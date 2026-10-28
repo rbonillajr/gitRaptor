@@ -19,7 +19,7 @@ use gitraptor_api::guard::{
     GuardUninstallParams, GuardUninstallRefusedData, GuardUninstallResult, HooksPathLevel,
     HooksStatus, InstallBlocker, Level, LogDetail, LogKind, LoggedOperation, LoggedReason,
     LoggedRef, LossCause, MAX_LOG_PAGE, MinimumSetStatus, NotPreventable, Param, ParamKind,
-    Permission, ProtectionAfter, ProtectionState, Reason, RefBackend, RefChange, Rule,
+    PendingKind, Permission, ProtectionAfter, ProtectionState, Reason, RefBackend, RefChange, Rule,
     UninstallRefusal,
 };
 use gitraptor_api::methods;
@@ -36,6 +36,7 @@ mod confirm;
 mod confirm_tests;
 #[cfg(test)]
 mod deny_text_tests;
+mod exec;
 mod snapshot_required;
 #[cfg(test)]
 mod snapshot_required_tests;
@@ -43,6 +44,7 @@ mod snapshot_required_tests;
 mod status_text_tests;
 
 pub use confirm::confirm;
+pub use exec::exec;
 use snapshot_required::DeniedOp;
 
 /// Longest parameter shown to the agent, in characters (M-05).
@@ -382,6 +384,7 @@ pub fn hook(args: &[OsString]) -> ExitCode {
     let env = HookEnv {
         git_dir: std::env::var_os("GIT_DIR").map(PathBuf::from),
         cwd: std::env::current_dir().unwrap_or_default(),
+        exception_token: HookEnv::exception_token_from_env(),
     };
     let outcome = hook::run(&args, &env, &input);
     // Only the words of the messages depend on it: the decision is the outcome's.
@@ -667,10 +670,17 @@ fn status_lines(status: &GuardStatus, tr: Tr) -> Vec<String> {
         out.push(format!("  - {}", blocker_text(*b)));
     }
     if let Some(pending) = &status.pending {
-        out.push(tr.t(
-            "guard.status.pending",
-            &[("seconds", &seconds_left(pending.applies_at_ms))],
-        ));
+        let seconds = seconds_left(pending.applies_at_ms);
+        match (&pending.action, &pending.exception) {
+            (PendingKind::Exception, Some(plan)) => out.push(tr.t(
+                "guard.status.pending-exception",
+                &[
+                    ("operation", &operation_text(&plan.operation)),
+                    ("seconds", &seconds),
+                ],
+            )),
+            _ => out.push(tr.t("guard.status.pending", &[("seconds", &seconds)])),
+        }
     }
     if status.confirm.is_some() {
         out.push(tr.t("guard.status.confirm", &[]));
@@ -1322,15 +1332,25 @@ fn agent_text(agent: Option<AgentKind>) -> String {
 /// The lines of one log entry: when, what was decided on which operation, why, who and
 /// where; for a commit, what is known of its authorship (DS-US-GRD-018 D12).
 pub fn log_entry_lines(e: &GuardLogEntry) -> Vec<String> {
-    let decided = match e.kind {
-        LogKind::Denial => t("guard.log.denied", &[]),
-        LogKind::Notice => t("guard.log.notice", &[]),
-        LogKind::ProtectionState => t("guard.log.protection", &[]),
+    let operation = operation_text(&e.operation);
+    let what = |key: &str| t(key, &[("operation", &operation)]);
+    let head = match e.kind {
+        LogKind::Denial => format!("{} · {operation}", t("guard.log.denied", &[])),
+        LogKind::Notice => format!("{} · {operation}", t("guard.log.notice", &[])),
+        LogKind::ProtectionState => format!("{} · {operation}", t("guard.log.protection", &[])),
+        LogKind::Exception => {
+            let rules: Vec<String> = e.reasons.iter().map(log_rule_text).collect();
+            t(
+                "guard.log.kind.exception",
+                &[("operation", &operation), ("rules", &rules.join(", "))],
+            )
+        }
+        LogKind::ExceptionRejected => what("guard.log.kind.exception-rejected"),
+        LogKind::ExceptionCancelled => what("guard.log.kind.exception-cancelled"),
     };
     let mut first = format!(
-        "{} · {decided} · {}",
-        crate::events::local_time(e.at_ms, e.utc_offset_s),
-        operation_text(&e.operation)
+        "{} · {head}",
+        crate::events::local_time(e.at_ms, e.utc_offset_s)
     );
     if e.count > 1 {
         first.push_str(&format!(
@@ -1351,8 +1371,21 @@ pub fn log_entry_lines(e: &GuardLogEntry) -> Vec<String> {
     if e.kind == LogKind::ProtectionState {
         return out;
     }
-    for reason in &e.reasons {
-        out.push(format!("  {}", log_rule_text(reason)));
+    if e.kind == LogKind::Exception {
+        // The rules it skipped are in the first line; a failed prior says what it meant.
+        for reason in e.reasons.iter().filter(|r| r.rule == Rule::SnapshotFailed) {
+            out.push(format!(
+                "  {}",
+                t(
+                    "guard.log.exception-no-prior",
+                    &[("cause", &t(snapshot_required::cause_key(reason.cause), &[]))],
+                )
+            ));
+        }
+    } else {
+        for reason in &e.reasons {
+            out.push(format!("  {}", log_rule_text(reason)));
+        }
     }
     let policy = e.authorship.as_ref().and_then(|a| a.policy.as_deref());
     if e.reasons.is_empty() && policy == Some("flexible") {
@@ -1394,9 +1427,11 @@ pub fn log_entry_lines(e: &GuardLogEntry) -> Vec<String> {
             "  {}",
             match e.kind {
                 LogKind::Denial => t("guard.log.author-not-created", &[]),
-                LogKind::Notice | LogKind::ProtectionState => {
-                    t("guard.log.author-see-events", &[])
-                }
+                LogKind::Notice
+                | LogKind::ProtectionState
+                | LogKind::Exception
+                | LogKind::ExceptionRejected
+                | LogKind::ExceptionCancelled => t("guard.log.author-see-events", &[]),
             }
         ));
         if let Some(a) = &e.authorship {
@@ -1432,6 +1467,15 @@ pub fn log_lines(log: &GuardLogResult, days: u32) -> Vec<String> {
         out.push(t(
             "guard.log.notices",
             &[("count", &log.summary.notices.to_string())],
+        ));
+    }
+    if log.summary.exceptions > 0 || log.summary.exceptions_rejected > 0 {
+        out.push(t(
+            "guard.log.exceptions",
+            &[
+                ("used", &log.summary.exceptions.to_string()),
+                ("rejected", &log.summary.exceptions_rejected.to_string()),
+            ],
         ));
     }
     if log.summary.rate_limited > 0 {

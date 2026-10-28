@@ -90,6 +90,8 @@ use crate::timemachine::timeline::{
     AgentFilter, EngineSide, FILES_BUDGET, OplogRead, PathsCache, PathsSource, SessionActors,
     TimelineQuery, build_timeline_from, fill_files,
 };
+mod exception;
+
 use crate::timemachine::undo::TmRepoHandle;
 use crate::timemachine::undo::{RawSide, UndoDone, UndoEnv, UndoError, tm_scope_for, undo_last};
 
@@ -663,6 +665,12 @@ impl Connection<'_> {
         self.audit_outcomes() && self.has(methods::CAP_GUARD_TEAM_CONFIRMATION.name)
     }
 
+    /// Whether the connection reads the `used` outcome of a conscious exception: it needs
+    /// `guard.exception` on top of `audit.outcomes`.
+    fn exception_outcomes(&self) -> bool {
+        self.audit_outcomes() && self.has(methods::CAP_GUARD_EXCEPTION.name)
+    }
+
     /// What the connection's capabilities change in what it is sent.
     fn apply_capabilities(&self) {
         // Nor the end of an announced action in `reserved.audit` without `audit.outcomes`.
@@ -670,6 +678,8 @@ impl Connection<'_> {
             .set_without_audit_outcomes(!self.audit_outcomes());
         self.outbox
             .set_without_changed_outcome(!self.team_confirm_outcomes());
+        self.outbox
+            .set_without_used_outcome(!self.exception_outcomes());
         // A connection without it cannot read Git events of kind `reset`
         // (protocol 8, US-TMC-004).
         self.outbox
@@ -997,7 +1007,7 @@ impl Connection<'_> {
             // On this thread, never through the loop: the hook of an executor's own `git`
             // must not wait for anything (ADR-GRD-003, Enmienda Cockpit).
             methods::GUARD_EVALUATE => {
-                let result = request.params::<EvaluateParams>().map(|p| {
+                let result = exception::evaluate_params(request).map(|p| {
                     // A hook call in flight until its answer: the `git` waiting for it may have
                     // changed files without writing its reflog yet, so no other calm of the
                     // worktree is taken meanwhile (only this call's own hook prior).
@@ -1006,6 +1016,9 @@ impl Connection<'_> {
                     let served = self.guard_served(&p, &caller);
                     let policy = served.authorship_policy;
                     let mut decision = served.decision;
+                    // The conscious exception before the prior (D11, D13): a decision it lets
+                    // through still takes its prior, and `enforce` keeps it allowed.
+                    let exception_note = self.exception_apply(&p, &mut decision);
                     // One decision per operation (ADR-GRD-003 § 6): the second line of the
                     // same `git` reuses the one `commit-msg` gave.
                     if let (
@@ -1034,6 +1047,9 @@ impl Connection<'_> {
                     // destructive operation whose prior failed (BR-EDGE-005).
                     crate::guardrails::snapshot_required::enforce(&mut decision);
                     self.log_decision(&p, &decision, &caller, policy, &served.ignored);
+                    if let Some(note) = exception_note {
+                        self.exception_log(&p, &decision, note);
+                    }
                     self.hook_claims(&p, &caller, &decision);
                     // After logging: the log keeps the product's own rule names, and the
                     // protection applies the same for a client that does not know them.
@@ -1050,6 +1066,18 @@ impl Connection<'_> {
             }
             methods::GUARD_LOG => {
                 let result = self.guard_log(request);
+                self.reply(&request.id, result);
+            }
+            methods::GUARD_EXCEPTION => {
+                let result = self.guard_exception(spec, request);
+                self.reply(&request.id, result);
+            }
+            methods::GUARD_EXCEPTION_CHILD => {
+                let result = self.guard_exception_child(spec, request);
+                self.reply(&request.id, result);
+            }
+            methods::GUARD_EXCEPTION_END => {
+                let result = self.guard_exception_end(request);
                 self.reply(&request.id, result);
             }
             methods::GUARD_PLAN
@@ -1645,7 +1673,11 @@ impl Connection<'_> {
                     recovery: self.has(methods::CAP_GUARD_RECOVERY.name),
                 },
             },
-            methods::GUARD_CANCEL => GuardRequest::Cancel(requester),
+            methods::GUARD_CANCEL => GuardRequest::Cancel(requester, {
+                let checks = self.ctx.checks();
+                crate::guardrails::actor::resolve_logged(self.peer, &checks, Some(&self.ctx.marks))
+                    .0
+            }),
             methods::GUARD_CONFIRM => GuardRequest::Confirm { step, requester },
             _ => GuardRequest::Status,
         };
@@ -1691,6 +1723,8 @@ impl Connection<'_> {
                 GuardReply::Failed => {
                     return Err(ErrorObject::new(code::INTERNAL, "guardrails unavailable"));
                 }
+                GuardReply::Exception(result) => serde_json::to_value(*result),
+                GuardReply::ExceptionRefused(data) => return Err(exception::refused_data(data)),
                 GuardReply::StepFailed(data) => {
                     return Err(guard_failed(
                         self.has(methods::CAP_GUARD_RECOVERY.name),
@@ -1728,6 +1762,9 @@ impl Connection<'_> {
     fn guard_shape_status(&self, status: &mut gitraptor_api::guard::GuardStatus) {
         if !self.has(methods::CAP_GUARD_PENDING_ACTION.name) {
             status.pending = None;
+        }
+        if !self.has(methods::CAP_GUARD_EXCEPTION.name) {
+            exception::legacy_status(status);
         }
         // The team confirmation: an older client could not decode it, and the MCP layer never
         // gets the hint to confirm.
@@ -1796,6 +1833,9 @@ impl Connection<'_> {
         {
             GuardLogReply::Log(log) => {
                 let mut log = *log;
+                if !self.has(methods::CAP_GUARD_EXCEPTION.name) {
+                    exception::legacy_log(&mut log);
+                }
                 // A connection without `guard.protection` never sees the changes of state.
                 if !self.has(methods::CAP_GUARD_PROTECTION.name) {
                     log.entries
@@ -2669,6 +2709,9 @@ impl Connection<'_> {
                     Some(entry)
                         if entry.outcome == gitraptor_api::messages::AuditOutcome::Changed
                             && !self.team_confirm_outcomes() => {}
+                    Some(entry)
+                        if entry.outcome == gitraptor_api::messages::AuditOutcome::Used
+                            && !self.exception_outcomes() => {}
                     Some(entry) => entries.push(entry),
                     None => self
                         .ctx
@@ -4348,6 +4391,7 @@ fn outcome_text(outcome: AuditOutcome) -> &'static str {
         AuditOutcome::Failed => "failed",
         AuditOutcome::Expired => "expired",
         AuditOutcome::Changed => "changed",
+        AuditOutcome::Used => "used",
     }
 }
 
@@ -4476,6 +4520,7 @@ mod tests {
             AuditOutcome::Failed,
             AuditOutcome::Expired,
             AuditOutcome::Changed,
+            AuditOutcome::Used,
         ] {
             assert_eq!(enum_text(&outcome), outcome_text(outcome));
         }

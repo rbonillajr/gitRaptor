@@ -22,6 +22,7 @@ pub fn worktree_reader(cwd: &Path, common: &Path) -> Option<RepoReader> {
     let env = HookEnv {
         git_dir: None,
         cwd: cwd.to_path_buf(),
+        exception_token: None,
     };
     let git_dir = transaction_git_dir(&env)?;
     let ours = common.canonicalize().ok()?;

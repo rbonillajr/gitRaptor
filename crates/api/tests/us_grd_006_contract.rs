@@ -282,9 +282,8 @@ fn exception_methods_are_reserved_outside_mcp_and_without_since() {
             "{name} is discovered in hello.methods from the frozen CAPABILITIES_PROTOCOL, like every method added since"
         );
         assert_eq!(
-            m.implemented_by,
-            Some("US-GRD-006"),
-            "{name} is declared ahead of its story until PR-B"
+            m.implemented_by, None,
+            "{name} is implemented by PR-B: no longer declared ahead"
         );
     }
 }

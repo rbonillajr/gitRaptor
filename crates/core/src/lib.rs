@@ -8,6 +8,7 @@ pub mod detect;
 pub mod discovery;
 pub mod executor;
 pub mod guardrails;
+pub mod interrupt;
 pub mod observe;
 pub mod power;
 pub mod predict;

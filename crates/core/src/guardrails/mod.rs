@@ -16,6 +16,7 @@ pub mod constants;
 pub mod cut;
 pub mod evaluate;
 pub mod exception;
+pub mod exception_facts;
 pub mod health;
 #[cfg(test)]
 mod health_tests;

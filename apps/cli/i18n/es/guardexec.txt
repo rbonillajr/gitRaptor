@@ -1,0 +1,33 @@
+# Mensajes de `raptor` para el usuario, español (NFR-10, ADR-GRP-003): `raptor guard exec`, la
+# excepción consciente del desarrollador (US-GRD-006). Una `clave = texto` por línea. Los
+# parámetros son `{nombre}`; el código los rellena por nombre, nunca concatenando. Toda clave
+# existe también en ../en/guardexec.txt. Solo los lee el desarrollador: ningún texto que recibe
+# un agente los menciona.
+
+guardexec.header = Excepción consciente en {repo}: {operation}.
+guardexec.skips = Se saltará: {rules}.
+guardexec.no-prior = Si no se puede guardar el punto de recuperación, la operación se ejecutará igualmente.
+guardexec.confirm = ¿Ejecutar esta operación una sola vez saltándote esas reglas? [s/N]
+guardexec.window = Anunciada a todos los clientes. Se ejecuta en {seconds} s; para cancelarla: raptor guard cancel (en cualquier terminal) o Ctrl-C aquí.
+guardexec.cancelled = cancelada: la operación no se ejecutó.
+guardexec.kept = no se ejecutó nada: la protección sigue como estaba.
+guardexec.no-answer = sin respuesta: no se ejecutó nada.
+guardexec.not-used = la excepción no llegó a usarse: la operación no coincidió con la anunciada y se evaluó como siempre.
+guardexec.unavailable = esta versión del motor no admite la excepción consciente; no se ejecutó nada.
+guardexec.no-engine = sin GitRaptor en marcha no hay excepción consciente: arranca GitRaptor (raptor daemon status lo arranca) y repite la operación.
+guardexec.non-utf8 = el comando de git tiene un argumento que no es texto válido; no se ejecutó nada.
+guardexec.no-folder = no se puede leer la carpeta actual; no se ejecutó nada.
+guardexec.git-failed = no se pudo lanzar git; no se ejecutó nada.
+guardexec.refused-agent = rechazada: solo el desarrollador puede pedir una excepción consciente, no un agente ni un proceso que este lanzó.
+guardexec.refused.not-installed = GitRaptor no protege este repo: no hay ninguna regla que saltarse.
+guardexec.refused.outdated-install = la protección de este repo es anterior a la excepción consciente: reinstálala con `raptor guard install` (se actualiza en sitio) y repite.
+guardexec.refused.already-pending = ya hay otra acción reservada esperando en este repo: deja que termine o cancélala (raptor guard cancel) y repite.
+guardexec.refused.window-open = la ventana aún no se ha cerrado.
+guardexec.refused.no-pending = el anuncio ya no está esperando (se canceló o caducó): no se ejecutó nada.
+guardexec.refused.not-the-requester = solo el comando que anunció la excepción puede ejecutarla.
+guardexec.refused.unsupported-form = la excepción consciente no admite esta forma del comando: nombra el remoto por su nombre y cada rama de forma explícita (sin URL, comodines, --all, --mirror, --tags, -c ni rebase -i).
+guardexec.refused.unsupported-operation = la excepción consciente solo admite push, borrar una rama local (branch -d/-D) y rebase no interactivo.
+guardexec.refused.pull = pull no está admitido: trae los cambios con git fetch y pide la excepción para el rebase.
+guardexec.refused.not-denied = nada deniega esta operación, así que no necesita excepción: ejecútala con git sin más.
+guardexec.refused.not-exceptable = una regla que deniega esta operación no se puede saltar con una excepción; no se ejecutó nada.
+guardexec.refused.child-not-ours = el git que se lanzó no es aquel para el que se emitió la excepción; no se saltó nada.

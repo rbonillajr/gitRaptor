@@ -200,7 +200,7 @@
       "type": "string"
     },
     "PatternPolicy": {
-      "description": "`policies.protectedBranches` and `policies.forbiddenPaths`: a list of patterns and who they\napply to. A branch pattern matches the whole short name (`release/*` does not cover\n`release/1.0/x`; `release/**` does). A path pattern follows `.gitignore`, reduced: with no\n`/` apart from a trailing one it is found at any depth (`secrets/`, `*.pem`), with a `/`\nin the middle or at the start it is anchored to the root (`config/prod.yml`, `/secrets`),\nand a directory covers what is below it. No negations (`!`) and no comments (`#`). With\n`appliesTo: everyone` the person is held too and, with no conscious exception in the MVP,\na protected branch is frozen for local pulls and fast-forwards as well.",
+      "description": "`policies.protectedBranches` and `policies.forbiddenPaths`: a list of patterns and who they\napply to. A branch pattern matches the whole short name (`release/*` does not cover\n`release/1.0/x`; `release/**` does). A path pattern follows `.gitignore`, reduced: with no\n`/` apart from a trailing one it is found at any depth (`secrets/`, `*.pem`), with a `/`\nin the middle or at the start it is anchored to the root (`config/prod.yml`, `/secrets`),\nand a directory covers what is below it. No negations (`!`) and no comments (`#`). With\n`appliesTo: everyone` the person is held too, local pulls and fast-forwards of a protected\nbranch included; the person's conscious exception (`raptor guard exec`) skips it.",
       "properties": {
         "appliesTo": {
           "$ref": "#/$defs/AppliesTo",

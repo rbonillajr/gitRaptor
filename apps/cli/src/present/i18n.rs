@@ -930,6 +930,11 @@ const MODULE_ERRORS: &[(&str, &str, &str)] = &[
         "la protección no se retiró",
     ),
     (
+        "guard-exception-refused",
+        "the conscious exception was not granted: nothing ran",
+        "la excepción consciente no se concedió: no se ejecutó nada",
+    ),
+    (
         "guard-failed",
         "a step of the protection failed: run the same raptor guard command again",
         "falló un paso de la protección: vuelve a ejecutar el mismo comando raptor guard",

@@ -10,7 +10,9 @@ use std::path::{Path, PathBuf};
 /// 2 adds the `pre-commit` and `commit-msg` dispatchers (US-GRD-018); 3 hands every pushed ref of
 /// a `pre-push` to `raptor hook` (no fast path for refs that are not governed). A repo installed
 /// with an earlier one keeps working unchanged and is upgraded when it is installed again.
-pub const TEMPLATE_VERSION: u32 = 3;
+/// 4 forwards the conscious exception token to `raptor hook` and hides it from a chained hook
+/// (US-GRD-006): an earlier install never forwards it, so its operations are denied as before.
+pub const TEMPLATE_VERSION: u32 = 4;
 
 /// The first template whose `pre-push` dispatcher hands over every pushed ref.
 pub const EVERY_PUSHED_REF: u32 = 3;

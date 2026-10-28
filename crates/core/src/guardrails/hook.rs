@@ -77,6 +77,22 @@ pub struct HookEnv {
     /// `GIT_DIR`, when Git set it (linked worktrees, `--git-dir`).
     pub git_dir: Option<PathBuf>,
     pub cwd: PathBuf,
+    /// The conscious exception token the git of `raptor guard exec` received
+    /// (`GITRAPTOR_EXCEPTION_TOKEN`), already validated in form; sent only to a daemon that
+    /// grants `guard.exception`. Its `Debug` is redacted.
+    pub exception_token: Option<gitraptor_api::guard::ExceptionToken>,
+}
+
+/// The variable through which `raptor guard exec` hands the token to its one git.
+pub const EXCEPTION_TOKEN_ENV: &str = "GITRAPTOR_EXCEPTION_TOKEN";
+
+impl HookEnv {
+    /// The token of the environment, when it has the form of one; anything else is ignored.
+    pub fn exception_token_from_env() -> Option<gitraptor_api::guard::ExceptionToken> {
+        std::env::var(EXCEPTION_TOKEN_ENV)
+            .ok()
+            .and_then(gitraptor_api::guard::ExceptionToken::from_secret)
+    }
 }
 
 /// Why the client decided alone.
@@ -689,7 +705,7 @@ fn read_regular(path: &Path, max: u64) -> Option<Vec<u8>> {
 
 /// Asks the daemon; without an authentic daemon of this instance, degraded mode.
 fn decide(args: &HookArgs, env: &HookEnv, full: Operation) -> HookOutcome {
-    let asked = ask_daemon(args, &full);
+    let asked = ask_daemon(args, env, &full);
     let (decision, granted, permissions, commit_policies) = match asked {
         Asked::Decision(mut decision, granted, permissions, commit_policies) => {
             // A daemon that does not convert a failed prior (a version apart) must not leave
@@ -779,7 +795,7 @@ enum Asked {
     Degraded(Degraded),
 }
 
-fn ask_daemon(args: &HookArgs, full: &Operation) -> Asked {
+fn ask_daemon(args: &HookArgs, env: &HookEnv, full: &Operation) -> Asked {
     let mut client = match connect(args) {
         Ok(client) => client,
         Err(Unusable::NotAuthentic) => return Asked::NotAuthentic,
@@ -803,7 +819,11 @@ fn ask_daemon(args: &HookArgs, full: &Operation) -> Asked {
         return Asked::Nothing(granted);
     };
     let params = EvaluateParams {
-        exception_token: None,
+        // Only to a daemon that knows it: an older one would refuse the parameter.
+        exception_token: env
+            .exception_token
+            .clone()
+            .filter(|_| served(methods::CAP_GUARD_EXCEPTION.name)),
         repo_id: args.repo.clone(),
         common_dir: args.common.to_string_lossy().into_owned(),
         hook: args.hook,

@@ -56,6 +56,8 @@ pub struct Outbox {
     without_audit_outcomes: std::sync::atomic::AtomicBool,
     /// Without `guard.team-confirmation` (see [`Outbox::set_without_changed_outcome`]).
     without_changed_outcome: std::sync::atomic::AtomicBool,
+    /// Without `guard.exception` (see [`Outbox::set_without_used_outcome`]).
+    without_used_outcome: std::sync::atomic::AtomicBool,
 }
 
 #[derive(Debug, Default)]
@@ -83,6 +85,7 @@ impl Outbox {
             without_protection: std::sync::atomic::AtomicBool::new(true),
             without_audit_outcomes: std::sync::atomic::AtomicBool::new(true),
             without_changed_outcome: std::sync::atomic::AtomicBool::new(true),
+            without_used_outcome: std::sync::atomic::AtomicBool::new(true),
         })
     }
 
@@ -140,6 +143,13 @@ impl Outbox {
     /// action never reach it (nor `raptor-mcp`, which gets no audit at all).
     pub fn set_without_audit_outcomes(&self, without: bool) {
         self.without_audit_outcomes
+            .store(without, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// The connection lacks `guard.exception`: a `reserved.audit` entry with the `used` outcome
+    /// never reaches it, even with `audit.outcomes`: an older client could not decode it.
+    pub fn set_without_used_outcome(&self, without: bool) {
+        self.without_used_outcome
             .store(without, std::sync::atomic::Ordering::Relaxed);
     }
 
@@ -258,7 +268,9 @@ impl Outbox {
             return (self.without_audit_outcomes.load(relaxed)
                 && outcome.is_some_and(AuditOutcome::needs_capability))
                 || (self.without_changed_outcome.load(relaxed)
-                    && outcome == Some(AuditOutcome::Changed));
+                    && outcome == Some(AuditOutcome::Changed))
+                || (self.without_used_outcome.load(relaxed)
+                    && outcome == Some(AuditOutcome::Used));
         }
         if event.kind == gitraptor_api::event::REPO_DISCOVERED {
             return self

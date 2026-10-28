@@ -37,7 +37,18 @@ const MAX_LINE: usize = 8 * 1024;
 const MAX_CONF: u64 = 64 * 1024;
 const MAX_INPUT: u64 = 256 * 1024 * 1024;
 /// Template versions this dispatcher understands (ADR-GRD-001 § 8).
-const TEMPLATES: &[&str] = &["1", "2", "3"];
+const TEMPLATES: &[&str] = &["1", "2", "3", "4"];
+
+/// The variable that carries the token of a conscious exception from `raptor guard exec` to
+/// `raptor hook` (as `gitraptor_core::guardrails::hook::EXCEPTION_TOKEN_ENV`). Only `raptor
+/// hook` ever gets it, and only from template 4 on; a prior hook never does.
+const EXCEPTION_TOKEN_ENV: &str = "GITRAPTOR_EXCEPTION_TOKEN";
+
+/// From template 4 on the dispatcher hands the exception token to `raptor hook`: an older
+/// template keeps the operation denied as before (fail closed).
+fn forwards_exception_token(conf: &Conf) -> bool {
+    !matches!(conf.get("template"), Some("1" | "2" | "3"))
+}
 
 /// Templates 1 and 2 let a push of refs Guardrails does not govern (tags, notes...) go without
 /// `raptor`. From 3 on every pushed ref is handed over, so the forbidden paths reach them: the
@@ -274,10 +285,13 @@ fn is_executable(path: &Path) -> bool {
 }
 
 /// The environment of `raptor hook`, built from scratch (ADR-GRD-001 § 2): `GIT_DIR` and
-/// `GIT_INDEX_FILE` if Git set them, the language of the messages, and on Windows what a
-/// process needs to start.
-fn allowlisted_env() -> Vec<(OsString, OsString)> {
+/// `GIT_INDEX_FILE` if Git set them, the language of the messages, the exception token from
+/// template 4 on, and on Windows what a process needs to start.
+fn allowlisted_env(conf: &Conf) -> Vec<(OsString, OsString)> {
     let mut keys = vec!["GIT_DIR", "GIT_INDEX_FILE", "LC_ALL", "LC_MESSAGES", "LANG"];
+    if forwards_exception_token(conf) {
+        keys.push(EXCEPTION_TOKEN_ENV);
+    }
     if cfg!(windows) {
         keys.push("SystemRoot");
     }
@@ -318,8 +332,9 @@ enum Input<'a> {
     Inherited,
 }
 
-/// Runs the prior hook as Git would have: same arguments, same input, Git's own environment and
-/// working folder, its output straight through. Its exit code is the result. Without a prior
+/// Runs the prior hook as Git would have: same arguments, same input, Git's own environment
+/// (without the exception token, which is only for `raptor hook`) and working folder, its output
+/// straight through. Its exit code is the result. Without a prior
 /// hook the operation simply goes ahead.
 #[cfg_attr(not(windows), allow(unused_variables))]
 fn chain(
@@ -339,6 +354,7 @@ fn chain(
     };
     let stdio = |command: &mut Command| {
         command
+            .env_remove(EXCEPTION_TOKEN_ENV)
             .stdin(match input {
                 Input::Read(_) => Stdio::piped(),
                 Input::Inherited => Stdio::inherit(),
@@ -554,7 +570,7 @@ fn main() -> ExitCode {
         .arg("--")
         .args(&args)
         .env_clear()
-        .envs(allowlisted_env())
+        .envs(allowlisted_env(&conf))
         .stdin(Stdio::piped())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit());

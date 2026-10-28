@@ -93,7 +93,7 @@ fn upgrade_from(from: u32) {
     let out = m.protect(&m.repo());
     assert!(out.status.success(), "{}", text(&out));
     assert!(!text(&out).contains(REPAIR_SCREEN), "{}", text(&out));
-    assert_eq!(m.conf_template(), "3");
+    assert_eq!(m.conf_template(), "4");
     for hook in hooks_of(3) {
         assert!(m.folder().join("hooks").join(hook).is_file(), "{hook}");
     }
@@ -175,7 +175,7 @@ fn after_the_cut(m: &Td, from: u32, point: &CutPoint, bad: &str) -> Vec<String> 
             note(format!("the next install: {}", text(&out)));
         }
     }
-    if m.conf_template() != "3" {
+    if m.conf_template() != "4" {
         note(format!(
             "template {} after the next install",
             m.conf_template()
@@ -403,7 +403,7 @@ fn repo_intact_an_upgrade_changes_only_the_dispatchers_and_the_journal() {
     m.downgrade_to(2);
     let out = m.protect(&m.repo());
     assert!(out.status.success(), "{}", text(&out));
-    assert_eq!(m.conf_template(), "3");
+    assert_eq!(m.conf_template(), "4");
 
     let after = m.f.snapshot(&exceptions);
     let changes = exceptions.filter(&gitraptor_testkit::diff(&before, &after), &before, &after);

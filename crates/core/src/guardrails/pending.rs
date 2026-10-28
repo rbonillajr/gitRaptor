@@ -65,6 +65,10 @@ pub struct Entry {
     pub fingerprint: Option<String>,
     /// What a conscious exception announced it would skip (US-GRD-006).
     pub exception: Option<super::exception::ExceptionPlan>,
+    /// The reasons of that announcement, as the log names them (with their level).
+    pub exception_reasons: Vec<gitraptor_api::guard::LoggedReason>,
+    /// The textconv drivers its git is to run with neutralized, read when it was announced.
+    pub exception_drivers: Vec<String>,
 }
 
 impl Entry {
@@ -78,8 +82,11 @@ impl Entry {
             action: self.kind,
             applies_at_ms: self.applies_at_ms,
             window_ms: self.window_ms,
-            // Shown only once `guard.status` serves the exception kind.
-            exception: None,
+            // The channel drops it for a connection without `guard.exception`.
+            exception: self
+                .exception
+                .as_ref()
+                .map(super::exception::ExceptionPlan::view),
         }
     }
 }
@@ -139,6 +146,33 @@ impl PendingActions {
         }
     }
 
+    /// Records the reasons, with their level, the exception `action_id` announced.
+    pub fn note_exception_reasons(
+        &mut self,
+        repo_id: &str,
+        action_id: &str,
+        reasons: Vec<gitraptor_api::guard::LoggedReason>,
+    ) {
+        if let Some(entry) = self
+            .by_repo
+            .get_mut(repo_id)
+            .filter(|e| e.action_id == action_id)
+        {
+            entry.exception_reasons = reasons;
+        }
+    }
+
+    /// Records the textconv drivers the exception `action_id` neutralizes in its git.
+    pub fn note_exception_drivers(&mut self, repo_id: &str, action_id: &str, drivers: Vec<String>) {
+        if let Some(entry) = self
+            .by_repo
+            .get_mut(repo_id)
+            .filter(|e| e.action_id == action_id)
+        {
+            entry.exception_drivers = drivers;
+        }
+    }
+
     /// Opens the window of `kind` in `repo_id`. One at a time per repo.
     pub fn announce(
         &mut self,
@@ -166,6 +200,8 @@ impl PendingActions {
             restores: None,
             fingerprint: None,
             exception: None,
+            exception_reasons: Vec::new(),
+            exception_drivers: Vec::new(),
         };
         let view = entry.view();
         self.by_repo.insert(repo_id.to_owned(), entry);

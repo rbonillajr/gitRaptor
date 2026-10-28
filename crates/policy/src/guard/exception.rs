@@ -177,7 +177,8 @@ fn parse_push(args: &[&str]) -> Result<Form, Unsupported> {
         match arg {
             "-f" | "--force" | "--force-with-lease" => force = true,
             _ if arg.starts_with("--force-with-lease=") => force = true,
-            "--force-if-includes" => {}
+            // Only what git prints changes: the refs pushed are the same.
+            "--force-if-includes" | "-q" | "--quiet" => {}
             "-d" | "--delete" => delete = true,
             _ if arg.starts_with('-') => return Err(Unsupported::Form),
             _ => positional.push(arg),
@@ -253,6 +254,7 @@ fn parse_branch(args: &[&str]) -> Result<Form, Unsupported> {
             "-d" | "--delete" => delete = true,
             "-D" => (delete, force) = (true, true),
             "-f" | "--force" => force = true,
+            "-q" | "--quiet" => {}
             _ if arg.starts_with('-') => other = true,
             _ => names.push(arg),
         }
@@ -277,6 +279,8 @@ fn parse_rebase(args: &[&str]) -> Result<Form, Unsupported> {
             onto = Some(name(args.next().ok_or(Unsupported::Form)?)?);
         } else if let Some(base) = arg.strip_prefix("--onto=") {
             onto = Some(name(base)?);
+        } else if arg == "-q" || arg == "--quiet" {
+            // Only what git prints changes.
         } else if arg.starts_with('-') {
             // `-i`, `--exec`, `--root` and any other option: interactive or running commands.
             return Err(Unsupported::Form);
@@ -416,6 +420,9 @@ fn default_refspec(remote: &str, facts: &RepoFacts) -> Result<Refspec, Unsupport
     let upstream = facts.upstreams.get(branch).filter(|u| u.remote == remote);
     let dst = match facts.push_default.as_deref().unwrap_or("simple") {
         "current" => branch_ref(branch),
+        // Git's `simple` pushes as `current` in a triangular workflow: a push to another remote
+        // than the one the branch fetches from (its upstream's, or `origin`).
+        "simple" if triangular(branch, remote, facts) => branch_ref(branch),
         "simple" => {
             let merge = &upstream.ok_or(Unsupported::Form)?.merge;
             if *merge != branch_ref(branch) {
@@ -431,6 +438,22 @@ fn default_refspec(remote: &str, facts: &RepoFacts) -> Result<Refspec, Unsupport
         dst: Some(dst),
         force: false,
     })
+}
+
+/// Whether pushing `branch` to `remote` is triangular: the branch fetches from another remote.
+fn triangular(branch: &str, remote: &str, facts: &RepoFacts) -> bool {
+    let fetch = facts
+        .upstreams
+        .get(branch)
+        .map(|u| u.remote.as_str())
+        .or_else(|| {
+            facts
+                .remotes
+                .iter()
+                .any(|r| r == "origin")
+                .then_some("origin")
+        });
+    fetch.is_some_and(|fetch| fetch != remote)
 }
 
 fn resolve_branch_delete(names: &[String], facts: &RepoFacts) -> Result<Binding, Unsupported> {

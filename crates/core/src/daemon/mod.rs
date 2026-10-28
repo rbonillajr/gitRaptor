@@ -25,6 +25,7 @@ mod discovery;
 mod env;
 mod gaps;
 mod guard;
+mod guard_exception;
 mod lock;
 mod log;
 mod mcp;
@@ -79,6 +80,7 @@ pub use env::{
     TM_NO_FREE_SPACE_FLOOR_ENV,
 };
 use guard::recover_guardrails;
+pub(crate) use guard_exception::ExceptionAsk;
 pub use lock::{InstanceLock, LOCK_FILE, running_pid, wait_until_released};
 pub use log::{Field, LOG_FILE, Level, LogLimits, Logger};
 pub use mcp::McpMarkError;

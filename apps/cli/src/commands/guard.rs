@@ -1,5 +1,6 @@
-//! `raptor guard`: the Guardrails hook layer (US-GRD-001, US-GRD-003, US-GRD-014).
+//! `raptor guard`: the Guardrails hook layer (US-GRD-001, US-GRD-003, US-GRD-014, US-GRD-006).
 
+use std::ffi::OsString;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -45,6 +46,16 @@ enum GuardAction {
         /// The repo's Git directory or any of its worktrees; defaults to the current folder.
         path: Option<PathBuf>,
     },
+    /// Run one git operation skipping the rules that deny it, once (reserved to the developer).
+    /// Announced to every client, it runs after a window in which anyone can cancel it.
+    Exec {
+        /// Answer the question without asking (the window still applies).
+        #[arg(long)]
+        yes: bool,
+        /// The git command, after `--`: `git [-C <dir>] push|branch -d|rebase …`.
+        #[arg(last = true, required = true, value_name = "GIT")]
+        argv: Vec<OsString>,
+    },
     /// Show the protection status of a repo.
     Status {
         /// The repo's Git directory or any of its worktrees; defaults to the current folder.
@@ -76,6 +87,7 @@ impl Cmd {
             GuardAction::Uninstall { path, yes } => guard::uninstall(path, yes),
             GuardAction::Cancel { path } => guard::cancel(path),
             GuardAction::Confirm { path } => guard::confirm(path),
+            GuardAction::Exec { yes, argv } => guard::exec(yes, argv),
             GuardAction::Status { path, json } => guard::status(path, json),
             GuardAction::Log {
                 path,

@@ -170,7 +170,7 @@ mod legacy_install {
         let out = m.protect(&m.repo());
         assert!(out.status.success(), "{}", text(&out));
         assert!(!text(&out).contains("internal error"), "{}", text(&out));
-        assert_eq!(m.conf_template(), "3");
+        assert_eq!(m.conf_template(), "4");
         for hook in hooks_of(3) {
             assert!(m.folder().join("hooks").join(hook).is_file(), "{hook}");
         }
@@ -180,7 +180,7 @@ mod legacy_install {
         use std::os::unix::fs::MetadataExt;
         let j = journal(&m).unwrap();
         assert_eq!(j["folder"]["dev"].as_u64(), Some(now.dev()));
-        assert_eq!(j["template"].as_u64(), Some(3));
+        assert_eq!(j["template"].as_u64(), Some(4));
     }
 
     // A folder restored from a copy (another inode) whose files are still the ones the journal
@@ -196,7 +196,7 @@ mod legacy_install {
 
         let out = m.protect(&m.repo());
         assert!(out.status.success(), "{}", text(&out));
-        assert_eq!(m.conf_template(), "3");
+        assert_eq!(m.conf_template(), "4");
         assert_protected(&m, "after the upgrade");
     }
 
@@ -218,7 +218,7 @@ mod legacy_install {
             "{}",
             text(&out)
         );
-        assert_eq!(m.conf_template(), "3");
+        assert_eq!(m.conf_template(), "4");
         assert_protected(&m, "after the repair");
     }
 }

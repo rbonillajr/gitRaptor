@@ -67,11 +67,30 @@ pub struct LogEntry {
     /// The layer that took the decision: `hooks` for every entry a hook asks for, the plan's
     /// layer (`mcp`, `cockpit`) for the single entry of an executor's plan.
     pub layer: LogLayer,
+    /// The conscious exception an `exception*` entry is about: part of its key, so two uses
+    /// never add up (ADR-GRD-006 § 2). `None` for every other entry.
+    pub action_id: Option<String>,
 }
 
 impl LogEntry {
     /// Two occurrences with the same key are the same entry (ADR-GRD-006 § 2).
     pub fn agg_key(&self) -> String {
+        // Another tuple only with an action: every other key stays byte for byte the same.
+        if let Some(action_id) = &self.action_id {
+            return serde_json::to_string(&(
+                "full",
+                &self.worktree,
+                &self.branch,
+                &self.actor,
+                &self.operation,
+                &self.kind,
+                &self.reasons,
+                &self.authorship,
+                &self.layer,
+                action_id,
+            ))
+            .unwrap_or_default();
+        }
         serde_json::to_string(&(
             "full",
             &self.worktree,
@@ -182,7 +201,61 @@ pub fn protection_entry(
         decision_id: super::evaluate::decision_id(),
         authorship: None,
         layer: LogLayer::Hooks,
+        action_id: None,
     }
+}
+
+/// What an `exception*` entry says (US-GRD-006, D16): the normalized operation the exception
+/// covers, never its argv, and the rules it skips or would have skipped.
+#[derive(Debug, Clone)]
+pub struct ExceptionLog {
+    pub kind: LogKind,
+    pub common_dir: String,
+    pub action_id: Option<String>,
+    pub operation: LoggedOperation,
+    pub reasons: Vec<LoggedReason>,
+    pub effect: Effect,
+    pub applied_effect: Effect,
+    pub decision_id: String,
+    pub layer: LogLayer,
+}
+
+/// The entry of an exception: an `exception`, `exception-rejected` or `exception-cancelled`.
+pub fn exception_entry(log: ExceptionLog, ctx: &LogContext) -> LogEntry {
+    LogEntry {
+        common_dir: log.common_dir,
+        at_ms: ctx.at_ms,
+        utc_offset_s: ctx.utc_offset_s,
+        worktree: ctx.worktree.clone(),
+        branch: ctx.branch.clone(),
+        actor: ctx.actor,
+        operation: log.operation,
+        kind: log.kind,
+        effect: log.effect,
+        applied_effect: log.applied_effect,
+        reasons: log.reasons,
+        decision_id: log.decision_id,
+        authorship: None,
+        layer: log.layer,
+        action_id: log.action_id,
+    }
+}
+
+/// The normalized operation an entry of `params` names.
+pub fn logged_operation(params: &EvaluateParams, reasons: &[Reason]) -> LoggedOperation {
+    normalize(&params.operation, reasons)
+}
+
+/// The reasons of a decision as the log keeps them.
+pub fn logged_reasons(reasons: &[Reason]) -> Vec<LoggedReason> {
+    reasons
+        .iter()
+        .map(|r| LoggedReason {
+            rule: r.rule,
+            level: r.level,
+            cause: r.cause,
+        })
+        .collect()
 }
 
 /// The entry of a decision, or `None` when nothing is logged.
@@ -228,6 +301,7 @@ pub fn entry(params: &EvaluateParams, decision: &Decision, ctx: &LogContext) -> 
         decision_id: decision.decision_id.clone(),
         authorship,
         layer: LogLayer::Hooks,
+        action_id: None,
     })
 }
 
@@ -384,6 +458,12 @@ impl LogSink {
     /// Takes one slot to queue an entry; `false` when the cap is reached. Never waits.
     pub fn try_reserve(&self) -> bool {
         self.update(|n| (n < self.capacity).then_some(n + 1))
+    }
+
+    /// Takes a slot past the cap: an `exception*` entry, whose number the one pending action
+    /// per repo bounds, is never only counted (D16).
+    pub fn reserve_always(&self) {
+        self.update(|n| Some(n.saturating_add(1)));
     }
 
     /// Gives back a slot: the loop wrote (or dropped) a queued entry.

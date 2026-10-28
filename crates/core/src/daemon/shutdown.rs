@@ -121,8 +121,21 @@ pub(crate) enum GuardRequest {
         requester: crate::guardrails::pending::Requester,
         recovery: bool,
     },
-    /// Cancels the action waiting in the repo.
-    Cancel(crate::guardrails::pending::Requester),
+    /// Cancels the action waiting in the repo: who cancels, and the agent behind them.
+    Cancel(
+        crate::guardrails::pending::Requester,
+        Option<gitraptor_api::AgentKind>,
+    ),
+    /// Announces a conscious exception the channel already normalized and evaluated
+    /// (US-GRD-006, D6 call 1).
+    ExceptionAnnounce(Box<crate::daemon::ExceptionAsk>),
+    /// Issues the token of the announced exception once its window closed (D6 call 2).
+    ExceptionIssue {
+        action_id: String,
+        requester: crate::guardrails::pending::Requester,
+        /// The textconv drivers read again for this call; `None` when they could not be read.
+        drivers: Option<Vec<String>>,
+    },
     /// `guard.confirm` (US-GRD-014): the plan, the fingerprint accepted, or the window applied.
     Confirm {
         step: crate::guardrails::confirm::Step,
@@ -150,6 +163,10 @@ pub(crate) enum GuardReply {
     UninstallRefused(crate::guardrails::pending::Refused),
     /// The answer of `guard.confirm` (US-GRD-014).
     Confirm(Box<gitraptor_api::guard::GuardConfirmResult>),
+    /// The exception was announced, or its token issued (US-GRD-006).
+    Exception(Box<gitraptor_api::guard::GuardExceptionResult>),
+    /// `guard.exception` did nothing.
+    ExceptionRefused(gitraptor_api::guard::GuardExceptionRefusedData),
 }
 
 /// What the loop answers to a `guard.log` (US-GRD-005).
