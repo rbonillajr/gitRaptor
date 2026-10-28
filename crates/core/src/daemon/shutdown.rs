@@ -8,6 +8,7 @@
 use std::sync::mpsc::{Receiver, Sender, SyncSender, channel, sync_channel};
 use std::time::Duration;
 
+use gitraptor_api::attribution::{AttributionChangeResult, AttributionRejectedData};
 use gitraptor_api::guard::{GuardPlan, GuardStatus, InstallBlocker};
 use gitraptor_api::messages::{
     EventsHistoryParams, GitEventView, RegistrationRegisterResult, RegistrationRejection,
@@ -67,6 +68,34 @@ pub(crate) struct RegisterRequest {
 pub(crate) struct WithdrawRequest {
     pub agent: crate::profile::Agent,
     pub folder: std::path::PathBuf,
+}
+
+/// Why the loop refused a correction of an attribution or its withdrawal.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(not(unix), allow(dead_code))]
+pub(crate) enum AttributionError {
+    /// Nothing changed; the reason and, for an ambiguous session, the candidates.
+    Rejected(AttributionRejectedData),
+    /// The profile could not be read or written (or the loop did not answer).
+    Internal,
+}
+
+/// A correction the channel authorized as a reserved command.
+#[derive(Debug, Clone)]
+#[cfg_attr(not(unix), allow(dead_code))]
+pub(crate) struct CorrectRequest {
+    pub agent: crate::profile::Agent,
+    /// The folder the developer named: the worktree of the session.
+    pub folder: std::path::PathBuf,
+    pub session_id: Option<String>,
+}
+
+/// A withdrawal of a correction the channel authorized as a reserved command.
+#[derive(Debug, Clone)]
+#[cfg_attr(not(unix), allow(dead_code))]
+pub(crate) struct WithdrawCorrectionRequest {
+    pub folder: std::path::PathBuf,
+    pub session_id: Option<String>,
 }
 
 /// A Guardrails request to the loop, for a repo the channel already located.
@@ -298,6 +327,18 @@ pub(crate) enum Control {
     Withdraw {
         request: WithdrawRequest,
         reply: SyncSender<Result<RegistrationWithdrawResult, RegistrationError>>,
+    },
+    /// Corrects the attribution of a session, already authorized.
+    #[cfg_attr(not(unix), allow(dead_code))]
+    Correct {
+        request: CorrectRequest,
+        reply: SyncSender<Result<AttributionChangeResult, AttributionError>>,
+    },
+    /// Withdraws the correction of a session, already authorized.
+    #[cfg_attr(not(unix), allow(dead_code))]
+    WithdrawCorrection {
+        request: WithdrawCorrectionRequest,
+        reply: SyncSender<Result<AttributionChangeResult, AttributionError>>,
     },
     /// Discovery roots and candidates (US-GRP-020).
     Discovery(super::discovery::DiscoveryRequest),
@@ -658,6 +699,34 @@ impl ShutdownHandle {
             .map_err(|_| RegistrationError::Internal)?;
         rx.recv_timeout(AUDIT_TIMEOUT)
             .map_err(|_| RegistrationError::Internal)?
+    }
+
+    /// Corrects the attribution of a session through the loop, which owns the stores.
+    #[cfg_attr(not(unix), allow(dead_code))]
+    pub(crate) fn correct(
+        &self,
+        request: CorrectRequest,
+    ) -> Result<AttributionChangeResult, AttributionError> {
+        let (reply, rx) = sync_channel(1);
+        self.tx
+            .send(Control::Correct { request, reply })
+            .map_err(|_| AttributionError::Internal)?;
+        rx.recv_timeout(AUDIT_TIMEOUT)
+            .map_err(|_| AttributionError::Internal)?
+    }
+
+    /// Withdraws the correction of a session through the loop.
+    #[cfg_attr(not(unix), allow(dead_code))]
+    pub(crate) fn withdraw_correction(
+        &self,
+        request: WithdrawCorrectionRequest,
+    ) -> Result<AttributionChangeResult, AttributionError> {
+        let (reply, rx) = sync_channel(1);
+        self.tx
+            .send(Control::WithdrawCorrection { request, reply })
+            .map_err(|_| AttributionError::Internal)?;
+        rx.recv_timeout(AUDIT_TIMEOUT)
+            .map_err(|_| AttributionError::Internal)?
     }
 
     /// Reads one page of a repo's Git events through the loop, which owns

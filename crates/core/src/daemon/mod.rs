@@ -18,6 +18,7 @@
 //! ADR-TMC-003 § 6). It does not depend on the engine store: a repo whose
 //! engine store cannot be opened still recovers its oplog (Q26).
 
+mod attribution;
 mod authorship;
 mod availability;
 mod discovery;
@@ -84,8 +85,11 @@ pub use mcp::McpMarkError;
 pub use power::PowerConfig;
 use shutdown::Control;
 pub(crate) use shutdown::McpContext;
+pub(crate) use shutdown::{
+    AttributionError, CorrectRequest, RegisterRequest, RepoAddRequest, WithdrawCorrectionRequest,
+    WithdrawRequest,
+};
 pub(crate) use shutdown::{GuardLogReply, GuardReply, GuardRequest, HealthReport};
-pub(crate) use shutdown::{RegisterRequest, RepoAddRequest, WithdrawRequest};
 pub use shutdown::{
     RegistrationError, RepoCommandError, ShutdownHandle, StopCause, TierTestOp,
     install_signal_handlers,
@@ -877,6 +881,14 @@ impl Daemon {
                 Ok(Control::Withdraw { request, reply }) => {
                     self.wake_for_folder(&request.folder);
                     let _ = reply.send(self.withdraw(request));
+                }
+                Ok(Control::Correct { request, reply }) => {
+                    self.wake_for_folder(&request.folder);
+                    let _ = reply.send(self.correct(request));
+                }
+                Ok(Control::WithdrawCorrection { request, reply }) => {
+                    self.wake_for_folder(&request.folder);
+                    let _ = reply.send(self.withdraw_correction(request));
                 }
                 Ok(Control::EventHistory { params, reply }) => {
                     self.wake_for_request(&params.repo_id);
