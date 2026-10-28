@@ -1,13 +1,12 @@
 ---
 mode: bulk
 generated: 2026-10-03T00:00Z
-updated: 2026-10-08
+updated: 2026-10-27
 generator: product-owner
-total_artifacts: 22
-expanded: 22
+total_artifacts: 24
+expanded: 24
 approved: 0
 blocked:
-  - US-TMC-011
   - US-TMC-020
 deferred:
   - US-TMC-021
@@ -58,7 +57,7 @@ deferred:
 | [US-TMC-008](./user-stories/US-TMC-008-timeline-atribucion-vigente.md) | El timeline refleja las correcciones de atribución sin reescribir quién deshizo qué | Desarrollador quiere la atribución vigente y el registro de cada undo intacto | 002, 006, US-GRP-010 | — | expanded |
 | [US-TMC-009](./user-stories/US-TMC-009-restaurar-punto-timeline.md) | El desarrollador devuelve su worktree a cualquier punto del timeline | Desarrollador quiere restaurar un punto con el alcance de D-TMC-20, deshaciendo la restauración si quiere | 001, 002, 006, 013 | — | implemented (PR #212; escenario 5 en PR #219) |
 | [US-TMC-010](./user-stories/US-TMC-010-undo-since.md) | El desarrollador deshace todo lo ocurrido en su worktree en los últimos minutos | Desarrollador quiere `raptor undo --since` en el worktree actual | 002, 012, 013 | — | expanded |
-| [US-TMC-011](./user-stories/US-TMC-011-undo-por-agente.md) | El desarrollador deshace solo lo que hizo un agente en un periodo | Desarrollador quiere `raptor undo --agent --since` con atribución vigente, sin huecos ni trabajo ajeno | 002, 007, 012, 013, US-GRP-007, US-GRP-009, US-GRP-010 | P17 de motor-local (D-TMC-22) | expanded |
+| [US-TMC-011](./user-stories/US-TMC-011-undo-por-agente.md) | El desarrollador deshace solo lo que hizo un agente en un periodo | Desarrollador quiere `raptor undo --agent --since` con atribución vigente, sin huecos ni trabajo ajeno | 002, 007, 012, 013, US-GRP-007, US-GRP-009, US-GRP-010 | — (P17 cerrada el 2026-10-27, Q50 de motor-local) | expanded |
 | [US-TMC-012](./user-stories/US-TMC-012-solape-otro-actor.md) | Un undo nunca sobrescribe trabajo posterior de otro actor | Desarrollador quiere que el undo se detenga y muestre el solape | 002, 006 | — | expanded |
 | [US-TMC-013](./user-stories/US-TMC-013-permisos-solicitante.md) | Un agente no puede deshacer trabajo ajeno, aunque lance la CLI desde su propia shell | Desarrollador quiere solicitante atribuido y confirmación interactiva para tocar trabajo ajeno | 002, US-GRP-007, US-GRP-009 | — (F-001-05 para el canal MCP) | implemented (PR #219) |
 | [US-TMC-014](./user-stories/US-TMC-014-undo-ya-empujado.md) | El desarrollador sabe cuándo lo que deshizo sigue en el remoto | Desarrollador quiere undo solo local con aviso si ya se empujó | 002 | — | expanded |
@@ -71,6 +70,7 @@ deferred:
 | [US-TMC-021](./user-stories/US-TMC-021-politica-guardrails-undo.md) | Las políticas del repo pueden restringir quién deshace, nunca ampliarlo | Desarrollador quiere que Guardrails endurezca los permisos del undo sin poder relajarlos | 013 | Fuera del MVP (Fase 2): Guardrails sin política sobre el undo | expanded |
 | [US-TMC-022](./user-stories/US-TMC-022-tope-disco.md) | La Time Machine nunca pasa del tope de disco que fijé | Desarrollador quiere un tope de disco con aviso y purga de lo más antiguo no protegido (RES-09) | 016 | — | expanded |
 | [US-TMC-023](./user-stories/US-TMC-023-timeline-legible-restaurar-id-corto.md) | El desarrollador lee el timeline de un vistazo y restaura un punto con el id corto que ve en la misma línea | Desarrollador quiere el timeline en una línea por evento, por día, con resúmenes e id corto para `raptor restore` (dogfooding, 2026-10-17) | 006, 009 | — | implemented (PR #265) |
+| [US-TMC-024](./user-stories/US-TMC-024-solape-restauracion.md) | Una restauración nunca retira trabajo de otro actor sin que el desarrollador lo vea y lo confirme | Desarrollador quiere ver y confirmar el trabajo ajeno que retira una restauración, que se detenga ante lo no confirmado (TQ-18, D-TMC-30) | 009, 012, 013 | — | expanded |
 
 ### Orden de ejecución sugerido (capas del DAG, solo dependencias internas)
 
@@ -79,7 +79,7 @@ deferred:
    - Tras 016: 022 (tope de disco, 2026-10-05)
 3. **Capa 2**: 006, 013, 014, 005, 017, 020 (bloqueada)
 4. **Capa 3**: 007, 008, 009, 012, 021 (fuera del MVP)
-5. **Capa 4**: 003, 010, 015, 019, 011 (bloqueada por P17)
+5. **Capa 4**: 003, 010, 015, 019, 011 (desbloqueada el 2026-10-27: P17 cerrada), 024 (solape de la restauración)
 
 ---
 
@@ -91,18 +91,19 @@ deferred:
 | BR-TMC-CONS-002 | 001, 004, 009 |
 | BR-TMC-CONS-003 | 004, 005, 006, 007 |
 | BR-TMC-CONS-004 | 018, 019 |
-| BR-TMC-CONS-005 | 003, 006, 008, 012 |
+| BR-TMC-CONS-005 | 003, 006, 008, 012, 024 |
 | BR-TMC-WF-001 | 002, 003, 010 |
 | BR-TMC-WF-002 | 011 |
-| BR-TMC-WF-003 | 009 |
+| BR-TMC-WF-003 | 009, 024 |
 | BR-TMC-VAL-001 | 002, 003, 010, 011 |
-| BR-TMC-AUTH-001 | 003, 009, 010, 011, 013, 021 |
+| BR-TMC-AUTH-001 | 003, 009, 010, 011, 013, 021, 024 |
 | BR-TMC-TIME-001 | 016, 017, 022 |
 | BR-TMC-EDGE-001 | 014 |
 | BR-TMC-EDGE-002 | 007, 009, 011 |
 | BR-TMC-EDGE-003 | 019 |
 | BR-TMC-EDGE-004 | 015 |
 | D-TMC-1 a D-TMC-25 | 1: 006 · 2: 008, 011 · 3: 001, 018 · 4: 005 · 5: 017 · 6: 013 · 7: 007 · 8: 014 · 9: 001, 004, 005 · 10: 001, 004, 005 · 11: 018 · 12: 006 · 13: 003, 012 · 14: 014 · 15: 016, 017 · 16: 001, 004, 009 · 17: 013, 021 · 18: 008 · 19: 002, 006, 007, 010 · 20: 009 · 21: 020 · 22: 011 · 23: 002, 003, 009, 010, 011, 013 · 24: — (`forget` fuera del MVP) · 25: 002, 003, 004, 007, 009, 016, 019 |
+| D-TMC-26 a D-TMC-30 | 26: 003 · 27: 003, 012, 024 · 28: 015 · 29: 010 · 30: 024 |
 
 ---
 
@@ -120,3 +121,4 @@ deferred:
 | 1.7 | 2026-10-04 | Agente de documentación para Rene Bonilla | US-TMC-021 sigue bloqueada con el motivo actualizado (Rene Bonilla, 2026-10-04): el formato de `policies` ya existe (ADR-GRP-007), pero Guardrails no define ninguna política sobre el undo. Pregunta abierta para el PO de Guardrails: ¿el catálogo incluye restringir quién deshace (D-TMC-17)? |
 | 1.8 | 2026-10-04 | Agente de documentación para Rene Bonilla | Decisión de Rene Bonilla, 2026-10-04: US-TMC-021 sale del MVP (Fase 2). La regla base de US-TMC-013 ya impide que un agente deshaga trabajo ajeno, y Guardrails no define política sobre el undo. Bloqueadas: 2 (011, 020); fuera del MVP: 1 (021) |
 | 1.9 | 2026-10-05 | Orquestador (decisión validada por PO y Arquitecto) | Decisión de Rene Bonilla (2026-10-05): tope de disco de la Time Machine. Nueva US-TMC-022 (Should, fuera de M1; sube a M1 si US-GRP-017 mide más de 2 GiB). Amplía BR-TMC-TIME-001 y D-TMC-15 con la purga por tamaño (ADR-TMC-007, Enmienda 2026-10-05); el PO actualiza su texto en business-rules.md |
+| 1.10 | 2026-10-27 | Orquestador (decisión validada por PO y Arquitecto) | Nueva US-TMC-024 (solape de la restauración, TQ-18; Must, bloquea el cierre de M2) con D-TMC-30 en business-rules.md. P17 de motor-local cerrada (Q50): US-TMC-011 se desbloquea. Bloqueadas: 1 (020); fuera del MVP: 1 (021) |
