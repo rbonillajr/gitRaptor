@@ -2,9 +2,9 @@
 id: DS-US-GRD-009
 title: "Dev Spec — US-GRD-009: tamaño del diff y formato de commit"
 type: dev-spec
-status: draft
+status: implemented
 created: 2026-10-21
-updated: 2026-10-21
+updated: 2026-10-28
 story: US-GRD-009
 feature: guardrails
 domain: GRP
@@ -480,3 +480,5 @@ G1 (Q-GRD-48 y Q-GRD-49, que bloqueaba la liberación) se cerró el 2026-10-21. 
 - **Certificación**: `deliver-run` paró en P3 por el tiempo límite de la suite (la suite completa tarda ~24 min con otros workers en paralelo); la suite se corrió a mano: 2 822 de 2 825 pasan, y los 3 rojos son inestables ajenos (`tm_chaos`, `daemon_tiers`, `tm_calm_dormant`, este último pasa solo en 7 s). Sin certificar.
 - **Segunda ronda (parqueo en remotas)**: un commit sobredimensionado creado con `commit-tree` y parqueado con `update-ref refs/remotes/x/y` se juzga en el paso de parqueo como una línea de rama (Decisión del orquestador (2026-10-28), validada por revisión de seguridad (opus)). Se evalúan las líneas `refs/remotes/*` escritas (no borradas) cuya cadena de `git` no es con certeza un fetch, pull o merge; la pasada de confirmación esconde solo las ramas locales para ellas. La exención es esa cadena certera: la del `fetch` que lanza `pull` también cuenta. Cambios: el cliente del hook (`hook.rs`) deja pasar esas líneas al daemon, `conn.rs` lee la cadena también para una transacción que escribe una remota, y el camino rápido del dispatcher (`fastpath.rs`) ya no se salta una remota escrita. **Coste**: todo `fetch` pasa ahora una vez por el daemon. Los dispatchers instalados antes de este cambio siguen saltándose las escrituras en remotas hasta que `raptor guard install` los refresque. Un commit con padres extra que ya están en la historia del primero se juzga como un commit normal; si la ascendencia no se puede leer, la lectura es `unverifiable` (falla cerrada).
 - **Residuos aceptados** (Decisión del orquestador (2026-10-28), validada por revisión de seguridad (opus)): una cadena de procesos falsificada (un binario `git` o `pull` falso) engaña a la exención de fetch, pull y merge, como a toda decisión por cadena de DS-US-GRD-007; y una fusión con un segundo padre sin relación esconde su contenido, porque las fusiones se juzgan solo por el mensaje.
+
+Implementado en: PR #296 (rama `feat/US-GRD-009-diff-size-commit-format`).
