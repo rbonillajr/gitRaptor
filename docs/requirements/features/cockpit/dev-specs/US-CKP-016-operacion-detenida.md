@@ -621,6 +621,10 @@ No aplicadas por esta DS; las aplica el PR de la historia o quedan anotadas en �
 | Detalle `in_progress` en los rechazos de la Time Machine | US-TMC-015 |
 | Abortar por MCP como operación suelta | Fuera del MVP (ADR-CKP-002 § 12) |
 
+## Enmienda (2026-10-28, US-CKP-013)
+
+**Decisión del orquestador (2026-10-28), validada por Arquitecto y PO.** Origen: [DS-US-CKP-013](./US-CKP-013-abrir-en-editor.md). Cierra G3: `e` en el panel de detenido prepara `open-in-editor` con la raíz de ese worktree, disponible con la operación en curso (`check_common`, rama `NoRepoWrite`). La fila G3 de § Decisiones queda como historia.
+
 ## Notas del autor
 
 - Riesgo: un `git` interrumpido con `SIGINT` en mitad de un hook puede dejar un `index.lock`. El previo garantizado lo cubre y la siguiente escritura responde `git-busy`; GitRaptor nunca borra un lock ajeno.

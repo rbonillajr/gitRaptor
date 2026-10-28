@@ -672,6 +672,14 @@ Corre `/security-review --scope devspec docs/requirements/features/time-machine/
 | E3 | ADR-TMC-005 § 5 (Enmienda 2026-10-27) | Para el undo por agente, el solape por sujeto compara con el valor final del agente; las rutas que el agente no tocó no se escriben (no hay conservadas que informar) (D4, D8, D-TMC-34) | Aplicada: ADR-TMC-005, Enmienda (2026-10-28, US-TMC-011) |
 | E4 | ADR-TMC-003 § 5 | Quitar "por eso el undo por agente sigue bloqueado (D-TMC-22)": P17 cerrada (Q50) | Aplicada: ADR-TMC-003 § 5 y Enmienda (2026-10-28, US-TMC-011) |
 
+## Enmienda (2026-10-28, US-TMC-014)
+
+**Decisión del orquestador (2026-10-28), validada por Arquitecto y PO.** Origen: [DS-US-TMC-014](./US-TMC-014-undo-ya-empujado.md) (E3); D-TMC-46. Su plan hace la misma llamada a `on_remote::check` (tras las precondiciones y antes de `ProtectedRequest`) y usa `UndoResult.on_remote`, que ya existe tras DS-US-TMC-014. Si aterriza después de DS-US-TMC-014, lo hace en su PR.
+
+## Enmienda (2026-10-28, US-TMC-008)
+
+**Decisión del orquestador (2026-10-28), validada por Arquitecto y PO.** Origen: [DS-US-TMC-008](./US-TMC-008-timeline-atribucion-vigente.md) D2; D-TMC-45. **T002 (opcional)**: `EngineLink::session_attribution` puede construirse sobre la misma lectura del bucle que `session_actors` (Actor → Requester con la regla de `requester_of`) para tener una sola lectura del actor vigente.
+
 ## Notas del autor
 
 | ID | Nota | Acción | Owner |

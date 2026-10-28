@@ -4,7 +4,7 @@ title: "Dev Spec — Deshacer lo ocurrido en el worktree en un periodo (raptor u
 type: dev-spec
 status: draft
 created: 2026-10-27
-updated: 2026-10-27
+updated: 2026-10-28
 story: US-TMC-010
 scope: backend
 frontend_surface: false
@@ -459,6 +459,10 @@ Corre `/security-review --scope devspec docs/requirements/features/time-machine/
 | ADR | Enmienda propuesta |
 |---|---|
 | ADR-TMC-003 § 4 | Añadir: "`undo --since` deshace, como una sola operación, el sufijo de la pila del worktree cuyo momento cae en el periodo; el destino es el previo de la más antigua" (D1, D2) |
+
+## Enmienda (2026-10-28, US-TMC-014)
+
+**Decisión del orquestador (2026-10-28), validada por Arquitecto y PO.** Origen: [DS-US-TMC-014](./US-TMC-014-undo-ya-empujado.md) (E3); D-TMC-46. Su plan hace la misma llamada a `on_remote::check` (tras las precondiciones y antes de `ProtectedRequest`) y usa `UndoResult.on_remote`, que ya existe tras DS-US-TMC-014. Si aterriza después de DS-US-TMC-014, lo hace en su PR.
 
 ## Notas del autor
 

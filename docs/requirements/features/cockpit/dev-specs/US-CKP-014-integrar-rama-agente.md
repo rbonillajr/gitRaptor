@@ -4,7 +4,7 @@ title: "Dev Spec — US-CKP-014: integrar la rama de un agente con una tecla y p
 type: dev-spec
 status: approved
 created: 2026-10-27
-updated: 2026-10-27
+updated: 2026-10-28
 story: US-CKP-014
 feature: cockpit
 domain: GRP
@@ -530,6 +530,20 @@ No aplicadas por esta DS; las aplica el PR de la historia o quedan anotadas en �
 | Cola de confirmación de Guardrails | US-CKP-023 |
 | Atribución commit→evento para el trabajo afectado | DEP-CKP-2 (motor-local) |
 | Merge por MCP | Fuera del MVP (Q-MCP-1) |
+
+## Enmienda (2026-10-28, US-CKP-018)
+
+**Decisión del orquestador (2026-10-28), validada por Arquitecto y PO.** Origen: [DS-US-CKP-018](./US-CKP-018-crear-worktree.md) C5 y C15; Q-CKP-57 y Q-CKP-58.
+
+- **T005**: `OpRequest::Prepare { operation, worktree, args: serde_json::Map<String, Value>, session_env }`; `args` vacío para las operaciones sin argumentos (DS-US-CKP-018 C15).
+- **I12**: "El Deshacer de una `create-worktree` no es `timemachine.undo`: es un `discard-worktree` del worktree creado (DS-US-CKP-018 C5)".
+
+## Enmienda (2026-10-28, US-CKP-021)
+
+**Decisión del orquestador (2026-10-28), validada por Arquitecto y PO.** Origen: [DS-US-CKP-021](./US-CKP-021-historial-aviso-purga.md) H7 y H9. Aditiva.
+
+- **T005 (`write_flow.rs`) y Firmas del stack**: "`OpRequest::Undo` lleva `confirmation: Option<ConfirmationToken>` (el toast manda `None`) y `RefusalView` lleva `tm: Option<Box<TmConfirmData>>`, el `data` de un rechazo de la Time Machine leído como `TmConfirmData`. Lo usa el historial de US-CKP-021 (H9)."
+- **I12**: "Desde el historial (DS-US-CKP-021 H7, H9) se nombra una sola raíz, la última del ámbito que sea fila disponible, como en el toast; con `not-last-operation` no se prueba otra. El historial sí ofrece la confirmación de trabajo de un agente."
 
 ## Notas del autor
 

@@ -4,7 +4,7 @@ title: "Dev Spec — Rehacer el último undo del worktree (raptor redo)"
 type: dev-spec
 status: draft
 created: 2026-10-27
-updated: 2026-10-27
+updated: 2026-10-28
 story: US-TMC-003
 scope: backend
 frontend_surface: false
@@ -582,6 +582,14 @@ Todas son **Decisión del orquestador (2026-10-27), validada por Arquitecto**, s
 ## Enmienda a la historia (aplicada)
 
 Aplicada el 2026-10-27 en [US-TMC-003](../user-stories/US-TMC-003-redo.md): el PO reescribió el escenario 5. Con Git, un cambio de `claude-1` en `feat-login` es una operación nueva e invalida el redo; una edición de archivo queda "sin atribuir" (DS-US-TMC-012 D3). Por eso el escenario pasa a un undo de `claude-1` seguido de un cambio sin atribuir de `b.rs`. El Arquitecto cambió la primera viñeta de Requisitos Técnicos por "Redo disponible si desde el último undo del ámbito no hubo una operación nueva" (D1, D-TMC-26). Esta ficha cita los escenarios tal como están ahora.
+
+## Enmienda (2026-10-28, US-TMC-014)
+
+**Decisión del orquestador (2026-10-28), validada por Arquitecto y PO.** Origen: [DS-US-TMC-014](./US-TMC-014-undo-ya-empujado.md) (E3); D-TMC-46.
+
+- Su plan llama a `on_remote::check(common_dir, &refs, &target_meta, now_ms)` después de sus precondiciones y antes de `ProtectedRequest`; añade `on_remote::warnings` **solo** a `req.warnings` (nunca a `RedoDone.warnings`); `RedoDone` gana `on_remote: RemoteNotice` y `RedoResult` gana `on_remote: Option<OnRemoteReport>` con `CAP_TM_ON_REMOTE`; la CLI de `raptor redo` imprime `tm.on-remote*` y `tm.on-remote-next`.
+- **Obligatorio**: amplía `no_undo_redo_or_restore_reaches_the_remote` al redo; el escenario 3 de US-TMC-014 para el redo se certifica ahí.
+- Si esta Dev Spec aterriza después de DS-US-TMC-014, lo hace en su PR.
 
 ## Notas del autor
 

@@ -504,6 +504,10 @@ Las D<n> son **Decisión del orquestador (2026-10-28), validada por Arquitecto**
 |---|---|---|
 | Q58 | La rama base del equipo existe solo como copia conocida del remoto (`origin/develop`), lo normal en un clon recién hecho: ¿contra qué se calcula el ahead/behind? | **Contra esa copia**, sin traer novedades (Q12); la local si existe; `base-missing` solo si no existe de ninguna forma. **Decisión del orquestador (2026-10-28), validada por PO y Arquitecto (Q58)**. Ajusta la propuesta inicial de esta ficha, que mantenía `base-missing` |
 
+## Enmienda (2026-10-28, US-CKP-018)
+
+**Decisión del orquestador (2026-10-28), validada por Arquitecto y PO.** Origen: [DS-US-CKP-018](../../cockpit/dev-specs/US-CKP-018-crear-worktree.md) C14 (G5). Enmienda condicional: "`pending` también lo consume el sitio de `create-worktree` de DS-US-MCP-019: con un cambio de base pendiente, crear un worktree se rechaza con `base-unconfirmed` en todas las capas".
+
 ## Notas del autor
 
 - T004 paso 1 hace que la tarea de refs envíe lotes que antes no enviaba (solo remotas). Revisar con el gate de frescura de INF-GRP-002 que un `fetch` grande no dispare el presupuesto del primer evento: el lote no lleva eventos, así que no debería.

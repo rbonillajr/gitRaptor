@@ -4,7 +4,7 @@ title: "Dev Spec — US-CKP-012: revisar lo que un agente integraría antes del 
 type: dev-spec
 status: draft
 created: 2026-10-27
-updated: 2026-10-27
+updated: 2026-10-28
 story: US-CKP-012
 feature: cockpit
 domain: GRP
@@ -98,7 +98,7 @@ Cada decisión es **Decisión del orquestador (2026-10-27), validada por Arquite
 | D8 | **Sin atribución por archivo** (BR-CKP-EDGE-004). La respuesta no tiene campo de actor ni de sesión, y la vista no pinta nombres de agente dentro del diff. El título nombra el worktree por su carpeta | Atribuir por sesión activa: con dos sesiones no hay forma fiable de saber quién tocó cada archivo (Q7 de motor-local) |
 | D9 | **El diff es una foto**: se pide al pulsar `d` y no se actualiza con los eventos. La cabecera dice "a las 14:03:12". Para refrescar, se cierra (`Esc` o `d`) y se vuelve a abrir | Recalcular con cada evento del worktree: un agente activo cambia archivos cada segundo y la vista saltaría mientras se lee |
 | D10 | **Cursor de fila en la flota.** `↑`/`↓` (`k`/`j`) mueven el cursor cuando no hay selector de repo ni pregunta en pantalla. El cursor guarda la clave del worktree (`WorktreeRow.key`), no el índice: sobrevive a los reordenamientos de DS-US-CKP-002. Si su fila desaparece, pasa a la siguiente en el orden. Arranca en la primera fila. Se pinta con el marcador de foco que ya tiene `AgentListModel.selected` | Cursor por índice: con el orden por atención, la fila seleccionada cambiaría sola al subir otra |
-| D11 | **Tecla `d` "ver diff"**, la primera acción por fila (D7 de DS-US-CKP-003). Sobre un worktree no disponible, `d` no pide nada: la barra muestra la pista desactivada con el motivo "el worktree no está disponible" (`KeyHints::disabled`) y la nota dice lo mismo (BR-CKP-ELIG-006, BR-CKP-EDGE-003). En cualquier estado de sesión, incluido Activo, `d` funciona | `Enter`: ya abre el repo en el selector, y "abrir" una fila se reserva para el editor (US-CKP-013) |
+| D11 | **Tecla `d` "ver diff"**, la primera acción por fila (D7 de DS-US-CKP-003). Sobre un worktree no disponible, `d` no pide nada: la barra muestra la pista desactivada con el motivo "el worktree no está disponible" (`KeyHints::disabled`) y la nota dice lo mismo (BR-CKP-ELIG-006, BR-CKP-EDGE-003). En cualquier estado de sesión, incluido Activo, `d` funciona | `Enter`: ya abre el repo en el selector; el editor es `e` (DS-US-CKP-013 K13) |
 | D12 | **Vista a pantalla completa** (ADR-CKP-003 § 7: el detalle pasa a pantalla completa bajo demanda). Una lista desplazable: cabecera de sección "entraría al merge (3 archivos)" / "sin commitear (1 archivo)", una cabecera por archivo con su cambio y `+a −r`, y sus líneas con `DiffView`. `↑`/`↓` desplazan una línea; `Esc` o `d` cierran. Los avisos van en la cabecera del archivo: "binario", "truncado: más de 2.000 líneas", "demasiado grande: más de 8 MiB" y, por sección, "truncado: …" según `cut` | Panel lateral: a 80×24 no cabe una línea de diff legible junto a la flota |
 | D13 | **Cliente sin bloqueo.** La biblioteca cliente gana `Client::submit` (envía sin esperar y apunta el id). `next_incoming` sigue entregando tramas sin decodificar (`Incoming::Frame`, `client/mod.rs:486`; decodificar cuenta en el presupuesto del cliente, ADR-CKP-003 § 6), así que la respuesta a un `submit` leída ahí llega como una trama más y la decodifica `apps/cli/src/client::decode`, que hoy descarta toda respuesta (`client/mod.rs:697`). Solo cambia `call`: hoy descarta una respuesta de otro id (`crates/api/src/client/mod.rs:431`); con el id apuntado, la guarda ya decodificada y `next_incoming` la entrega como `Incoming::Reply`, igual que hoy entrega como `Buffered` las notificaciones que `call` leyó. El hilo del canal de la TUI envía el diff con `submit` y sigue leyendo el stream | Una segunda conexión solo para consultas: la cancelación tendría que cruzar conexiones (D3 lo prohíbe) |
 | D14 | **La raíz cruda del worktree en el modelo.** `WorktreeRow` gana `root: PathBuf`, rellenado en la ingesta y usado solo como identificador en `Cmd::Diff`; nunca se pinta. Es el mismo patrón que `Cmd::Observe { root: PathBuf }` | Pedir el diff por `key`: el daemon no conoce el hash del cliente; por `path` (`SafeText`): el saneado puede cambiar la ruta |
@@ -618,6 +618,10 @@ Sin archivos compartidos más allá del dispatch de `conn.rs` (ADR-GRP-016, [gu�
 | Diff por el MCP | Nunca (Q-CKP-8) | `mcp_connection_does_not_see_diff_worktree` |
 
 ---
+
+## Enmienda (2026-10-28, US-CKP-013)
+
+**Decisión del orquestador (2026-10-28), validada por Arquitecto y PO.** Origen: [DS-US-CKP-013](./US-CKP-013-abrir-en-editor.md) K13. Cambia una celda de D11 (columna "Por qué / descartado"). Antes decía: "`Enter`: ya abre el repo en el selector, y "abrir" una fila se reserva para el editor (US-CKP-013)"; ahora: "`Enter`: ya abre el repo en el selector; el editor es `e` (DS-US-CKP-013 K13)".
 
 ## Notas del autor
 
