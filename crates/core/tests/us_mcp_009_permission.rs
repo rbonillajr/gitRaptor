@@ -252,6 +252,7 @@ fn the_hooks_under_a_safe_commit_reuse_the_bound_decision_and_log_once() {
             hook,
             operation: Operation::Commit { stage },
             authorship: Some(commit_facts(&r.common, MESSAGE)),
+            exception_token: None,
         };
         let served = serve_child(&r.registry, &params, &child, Some(r.repo.path()));
         assert_eq!(
