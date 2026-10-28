@@ -256,6 +256,7 @@ fn config(tp: &TempProfile, operations: Option<OperationsWiring>) -> DaemonConfi
         tiers: Default::default(),
         discovery: Default::default(),
         power: Default::default(),
+        predict: Default::default(),
         tm_capture: Default::default(),
     }
 }

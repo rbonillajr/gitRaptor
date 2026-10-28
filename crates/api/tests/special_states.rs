@@ -50,6 +50,7 @@ fn repo(w: WorktreeView) -> RepoView {
         tier: None,
         checked_utc_ms: None,
         kept_temps: None,
+        prediction: None,
     }
 }
 

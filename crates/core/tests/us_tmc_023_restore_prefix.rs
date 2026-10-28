@@ -352,6 +352,7 @@ fn a_prefix_never_resolves_or_lists_ids_of_another_repo() {
             prior_deadline: Duration::from_secs(30),
             prior_layer: None,
         }),
+        predict: Default::default(),
         tm_capture: TmCapture {
             config: CaptureConfig {
                 enabled: false,

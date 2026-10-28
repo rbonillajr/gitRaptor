@@ -25,6 +25,7 @@ pub mod guard;
 pub mod mcp_view;
 pub mod messages;
 pub mod methods;
+pub mod prediction;
 pub mod resources;
 pub mod rpc;
 pub mod scope;

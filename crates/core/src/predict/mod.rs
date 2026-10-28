@@ -6,10 +6,13 @@
 //! published, and nothing runs a dry merge: [`state::RepoPairs::apply`] says which pairs to
 //! queue and [`state::RepoPairs::complete`] takes the result back.
 
+pub mod merger;
 pub mod overlap;
 pub mod pairs;
+pub mod pool;
 pub mod queue;
 pub mod state;
+pub mod worker;
 
 use std::path::PathBuf;
 
@@ -17,6 +20,26 @@ use gitraptor_api::messages::BaseStatusView;
 use gitraptor_git::dry_merge::DryMergeOutcome;
 
 use crate::observe::UncommittedPaths;
+use crate::predict::worker::WorkerConfig;
+
+/// How the daemon runs the predictor's dry merges.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum PredictMerger {
+    /// No dry merge runs and nothing is published: the daemon behaves as before the predictor
+    /// (tests that do not exercise it).
+    #[default]
+    Off,
+    /// In the daemon's own process (tests of the publication).
+    InProcess,
+    /// The worker process (production: the daemon's own binary, resolved once at start).
+    Worker(WorkerConfig),
+}
+
+/// The predictor's part of the daemon's configuration.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PredictConfig {
+    pub merger: PredictMerger,
+}
 
 /// The other side of a pair: the base branch or another worktree.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]

@@ -108,6 +108,7 @@ fn snapshot(trees: &[Tree]) -> Msg {
                 tier: None,
                 checked_utc_ms: None,
                 kept_temps: None,
+                prediction: None,
             },
         },
     ))))

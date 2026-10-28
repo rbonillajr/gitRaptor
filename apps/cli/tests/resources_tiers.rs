@@ -112,6 +112,7 @@ fn machine() -> Machine {
             sweep_every: Duration::from_secs(120),
             reconcile_every: Duration::from_secs(3600),
         },
+        predict: Default::default(),
         tm_capture: Default::default(),
         discovery: Default::default(),
         power: Default::default(),

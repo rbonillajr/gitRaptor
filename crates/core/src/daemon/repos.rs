@@ -91,6 +91,7 @@ impl Daemon {
                     tier: None,
                     checked_utc_ms: None,
                     kept_temps: None,
+                    prediction: None,
                 },
             });
         }
@@ -132,6 +133,7 @@ impl Daemon {
             fetched_utc_ms: observe::fetched_utc_ms(&request.common_dir, now_ms()),
             tier: (state == RepoStateView::Observed).then_some(RepoTier::Active),
             checked_utc_ms: None,
+            prediction: None,
             kept_temps: None,
         };
         if self.state == EngineState::NoRepos {

@@ -57,6 +57,7 @@ fn repo_of(worktrees: Vec<WorktreeView>, tier: Option<RepoTier>) -> RepoView {
         tier,
         checked_utc_ms: None,
         kept_temps: None,
+        prediction: None,
     }
 }
 
