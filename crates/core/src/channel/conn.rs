@@ -1262,7 +1262,14 @@ impl Connection<'_> {
         // US-GRD-008: the actor of a branch movement or a push, for the rules that tell an agent
         // from the person. Resolved only for a connection that asked for it.
         let policies = self.has(methods::CAP_GUARD_POLICIES.name) && movement;
+        // US-GRD-009: the same for the diff size and the commit format of a branch movement.
+        let commit_policies = self.has(methods::CAP_GUARD_COMMIT_POLICIES.name)
+            && matches!(
+                params.operation,
+                gitraptor_api::guard::Operation::RefTransaction { .. }
+            );
         if policies
+            || commit_policies
             || (permissions
                 && !matches!(
                     params.operation,
@@ -1281,9 +1288,13 @@ impl Connection<'_> {
                 cwd: process_cwd(self.peer.pid),
                 authorship,
                 policies,
+                commit_policies,
                 permissions,
-                chain: (permissions
-                    && crate::guardrails::permissions::moves_a_branch(&params.operation))
+                chain: ((permissions || commit_policies)
+                    && (crate::guardrails::permissions::moves_a_branch(&params.operation)
+                        || crate::guardrails::commit_policies::writes_remote_tracking(
+                            &params.operation,
+                        )))
                 .then(|| crate::guardrails::permissions::git_chain(self.peer, &checks)),
                 ..Default::default()
             };
@@ -1325,6 +1336,7 @@ impl Connection<'_> {
             git,
             second_line_skip,
             policies: false,
+            commit_policies: false,
             permissions,
             chain: None,
             asked_by: Some(asked_by),
@@ -1728,6 +1740,9 @@ impl Connection<'_> {
         if !self.has(methods::CAP_GUARD_PERMISSIONS.name) {
             crate::guardrails::permissions::legacy_not_preventable(&mut status.not_preventable);
         }
+        if !self.has(methods::CAP_GUARD_COMMIT_POLICIES.name) {
+            crate::guardrails::commit_policies::legacy_not_preventable(&mut status.not_preventable);
+        }
     }
 
     /// The fields of `guard.plan` a connection has the capability for.
@@ -1741,6 +1756,9 @@ impl Connection<'_> {
         plan.blockers = self.guard_blockers(std::mem::take(&mut plan.blockers));
         if !self.has(methods::CAP_GUARD_PERMISSIONS.name) {
             crate::guardrails::permissions::legacy_not_preventable(&mut plan.not_preventable);
+        }
+        if !self.has(methods::CAP_GUARD_COMMIT_POLICIES.name) {
+            crate::guardrails::commit_policies::legacy_not_preventable(&mut plan.not_preventable);
         }
         self.guard_shape_status(&mut plan.status);
     }
@@ -1788,6 +1806,9 @@ impl Connection<'_> {
                 // The permissions per operation are left out; the summary still counts them.
                 if !self.has(methods::CAP_GUARD_PERMISSIONS.name) {
                     crate::guardrails::permissions::legacy_log(&mut log);
+                }
+                if !self.has(methods::CAP_GUARD_COMMIT_POLICIES.name) {
+                    crate::guardrails::commit_policies::legacy_log(&mut log);
                 }
                 Ok(log)
             }

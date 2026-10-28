@@ -12,6 +12,7 @@ use gitraptor_api::guard::{
 };
 use gitraptor_git::{Ancestry, ReaderOptions, RefName, RepoReader};
 use gitraptor_policy::guard::authorship::Effective;
+use gitraptor_policy::guard::commit_policies::CommitPolicies;
 use gitraptor_policy::guard::glob::{Kind, Pattern};
 use gitraptor_policy::guard::permissions::{Chain, Classified};
 use gitraptor_policy::guard::plan::Preset;
@@ -45,6 +46,7 @@ pub fn facts(reader: &RepoReader, op: &Operation) -> Facts {
         touched: Vec::new(),
         config_touched: Vec::new(),
         classified: Vec::new(),
+        commits: Vec::new(),
         push: updates
             .iter()
             .map(|u| {
@@ -94,6 +96,11 @@ pub struct CommitContext {
     pub facts: Option<gitraptor_api::guard::AuthorshipFacts>,
     /// The protected branches and forbidden paths in force (US-GRD-008).
     pub policies: Policies,
+    /// The diff size and commit format rules in force (US-GRD-009).
+    pub commit_policies: CommitPolicies,
+    /// The `git` processes above the hook, to tell a `fetch` or `clone` (US-GRD-009, D6); empty
+    /// proves nothing.
+    pub chain: Chain,
     /// The permissions per operation in force (US-GRD-007); `None` evaluates none of them. The
     /// safe minimum is active unless these say otherwise.
     pub permissions: Option<EffectivePermissions>,
@@ -140,6 +147,7 @@ fn evaluate_preset(
         actor: commit.actor,
         authorship: commit.authorship,
         policies: commit.policies,
+        commit_policies: commit.commit_policies,
         layer,
         minimum: commit
             .permissions
@@ -162,6 +170,10 @@ fn evaluate_preset(
         Some(_) => Vec::new(),
         None => super::policies::config_touched(reader, op, ctx.actor),
     };
+    // The commits of the movement are read for the two commit policies only when a rule governs
+    // the actor, and their trees only when a size rule does.
+    facts.commits =
+        super::commit_policies::changes(reader, op, &ctx.commit_policies, ctx.actor, &commit.chain);
     policy::evaluate(op, &facts, &ctx)
 }
 
@@ -328,6 +340,9 @@ pub struct Caller {
     /// The connection was granted `guard.policies`: the actor of a `ref-transaction` or a
     /// `push` is resolved and the protected branches and forbidden paths apply (US-GRD-008).
     pub policies: bool,
+    /// The connection was granted `guard.commit-policies`: the actor of a `ref-transaction` is
+    /// resolved and the diff size and commit format apply (US-GRD-009).
+    pub commit_policies: bool,
     /// The `git` process that ran the hook, for an agent's commit (DS-US-GRD-018 D6).
     pub git: Option<super::second_line::GitProcess>,
     /// The second line does not evaluate this commit: the same `git` already had its decision,
@@ -387,6 +402,8 @@ pub struct RuleSet {
     pub authorship: bool,
     /// The protected branches and forbidden paths of a movement (`guard.policies`).
     pub policies: bool,
+    /// The diff size and commit format of a movement (`guard.commit-policies`).
+    pub commit_policies: bool,
     /// The second line does not evaluate this commit (§ 5.3).
     pub second_line_skip: bool,
     /// The permissions per operation (`guard.permissions`).
@@ -399,6 +416,7 @@ impl RuleSet {
         Self {
             authorship: caller.authorship,
             policies: caller.policies,
+            commit_policies: caller.commit_policies,
             second_line_skip: caller.second_line_skip,
             permissions: caller.permissions,
         }
@@ -410,6 +428,7 @@ impl RuleSet {
         Self {
             authorship: true,
             policies: true,
+            commit_policies: false,
             second_line_skip: false,
             permissions: false,
         }
@@ -554,8 +573,10 @@ fn decide_op(
         decision(evaluation)
     };
     if !input.rules.authorship {
-        out.notices
-            .retain(|n| super::permissions::is_permission(n.rule));
+        out.notices.retain(|n| {
+            super::permissions::is_permission(n.rule)
+                || super::commit_policies::is_commit_policy(n.rule)
+        });
     }
     Served {
         decision: out,
@@ -619,21 +640,24 @@ fn evaluate_op(
         operation,
         Operation::RefTransaction { .. } | Operation::Push { .. }
     ) && input.rules.policies;
+    let commit_policies =
+        matches!(operation, Operation::RefTransaction { .. }) && input.rules.commit_policies;
     let permissions = input.rules.permissions && !second_line_skipped;
     // One read of every level for the whole evaluation: the bases of a protected repo, the
     // permissions, the minimum, the rules, the authorship policy and the ignored relaxations
     // all come from it.
-    let layers = (registered || authorship || policies || permissions).then(|| {
-        let worktree = input
-            .worktree
-            .and_then(|cwd| super::authorship::worktree_reader(cwd, common));
-        super::layers::load(
-            worktree.as_ref().unwrap_or(&reader),
-            confirmed.as_ref(),
-            registry.profile().as_ref(),
-            repo_id,
-        )
-    });
+    let layers =
+        (registered || authorship || policies || commit_policies || permissions).then(|| {
+            let worktree = input
+                .worktree
+                .and_then(|cwd| super::authorship::worktree_reader(cwd, common));
+            super::layers::load(
+                worktree.as_ref().unwrap_or(&reader),
+                confirmed.as_ref(),
+                registry.profile().as_ref(),
+                repo_id,
+            )
+        });
     // A protected repo guards the bases of the team level (ADR-GRD-004 § 3), or the fail-safe
     // union when it cannot be read; an unknown one, `main` and its main branch.
     let mut bases = match &recorded {
@@ -661,7 +685,9 @@ fn evaluate_op(
     let mut ignored = Vec::new();
     let mut commit = CommitContext {
         // The rules that tell an agent from the person; an `ask` reads the actor apart.
-        actor: (authorship || policies).then_some(input.actor).flatten(),
+        actor: (authorship || policies || commit_policies)
+            .then_some(input.actor)
+            .flatten(),
         ..CommitContext::default()
     };
     if authorship {
@@ -687,6 +713,14 @@ fn evaluate_op(
             rules.branches.push(rules_of);
         }
         commit.policies = rules;
+    }
+    if commit_policies {
+        // What cannot be read leaves no rule of these two keys: an unreadable team level is
+        // already denied for an agent's movement by the protected branches (D13).
+        if let Some(Ok(layers)) = &layers {
+            commit.commit_policies = layers.commit_policies();
+        }
+        commit.chain = chain.clone();
     }
     if permissions {
         // A team level the full read cannot load falls back to what the hook client would

@@ -9,6 +9,7 @@
 
 pub mod actor;
 pub mod authorship;
+pub mod commit_policies;
 pub mod config_guard;
 pub mod confirm;
 pub mod constants;

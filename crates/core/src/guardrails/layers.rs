@@ -11,6 +11,7 @@ use std::sync::LazyLock;
 use gitraptor_api::guard::Level;
 use gitraptor_git::RepoReader;
 use gitraptor_policy::guard::authorship::{self, Effective};
+use gitraptor_policy::guard::commit_policies::{self, CommitPolicies};
 use gitraptor_policy::guard::policies::{self, Policies};
 use gitraptor_policy::layers::{self, IgnoredRelaxation, Personal};
 use gitraptor_policy::settings::Parsed;
@@ -97,6 +98,26 @@ impl Layers {
             source(Level::Floor, self.team.floor.parsed.applicable()),
             // The confirmed floor too, so a removal waits for its confirmation like any
             // relaxation.
+            source(
+                Level::Floor,
+                self.team
+                    .confirmed_floor
+                    .as_ref()
+                    .and_then(|f| f.parsed.applicable()),
+            ),
+            source(Level::Worktree, self.team.worktree.parsed.applicable()),
+            source(Level::Profile, self.profile.applicable()),
+            source(Level::Local, self.local.applicable()),
+        ])
+    }
+
+    /// Diff size and commit format: the size rules of the floor, the confirmed floor, the worktree
+    /// and the personal level, and the one format of the first level that declares it
+    /// (US-GRD-009, D2). The confirmed floor too, so a relaxation waits for its confirmation.
+    pub fn commit_policies(&self) -> CommitPolicies {
+        let source = |level, settings| policies::Source { level, settings };
+        commit_policies::combine(&[
+            source(Level::Floor, self.team.floor.parsed.applicable()),
             source(
                 Level::Floor,
                 self.team
