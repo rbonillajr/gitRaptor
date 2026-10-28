@@ -156,7 +156,7 @@ sequenceDiagram
 
 - **Medir lo que paga el usuario** (D1). El escenario `protected` del banco llama a `ProtectedOperation::run` con el `StoreSnapshotter` real y un paso vacío que anota `Instant::now()` al entrar. Overhead = entrada de `run` → entrada del paso: intención, hilo, captura, `prior-snapshot` y `ready`. "Admisión" = overhead − `StageTimings.total`. El salto por el socket ya tiene su gate (`channel_flood`, p95 < 25 ms, ADR-GRP-011).
 - **Escalón 2 en producción** (D5). `EngineLink::changed_paths` con implementación por defecto `None` (los dobles siguen con detección completa, que siempre es correcta). La captura pide las pistas **dentro** del escritor, con la marca guardada del worktree, así que `since` siempre es la de su captura anterior. La regla de continuidad es una función pura y falla cerrado (ADR-TMC-006 § 5).
-- **El plazo cuenta el avance** (D-TMC-42). `PriorWatch` sustituye el `recv_timeout` único: aborta con `Timeout` si la captura pasa `prior_deadline` (10 s) sin avanzar o si llega a `PRIOR_HARD_DEADLINE` (100 s, por debajo de `WRITE_CALL_TIMEOUT` = 120 s del cliente, para que la respuesta tipada llegue siempre). `PriorFailure::Timeout` no cambia.
+- **El plazo cuenta el avance** (D-TMC-42). `PriorWatch` sustituye el `recv_timeout` único: aborta con `Timeout` si la captura pasa `prior_deadline` (10 s) sin avanzar o si llega a `PRIOR_HARD_DEADLINE` (100 s desde que se aceptó la petición, cola del lock incluida; por debajo de `WRITE_CALL_TIMEOUT` = 120 s del cliente, para que la respuesta tipada llegue siempre). `PriorFailure::Timeout` no cambia.
 - **Progreso empujado por el daemon** (D2, D-TMC-43). Pasado `PRIOR_PROGRESS_AFTER` (1 s), y cada `PRIOR_PROGRESS_EVERY` (1 s), el hilo que espera llama al `PriorProgressSink`. En el canal, el sink empuja `timemachine.prior-progress` al `Outbox` de **esa** conexión solo si tiene la capacidad `timemachine.prior-progress` y no es `raptor-mcp`.
 - **Sin hilos nuevos** (D3). La espera y el progreso corren en el hilo que ya esperaba (`raptor-conn`). Los contadores de la captura son atómicos `Relaxed` que escriben los hilos de hashing; nadie toma el cerrojo del escritor para leerlos. Compatible con TS-GRP-005 D11.
 
@@ -278,7 +278,8 @@ flowchart LR
 
 **Reglas**
 - `PriorWatch::next(now, reading) -> Wait(Duration) | Notify | Abort`: `Abort` si `now − último avance ≥ deadline` o `now − inicio ≥ PRIOR_HARD_DEADLINE`; `Notify` si `now − inicio ≥ PRIOR_PROGRESS_AFTER` y pasó `PRIOR_PROGRESS_EVERY` desde el último aviso; si no, `Wait` hasta el más cercano de esos plazos.
-- `ProtectedOperation.deadline` pasa a ser el plazo **sin avance** (D-TMC-42). `ProtectedOperation` gana `hard_deadline` y `progress_after`; `ProtectedWiring` y `TimeMachineWiring` (`channel/mod.rs`) también, con los valores por defecto en `daemon/serve.rs` (los tres literales de `ProtectedOperation` y los dos de `UndoEnv`/seis de `RunEnv` se actualizan; los tests con `..Default`-like donde exista).
+- `ProtectedOperation.deadline` pasa a ser el plazo **sin avance** (D-TMC-42). `ProtectedOperation` gana `hard_deadline`, `progress_after` y `accepted: Instant`; `ProtectedWiring` y `TimeMachineWiring` (`channel/mod.rs`) también, con los valores por defecto en `daemon/serve.rs`. Se actualizan los tres literales de `ProtectedOperation` (`undo.rs`, `restore.rs`, `executor/mod.rs`) y los de `UndoEnv` y `RunEnv`; los tests, con `..Default`-like donde exista.
+- **El tope cuenta desde que `raptor-conn` aceptó la petición** (`accepted`), no desde que arranca el previo: incluye la espera en la cola del lock del repo (`lock_queued`, hasta `MAX_QUEUED_PER_REPO` = 8 por delante). Si no, una petición en cola detrás de previos lentos pasaría de `WRITE_CALL_TIMEOUT` (120 s): el cliente daría la operación por fallida y el daemon la ejecutaría después. Si al empezar el previo ya no queda tope, aborta con `Timeout` sin capturar (revisión del Arquitecto, 2026-10-28).
 - `progress_after == 0` emite el primer aviso **antes** de esperar: así los tests de proceso lo ven sin depender del tiempo.
 - El abortado sigue siendo `PriorFailure::Timeout`: intención `aborted`, el paso no corre, el repo no cambia (BR-TMC-CONS-001). La captura tardía sigue como punto del timeline, nunca como previo (TS-TMC-004).
 - Al terminar el previo, una línea de diagnóstico en el log del daemon con `operation_id`, overhead, `StageTimings` y la detección (ADR-TMC-006 § 4; NFR-03). Sin rutas.
@@ -291,6 +292,7 @@ flowchart LR
 - **Guard ⛔4.3:** `watch::the_hard_deadline_aborts_even_while_advancing`
 - **Guard ⛔4.4:** `watch::no_progress_before_the_threshold_then_one_per_period`
 - **Guard ⛔4.5:** `protected::tests::a_stalled_prior_aborts_and_the_step_never_runs` (doble de `PriorSnapshotter` que se bloquea en un canal; `deadline` 50 ms; sin `sleep`: el test espera el `Err` de `run`)
+- **Guard ⛔4.6:** `watch::the_hard_deadline_counts_the_queue` (`accepted` anterior al inicio del previo en más del tope → `Abort` en la primera consulta)
 
 ### T005 — Servir el progreso en el canal
 
@@ -301,11 +303,11 @@ flowchart LR
 - `crates/core/src/timemachine/undo.rs` (**MODIFY**: `UndoEnv.prior_progress: Option<&dyn PriorProgressSink>`; `run_with` en el sitio de `ProtectedOperation`)
 - `crates/core/src/timemachine/restore.rs` (**MODIFY**: igual)
 - `crates/core/src/executor/mod.rs` (**MODIFY**: `RunEnv.prior_progress`; `run_with`)
-- `crates/core/src/client.rs` (**MODIFY**: la capacidad entra en las que pide `connection.accept`)
+- `crates/core/src/client.rs`: **sin cambios**. `ClientOptions::new` ya pide en `connection.accept` toda capacidad declarada (`capability::all()`), así que la CLI, la TUI y `raptor-mcp` la piden en cuanto T001 la declara
 
 **Reglas**
 - `ConnProgress` empuja con `Outbox::push`; si la cola está `is_lagged`, descarta el aviso (el progreso no es un evento: el siguiente lo sustituye).
-- `raptor-mcp` no pide la capacidad (lo dice el comentario en `apps/mcp/src/engine.rs`) y, aunque la pidiera, `is_mcp()` la anula.
+- `raptor-mcp` también pide la capacidad (usa `gitraptor_core::client` con `capability::all()`); la exclusión la hace `is_mcp()` en el daemon, que es lo que prueba Guard ⛔5.2.
 - Ningún brazo nuevo en el `match` de dispatch: no hay método nuevo.
 
 - **Depende:** T001, T004
@@ -380,10 +382,10 @@ flowchart LR
 **Ubicación.** `.github/workflows/engine-bench.yml` (**MODIFY**)
 
 **Reglas**
-- Paso nuevo "Time Machine prior overhead" tras "Channel under flood": `cargo bench -p gitraptor-core --bench tm_snapshot -- --gate ci --scenario protected --out "$TM_BENCH_ROOT/tm-snapshot-${{ runner.os }}.json"`. Su informe se sube con el artefacto `engine-bench-*`.
+- Paso nuevo "Time Machine prior overhead" tras "Channel under flood": `cargo bench -p gitraptor-core --bench tm_snapshot -- --gate ci --scenario protected` (prefijo: `protected_1wt` y `protected_10wt`) `--out "$TM_BENCH_ROOT/tm-snapshot-${{ runner.os }}.json"`. Su informe se sube con el artefacto `engine-bench-*`.
 - Caché del perfil `M` como la del repo de 100K commits: `key: tm-bench-ref-M-v1-${{ runner.os }}-${{ hashFiles('crates/testkit/src/repogen.rs') }}`.
 - `large` (perfil `L`) solo en `schedule` y `workflow_dispatch`, con su caché.
-- El recordatorio de la máquina de referencia se amplía a `^crates/core/src/timemachine/(store|protected)/`: pide adjuntar `--gate reference` del banco `tm_snapshot` (D9).
+- El recordatorio de la máquina de referencia se amplía a `^crates/core/src/timemachine/((store|protected)/|hints\.rs)`: pide adjuntar `--gate reference` del banco `tm_snapshot` (D9).
 - **Calibración** (antes de mezclar): 5 ejecuciones con `workflow_dispatch` en la rama por runner; techos = `calibrated(máximo, WIDE_FACTOR)` para el p95 y `calibrated(máximo, STEADY_P50_FACTOR)` para el p50; la tabla de ejecuciones va en el PR y en DS-INF-GRP-002.
 
 - **Depende:** T008
@@ -431,7 +433,6 @@ crates/core/src/channel/{mod,conn}.rs                  ← MODIFY  (T004 wiring,
 crates/core/src/daemon/serve.rs                        ← MODIFY  (T004, valores por defecto)
 crates/core/src/timemachine/{undo,restore}.rs          ← MODIFY  (T005)
 crates/core/src/executor/mod.rs                        ← MODIFY  (T005)
-crates/core/src/client.rs                              ← MODIFY  (T005)
 apps/cli/src/progress.rs                               ← CREATE  (T006)
 apps/cli/src/undo/confirm/mod.rs                       ← MODIFY  (T006)
 apps/cli/i18n/{en,es}/timemachine.txt                  ← MODIFY  (T006)
@@ -530,7 +531,7 @@ _No aplica: sin claves nuevas._ Los plazos son constantes; los tests los fijan p
 | Cola del escritor (aviso) | 10 ms p95 | ADR-TMC-004 § 2 |
 | Delta de referencia | 100 archivos / ~20 MB | ADR-TMC-006 § 2 |
 | Plazo sin avance | 10 s | D-TMC-42 (era el plazo absoluto) |
-| Tope del previo | 100 s (< 120 s de `WRITE_CALL_TIMEOUT`) | D-TMC-42; TQ-27 |
+| Tope del previo | 100 s desde la aceptación de la petición, cola incluida (< 120 s de `WRITE_CALL_TIMEOUT`) | D-TMC-42; TQ-27 |
 | Umbral y periodo del progreso | 1 s y 1 s | D-TMC-43; story § Requisitos técnicos |
 | Paso del contador de bytes | 256 KiB | Igual que el sondeo de `write_blob_stream` |
 | Techos de regresión de CI | Los de la calibración de T009 | INF-GRP-002 |
@@ -665,7 +666,7 @@ Corre `/security-review --scope devspec docs/requirements/features/time-machine/
 
 | ID | Decisión |
 |---|---|
-| D-TMC-42 | Un snapshot previo que sigue avanzando no se corta: la operación espera mientras la captura avance, hasta un tope de 100 s. Si la captura pasa 10 s sin avanzar o llega al tope, la operación no se ejecuta, el repo no cambia y el motivo es el de hoy (`prior-timeout`). **Decisión del orquestador (2026-10-28), validada por Arquitecto** |
+| D-TMC-42 | Un snapshot previo que sigue avanzando no se corta: la operación espera mientras la captura avance, hasta un tope de 100 s contados desde que el daemon aceptó la petición (la espera en cola incluida). Si la captura pasa 10 s sin avanzar o llega al tope, la operación no se ejecuta, el repo no cambia y el motivo es el de hoy (`prior-timeout`). **Decisión del orquestador (2026-10-28), validada por Arquitecto** |
 | D-TMC-43 | Si guardar el snapshot previo pasa de 1 s, la CLI y la TUI muestran que se está guardando el trabajo primero, con el tiempo y lo leído, y lo actualizan cada segundo hasta la respuesta. El MCP no recibe progreso (su respuesta llega al terminar), y la CLI no lo muestra con `--json` ni sin terminal. **Decisión del orquestador (2026-10-28), validada por Arquitecto** |
 
 ### Preguntas abiertas nuevas

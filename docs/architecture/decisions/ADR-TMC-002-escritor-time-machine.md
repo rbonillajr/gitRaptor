@@ -5,7 +5,7 @@ type: adr
 status: accepted
 accepted: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-27
+updated: 2026-10-28
 date: 2026-10-03
 domain: GRP
 feature: time-machine
@@ -62,7 +62,7 @@ Heredan ADR-GRP-009 § 3 y añaden lo que fijan **SEC-TMC-02** (invocación sin 
   - En macOS, nunca el *shim* `/usr/bin/git`: cuesta unos 17 ms extra por proceso.
   - **Tampoco se ejecuta `xcrun`**, que puede abrir el diálogo de instalación de las herramientas, algo que prohíbe ADR-GRP-009 § 4. El directorio del desarrollador se resuelve leyendo el disco (`readlink /var/db/xcode_select_link`) y la ruta real de Git se toma de ahí.
   - Cambiar esa resolución para el motor y el ejecutor es una nota pendiente para ADR-GRP-009 § 4 y ADR-GRP-001.
-- Añadir una operación a la lista exige revisar este ADR; el detalle está en la Dev Spec de TS-TMC-003. La escritura del almacén con gitoxide (§ 1) y el `repack` y el `prune` del mantenimiento (ADR-TMC-007 § 4) forman parte de la lista desde la Enmienda de 2026-10-04.
+- Añadir una operación a la lista exige revisar este ADR; el detalle está en la Dev Spec de TS-TMC-003. La escritura del almacén con gitoxide (§ 1) y el `repack` y el `prune` del mantenimiento (ADR-TMC-007 § 4) forman parte de la lista desde la Enmienda de 2026-10-04; el `repack --cruft` tras una purga, desde la Enmienda (2026-10-28, US-TMC-016).
 
 ### 3. Protocolo de aplicación (undo, redo, restauración)
 
@@ -199,3 +199,15 @@ Aplicada desde DEP-CKP-7 de [CTX-CKP-001](../../requirements/features/cockpit/co
 - **Recuperación**: como todo undo, el selectivo tiene su previo garantizado; redo vuelve a él (NFR-01).
 
 **Validación añadida** (definida en DS-US-TMC-011 T005 y § 9.4; tests por implementar): el modo selectivo escribe solo sus rutas, borra una ruta ausente en su destino, mueve solo sus ramas, y con `keep` o con una ruta excluida no cambia nada.
+
+## Enmienda (2026-10-28, US-TMC-016)
+
+**Decisión del orquestador (2026-10-28), validada por Arquitecto** (revisión de segunda opinión el 2026-10-28). Origen: [DS-US-TMC-016](../../requirements/features/time-machine/dev-specs/US-TMC-016-retencion-por-defecto.md) E2 y D5. Añade una operación a la lista cerrada de § 2; no cambia sus reglas. El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| `repack -a -d -q --cruft --cruft-expiration=1.hour.ago` sobre el almacén entra en la lista cerrada, con las mismas reglas que `repack -d --geometric=2` y `prune --expire=1.hour.ago`: opciones fijas, sin configuración de sistema ni global, sin hooks y con el binario de Git que resuelve el daemon (≥ 2.38, que ya trae `--cruft`) | § 2 | DS-US-TMC-016 E2 |
+
+- Solo lo lanza el mantenimiento tras una pasada de purga que borró refs (ADR-TMC-007 § 4.4, Enmienda 2026-10-28), fuera del cerrojo del repo y del escritor del almacén.
+
+**Validación añadida** (definida en DS-US-TMC-016 T006; tests por implementar): la lista cerrada de la capa de escritura incluye `RepackCruft` con su argv fijo.

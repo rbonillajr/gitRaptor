@@ -234,14 +234,14 @@ flowchart LR
 
 **Reglas**
 - `trait DiskProbe: Send + Sync { fn measure(&self, dirs: &ProfileDirs) -> io::Result<DiskSizes>; }`. `TmDirProbe` recorre `<data>/tm/` sin seguir enlaces (`symlink_metadata`, como `StoreRepo::size_bytes`).
-- `DiskLedger::{measure, added, used, gate, size_due, take_size_due}` con atómicos y un `Mutex` por repo. `gate(repo_id, floor) -> Result<(), NoSpaceCause>`.
+- `DiskLedger::{measure, added, used, gate, size_due, take_size_due}` con atómicos y un `Mutex` por repo. `gate(repo_id, dirs, floor) -> Result<(), NoSpaceCause>` (§ Firmas del stack).
 - Lee el tope y la cuota con T001 en cada `measure`.
 - **Refs:** RES-09, SEC-TMC-12
 - **Aceptación:** `ledger_adds_until_the_next_measure`, `gate_order_is_floor_limit_quota`, `crossing_80_percent_raises_size_due_once`
 
 ### T004 — Registrar el hueco "sin espacio"
 
-**Ubicación.** `crates/core/src/timemachine/oplog/schema.rs` (**MODIFY**: migración 5, al final de `OPLOG_MIGRATIONS`), `oplog/mod.rs`, `oplog/query.rs` (**MODIFY**)
+**Ubicación.** `crates/core/src/timemachine/oplog/schema.rs` (**MODIFY**: una migración al final de `OPLOG_MIGRATIONS`; hoy hay 4, así que es la 5. DS-US-MCP-015 T004 también añade una al final: la que se mezcle segunda rebasa y toma el número siguiente), `oplog/mod.rs`, `oplog/query.rs` (**MODIFY**)
 
 **Reglas**
 - Migración 5: reconstruye `journal` con `entry` ampliado a `'capture-paused'` y `'capture-resumed'`. Mismas columnas y en el mismo orden, filas copiadas tal cual (el hash verifica con su formato, como las migraciones 3 y 4), índice `journal_by_subject` y triggers recreados con el texto de la migración 1.
@@ -254,7 +254,7 @@ flowchart LR
 **Ubicación.** `crates/core/src/timemachine/continuous.rs`, `manual.rs`, `protected/mod.rs`, `hook_prior.rs` (**MODIFY**)
 
 **Reglas**
-- `continuous::observe`: `Failure::NoSpace` pasa a `NoSpace(NoSpaceCause)`. La comprobación de `below_floor` se sustituye por `deps.repos.disk.gate(repo_id, floor)` en el mismo sitio. `capture_one` registra la pausa la primera vez y la reanudación con la primera captura tomada.
+- `continuous::observe`: `Failure::NoSpace` pasa a `NoSpace(NoSpaceCause)`. La comprobación de `below_floor` se sustituye por `deps.repos.disk.gate(repo_id, &deps.profile, floor)` en el mismo sitio. `capture_one` registra la pausa la primera vez y la reanudación con la primera captura tomada.
 - `manual.rs`: `gate` antes de leer el worktree → `ManualError::NoSpace`.
 - Previo protegido, `hook-prior`, observación y manual llaman a `disk.added(repo_id, outcome.unique_bytes)` al completar. El previo y el `hook-prior` **no** pasan por `gate`.
 - **Refs:** ADR-TMC-004 § 2, ADR-TMC-007 Enmienda 2026-10-05 § 3, US-TMC-004 D8
@@ -295,7 +295,7 @@ Ver § 9.4.
 
 ### T010 — Cerrar la historia
 
-US-TMC-022 a `implemented`. El orquestador integra D-TMC-39 y E3 y E4, y actualiza SEC-TMC-12 en `non-functional.md` (5 GiB, `storeQuotaGiB`).
+US-TMC-022 a `implemented`. El orquestador integra D-TMC-39 en `business-rules.md`. E3 y E4 ya están en los ADR (2026-10-28). SEC-TMC-12 de `non-functional.md` ya dice 5 GiB en su Enmienda 2026-10-05; esta tarea solo añade el nombre de la clave (`timeMachine.storeQuotaGiB`) a esa línea y a la nota de integración de ADR-GRP-007, que aún nombra `storeQuotaGB`.
 
 ## Estructura de ficheros
 
@@ -505,7 +505,7 @@ Corre `/security-review --scope devspec docs/requirements/features/time-machine/
 | D2 | Los candidatos por tamaño se eligen entre **todos** los repos, del más antiguo al más reciente, porque el tope es total; cada repo recibe su propio aviso en su oplog | **Decisión del orquestador (2026-10-28), validada por Arquitecto** |
 | D3 | La proyección hasta el 70 % usa `unique_size_bytes` y, al ejecutar, se vuelve a medir. Si tras el mantenimiento sigue en el 80 % o más, la siguiente ronda lleva su propio aviso y su gracia | **Decisión del orquestador (2026-10-28), validada por Arquitecto** (D-TMC-38) |
 | D4 | El hueco "sin espacio" se registra en el diario del oplog (`capture-paused` con causa, `capture-resumed`), con una migración que reconstruye `journal`. No va a los huecos del motor, porque esos marcan eventos "sin atribuir" y aquí el motor sí observó | **Decisión del orquestador (2026-10-28), validada por Arquitecto** |
-| D5 | Orden de la puerta: suelo de espacio libre, tope y cuota. Se aplica a la observación y al snapshot manual (que se cubre como una observación, ADR-TMC-004 § 4); nunca al previo garantizado ni al `hook-prior` | **Decisión del orquestador (2026-10-28), validada por Arquitecto** (ADR-TMC-007, Enmienda 2026-10-05 § 3) |
+| D5 | Orden de la puerta: suelo de espacio libre, tope y cuota. Se aplica a la observación y al snapshot manual (que tiene la prioridad de una observación, ADR-TMC-004, Enmienda 2026-10-05, MCP); nunca al previo garantizado ni al `hook-prior` | **Decisión del orquestador (2026-10-28), validada por Arquitecto** (ADR-TMC-007, Enmienda 2026-10-05 § 3) |
 | D6 | El estado de disco viaja en `timemachine.notices` con la capacidad `timemachine.disk-limit` y no se marca como entregado: el aviso del tope superado se repite en cada comando | **Decisión del orquestador (2026-10-28), validada por Arquitecto** |
 | D7 | `storeQuotaGB` pasa a `storeQuotaGiB` (1..=1024, 5 por defecto): nadie la lee todavía y la Enmienda fija la cuota en GiB | **Decisión del orquestador (2026-10-28), validada por Arquitecto** |
 | D8 | Los diagnósticos de las claves de disco en los tres niveles salen en `TmDiskView.diagnostics`: el escenario 5 pide "se avisa" y la Time Machine no tenía dónde decirlo | **Decisión del orquestador (2026-10-28), validada por Arquitecto** |
@@ -525,17 +525,17 @@ Corre `/security-review --scope devspec docs/requirements/features/time-machine/
 | TQ-24 | Con los valores por defecto (cuota por repo de 5 GiB, tope total de 10 GiB), un desarrollador con **un solo repo** llega a la cuota antes del 80 % del tope (8 GiB): la captura se detiene y la purga por tamaño nunca empieza. ¿(a) La cuota por repo también purga por tamaño con la misma regla 80/70 y 7 días (el escenario 3 de US-TMC-016 pasaría a "puntos de menos de 7 días"), o (b) se queda como límite que solo detiene la captura? | (b): la cuota solo detiene. El Arquitecto recomienda (a), porque el espíritu de la decisión de Rene es purgar lo antiguo y no dejar de capturar | PO / Rene |
 | TQ-25 | La carpeta de un repo que ya no se observa (retirado o no registrado) cuenta en el tope total, pero la pasada no puede purgarla. ¿Se purga con las mismas reglas abriéndolo solo para eso, o se muestra en el aviso persistente y en `raptor doctor` para que el desarrollador decida? | Cuenta en el total, no se purga; el aviso persistente lo dice | PO |
 
-### Enmiendas a ADR (propuestas; las aplica el orquestador)
+### Enmiendas a ADR
 
 | # | ADR | Enmienda | Estado |
 |---|---|---|---|
-| E3 | ADR-TMC-007, Enmienda 2026-10-05 | El tope y la cuota se miden sobre `<data>/tm/` (almacenes y oplogs); entre medidas se suma `unique_bytes` de cada captura. La cuota se lee de `storeQuotaGiB`. El snapshot manual pasa por la puerta del tope como una observación | Propuesta |
-| E4 | ADR-TMC-003 § 1 | Migración 5: entradas `capture-paused` y `capture-resumed` del diario (hueco "sin espacio") | Propuesta |
+| E3 | ADR-TMC-007, Enmienda 2026-10-05 | El tope y la cuota se miden sobre `<data>/tm/` (almacenes y oplogs); entre medidas se suma `unique_bytes` de cada captura. La cuota se lee de `storeQuotaGiB`. El snapshot manual pasa por la puerta del tope como una observación | Aplicada (2026-10-28) |
+| E4 | ADR-TMC-003 § 2 (Diario) | Migración del diario: entradas `capture-paused` y `capture-resumed` (hueco "sin espacio") | Aplicada (2026-10-28) |
 
 ## Notas del autor
 
 | ID | Nota | Acción | Owner |
 |---|---|---|---|
 | G1 | Cada repo recibe su aviso de purga por tamaño en su oplog y lo ve el primer cliente de ese repo. Un repo cuyo cliente nunca abre la CLI no arranca su gracia; si eso deja el total por encima, la captura se detiene y el aviso persistente lo explica | Ninguna | — |
-| G2 | `non-functional.md` (SEC-TMC-12) sigue diciendo 20 GB; la Enmienda del ADR dice 5 GiB | Actualizar en T010 | Orquestador |
+| G2 | `non-functional.md` (SEC-TMC-12) ya recoge los 5 GiB en su Enmienda 2026-10-05 (revisado el 2026-10-28: no discrepa del ADR). Falta el nombre de la clave, que nace en esta ficha | T010 lo añade | Orquestador |
 | G3 | `GROUP.capabilities`, `TmNotice` y `i18n/*/timemachine.txt` se tocan también en DS-US-TMC-016: variantes y claves al final; mezclar 016 antes | Ninguna | — |
