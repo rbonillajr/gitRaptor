@@ -374,7 +374,7 @@ _Sin esquema ni migración._
 | ID | Decisión |
 |---|---|
 | D-TMC-40 | "Un agente no altera los snapshots" (D-TMC-11) cubre todo lo que un agente hace con Git y con los archivos del repo y sus worktrees, incluido borrar un worktree, podarlo y cualquier mantenimiento. No cubre escribir o borrar a propósito en la carpeta de datos de GitRaptor: eso no se impide, se detecta (la verificación de un snapshot falla y se avisa, SEC-TMC-09/11) y queda fuera de esta garantía. **Decisión del orquestador (2026-10-28), validada por Arquitecto** |
-| D-TMC-41 | Un snapshot no depende de nada del repo del usuario: sigue disponible aunque desaparezcan su worktree, su rama, sus commits o los objetos que el repo tomaba de otro (`alternates`). Mientras esté dentro de la retención solo lo retira la purga de la Time Machine (BR-TMC-TIME-001). **Decisión del orquestador (2026-10-28), validada por Arquitecto** |
+| D-TMC-41 | Un snapshot no depende de nada del repo del usuario: sigue disponible aunque desaparezcan su worktree, su rama, sus commits o los objetos que el repo tomaba de otro (`alternates`). Mientras esté dentro de la retención solo lo retira la purga de la Time Machine, por edad o por tamaño, siempre con aviso y gracia (BR-TMC-TIME-001, D-TMC-38). **Decisión del orquestador (2026-10-28), validada por Arquitecto** |
 
 ### Preguntas abiertas nuevas
 

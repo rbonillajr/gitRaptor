@@ -5,7 +5,7 @@ type: adr
 status: accepted
 accepted: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-05
+updated: 2026-10-28
 date: 2026-10-03
 domain: GRP
 feature: time-machine
@@ -72,6 +72,7 @@ Para las operaciones protegidas, el tipo de operación declara si es destructiva
    - **Consolidación** (Enmienda 2026-10-04, E10): `git repack -d --geometric=2` sobre el almacén, a diario o al pasar un umbral de objetos sueltos (el umbral lo fija la Dev Spec de TS-TMC-001), en reposo y en segundo plano.
    - Corre **fuera del cerrojo del escritor del almacén**, para no retener a un snapshot previo: tarda unos 16 s.
    - El `prune` sigue sujeto al periodo de gracia.
+   - **Tras una purga que borró refs** (Enmienda 2026-10-28, US-TMC-016): `repack -a -d --cruft --cruft-expiration=1.hour.ago`, porque la consolidación geométrica no suelta los objetos que ya estaban en packs. La gracia solo protege a las capturas en curso si toda reutilización de un objeto lo refresca y el estado del escritor se olvida antes de mantener (ver la Enmienda).
    - Medido por SPIKE-TMC-001 en macOS: una semana de capturas (2.400) deja +280 MiB en objetos sueltos, que bajan a +47 MiB tras consolidar. Sin consolidar, cada captura deja unos 25 árboles sueltos.
 5. **Interrupción** (US-TMC-016, escenario 4): al recuperar, un snapshot con intención de purga y ref presente vuelve a estar disponible; uno con la ref ya borrada pasa a purgado. Como la transacción de refs es atómica, no hay estados intermedios.
 
@@ -148,3 +149,31 @@ Aplicada desde § 7 de [SPIKE-TMC-001-resultados.md](../../requirements/features
 7. `timeMachine.maxDiskSizeGiB` en el nivel local o de equipo se ignora con diagnóstico; el valor 0 o uno mayor que 1024 da el valor por defecto con aviso.
 
 Linux y Windows (tamaño en disco, exclusión de copias de seguridad): **Pendiente: etapa de validación multiplataforma**.
+
+## Enmienda (2026-10-28, US-TMC-016)
+
+**Decisión del orquestador (2026-10-28), validada por Arquitecto** (revisión de segunda opinión el 2026-10-28, que añadió el refresco al reutilizar y el olvido del estado del escritor). Origen: [DS-US-TMC-016](../../requirements/features/time-machine/dev-specs/US-TMC-016-retencion-por-defecto.md) E1 y D5. No cambia las dos fases, la gracia, la transacción de refs ni la recuperación. El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| Tras una pasada que borró refs, el mantenimiento corre `repack -a -d -q --cruft --cruft-expiration=1.hour.ago`; la consolidación geométrica diaria y el `prune` siguen igual para el resto | § 4.4 | DS-US-TMC-016 E1, D5 |
+| Toda escritura del almacén que encuentra el objeto ya presente lo refresca, como Git: suelto → `mtime` a ahora; en un pack normal → `mtime` del pack; solo en un pack cruft → copia suelta | § 4.4 | Revisión del Arquitecto (NFR-01) |
+| Antes de un `repack --cruft` o un `prune`, el estado del escritor se olvida (`reset_continuity`): la siguiente captura de cada worktree es una detección completa sin caché | § 4.4 | Revisión del Arquitecto (NFR-01) |
+
+- **Por qué el cruft**: el `repack` geométrico solo junta packs y el `prune` solo mira objetos sueltos, así que sin él los objetos de un punto purgado que ya estaban en un pack no se liberan nunca. Los objetos de menos de 1 h, y lo que cuelga de ellos, quedan en el pack cruft.
+- **Por qué el refresco y el olvido**: la captura nombra objetos sin escribirlos cuando el almacén ya los tiene, y su estado en memoria reutiliza ids de la captura anterior. Tras una purga esos objetos pueden ser viejos e inalcanzables; si el mantenimiento recorre las refs antes de que la captura cree la suya, los borra y el punto nuevo nace roto. Refrescar la punta basta, porque el `prune` y el `repack --cruft` conservan lo que cuelga de un objeto reciente.
+- **Coste**: una detección completa por worktree tras cada mantenimiento que puede borrar (como mucho una vez al día por repo). Ese previo puede pasar de los 200 ms de ADR-TMC-006; lo cubre el plazo por avance de D-TMC-42.
+
+**Validación añadida** (definida en DS-US-TMC-016 T006; tests por implementar): el tamaño del almacén baja tras purgar y consolidar; una captura en curso durante el mantenimiento conserva sus objetos; un objeto de un punto purgado que reutiliza una captura nueva sobrevive al `repack --cruft`; tras mantener, la siguiente captura es una detección completa.
+
+## Enmienda (2026-10-28, US-TMC-022)
+
+**Decisión del orquestador (2026-10-28), validada por Arquitecto** (revisión de segunda opinión el 2026-10-28). Origen: [DS-US-TMC-022](../../requirements/features/time-machine/dev-specs/US-TMC-022-tope-disco.md) E3, D1, D5 y D7. Precisa la Enmienda (2026-10-05, tope de disco); no cambia sus cifras. El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| El tope y la cuota se miden sobre `<datos>/tm/` (almacenes y oplogs de todos los repos; por repo, `<datos>/tm/<id-repo>/`). Se mide al arrancar el trabajo de purga y al final de cada pasada, tras el mantenimiento; entre medidas se suma el tamaño único de cada captura completa (`unique_bytes`), que sobrestima y nunca deja pasar el tope | Enmienda 2026-10-05; § 5 | DS-US-TMC-022 E3, D1 |
+| La cuota por repo se lee de `timeMachine.storeQuotaGiB` (entero de 1 a 1024, solo perfil, por defecto 5), que sustituye a `storeQuotaGB` de la nota de integración de ADR-GRP-007 (nadie la leía) | § 1, § 5; SEC-TMC-12 | DS-US-TMC-022 D7 |
+| El snapshot manual pasa por la puerta del tope y de la cuota como una captura por observación (ADR-TMC-004, Enmienda 2026-10-05, MCP). El previo garantizado y el de hook nunca pasan por ella: se toman con su reserva y cuentan para la purga | Enmienda 2026-10-05, punto 3 | DS-US-TMC-022 E3, D5 |
+
+**Validación añadida** (definida en DS-US-TMC-022 § 9.4; tests por implementar): con tamaños simulados, un snapshot manual por encima del tope se rechaza con `SNAPSHOT_QUOTA` (`window: disk`) y un previo se toma; el repo en su cuota se detiene solo mientras los demás siguen capturando.

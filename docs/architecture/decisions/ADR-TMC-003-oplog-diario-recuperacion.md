@@ -5,7 +5,7 @@ type: adr
 status: accepted
 accepted: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-27
+updated: 2026-10-28
 date: 2026-10-03
 domain: GRP
 feature: time-machine
@@ -307,3 +307,17 @@ Aplicada desde la [Dev Spec de US-TMC-004](../../requirements/features/time-mach
 - Si la barrera resulta demasiado estricta, queda abierta en TQ-21.
 
 **Validación añadida** (definida en DS-US-TMC-011 § 9.4; tests por implementar): el undo por agente deshace solo los commits del agente y deja lo de otros; usa la atribución vigente al planificar y una corrección posterior no cambia lo deshecho; un evento de un hueco nunca entra; un `raptor undo` por debajo de un undo selectivo se rechaza con el repo igual; tras el redo, el siguiente undo toma la operación más reciente.
+
+## Enmienda (2026-10-28, US-TMC-022)
+
+**Decisión del orquestador (2026-10-28), validada por Arquitecto** (revisión de segunda opinión el 2026-10-28). Origen: [DS-US-TMC-022](../../requirements/features/time-machine/dev-specs/US-TMC-022-tope-disco.md) E4 y D4. Amplía el diario de § 2; no cambia la cadena, los estados ni la recuperación. El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| El diario admite dos entradas nuevas: `capture-paused`, con la causa (`free-space`, `limit` o `quota`), y `capture-resumed`. Marcan el hueco "sin espacio" de un repo (BR-TMC-EDGE-002, ADR-TMC-007 Enmienda 2026-10-05) | § 2 | DS-US-TMC-022 E4, D4 |
+| Una migración al final de `OPLOG_MIGRATIONS` reconstruye `journal` con la lista de `entry` ampliada: mismas columnas en el mismo orden, filas copiadas tal cual (cada hash verifica con su formato), índice y triggers de solo anexión recreados | § 1, § 2 | DS-US-TMC-022 T004 |
+
+- **Por qué en el diario y no en los huecos del motor**: un hueco del motor marca eventos "sin atribuir"; aquí el motor sí observó, lo que falta es el snapshot.
+- La pausa se abre con la primera captura omitida y se cierra con la primera tomada; un cambio de causa durante la pausa no escribe nada. Al arrancar se reconstruye de la última entrada.
+
+**Validación añadida** (definida en DS-US-TMC-022 T004; tests por implementar): la reconstrucción conserva la cadena; una pausa se abre y se cierra una sola vez y sobrevive a un reinicio sin duplicarse.

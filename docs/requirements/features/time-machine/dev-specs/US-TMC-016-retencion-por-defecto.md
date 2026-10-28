@@ -101,7 +101,7 @@ Lo que **ya existe** y no se rediseña:
 
 _No gaps. Ready to implement._
 
-Dos enmiendas de ADR propuestas (§ Decisiones, E1 y E2) para la consolidación tras una purga; el orquestador las aplica antes de mezclar T006. Las clases de trabajo (`Background`) y el modo de ahorro llegan con TS-GRP-005: hasta entonces el hilo corre con la prioridad heredada y el mantenimiento no se aplaza (§ Dependencias).
+Dos enmiendas de ADR (§ Decisiones, E1 y E2) para la consolidación tras una purga, aplicadas el 2026-10-28 tras la revisión del Arquitecto, que añadió a E1 el refresco al reutilizar y el olvido del estado del escritor. Las clases de trabajo (`Background`) y el modo de ahorro llegan con TS-GRP-005: hasta entonces el hilo corre con la prioridad heredada y el mantenimiento no se aplaza (§ Dependencias).
 
 ---
 
@@ -116,7 +116,7 @@ classDiagram
     class Oplog:::modificado { <<modificado T003>> }
     class StoreRepo:::modificado { <<modificado T006 repack_cruft>> }
     class TmNotice:::modificado { <<modificado T001 Purge>> }
-    class Points:::modificado { <<modificado T004 point_before_event>> }
+    class Points:::modificado { <<modificado T004 before_event pub(crate)>> }
     RetentionModule --> RetentionJob : pasada por repo
     RetentionJob --> ProtectedSet : protegidos
     RetentionJob --> AgePlan : candidatos por edad
@@ -166,7 +166,7 @@ flowchart TD
 |---|---|
 | Última operación de la Time Machine que alcanzó ese worktree (cualquier `OperationKind`: `protected`, `undo`, `redo`, `restore`) | Su `prior_snapshot` |
 | Último `hook-prior` de ese worktree | Ese punto (existe porque Guardrails vio una operación destructiva) |
-| Último evento de Git crudo de ese worktree, salvo `push`, `branch-create` y `worktree-create` | El punto antes del evento según `prior_point` (`Points::point_before_event`, T004) |
+| Último evento de Git crudo de ese worktree, salvo `push`, `branch-create` y `worktree-create` | El punto antes del evento según `prior_point` (`Points::before_event`, T004) |
 | Última desaparición de archivos entre dos puntos consecutivos de ese worktree (`clean`, `checkout -- ruta` sin evento de Git) | El anterior de los dos |
 | Toda operación en estado `interrupted` | Su `prior_snapshot` |
 
@@ -186,8 +186,11 @@ flowchart TD
 Luego, en lotes de `PURGE_BATCH`: un `set_snapshot_states(…, PurgeIntent)` (una escritura), `SnapshotRefs::delete` (una transacción de refs) y un `set_snapshot_states(…, Purged)` (una escritura). La fila se conserva: el timeline la muestra como "punto purgado" (T008).
 
 **Mantenimiento** (T006, ADR-TMC-007 § 4.4), fuera del lock del repo y del lock del escritor del almacén:
-- Tras una pasada que borró refs: `repack -a -d -q --cruft --cruft-expiration=1.hour.ago`. Es el único `repack` que suelta los objetos de los puntos purgados que ya estaban en packs: el geométrico solo junta packs y el `prune` solo mira objetos sueltos. Los objetos de menos de 1 h quedan en el pack cruft, así que una captura en curso no pierde nada (E1, E2).
+- Tras una pasada que borró refs: `repack -a -d -q --cruft --cruft-expiration=1.hour.ago`. Es el único `repack` que suelta los objetos de los puntos purgados que ya estaban en packs: el geométrico solo junta packs y el `prune` solo mira objetos sueltos. Los objetos de menos de 1 h, y lo que cuelga de ellos, quedan en el pack cruft (E1, E2).
 - Si no: `repack -d --geometric=2` + `prune` si pasaron 24 h desde el último.
+- **La gracia de 1 h solo protege lo que es reciente** (revisión del Arquitecto, 2026-10-28; NFR-01). Dos caminos de la captura nombran objetos sin escribirlos, y tras una purga esos objetos pueden ser viejos e inalcanzables: `write_blob`, `write_blob_stream`, las escrituras de árboles y `copy_closure` se saltan el objeto que el almacén ya tiene (`has_object`), y el estado del escritor (`capture::State`: `files_tree`, `index_tree`, caché de stat, `last`) reutiliza ids de la captura anterior sin comprobarlos. Si el `repack --cruft` o el `prune` recorren las refs antes de que la captura cree la suya, borran esos objetos y el punto nuevo nace roto. Por eso, en T006:
+  - **Refresco al reutilizar**: toda escritura del almacén que encuentra el objeto ya presente lo refresca como hace Git (`freshen_object`): suelto → `mtime` a ahora; en un pack normal → `mtime` del pack a ahora; solo en un pack cruft (tiene `.mtimes`) → se escribe una copia suelta. Basta con refrescar la punta: el `prune` y el `repack --cruft` conservan lo que cuelga de un objeto reciente.
+  - **Estado del escritor olvidado antes de mantener**: justo antes de un `repack --cruft` o un `prune`, `SnapshotStore::reset_continuity()` (ya existe; toma el cerrojo del escritor). La siguiente captura de cada worktree es una detección completa sin caché y escribe o refresca todo lo que nombra. Cuesta una detección completa por worktree tras cada mantenimiento que puede borrar (como mucho una vez al día por repo); el previo de esa captura no cumple NFR-04 esa vez y lo cubre el plazo por avance de DS-US-TMC-020.
 - Corre en el hilo del módulo, que es de clase `Background` cuando exista TS-GRP-005. Con el modo de ahorro activo se aplaza (ADR-GRP-015 § 2); US-TMC-022 añade la excepción del tope superado.
 
 **Aviso en el cliente** (T001, T008-T010):
@@ -288,7 +291,7 @@ flowchart LR
 
 **Objetivo.** `protected_points(input: &ProtectInput) -> HashSet<String>`, una función pura salvo la diferencia de árboles.
 
-**Ubicación.** `crates/core/src/timemachine/retention/protect.rs` (**CREATE**); `crates/core/src/timemachine/timeline.rs` (**MODIFY**: `Points::point_before_event` pasa a `pub(crate)`)
+**Ubicación.** `crates/core/src/timemachine/retention/protect.rs` (**CREATE**); `crates/core/src/timemachine/timeline.rs` (**MODIFY**: `Points`, `Points::with_events` y `Points::before_event` pasan de privados a `pub(crate)`; no se copia la regla)
 
 **Reglas**
 - La tabla de § Diseño, por clave de worktree. `ProtectInput` lleva las `SnapshotView`, las `OperationView`, los eventos crudos (`seq`, tipo, worktree, `worktree_inferred`) y un `DeletionProbe` (trait) que dice si entre dos puntos desapareció algún archivo. La implementación real usa los árboles del almacén; los tests usan uno falso.
@@ -308,6 +311,7 @@ flowchart LR
 - `job.rs`: el orden de § Una pasada. Lee con el lock del oplog del repo (`TmRepos::repo`) y lo suelta antes de tocar el almacén. Ejecuta bajo `repo_lock::try_lock`. Lotes de `PURGE_BATCH`.
 - `PassReport { announced, purged, cancelled, skipped: Option<SkipCause> }`. Log `tm_retention_pass` con `repo` (id) y recuentos, nunca rutas.
 - Seam de fallos solo en debug (`PurgeFault`: después de la intención, después de borrar refs) para el escenario 6.
+- Si `SnapshotRefs::delete` devuelve error, el lote se cierra en la misma pasada como lo cierra la recuperación (`recovery.rs` paso 5): con ref → `purge-cancelled`, sin ref → `purged`. Ningún punto se queda en `purge-intent` (no disponible) hasta el siguiente arranque.
 - **Depende:** T002, T003, T004
 - **Refs:** ADR-TMC-007 § 4, D-TMC-37, D-TMC-38
 - **Aceptación:** unitarios en `retention/plan.rs` (`only_old_unprotected_available_points`, `a_cancelled_point_can_be_announced_again`, `a_tampered_point_is_never_a_candidate`) y los de § 9.4
@@ -316,19 +320,20 @@ flowchart LR
 
 **Objetivo.** El `repack` que suelta los objetos purgados de los packs.
 
-**Ubicación.** `crates/git/src/invoke.rs` (**MODIFY**: `WriteSubcommand::RepackCruft` → `["repack", "-a", "-d", "-q", "--cruft", "--cruft-expiration=1.hour.ago"]`); `crates/git/src/tm_write/store/mod.rs` (**MODIFY**: `StoreRepo::repack_cruft`); `crates/core/src/timemachine/store/mod.rs` (**MODIFY**: `SnapshotStore::{repack, repack_cruft, prune}` delegan)
+**Ubicación.** `crates/git/src/invoke.rs` (**MODIFY**: `WriteSubcommand::RepackCruft` → `["repack", "-a", "-d", "-q", "--cruft", "--cruft-expiration=1.hour.ago"]`); `crates/git/src/tm_write/store/mod.rs` (**MODIFY**: `StoreRepo::repack_cruft`; refresco en `StoreHandle::{write_blob, write_blob_stream}` y en la escritura de árboles); `crates/git/src/tm_write/store/anchor.rs` (**MODIFY**: refresco de la punta que `copy_closure` ya tiene); `crates/core/src/timemachine/store/mod.rs` (**MODIFY**: `SnapshotStore::{repack, repack_cruft, prune}` delegan y llaman antes a `reset_continuity` en `repack_cruft` y `prune`)
 
 **Reglas**
 - Misma lista cerrada y mismo entorno sin configuración del usuario que `Repack` y `Prune` (ADR-TMC-002 § 2, TQ-13). Git ≥ 2.38 ya trae `--cruft` (NFR-TMC-12).
+- Refresco al reutilizar y estado del escritor olvidado antes de mantener: § Diseño, **Mantenimiento** (E1). El refresco no cambia ni el id ni el contenido; un error al refrescar falla la escritura (la captura se descarta, nunca se sella con un objeto sin refrescar).
 - **Depende:** — (E1 y E2 aplicadas)
-- **Refs:** ADR-TMC-007 § 4.4, ADR-TMC-002 § 2
-- **Aceptación:** `repack_cruft_frees_purged_objects` (el tamaño baja tras borrar refs y avanzar 1 h el `mtime` de los objetos con un helper de test), `maintenance_keeps_a_capture_in_flight` en `crates/core/tests/tm_store_safety.rs` (prueba aplazada por TS-TMC-001)
+- **Refs:** ADR-TMC-007 § 4.4 (Enmienda 2026-10-28), ADR-TMC-002 § 2
+- **Aceptación:** `repack_cruft_frees_purged_objects` (el tamaño baja tras borrar refs y avanzar 1 h el `mtime` de los objetos con un helper de test; los puntos purgados tienen contenido propio, no clones de `aged_point`, que comparten commit con un punto vivo), `maintenance_keeps_a_capture_in_flight` en `crates/core/tests/tm_store_safety.rs` (prueba aplazada por TS-TMC-001; añadida al final del archivo, sin tocar las existentes), `a_reused_object_of_a_purged_point_survives_the_cruft_repack` (purga un punto, envejece sus objetos 2 h, una captura nueva reutiliza un blob suyo y se detiene con un seam de debug antes de su ref; corre `repack_cruft`; se suelta la captura → `verify` del punto nuevo pasa) y `maintenance_forgets_the_writer_state` (tras `repack_cruft`, la siguiente captura es `Detection::Full("first-capture")`). Unitarios en `crates/git`: `reusing_a_loose_object_refreshes_its_mtime`, `reusing_an_object_only_in_a_cruft_pack_writes_it_loose`
 
 ### T007 — Correr la pasada como módulo del daemon
 
 **Objetivo.** El disparo de D-TMC-37.
 
-**Ubicación.** `crates/core/src/daemon/modules/tm_retention.rs` (**CREATE**); `crates/core/src/daemon/modules/mod.rs` (**MODIFY**: una línea en `MODULES`, después de `tm-capture`)
+**Ubicación.** `crates/core/src/daemon/modules/tm_retention.rs` (**CREATE**); `crates/core/src/daemon/modules/mod.rs` (**MODIFY**: `mod tm_retention;` y su fila en `MODULES`, después de `tm-capture`)
 
 **Reglas**
 - `start(&Daemon)`: toma `Arc<TmRepos>`, `ProfileDirs` y `Logger` de `daemon.capture_deps()` y lanza el hilo `raptor-tm-retention`, que late cada `RETENTION_TICK`. En cada latido, por repo abierto: pasada si nunca corrió, si pasaron 24 h o si un aviso venció la gracia (`purge_notices()`).
@@ -382,7 +387,7 @@ Ver § 9.4. **Depende:** T007, T008, T009.
 
 ### T012 — Cerrar la historia
 
-US-TMC-016 a `implemented` con su milestone. El orquestador integra D-TMC-37 y D-TMC-38 en `business-rules.md` y E1 y E2 en los ADR, y regenera `ARTIFACTS.md`. **Depende:** T001-T011.
+US-TMC-016 a `implemented` con su milestone. El orquestador integra D-TMC-37 y D-TMC-38 en `business-rules.md` y regenera `ARTIFACTS.md`. E1 y E2 ya están en los ADR (2026-10-28). **Depende:** T001-T011.
 
 ## Estructura de ficheros
 
@@ -395,10 +400,10 @@ crates/core/src/timemachine/retention/{mod,plan,job,protect}.rs ← CREATE (T004
 crates/core/src/timemachine/timeline.rs                    ← MODIFY  (T004, T008)
 crates/core/src/timemachine/mod.rs                         ← MODIFY  (T005: una línea)
 crates/git/src/invoke.rs                                   ← MODIFY  (T006)
-crates/git/src/tm_write/store/mod.rs                       ← MODIFY  (T006)
+crates/git/src/tm_write/store/{mod,anchor}.rs              ← MODIFY  (T006)
 crates/core/src/timemachine/store/mod.rs                   ← MODIFY  (T006)
 crates/core/src/daemon/modules/tm_retention.rs             ← CREATE  (T007)
-crates/core/src/daemon/modules/mod.rs                      ← MODIFY  (T007: una línea)
+crates/core/src/daemon/modules/mod.rs                      ← MODIFY  (T007: dos líneas)
 crates/core/src/timemachine/notices.rs                     ← MODIFY  (T008)
 crates/core/src/channel/conn.rs                            ← MODIFY  (T008, tm_notices)
 apps/cli/src/undo/notices.rs, apps/cli/src/commands/{status,timeline}.rs ← MODIFY (T009)
@@ -526,14 +531,14 @@ _Sin migración._ Ya existen la tabla `notices` (`kind = 'purge'`), los estados 
 | 2. Sin aviso visto no se purga (nunca mostrado) | `never_shown_means_never_purged`: aviso sin entregar; pasadas a +48 h y +30 días; nada purgado; los puntos de 40 días se restauran bit a bit (`store.verify`) |
 | 2. (mostrado hace menos de 24 h) | `shown_23_hours_ago_is_not_enough`: entrega por CLI en T; pasada en T + 23 h → nada purgado |
 | 2. (solo MCP) | `an_mcp_delivery_does_not_start_the_grace`: entrega marcada con `Channel::Mcp`; `first_interactive_delivery_ms` = `None`; nada purgado |
-| 3. La cuota no adelanta la purga | `a_full_quota_does_not_bring_the_purge_forward`: el almacén del repo en su cuota (sonda de tamaño falsa de DS-US-TMC-022, o un almacén lleno simulado), puntos de 10 y 20 días → ningún aviso de edad y nada purgado |
+| 3. La cuota no adelanta la purga | `a_full_quota_does_not_bring_the_purge_forward`: puntos de 10 y 20 días y una pasada → ningún aviso y nada purgado. Esta ficha se mezcla antes que DS-US-TMC-022 y no tiene contabilidad de tamaño: la prueba fija que la edad es la única causa de purga. DS-US-TMC-022 la repite con `SimProbe`: repo en su cuota y total por debajo del 80 % del tope → ningún aviso (`a_repo_at_its_quota_pauses_alone`) |
 | 4. El previo a la última destructiva nunca se purga | `the_prior_of_the_last_destructive_operation_stays`: operación protegida hace 45 días con su previo de 46; aviso visto y gracia vencida → el previo sigue `complete`; los demás de más de 30 días se purgan. Variantes: `two_worktrees_keep_their_own_prior`, `an_interrupted_operations_prior_stays`, `a_raw_reset_45_days_ago_keeps_its_point` |
 | 5. Nada que purgar | `nothing_to_purge_records_nothing`: todos de menos de 30 días → ni aviso ni transición; el oplog verifica su cadena |
 | 6. Purga interrumpida | `an_interrupted_purge_leaves_every_point_whole`: `PurgeFault` tras la intención → recuperación (`Oplog::recover`) → `purge-cancelled` y restaurables bit a bit. Tras borrar refs → `purged`. Ninguno a medias; huella igual |
 | Recalcular al ejecutar | `a_point_that_became_protected_is_cancelled`, `raising_the_retention_cancels_the_rest` |
 | Lock del repo | `a_busy_repo_retries_on_the_next_tick`: con `repo_lock` tomado, la ejecución espera; la siguiente pasada purga |
 | Purgados en el timeline | `us_tmc_016.rs::purged_points_show_as_purged` |
-| Mantenimiento | `tm_store_safety.rs::repack_cruft_frees_purged_objects`, `maintenance_keeps_a_capture_in_flight` |
+| Mantenimiento | `tm_store_safety.rs::repack_cruft_frees_purged_objects`, `maintenance_keeps_a_capture_in_flight`, `a_reused_object_of_a_purged_point_survives_the_cruft_repack`, `maintenance_forgets_the_writer_state` |
 | Avisos en la CLI | e2e `us_tmc_016_process.rs::status_shows_the_purge_notice_in_en_and_es`: daemon en proceso, aviso pendiente; `raptor status` lo muestra con su recuento, periodo, tamaño y fecha en los dos idiomas; la gracia queda arrancada en el oplog |
 | Aviso una sola vez | e2e `the_purge_notice_is_shown_once` |
 
@@ -553,7 +558,7 @@ _Sin migración._ Ya existen la tabla `notices` (`kind = 'purge'`), los estados 
 - Las filas no se borran: el oplog sigue siendo solo de inserción y encadenado (SEC-TMC-09). Un punto marcado como manipulado nunca es candidato.
 - Falla cerrado: sin eventos crudos legibles, sin oplog legible o con el repo ocupado, la pasada no ejecuta nada.
 - Nada se borra sin aviso visto en CLI o TUI: MCP no arranca la gracia, y un cliente sin la capacidad no recibe ni marca el aviso.
-- `repack --cruft` y `prune` pasan por la lista cerrada de la capa de escritura, sin configuración ni hooks del usuario (TQ-13), con gracia de 1 h para las capturas en curso.
+- `repack --cruft` y `prune` pasan por la lista cerrada de la capa de escritura, sin configuración ni hooks del usuario (TQ-13), con gracia de 1 h para las capturas en curso. La gracia solo vale porque toda reutilización refresca el objeto y el estado del escritor se olvida antes de mantener (T006): sin eso, una captura concurrente puede sellar un punto que nombra objetos ya borrados (NFR-01).
 - Log sin rutas: ids del repo y recuentos (SEC-12).
 
 Corre `/security-review --scope devspec docs/requirements/features/time-machine/dev-specs/US-TMC-016-retencion-por-defecto.md` antes de mezclar.
@@ -594,7 +599,7 @@ Corre `/security-review --scope devspec docs/requirements/features/time-machine/
 | D2 | El conjunto anunciado se guarda como detalle de la transición `purge-announced` (`{"notice": id}`), escrito en el mismo lote que el aviso: sin migración, y sin lista de ids en el detalle del aviso, que podría tener miles | **Decisión del orquestador (2026-10-28), validada por Arquitecto** |
 | D3 | Protegidos por worktree: el último punto de cada fuente de § Diseño (operación de la Time Machine, `hook-prior`, evento crudo que puede mover una ref, desaparición de archivos) y el previo de toda operación interrumpida. Se protege de más en vez de clasificar con precisión cada `commit`, porque el evento no distingue un `--amend` | **Decisión del orquestador (2026-10-28), validada por Arquitecto** (ADR-TMC-007 § 2-3) |
 | D4 | La ejecución corre bajo `repo_lock::try_lock` y, si el repo está ocupado, espera al siguiente latido: un undo o una restauración nunca ven desaparecer su destino a mitad | **Decisión del orquestador (2026-10-28), validada por Arquitecto** |
-| D5 | Tras una pasada que borró refs, `repack -a -d --cruft --cruft-expiration=1.hour.ago`; el geométrico diario y el `prune` siguen para el resto. Sin el cruft, los objetos purgados que estaban en packs no se liberan nunca | **Decisión del orquestador (2026-10-28), validada por Arquitecto** (E1, E2) |
+| D5 | Tras una pasada que borró refs, `repack -a -d --cruft --cruft-expiration=1.hour.ago`; el geométrico diario y el `prune` siguen para el resto. Sin el cruft, los objetos purgados que estaban en packs no se liberan nunca. Toda reutilización de un objeto lo refresca y el estado del escritor se olvida antes de un mantenimiento que puede borrar (revisión del Arquitecto, 2026-10-28) | **Decisión del orquestador (2026-10-28), validada por Arquitecto** (E1, E2) |
 | D6 | Sin eventos crudos u oplog legibles, la pasada no ejecuta ni anuncia (falla cerrado) | **Decisión del orquestador (2026-10-28), validada por Arquitecto** |
 | D7 | El aviso de purga solo viaja con la capacidad `timemachine.purge-notices`; sin ella no se entrega ni se marca, así que la gracia no arranca | **Decisión del orquestador (2026-10-28), validada por Arquitecto** (ADR-GRP-016) |
 | D8 | La CLI muestra los avisos también en `raptor status`; la TUI, al conectar y en cada refresco. Sin eso, quien no usa `undo`, `restore` ni `timeline` no vería nunca el aviso y nada se purgaría | **Decisión del orquestador (2026-10-28), validada por Arquitecto** |
@@ -613,12 +618,12 @@ Corre `/security-review --scope devspec docs/requirements/features/time-machine/
 
 _Ninguna propia; las de tamaño están en DS-US-TMC-022 (TQ-24, TQ-25)._
 
-### Enmiendas a ADR (propuestas; las aplica el orquestador)
+### Enmiendas a ADR
 
 | # | ADR | Enmienda | Estado |
 |---|---|---|---|
-| E1 | ADR-TMC-007 § 4.4 | "Tras una purga que borró refs, el mantenimiento corre `repack -a -d --cruft --cruft-expiration=1.hour.ago`: el geométrico no suelta los objetos que ya estaban en packs. La consolidación geométrica diaria y el `prune` siguen igual." | Propuesta |
-| E2 | ADR-TMC-002 § 2 | Añadir `repack -a -d -q --cruft --cruft-expiration=1.hour.ago` a la lista cerrada de comandos sobre el almacén | Propuesta |
+| E1 | ADR-TMC-007 § 4.4 | "Tras una purga que borró refs, el mantenimiento corre `repack -a -d --cruft --cruft-expiration=1.hour.ago`: el geométrico no suelta los objetos que ya estaban en packs. La consolidación geométrica diaria y el `prune` siguen igual." Tras la revisión: toda escritura que reutiliza un objeto lo refresca, y el estado del escritor se olvida antes de un `repack --cruft` o un `prune` | Aplicada (2026-10-28) |
+| E2 | ADR-TMC-002 § 2 | Añadir `repack -a -d -q --cruft --cruft-expiration=1.hour.ago` a la lista cerrada de comandos sobre el almacén | Aplicada (2026-10-28) |
 
 ## Notas del autor
 
