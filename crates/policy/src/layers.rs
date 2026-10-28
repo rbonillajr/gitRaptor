@@ -90,6 +90,10 @@ pub enum RelaxKey {
     SafeMinimum,
     BaseBranch,
     CommitAuthorship,
+    /// A limit of diff size above the team's (US-GRD-009).
+    DiffSize,
+    /// A commit format when a team level fixes one (US-GRD-009).
+    CommitFormat,
 }
 
 /// One relaxation that was ignored, and the level that declared it (`Worktree`, `Profile` or
@@ -233,9 +237,68 @@ pub fn ignored_relaxations(
         }
     }
 
+    commit_policy_relaxations(team, profile_s, local_s, &mut push);
+
     out.sort_by_key(|r| (rank(r.level), r.key));
     out.dedup();
     out
+}
+
+/// `diffSize` and `commitFormat` (US-GRD-009, D2): a limit above the team's lowest one, and a
+/// format declared where a level above already fixes one. Neither changes a decision: the
+/// lowest limit and the first format hold anyway.
+fn commit_policy_relaxations(
+    team: &TeamConfig,
+    profile: Option<&Settings>,
+    local: Option<&Settings>,
+    push: &mut impl FnMut(Level, RelaxKey),
+) {
+    let limit = |s: Option<&Settings>| {
+        s.and_then(|s| s.policies.as_ref())
+            .and_then(|p| p.diff_size.as_ref())
+            .map(|d| d.max_lines)
+    };
+    let has_format = |s: Option<&Settings>| {
+        s.and_then(|s| s.policies.as_ref())
+            .is_some_and(|p| p.commit_format.is_some())
+    };
+    let floor = team.floor.parsed.applicable();
+    let worktree = team.worktree.parsed.applicable();
+    let floor_limit = limit(floor);
+    if let (Some(floor), Some(w)) = (floor_limit, limit(worktree))
+        && w > floor
+    {
+        push(Level::Worktree, RelaxKey::DiffSize);
+    }
+    let team_limit = [floor_limit, limit(worktree)].into_iter().flatten().min();
+    let (personal_level, personal) = if local.is_some_and(|s| limit(Some(s)).is_some()) {
+        (Level::Local, local)
+    } else {
+        (Level::Profile, profile)
+    };
+    if let (Some(team), Some(own)) = (team_limit, limit(personal))
+        && own > team
+    {
+        push(personal_level, RelaxKey::DiffSize);
+    }
+
+    if has_format(floor) && has_format(worktree) {
+        push(Level::Worktree, RelaxKey::CommitFormat);
+    }
+    if has_format(floor) || has_format(worktree) {
+        let level = if has_format(local) {
+            Level::Local
+        } else {
+            Level::Profile
+        };
+        if has_format(if level == Level::Local {
+            local
+        } else {
+            profile
+        }) {
+            push(level, RelaxKey::CommitFormat);
+        }
+    }
 }
 
 #[cfg(test)]

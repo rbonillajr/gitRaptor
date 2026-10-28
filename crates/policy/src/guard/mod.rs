@@ -10,6 +10,8 @@
 //! (BR-AUTH-004) from no configuration at all.
 
 pub mod authorship;
+pub mod commit_format;
+pub mod commit_policies;
 pub mod config;
 pub mod exception;
 pub mod fastpath;
@@ -62,6 +64,10 @@ pub struct Facts {
     /// aligned with its updates. A line of `refs/heads/*` that moves or creates a branch without
     /// its entry, while a permission it could need is not `allow`, is denied as unverifiable.
     pub classified: Vec<permissions::Classified>,
+    /// What the new commits of each update of a `reference-transaction` bring (US-GRD-009, D6),
+    /// aligned with the updates; `None` where nothing was read (no rule of the two keys governs
+    /// the actor, a deletion or a ref that is not a branch).
+    pub commits: Vec<Option<commit_policies::NewCommits>>,
 }
 
 /// The context of an evaluation.
@@ -78,6 +84,8 @@ pub struct Context {
     pub authorship: authorship::Effective,
     /// The protected branches and forbidden paths in force (US-GRD-008).
     pub policies: policies::Policies,
+    /// The diff size and commit format rules in force (US-GRD-009).
+    pub commit_policies: commit_policies::CommitPolicies,
     /// The layer that asks; it never changes the decision, only where it is recorded.
     pub layer: LogLayer,
     /// The safe minimum is active (`EffectivePermissions::safe_minimum_active`): `false` turns off
@@ -177,6 +185,15 @@ pub fn evaluate(operation: &Operation, facts: &Facts, ctx: &Context) -> Evaluati
                     ctx,
                     &mut budget,
                 );
+                if let Some(commits) = facts.commits.get(i).and_then(Option::as_ref) {
+                    commit_policies::apply(
+                        &mut out,
+                        commits,
+                        ctx.actor,
+                        &ctx.commit_policies,
+                        &mut budget,
+                    );
+                }
             }
         }
         // Nothing of the minimum governs a rebase; only its permission.
@@ -426,6 +443,7 @@ pub fn not_preventable(backend: RefBackend) -> Vec<NotPreventable> {
         NotPreventable::PolicyReach,
         NotPreventable::PolicyFloor,
         NotPreventable::PermissionReach,
+        NotPreventable::CommitPolicyReach,
     ];
     if backend == RefBackend::Reftable {
         list.push(NotPreventable::RenameBaseReftable);

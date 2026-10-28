@@ -24,14 +24,19 @@ pub enum Scope {
 
 impl Scope {
     fn of(policy: &PatternPolicy) -> Self {
-        match policy.applies_to {
+        Self::declared(policy.applies_to)
+    }
+
+    /// The scope a policy declares; `agents` when it says nothing.
+    pub(super) fn declared(applies_to: Option<AppliesTo>) -> Self {
+        match applies_to {
             Some(AppliesTo::Everyone) => Self::Everyone,
             Some(AppliesTo::Agents) | None => Self::Agents,
         }
     }
 
     /// Whether the rule governs an operation of `actor` (`None` = unattributed).
-    fn governs(self, actor: Option<AgentKind>) -> bool {
+    pub(super) fn governs(self, actor: Option<AgentKind>) -> bool {
         self == Self::Everyone || actor.is_some()
     }
 }
@@ -321,6 +326,7 @@ mod tests {
                 commit_authorship: None,
                 protected_branches: get("protectedBranches"),
                 forbidden_paths: get("forbiddenPaths"),
+                ..Declared::default()
             }),
             ..Settings::default()
         }

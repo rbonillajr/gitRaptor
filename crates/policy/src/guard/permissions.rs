@@ -39,6 +39,19 @@ impl Chain {
         &self.commands
     }
 
+    /// Every process of the chain is read with certainty and one of them is a `clone`: the
+    /// refs it writes come from the remote and were judged there (US-GRD-009, D6). A `fetch`
+    /// is not exempt: it can write `refs/heads/*` from any local ref.
+    pub fn certainly_clones(&self) -> bool {
+        !self.uncertain() && self.commands.iter().any(|c| c.is("clone", None))
+    }
+
+    /// Every process is read with certainty and the movement is a `fetch`, `pull` or `merge`:
+    /// the commits a remote-tracking branch already holds are not new to the repo.
+    pub fn certainly_takes_remote_commits(&self) -> bool {
+        !self.uncertain() && matches!(self.best(), Kind::Fetch | Kind::Merge)
+    }
+
     /// The highest-precedence kind read with certainty.
     fn best(&self) -> Kind {
         self.commands

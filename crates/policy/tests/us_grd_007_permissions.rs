@@ -360,6 +360,7 @@ fn ctx(permissions: Option<EffectivePermissions>) -> Context {
         actor: None,
         authorship: authorship::Effective::default(),
         policies: Policies::default(),
+        commit_policies: Default::default(),
         layer: LogLayer::Hooks,
         // The minimum is off so each permission is seen alone (except where a test says otherwise).
         minimum: false,

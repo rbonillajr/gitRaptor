@@ -142,6 +142,26 @@ fn resolve(mut schema: &Value) -> &Value {
     schema
 }
 
+/// Most types a `commitFormat` may list.
+const MAX_TYPES: usize = 32;
+
+/// A commit type: `[a-z][a-z0-9-]{0,31}`.
+fn valid_type(raw: &str) -> bool {
+    let bytes = raw.as_bytes();
+    bytes.len() <= 32
+        && bytes.first().is_some_and(u8::is_ascii_lowercase)
+        && bytes
+            .iter()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || *b == b'-')
+}
+
+/// Whether the array is a list of commit types (`x-gitraptor-types`).
+fn declared_types(declared: &Value, schema: &Value) -> bool {
+    [declared, schema]
+        .iter()
+        .any(|n| n.get("x-gitraptor-types").and_then(Value::as_bool) == Some(true))
+}
+
 /// Whether the array is a list of patterns (`x-gitraptor-patterns`).
 fn declared_patterns(declared: &Value, schema: &Value) -> bool {
     [declared, schema]
@@ -200,6 +220,15 @@ impl Walk {
         let expected = schema.get("type").and_then(Value::as_str).unwrap_or("");
         match (expected, &mut *value) {
             ("object", Value::Object(map)) => {
+                // A size rule without its limit does not exist: dropped, the source is partial
+                // (US-GRD-009, D1).
+                if matches!(path.as_slice(), [p, k] if p == "policies" && k == "diffSize")
+                    && !map.contains_key("maxLines")
+                {
+                    self.partial = true;
+                    self.note(Code::PolicyInvalid, path);
+                    return Keep::Drop;
+                }
                 let properties = schema.get("properties");
                 let keys: Vec<String> = map.keys().cloned().collect();
                 for key in keys {
@@ -264,6 +293,30 @@ impl Walk {
                 *items = kept;
                 Keep::Yes
             }
+            ("array", Value::Array(items)) if declared_types(declared, schema) => {
+                // From 1 to 32 commit types; an invalid one is dropped alone (US-GRD-009, D1).
+                if items.is_empty() || items.len() > MAX_TYPES {
+                    return self.fail(Code::OutOfRange, path);
+                }
+                let mut kept = Vec::with_capacity(items.len());
+                for (i, item) in std::mem::take(items).into_iter().enumerate() {
+                    path.push(i.to_string());
+                    match &item {
+                        Value::String(raw) if valid_type(raw) => kept.push(item),
+                        Value::String(_) => {
+                            self.partial = true;
+                            self.note(Code::PolicyInvalid, path);
+                        }
+                        _ => {
+                            path.pop();
+                            return self.fail(Code::WrongType, path);
+                        }
+                    }
+                    path.pop();
+                }
+                *items = kept;
+                Keep::Yes
+            }
             ("array", Value::Array(items)) => {
                 let item_schema = schema.get("items").cloned().unwrap_or(Value::Null);
                 let mut kept = Vec::with_capacity(items.len());
@@ -284,13 +337,22 @@ impl Walk {
                 if allowed.iter().any(|a| a == s.as_str()) {
                     return Keep::Yes;
                 }
-                if Self::open_section(path) == Some("policies")
-                    && path.last().is_some_and(|k| k == "appliesTo")
-                {
-                    // Who a rule applies to: a value this version does not know is read as the
-                    // stricter one, never as the default that would silently let the person
-                    // through (US-GRD-008, D1).
-                    *s = "everyone".to_owned();
+                // A value of a policy this version does not know is read as the stricter one,
+                // never as the default that would silently let something through: `appliesTo`
+                // as `everyone` (US-GRD-008, D1), `effect` as `deny` and `style` as
+                // `conventional` (US-GRD-009, D1).
+                let strict = if Self::open_section(path) == Some("policies") {
+                    match path.last().map(String::as_str) {
+                        Some("appliesTo") => Some("everyone"),
+                        Some("effect") => Some("deny"),
+                        Some("style") => Some("conventional"),
+                        _ => None,
+                    }
+                } else {
+                    None
+                };
+                if let Some(strict) = strict {
+                    *s = strict.to_owned();
                     self.partial = true;
                     self.note(Code::PolicyInvalid, path);
                     Keep::Yes

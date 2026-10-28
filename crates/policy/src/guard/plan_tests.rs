@@ -576,6 +576,7 @@ fn the_layer_never_changes_the_decision() {
                         actor,
                         authorship: authorship::Effective::default(),
                         policies: policies::Policies::default(),
+                        commit_policies: Default::default(),
                         layer,
                         minimum: true,
                         permissions: None,
