@@ -356,6 +356,8 @@ const EN_CONFIRMATION: [&str; 2] = ["belongs to an agent", "ask the agent to res
 const ES_CONFIRMATION: [&str; 2] = ["es de un agente", "pídele al agente que restaure él mismo"];
 const EN_NOT_FOUND: &str = "no restore point";
 const ES_NOT_FOUND: &str = "no hay un punto de restauración";
+/// The S-03 refusal of a requester past its write burst, in each language.
+const RATE_LIMITED: [&str; 2] = ["too many requests", "demasiadas peticiones"];
 const EN_INVALID_ID: &str = "not a valid restore point id";
 const ES_INVALID_ID: &str = "no es un id de punto de restauración válido";
 
@@ -479,8 +481,24 @@ fn raptor_restore_explains_rejections_in_english_and_spanish() {
         (UNKNOWN_ID, "unknown", &[EN_NOT_FOUND], &[ES_NOT_FOUND]),
         ("../etc", "malformed", &[EN_INVALID_ID], &[ES_INVALID_ID]),
     ];
+    // Seven writes of one requester key (the reset and six restores, all
+    // unattributed callers) pass its write burst: a restore refused for that
+    // (S-03) is asked again once the bucket has refilled, so each case is
+    // checked against the answer it was asked for.
+    let restore = |id: &str, lang: &str| {
+        let start = Instant::now();
+        loop {
+            let out = m.raptor(&m.worktree, &["restore", id], lang);
+            let stderr = text(&out.stderr);
+            if !RATE_LIMITED.iter().any(|t| stderr.contains(t)) {
+                return out;
+            }
+            assert!(start.elapsed() < Duration::from_secs(30), "still limited");
+            std::thread::sleep(Duration::from_millis(250));
+        }
+    };
     for (id, what, en, es) in cases {
-        let english = m.raptor(&m.worktree, &["restore", id], "en_US.UTF-8");
+        let english = restore(id, "en_US.UTF-8");
         assert!(
             !english.status.success(),
             "{what}: {}",
@@ -490,7 +508,7 @@ fn raptor_restore_explains_rejections_in_english_and_spanish() {
         for fragment in en {
             assert!(stderr.contains(fragment), "{what}: {stderr}");
         }
-        let spanish = m.raptor(&m.worktree, &["restore", id], "es_ES.UTF-8");
+        let spanish = restore(id, "es_ES.UTF-8");
         assert!(
             !spanish.status.success(),
             "{what}: {}",
