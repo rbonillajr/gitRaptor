@@ -102,7 +102,7 @@ fn another_owner_makes_the_repo_unavailable() {
     assert_eq!(availability(&repo, 0, &facts_of(None, true, true)), Ok(()));
 
     // What is read from the OS: this user's folder is its own, where an owner is told.
-    let read = facts(&repo, 0, None);
+    let read = facts(&repo, 0, &[]);
     assert!(read.exists);
     assert!(read.trusted_link, "a main worktree has no link to distrust");
     assert_eq!(read.owned_by_me, cfg!(unix).then_some(true));
@@ -130,7 +130,7 @@ fn a_worktree_rooted_at_home_is_unavailable() {
         ],
     );
 
-    let at_home = facts(&repo, 1, Some(&canonical(&home)));
+    let at_home = facts(&repo, 1, &[canonical(&home)]);
     assert!(at_home.exists);
     assert!(!at_home.trusted_link, "{at_home:?}");
     assert_eq!(
@@ -138,7 +138,7 @@ fn a_worktree_rooted_at_home_is_unavailable() {
         Err(McpUnavailable::WorktreeUntrusted)
     );
 
-    let elsewhere = facts(&repo, 1, Some(&base.join("not-home")));
+    let elsewhere = facts(&repo, 1, &[base.join("not-home")]);
     assert!(elsewhere.trusted_link, "{elsewhere:?}");
     assert_eq!(availability(&repo, 1, &elsewhere), Ok(()));
 

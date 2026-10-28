@@ -1957,14 +1957,12 @@ impl Connection<'_> {
             .worktrees
             .get(w)
             .ok_or_else(|| scope_refused(ScopeError::NotObserved))?;
-        let home = std::env::var_os("HOME")
-            .or_else(|| std::env::var_os("USERPROFILE"))
-            .map(PathBuf::from);
+        let homes = crate::observe::home_folders();
         // The allowlist answers before anything is read from the disk for this repo.
         if !allowed {
             return Err(scope_refused(ScopeError::NotAllowlisted));
         }
-        let facts = mcp_status::facts(repo, w, home.as_deref());
+        let facts = mcp_status::facts(repo, w, &homes);
         match mcp_status::admit(allowed, repo, w, &facts) {
             Err(mcp_status::Refusal::NotAllowlisted) => {
                 return Err(scope_refused(ScopeError::NotAllowlisted));
@@ -2006,7 +2004,7 @@ impl Connection<'_> {
         }
         if let Some(mcp_status::CursorEntry::Paths { root, after, .. }) = entry {
             let own = Path::new(worktree.path.raw());
-            self.mcp_paths_page(&mut status, repo, (&root, own), after, home.as_deref())?;
+            self.mcp_paths_page(&mut status, repo, (&root, own), after, &homes)?;
             return Ok(status);
         }
         // The ahead/behind as of now, as in the snapshot (US-GRP-012, D5).
@@ -2145,7 +2143,7 @@ impl Connection<'_> {
         repo: &gitraptor_api::messages::RepoView,
         scope: (&Path, &Path),
         after: Option<String>,
-        home: Option<&Path>,
+        homes: &[PathBuf],
     ) -> Result<(), ErrorObject> {
         let (root, own) = scope;
         let not_found = || ErrorObject::new(code::NOT_FOUND, "cursor not found");
@@ -2161,7 +2159,7 @@ impl Connection<'_> {
             .iter()
             .position(|v| Path::new(v.path.raw()) == root)
             .ok_or_else(not_found)?;
-        let facts = mcp_status::facts(repo, index, home);
+        let facts = mcp_status::facts(repo, index, homes);
         mcp_status::availability(repo, index, &facts).map_err(refuse)?;
         let view = repo.worktrees.get(index);
         let main = view.is_some_and(|v| v.main);
