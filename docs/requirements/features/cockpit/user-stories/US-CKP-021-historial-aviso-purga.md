@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: medium
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-28
 feature: cockpit
 related:
   context:
@@ -19,6 +19,7 @@ related:
     - US-TMC-006
     - US-TMC-012
     - US-TMC-016
+  specs: [DS-US-CKP-021]
 tags:
   - cockpit
   - time-machine
@@ -68,8 +69,10 @@ Entonces la TUI muestra el solape con "claude-3" y no deshace nada sin su decisi
 
 Dado 3 snapshots de más de 30 días con purga programada
 Cuando el desarrollador abre la TUI
-Entonces la TUI muestra "3 snapshots se purgarán a partir de mañana a las 10:00"
+Entonces la TUI muestra "3 snapshots de más de 30 días se purgarán a partir de mañana a las 10:00"
   Y la Time Machine registra el aviso como visto
+
+> Cambio del PO (2026-10-28), revisión de DS-US-CKP-021 (H13): el literal pasa de "3 snapshots se purgarán a partir de mañana a las 10:00" a la forma compacta de la TUI, que nombra la antigüedad.
 
 ## Requisitos Técnicos
 
@@ -78,4 +81,4 @@ _Pendiente — lo completa el Arquitecto (Dev Spec)._
 ## Diseño y Dev Spec
 
 - **Diseño:** DSYS-GRP-001.
-- **Dev Spec:** pendiente.
+- **Dev Spec:** [DS-US-CKP-021](../dev-specs/US-CKP-021-historial-aviso-purga.md) (approved).
