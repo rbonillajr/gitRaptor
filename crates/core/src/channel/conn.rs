@@ -7,6 +7,9 @@ use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
 use gitraptor_api::Untrusted;
+use gitraptor_api::attribution::{
+    AttributionChangeResult, AttributionCorrectParams, AttributionWithdrawParams,
+};
 use gitraptor_api::capability::{self, AcceptParams, AcceptResult, CAPABILITIES_PROTOCOL};
 use gitraptor_api::catalog::{
     self as catalog, CancelParams, CancelResult, Layer, PrepareParams, PrepareResult, RejectedData,
@@ -58,8 +61,9 @@ use super::transport::Stream;
 use super::validate;
 use super::{ServerCtx, file_id};
 use crate::daemon::{
-    CHANGE_LIST_BUDGET, Field, GuardLogReply, GuardReply, GuardRequest, RegisterRequest,
-    RegistrationError, RepoAddRequest, RepoCommandError, StopCause, WithdrawRequest, now_ms,
+    AttributionError, CHANGE_LIST_BUDGET, CorrectRequest, Field, GuardLogReply, GuardReply,
+    GuardRequest, RegisterRequest, RegistrationError, RepoAddRequest, RepoCommandError, StopCause,
+    WithdrawCorrectionRequest, WithdrawRequest, now_ms,
 };
 use crate::executor::{
     Caller, ExecError, PrepareInput, RunEnv, RunInput, layer_for, oplog_channel,
@@ -980,6 +984,14 @@ impl Connection<'_> {
             }
             methods::REGISTRATION_WITHDRAW => {
                 let result = self.registration_withdraw(spec, request);
+                self.reply(&request.id, result);
+            }
+            methods::ATTRIBUTION_CORRECT => {
+                let result = self.attribution_correct(spec, request);
+                self.reply(&request.id, result);
+            }
+            methods::ATTRIBUTION_WITHDRAW => {
+                let result = self.attribution_withdraw(spec, request);
                 self.reply(&request.id, result);
             }
             // On this thread, never through the loop: the hook of an executor's own `git`
@@ -2249,6 +2261,44 @@ impl Connection<'_> {
             .control
             .withdraw(WithdrawRequest { agent, folder })
             .map_err(registration_error)
+    }
+
+    /// `attribution.correct`: a reserved command. The parameters are validated first, then who
+    /// asks (an agent is refused and audited), and only then the loop is asked.
+    fn attribution_correct(
+        &self,
+        spec: &MethodSpec,
+        request: &Request,
+    ) -> Result<AttributionChangeResult, ErrorObject> {
+        let params: AttributionCorrectParams = request.params()?;
+        let agent = declared_agent(&params.agent)?;
+        let folder = validate::client_path(&params.worktree).map_err(invalid)?;
+        let session_id = checked_session_id(params.session_id)?;
+        self.reserved(spec, None)?;
+        self.ctx
+            .control
+            .correct(CorrectRequest {
+                agent,
+                folder,
+                session_id,
+            })
+            .map_err(attribution_error)
+    }
+
+    /// `attribution.withdraw-correction`: a reserved command, like `attribution.correct`.
+    fn attribution_withdraw(
+        &self,
+        spec: &MethodSpec,
+        request: &Request,
+    ) -> Result<AttributionChangeResult, ErrorObject> {
+        let params: AttributionWithdrawParams = request.params()?;
+        let folder = validate::client_path(&params.worktree).map_err(invalid)?;
+        let session_id = checked_session_id(params.session_id)?;
+        self.reserved(spec, None)?;
+        self.ctx
+            .control
+            .withdraw_correction(WithdrawCorrectionRequest { folder, session_id })
+            .map_err(attribution_error)
     }
 
     /// The kept temporary entries still there, for a connection with
@@ -4241,6 +4291,29 @@ fn declared_agent(agent: &DeclaredAgent) -> Result<Agent, ErrorObject> {
 fn registration_rejected(reason: RegistrationRejection) -> ErrorObject {
     ErrorObject::new(code::REGISTRATION_REJECTED, "registration rejected")
         .with_data(RegistrationRejectedData { reason })
+}
+
+/// A session id the caller names: the alphabet and bounds of an agent identifier.
+fn checked_session_id(id: Option<String>) -> Result<Option<String>, ErrorObject> {
+    match id {
+        Some(id) if gitraptor_api::timemachine::check_agent_id(&id).is_err() => {
+            Err(ErrorObject::new(
+                code::INVALID_PARAMS,
+                "session_id: invalid session identifier",
+            ))
+        }
+        other => Ok(other),
+    }
+}
+
+fn attribution_error(err: AttributionError) -> ErrorObject {
+    match err {
+        AttributionError::Rejected(data) => {
+            ErrorObject::new(methods::ATTRIBUTION_REJECTED.code, "attribution rejected")
+                .with_data(data)
+        }
+        AttributionError::Internal => ErrorObject::new(code::INTERNAL, "profile unavailable"),
+    }
 }
 
 fn registration_error(err: RegistrationError) -> ErrorObject {

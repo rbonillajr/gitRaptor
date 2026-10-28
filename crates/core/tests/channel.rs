@@ -569,7 +569,10 @@ fn reserved_commands_from_an_agent_descendant_are_refused_and_audited() {
         (methods::DAEMON_STOP, json!({})),
         (methods::REPO_ADD, json!({"path": "/tmp/some/repo"})),
         (methods::REPO_RETIRE, json!({"repo_id": "abc-123"})),
-        (methods::ATTRIBUTION_CORRECT, json!({})),
+        (
+            methods::ATTRIBUTION_CORRECT,
+            json!({"worktree": "/tmp/some/repo", "agent": {"kind": "other", "name": "Codex"}}),
+        ),
         (
             methods::REGISTRATION_WITHDRAW,
             json!({"worktree": "/tmp/some/repo", "agent": {"kind": "other", "name": "Codex"}}),
