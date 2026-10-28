@@ -290,9 +290,7 @@ fn a_lost_profile_defers_the_stop_while_a_protected_write_runs() {
     let parent = tempfile::tempdir().unwrap();
     let repo = init_repo(parent.path(), "demo", true);
     let mut profile = tp.open();
-    let (entry, _) = profile
-        .add_repo(&common_dir(&repo).canonicalize().unwrap(), None, 1)
-        .unwrap();
+    let (entry, _) = profile.add_repo(&common_dir(&repo), None, 1).unwrap();
     drop(profile);
     let (mut live, _id) = serving(&tp);
     let guard = gitraptor_core::repo_lock::try_lock(&entry.repo_id)
