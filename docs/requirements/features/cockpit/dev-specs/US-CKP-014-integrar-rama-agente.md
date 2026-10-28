@@ -152,7 +152,7 @@ sequenceDiagram
     D->>TM: intención + snapshot previo garantizado (falla → aborted)
     D->>M: step: git merge --no-edit -m <plantilla> <oid> en el destino (T003)
     M->>G: run_git (barrera, transición MergeInto ya registrada)
-    G-->>M: salida; M lee el desenlace (I8)
+    G-->>M: salida, M lee el desenlace (I8)
     D-->>C: OperationRunResult {operation_id, outcome}
     C->>T: Hecha → toast "Integrado feat-pagos en main · u Deshacer" (5 s)
     T->>C: u → LinkCmd::Operation(Undo {worktree, operation_id}) (T007)
