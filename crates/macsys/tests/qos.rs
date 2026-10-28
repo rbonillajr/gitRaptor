@@ -7,7 +7,7 @@ use std::process::Command;
 use gitraptor_macsys::qos::{self, QosClass};
 
 #[test]
-fn set_current_utility_reads_back_utility_and_iopol_utility() {
+fn set_current_utility_reads_back_utility_and_no_thread_iopolicy() {
     // A fresh thread: the test thread of the harness is not shared with other tests.
     std::thread::spawn(|| {
         qos::set_current(QosClass::Utility).expect("set_current(Utility) must succeed");
@@ -16,10 +16,12 @@ fn set_current_utility_reads_back_utility_and_iopol_utility() {
             Some(QosClass::Utility),
             "the thread QoS must read back as Utility"
         );
+        // macOS forbids a thread-scope iopolicy together with QoS: the disk tier follows the
+        // QoS, so no explicit thread-scope policy is set.
         assert_eq!(
             qos::current_io(),
-            Some(QosClass::Utility),
-            "the thread I/O policy must read back as IOPOL_UTILITY"
+            None,
+            "set_current must not set an explicit thread-scope I/O policy (it would opt the thread out of QoS)"
         );
     })
     .join()

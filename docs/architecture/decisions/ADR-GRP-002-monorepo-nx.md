@@ -133,6 +133,7 @@ Decisión del orquestador (2026-10-07), validada por el Arquitecto (`nassa-archi
   - **Búfer acotado**: como mucho 16 MiB y 3 reintentos ante `ENOMEM`.
   - **Comprobación en ejecución**: el propio proceso debe aparecer con su padre. Si falla, el detector vuelve a `proc_pidinfo`, de modo que un fallo cuesta CPU pero no deja ciega la detección.
   - Decisión del orquestador (2026-10-08), validada por el Arquitecto (una consulta; sus ajustes están incorporados). Requiere la revisión de seguridad que esta Enmienda exige.
+- **Registro (2026-10-28, clases de trabajo del daemon, RES-06):** `macsys` suma el módulo público `qos` (QoS del hilo actual y prioridad de un hijo antes de `exec`) y el módulo FFI privado `ffi_qos`, con `pthread_set_qos_class_self_np`, `qos_class_self` y `getiopolicy_np`/`setiopolicy_np` declarados a mano (`libc` no los trae) y `setpriority` de `libc`. `lower_child` instala con `CommandExt::pre_exec` un cierre que solo hace `setpriority(PRIO_PROCESS, 0, nice)` y `setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_PROCESS, …)`: dos llamadas al sistema sobre enteros capturados por valor, sin reservar memoria ni tomar cerrojos entre `fork` y `exec`. Sin punteros en la API pública. Sigue las mismas reglas y pasa por revisión de seguridad. Ver ADR-GRP-015 § 1 y DS-TS-GRP-005 (T001, D9).
 
 ## Enmienda (2026-10-07, nx sobre cargo y CI con affected)
 
