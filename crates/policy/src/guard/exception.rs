@@ -508,6 +508,8 @@ pub fn exceptable(rule: Rule) -> bool {
         | Rule::MinimumBaseBranchDelete
         | Rule::ProtectedBranch
         | Rule::ForbiddenPath
+        | Rule::DiffSize
+        | Rule::CommitFormat
         | Rule::SnapshotFailed
         | Rule::PermissionCommit
         | Rule::PermissionPush
