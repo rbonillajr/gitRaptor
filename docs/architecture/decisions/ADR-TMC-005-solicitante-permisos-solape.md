@@ -97,7 +97,7 @@ Orden de evaluación: validación (BR-TMC-VAL-001), conjunto, regla base (§ 2),
 - ✅ El solape nunca sobrescribe: la granularidad elegida solo puede detener de más, nunca de menos.
 - ⚠️ Un agente no detectado ni reconocido que lanza la CLI desde una pty puede pasar por "sin atribuir" y confirmar. **Mitigación**: ascendencia de agentes registrados (TQ-8 → a, depende de motor-local), reto ligado al plan y snapshot previo de toda operación (se puede deshacer). La auditoría del oplog ayuda, pero el mismo usuario puede manipularla (SEC-TMC-09). Riesgo residual aceptado arriba.
 - ⚠️ En worktrees compartidos casi todo queda "sin atribuir" (Q7, ADR-GRP-013 § 3), así que el solape detendrá muchos undos por agente. Es el comportamiento seguro.
-- ⚠️ Depende de P17 para el undo por agente (D-TMC-22).
+- ⚠️ Depende de P17 para el undo por agente (D-TMC-22) → resuelta el 2026-10-27 (Q50, decisión del orquestador validada por PO y Arquitecto): sí; US-TMC-011 desbloqueada y D-TMC-22 cumplida.
 
 ## Validación
 
