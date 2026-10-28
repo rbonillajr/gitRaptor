@@ -149,6 +149,7 @@ fn interrupted(fx: &Fixture) -> (TempProfile, PathBuf, String, String, String) {
             key: "main".into(),
             root: root.clone(),
             recreate_id: None,
+            keep: Default::default(),
         }],
         refs: RefScope::All,
     };

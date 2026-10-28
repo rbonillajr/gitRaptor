@@ -3218,6 +3218,21 @@ fn undo_error(e: UndoError, confirm: &Confirmation<'_>) -> ErrorObject {
                 .with_data(serde_json::json!({ "operation_id": operation_id }))
         }
         UndoError::Internal(_) => ErrorObject::new(code::INTERNAL, "time machine unavailable"),
+        // Only the code until the detail is served (`CAP_TM_OVERLAP`).
+        UndoError::Overlap {
+            operation_id,
+            report,
+        } => {
+            let reason = if report.unverified {
+                TmRejectReason::OverlapUnverified
+            } else {
+                TmRejectReason::Overlap
+            };
+            ErrorObject::new(code::OPERATION_REJECTED, "undo rejected").with_data(TmRejectedData {
+                reason,
+                operation_id,
+            })
+        }
     }
 }
 
@@ -3328,6 +3343,7 @@ fn undo_result(done: UndoDone, requester: RequesterView) -> UndoResult {
             .map(warning_code)
             .chain(done.warnings)
             .collect(),
+        kept: Vec::new(),
     }
 }
 

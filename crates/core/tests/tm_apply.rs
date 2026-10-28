@@ -118,6 +118,7 @@ impl Apply {
                 key: "main".into(),
                 root: self.f().repo.clone(),
                 recreate_id: None,
+                keep: Default::default(),
             }],
             refs: RefScope::All,
         }
@@ -736,6 +737,7 @@ mod repo_intact {
             key: "w".into(),
             root: wt.clone(),
             recreate_id: Some("w".into()),
+            keep: Default::default(),
         });
         let report = t.applier(ApplyHooks::default()).apply(&op, &plan).unwrap();
         assert!(report.paths.is_empty(), "{report:?}");

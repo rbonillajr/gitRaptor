@@ -148,3 +148,8 @@ tm-notice.interrupted-undo = the undo {id} of this worktree was interrupted when
 tm-notice.interrupted-restore = the restore {id} of this worktree was interrupted when GitRaptor stopped; raptor undo returns to the state before it
 tm-notice.interrupted-redo = the redo {id} of this worktree was interrupted when GitRaptor stopped; raptor undo returns to the state before it
 tm-notice.interrupted-operation = the operation {id} of this worktree was interrupted when GitRaptor stopped; raptor undo returns to the state before it
+# Overlap with later work of another actor (US-TMC-012).
+undo.reason.overlap = another actor changed what this undo would overwrite after that change; nothing changed
+undo.reason.overlap-unverified = could not check that nobody else changed those files afterwards; nothing changed
+restore.reason.overlap = another actor changed what this restore would overwrite; nothing changed
+restore.reason.overlap-unverified = could not check that nobody else changed those files afterwards; nothing changed

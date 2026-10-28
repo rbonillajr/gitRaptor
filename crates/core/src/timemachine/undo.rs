@@ -38,6 +38,7 @@ use super::oplog::{
     Channel, NewOperation, OpRef, OperationKind, OperationTransition, OperationView, Oplog,
     Requester, Scope, SnapshotView, StackScope, Target,
 };
+use super::overlap::OverlapReport;
 use super::protected::{
     McpAllowlist, ProtectedError, ProtectedOperation, ProtectedRequest, ProtectedStep, RepoHandle,
     ScopeError, StepCtx, StepError, StepOutput, StepScope, registered_worktrees,
@@ -155,6 +156,13 @@ pub enum UndoError {
     },
     /// The oplog or the write layer could not be used: nothing ran.
     Internal(String),
+    /// Another actor changed, after the undone change, something the undo would overwrite (or
+    /// that could not be checked: `report.unverified`). Nothing changed.
+    Overlap {
+        operation_id: Option<String>,
+        // Boxed: the report would make every `Result<_, UndoError>` large.
+        report: Box<OverlapReport>,
+    },
 }
 
 /// The base permission rule (ADR-TMC-005 § 2) for undoing work of `owner`.
@@ -555,6 +563,7 @@ fn plan(
             key: in_meta.key.clone(),
             root: PathBuf::from(root),
             recreate_id: None,
+            keep: BTreeSet::new(),
         });
     }
     // A branch checked out in a worktree outside the scope never moves: it
