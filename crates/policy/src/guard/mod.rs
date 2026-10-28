@@ -11,6 +11,7 @@
 
 pub mod authorship;
 pub mod config;
+pub mod exception;
 pub mod fastpath;
 pub mod git_command;
 pub mod glob;

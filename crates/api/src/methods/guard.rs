@@ -104,6 +104,17 @@ pub const CAP_GUARD_PERMISSIONS: Capability = Capability::new("guard.permissions
 /// view of before. `raptor-mcp` may take it for the diagnostics, never `confirm`.
 pub const CAP_GUARD_TEAM_CONFIRMATION: Capability = Capability::new("guard.team-confirmation");
 
+/// Reserved: issues an exception token for one denied operation (US-GRD-006). Not in `GROUP` yet.
+pub const GUARD_EXCEPTION: &str = "guard.exception";
+/// Reserved: binds the git child of an exception to its requester. Not in `GROUP` yet.
+pub const GUARD_EXCEPTION_CHILD: &str = "guard.exception-child";
+/// Ends an exception, consumed or not. Not in `GROUP` yet.
+pub const GUARD_EXCEPTION_END: &str = "guard.exception-end";
+/// The daemon serves `guard.exception`. Not in `GROUP` yet.
+pub const CAP_GUARD_EXCEPTION: Capability = Capability::new("guard.exception");
+/// An exception request refused; the data carries the reason. Not in `GROUP` yet.
+pub const GUARD_EXCEPTION_REFUSED: ErrorSpec = ErrorSpec::new(BLOCK - 2, "guard-exception-refused");
+
 pub(super) const GROUP: Group = Group {
     // None is offered to `raptor-mcp` (BR-AUTH-004): it neither installs nor
     // evaluates. A connection of protocol 5 or 6 sees none.

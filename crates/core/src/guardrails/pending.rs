@@ -119,6 +119,17 @@ pub struct PendingActions {
 }
 
 impl PendingActions {
+    /// Attaches the plan of an exception to the pending action `action_id` of `repo_id`.
+    pub fn note_exception(
+        &mut self,
+        repo_id: &str,
+        action_id: &str,
+        plan: super::exception::ExceptionPlan,
+    ) {
+        let _ = (repo_id, action_id, plan);
+        todo!()
+    }
+
     /// Opens the window of `kind` in `repo_id`. One at a time per repo.
     pub fn announce(
         &mut self,
