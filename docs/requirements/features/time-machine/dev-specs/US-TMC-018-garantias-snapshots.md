@@ -235,8 +235,8 @@ flowchart LR
 **Ubicación.** `docs/` (**MODIFY**)
 
 **Reglas**
-- US-TMC-018: `status: implemented`, enlace a esta ficha en § Diseño y Dev Spec, y el estado del backlog o del hito que corresponda.
-- § Estado de esta ficha con PR, tests y plataformas verificadas. `xplat-pendientes.md`: una fila nueva para T007 en Windows real y para T006 en Linux, si no se verificaron.
+- US-TMC-018: `status: implemented`, enlace a esta ficha en § Diseño y Dev Spec, la marca "Pendiente: etapa de validación multiplataforma" (XP-48) en § Dependencias / Transversal, y el estado del backlog o del hito que corresponda. Cerrar con Windows parcial está aceptado por el PO (M2 = MVP completo en macOS).
+- § Estado de esta ficha con PR, tests y plataformas verificadas. `xplat-pendientes.md`: XP-48 ya existe (T006 en Linux y Windows, T007 en Windows real); se actualiza su estado con lo verificado.
 
 - **Depende:** T002, T003, T004, T005, T006, T007
 - **Refs:** AGENTS.md § Pull requests
@@ -322,8 +322,8 @@ _Sin esquema ni migración._
 | Plataforma | Cómo se verifica | Pendiente |
 |---|---|---|
 | macOS | `cargo clippy --workspace --all-targets -- -D warnings` y `cargo test --workspace` | — |
-| Linux | `us_tmc_018` y `us_tmc_018_intact` en el CI (ubuntu); los `tm_store_*` ya pasan en contenedor (XP-11) | **Pendiente: etapa de validación multiplataforma** (reflink real, XP-11) |
-| Windows | `us_tmc_018` compila y corre como `tm_store_safety` tras XP-12; T007 es el que importa aquí. `us_tmc_018_intact` no corre (el daemon con Git no corre todavía en el CI de Windows, como `tm_chaos`) | **Pendiente: etapa de validación multiplataforma** (T007 y T006 en máquina real) |
+| Linux | `us_tmc_018` y `us_tmc_018_intact` en el CI (ubuntu); los `tm_store_*` ya pasan en contenedor (XP-11) | **Pendiente: etapa de validación multiplataforma** (reflink real, XP-11) (XP-48) |
+| Windows | `us_tmc_018` compila y corre como `tm_store_safety` tras XP-12; T007 es el que importa aquí. `us_tmc_018_intact` no corre (el daemon con Git no corre todavía en el CI de Windows, como `tm_chaos`) | **Pendiente: etapa de validación multiplataforma** (T007 y T006 en máquina real) (XP-48) |
 
 ---
 
@@ -332,7 +332,7 @@ _Sin esquema ni migración._
 - Ningún test toca el repo real ni el perfil real: todo bajo el `root` del fixture, con `HOME` temporal (T004 escribe `maintenance.repo` en el `.gitconfig` de ese `HOME`).
 - Ningún test programa tareas del SO (`maintenance start` prohibido).
 - El almacén no gana remotos, `alternates` ni hooks: T001 y T004 lo comprueban además del test base de la configuración.
-- Fuera de las garantías (D-TMC-40): un proceso del mismo usuario que escribe en `<datos>/tm/` no queda impedido. Lo detecta `verify` (SEC-TMC-09) y su caso hostil es SEC-TMC-11 de INF-TMC-001 § 6.
+- Fuera de las garantías (D-TMC-40): un proceso del mismo usuario que escribe en `<datos>/tm/` no queda impedido. La **alteración** de un snapshot la detecta `verify` (SEC-TMC-09) y su caso hostil es SEC-TMC-11 de INF-TMC-001 § 6. La **desaparición entera** de `<datos>/tm/<repo>/` hoy **no** se detecta: la cabeza de la cadena del oplog vive en esa misma carpeta (`oplog/mod.rs`, `HEAD_FILE`), así que el daemon recrea un oplog vacío y el timeline sale vacío sin aviso. D-TMC-40 promete solo lo primero (G4).
 
 ---
 
@@ -373,8 +373,8 @@ _Sin esquema ni migración._
 
 | ID | Decisión |
 |---|---|
-| D-TMC-40 | "Un agente no altera los snapshots" (D-TMC-11) cubre todo lo que un agente hace con Git y con los archivos del repo y sus worktrees, incluido borrar un worktree, podarlo y cualquier mantenimiento. No cubre escribir o borrar a propósito en la carpeta de datos de GitRaptor: eso no se impide, se detecta (la verificación de un snapshot falla y se avisa, SEC-TMC-09/11) y queda fuera de esta garantía. **Decisión del orquestador (2026-10-28), validada por Arquitecto** |
-| D-TMC-41 | Un snapshot no depende de nada del repo del usuario: sigue disponible aunque desaparezcan su worktree, su rama, sus commits o los objetos que el repo tomaba de otro (`alternates`). Mientras esté dentro de la retención solo lo retira la purga de la Time Machine, por edad o por tamaño, siempre con aviso y gracia (BR-TMC-TIME-001, D-TMC-38). **Decisión del orquestador (2026-10-28), validada por Arquitecto** |
+| D-TMC-40 | "Un agente no altera los snapshots" (D-TMC-11) cubre todo lo que un agente hace con Git y con los archivos del repo y sus worktrees, incluido borrar un worktree, podarlo y cualquier mantenimiento. No cubre escribir o borrar a propósito en la carpeta de datos de GitRaptor: eso no se impide y queda fuera de esta garantía. La alteración de un snapshot se detecta (su verificación falla y se avisa, SEC-TMC-09); la desaparición entera de la carpeta de un repo no se detecta en el MVP. **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO** |
+| D-TMC-41 | Un snapshot no depende de nada del repo del usuario: sigue disponible aunque desaparezcan su worktree, su rama, sus commits o los objetos que el repo tomaba de otro (`alternates`). Mientras esté dentro de la retención solo lo retira la purga de la Time Machine, por edad, por tope o por cuota, siempre con aviso visto y 24 h (BR-TMC-TIME-001, D-TMC-38). **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO** |
 
 ### Preguntas abiertas nuevas
 
@@ -388,4 +388,5 @@ _Sin esquema ni migración._
 |---|---|---|---|
 | G1 | La historia dice "tres SO". En Windows, los tests en proceso corren tras XP-12. La huella con el daemon y los `hostile_*` siguen sin correr allí, como todo el arnés de INF-TMC-001 | Pendiente: etapa de validación multiplataforma | Orquestador |
 | G2 | El test base de configuración (`store_configuration_has_no_remotes_hooks_or_gc`) no comprueba `maintenance.auto=false`, que el almacén sí escribe (`tm_write/store/mod.rs`). T004 lo comprueba sin editar ese test (D1) | Ninguna | — |
+| G4 | Detectar la desaparición entera de `<datos>/tm/<repo>/` de un repo registrado que tenía snapshots (guardar fuera de esa carpeta, en el almacén del perfil, una marca o la cabeza de la cadena, y avisar en el siguiente comando de la CLI o la TUI). Pide migración del almacén del perfil y un tipo de aviso nuevo: no cabe en una ficha de verificación. Mientras tanto D-TMC-40 promete solo detectar la alteración | Candidato para INF-TMC-001 § 6 o una historia nueva; decide el PO | Arquitecto → PO |
 | G3 | El Git CLI que corre sobre el almacén va con `GIT_CONFIG_NOSYSTEM=1` y `GIT_CONFIG_GLOBAL` vacío (`crates/git/src/invoke.rs`): un `gc.*` global del usuario no le afecta. Lo que sí le afectaría es una herramienta del usuario que lance `git gc` dentro de `<datos>/tm/`, fuera de las garantías por D-TMC-40 | Ninguna | — |
