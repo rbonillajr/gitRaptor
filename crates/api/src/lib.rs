@@ -11,6 +11,7 @@
 //! "human" variant ([`Actor`], ADR-GRP-013 § 6).
 
 pub mod actor;
+pub mod attribution;
 pub mod capability;
 pub mod catalog;
 #[cfg(feature = "client")]
