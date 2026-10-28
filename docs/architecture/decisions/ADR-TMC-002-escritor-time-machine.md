@@ -211,3 +211,16 @@ Aplicada desde DEP-CKP-7 de [CTX-CKP-001](../../requirements/features/cockpit/co
 - Solo lo lanza el mantenimiento tras una pasada de purga que borró refs (ADR-TMC-007 § 4.4, Enmienda 2026-10-28), fuera del cerrojo del repo y del escritor del almacén.
 
 **Validación añadida** (definida en DS-US-TMC-016 T006; tests por implementar): la lista cerrada de la capa de escritura incluye `RepackCruft` con su argv fijo.
+
+## Enmienda (2026-10-28, US-TMC-014)
+
+**Decisión del orquestador (2026-10-28), validada por Arquitecto y PO** (revisión, con cambios). Origen: [DS-US-TMC-014](../../requirements/features/time-machine/dev-specs/US-TMC-014-undo-ya-empujado.md) D1-D7; regla de negocio D-TMC-46. Precisa § 4 y la Validación 6. El `status` sigue en `accepted`.
+
+- **Qué remotos**: cualquier ref no simbólica bajo `refs/remotes/`, no solo `refs/remotes/origin/*` (la Validación 6 queda: "commit alcanzable desde alguna `refs/remotes/*`, con aviso").
+- **Qué commits**: los alcanzables desde la punta actual de cada rama local que la operación mueve y no desde su punta destino; si la rama desaparece, los que no alcanza ninguna otra rama local.
+- **Antigüedad del dato**: hora de la última línea del reflog de la ref remota (la escriben fetch y push); sin reflog, `FETCH_HEAD`; sin ninguno, "desconocida". Nunca se refresca: sin red.
+- **Alcance**: undo (todas sus variantes), redo y restauración, con una sola comprobación compartida (`timemachine/on_remote.rs`), al planificar, con el lock del repo, tras las precondiciones y antes de la intención. El aviso queda en los avisos de la intención (`on-remote:<rama>:<ref remota>:<n>`).
+- **Fallo de la comprobación**: recorrido acotado (10 000 commits quitados por rama, 200 000 visitados, 4 096 puntas remotas); pasado un límite, en un clon superficial o con una lectura fallida, el resultado dice "no se pudo comprobar" y la operación sigue. Nunca "no publicado" sin comprobarlo.
+- **Coste**: cada recorrido se corta por fecha de commit (el quitado más antiguo menos 1 día) y sale al encontrar todos los quitados; se cuentan commits quitados distintos (uno en dos remotos cuenta una vez).
+- **Dónde se ve**: los códigos `on-remote*` van solo en los avisos de la intención del oplog; al cliente llegan por el campo `on_remote` con la capacidad `timemachine.on-remote`, nunca en `warnings` del resultado.
+- **Sin red**: `gix` y `gix-transport` se compilan sin cliente de red y el grafo no trae `curl`, `reqwest` ni `ureq`; `crates/git/tests/static_check.rs::gix_has_no_network_client` lo comprueba en CI sobre `cargo metadata`. Las invocaciones de Git llevan `protocol.allow=never` (`crates/git/src/invoke.rs:124`).

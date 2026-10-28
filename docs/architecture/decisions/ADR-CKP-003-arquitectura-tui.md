@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-04
 created: 2026-10-04
-updated: 2026-10-27
+updated: 2026-10-28
 deciders: [Orquestador (delegación de Rene Bonilla, 2026-10-04)]
 domain: GRP
 feature: cockpit
@@ -327,3 +327,15 @@ Origen: [DS-US-CKP-011](../../requirements/features/cockpit/dev-specs/US-CKP-011
 - Enablers: TS-GRP-004 (canal), INF-GRP-001 (repo intacto), INF-GRP-002 (banco de frescura).
 - Design system: [DSYS-GRP-001](../../design-system/README.md) § 2, § 3, § 6, § 7.
 - Versiones: crates.io (`ratatui` 0.30.2, `crossterm` 0.29.0), consultado el 2026-10-04; notas de la 0.30 en ratatui.rs.
+
+## Enmienda (2026-10-28, US-CKP-013)
+
+**Decisión del orquestador (2026-10-28), validada por Arquitecto y PO** (revisión 2026-10-28). Origen: [DS-US-CKP-013](../../requirements/features/cockpit/dev-specs/US-CKP-013-abrir-en-editor.md) K1, K2, K9, K11 y Q-CKP-54. Precisa § 4 (N10), § 9 y V12. El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| N10 = `operation.prepare` de `open-in-editor` con la capacidad `operation.editor`; el daemon no guarda el plan (campo `OpPlan.store = false`; `expires_in_ms = 0`, `operation.run` → `plan-unknown`) | § 4 (N10) | K1, K2 |
+| La "huella" del último argv aprobado es el argv canónico literal (palabras + modo, sin la ruta destino), guardado en N9 como `editorApproved` | § 9 | K9 |
+| El argv de `$VISUAL`/`$EDITOR` sin nada ignorado no pide aprobación | § 9 | K9 |
+| El editor de terminal no bloquea el hilo principal: el hilo principal hace `resolve_program` y `term::hand_over`; el hilo `raptor-editor` solo `spawn` y `wait` y envía `Msg::EditorClosed` (o `{ error }`); el principal hace `take_back` | § 9 | K11 |
+| "Abrir en el editor" se añade a lo que desactiva una TUI lanzada desde el árbol de un agente | V12 | Q-CKP-54 |

@@ -312,3 +312,9 @@ Aplicada desde DEP-CKP-13 de [CTX-CKP-001](../../requirements/features/cockpit/c
 | Un cambio del umbral se aplica desde la siguiente comprobación del motor; subirlo no reactiva una sesión Inactiva (BR-TIME-001). Validado también por PO | Lectura y recarga | Q56 |
 
 La regla de solo lectura (Validación 9) no cambia: el sondeo abre los archivos para leer y nunca los crea.
+
+## Enmienda (2026-10-28, US-CKP-013)
+
+**Decisión del orquestador (2026-10-28), validada por Arquitecto y PO** (Q-CKP-55). Origen: [DS-US-CKP-013](../../requirements/features/cockpit/dev-specs/US-CKP-013-abrir-en-editor.md) K6. Precisa la sección `cockpit` (Enmienda 2026-10-04, Cockpit). El `status` sigue en `accepted`.
+
+- El "Valor que no sirve" de `cockpit.editor` lo aplica el daemon al usarlo (el cargador de `crates/policy` no depende de `crates/api`), por nivel: un local rechazado deja paso al perfil.
