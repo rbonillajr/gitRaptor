@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: high
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-28
 feature: cockpit
 related:
   context:
@@ -15,6 +15,8 @@ related:
   stories:
     - US-CKP-014
     - US-GRP-016
+  specs:
+    - DS-US-CKP-015
 tags:
   - cockpit
   - acciones-por-agente
@@ -86,4 +88,4 @@ _Pendiente — lo completa el Arquitecto (Dev Spec)._
 ## Diseño y Dev Spec
 
 - **Diseño:** DSYS-GRP-001.
-- **Dev Spec:** pendiente.
+- **Dev Spec:** [DS-US-CKP-015](../dev-specs/US-CKP-015-rebasar-rama-agente.md) (draft).
