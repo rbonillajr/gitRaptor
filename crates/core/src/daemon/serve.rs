@@ -25,12 +25,12 @@ impl Daemon {
             return Some(wiring.clone());
         }
         let mut ops = self.config.operations.clone()?;
-        // `commit` launches the system Git with the daemon's `HOME`; without Git it is refused in
-        // the plan (`git-unavailable`).
+        // `commit` launches the system Git with the `HOME` of the daemon's captured environment,
+        // never the process's own; without Git it is refused in the plan (`git-unavailable`).
         if let Some(git) = self.report.git.clone() {
             ops = ops.with_commit_env(crate::executor::ops::CommitEnv {
                 git,
-                home: std::env::var_os("HOME").map(std::path::PathBuf::from),
+                home: self.config.env.get("HOME").map(std::path::PathBuf::from),
             });
         }
         let presence = crate::timemachine::protected::backend::profile_presence(

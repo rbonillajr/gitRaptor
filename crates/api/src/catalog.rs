@@ -1223,9 +1223,15 @@ mod tests {
     #[test]
     fn commit_arguments() {
         let args = |v: Value| v.as_object().unwrap().clone();
+        // A pathspec-magic name is a literal name; Windows refuses `:` in any name.
+        let path = if cfg!(windows) {
+            "src/a.rs"
+        } else {
+            ":(glob)**"
+        };
         let ok = OperationArgs::parse(
             OperationId::Commit,
-            &args(json!({ "message": "$(rm -rf ~) --amend", "paths": [":(glob)**"] })),
+            &args(json!({ "message": "$(rm -rf ~) --amend", "paths": [path] })),
             true,
         )
         .unwrap();
