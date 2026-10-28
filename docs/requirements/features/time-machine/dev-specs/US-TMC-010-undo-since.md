@@ -454,7 +454,7 @@ Corre `/security-review --scope devspec docs/requirements/features/time-machine/
 |---|---|---|---|
 | TQ-20 | Si un worktree se movió (`git worktree move`), la pila se indexa por la ruta canónica y `--since` no ve lo de antes (límite de DS-US-TMC-002 § 6). ¿Hace falta seguir el worktree por su id? | Límite conocido, sin cambio | Arquitecto |
 
-### Enmiendas propuestas a ADR (no aplicadas)
+### Enmiendas propuestas a ADR (aplicadas el 2026-10-27)
 
 | ADR | Enmienda propuesta |
 |---|---|

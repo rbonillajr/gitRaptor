@@ -510,7 +510,7 @@ Corre `/security-review --scope devspec docs/requirements/features/time-machine/
 |---|---|---|---|
 | TQ-19 | Un rebase o un merge abortado sin efecto neto, ¿debe ser una entrada de la pila? Hoy sí (sus eventos cambian el reflog), así que el primer undo tras el abort puede no cambiar nada visible y el segundo deshace lo anterior | Se mantiene ADR-TMC-003 § 4; el aviso de éxito del undo ya dice qué operación deshizo | PO + Arquitecto |
 
-### Enmiendas propuestas a ADR (no aplicadas)
+### Enmiendas propuestas a ADR (aplicadas el 2026-10-27)
 
 | ADR | Enmienda propuesta |
 |---|---|

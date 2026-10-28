@@ -5,7 +5,7 @@ type: adr
 status: accepted
 accepted: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-04
+updated: 2026-10-27
 date: 2026-10-03
 domain: GRP
 feature: time-machine
@@ -68,7 +68,7 @@ Heredan ADR-GRP-009 § 3 y añaden lo que fijan **SEC-TMC-02** (invocación sin 
 
 El planificador calcula un **estado destino** por worktree y por ref (ADR-TMC-003, ADR-TMC-005). El aplicador lo lleva al repo en este orden y anota cada paso en el diario (ADR-TMC-003):
 
-1. **Precondiciones** (sin cambios si fallan): ninguna operación de Git en curso en un worktree afectado (`rebase-merge/`, `rebase-apply/`, `MERGE_HEAD`, `CHERRY_PICK_HEAD`, `REVERT_HEAD`, `BISECT_LOG`, `sequencer/`; BR-TMC-EDGE-004); ningún lock de Git presente (`index.lock`, `HEAD.lock`, locks de refs), que se reporta como "Git ocupado" y **nunca se borra**; repo disponible (`safe.directory`); árbol destino revalidado (SEC-TMC-04, SEC-TMC-09).
+1. **Precondiciones** (sin cambios si fallan): ninguna operación de Git en curso en un worktree afectado (`rebase-merge/`, `rebase-apply/`, `MERGE_HEAD`, `CHERRY_PICK_HEAD`, `REVERT_HEAD`, `BISECT_LOG`, `sequencer/`; BR-TMC-EDGE-004); ningún lock de Git presente (`index.lock`, `HEAD.lock`, locks de refs), que se reporta como "Git ocupado" y **nunca se borra**; repo disponible (`safe.directory`); árbol destino revalidado (SEC-TMC-04, SEC-TMC-09). Qué es un "worktree afectado" y cuándo un lock ajeno da "Git ocupado" antes de llegar aquí: Enmienda (2026-10-27, US-TMC-015), al final.
 2. **Snapshot previo garantizado** del ámbito (BR-TMC-CONS-001). Si falla, la operación no se ejecuta.
 3. **Locks**: lock por repo de la Time Machine en el daemon (una aplicación a la vez; Enmienda 2026-10-04, Cockpit: es el cerrojo de escritura del repo que comparte con el ejecutor de operaciones) y `index.lock` de cada worktree afectado, creado en exclusiva y anotado en el diario (ruta e inodo). Mientras dura, los comandos de Git de un agente sobre ese worktree fallan rápido en vez de mezclarse.
 4. **Objetos**: si el destino apunta a commits que el repo ya no tiene, se copian del almacén al repo (escritura explícita e inocua).
@@ -162,3 +162,22 @@ Aplicada desde DEP-CKP-7 de [CTX-CKP-001](../../requirements/features/cockpit/co
 - **Cerrojo compartido**: vive en un módulo neutro de `crates/core` que usan el aplicador y el ejecutor; la clave es el directorio común del repo. No se usa un cerrojo por worktree, porque un merge toca dos worktrees y refs del repo. Las peticiones esperan en orden de llegada y se ven como "en cola" en todos los clientes (ADR-CKP-002 § 5). **Estado en main**: la Enmienda (2026-10-04, TS-TMC-003) implementó el lock del aplicador en `timemachine`, con clave la ruta del almacén (única por repo y perfil) y sin espera; la Dev Spec de TS-CKP-002 lo reutiliza como este cerrojo y le añade la cola.
 - **Sin interbloqueo con los hooks**: la evaluación de un hook de Guardrails nunca espera a este cerrojo (ADR-GRD-003, Enmienda (2026-10-04, Cockpit)). Las escrituras internas de esta capa siguen sin hooks (§ 2).
 - **Validación añadida**: un undo pedido mientras el ejecutor integra en el mismo repo espera en cola y después revalida su plan; nunca se aplican a la vez.
+
+## Enmienda (2026-10-27, US-TMC-015)
+
+**Decisión del orquestador (2026-10-27), validada por Arquitecto y PO**. Origen: [DS-US-TMC-015](../../requirements/features/time-machine/dev-specs/US-TMC-015-operacion-git-en-curso.md), § Enmiendas propuestas, D1 a D5, D7 y D-TMC-28. Precisa el paso 1 del § 3 y la Validación 3; no cambia el orden del protocolo, la lista de marcadores ni que un lock ajeno nunca se borra. El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| "Worktree afectado": los worktrees del plan; con el ámbito de refs acotado del undo, los marcadores del worktree principal solo cuentan si está en el ámbito; la rama de un rebase o un bisect en un worktree fuera del ámbito cuenta como en uso | § 3, paso 1 | D2, D3; D-TMC-28 |
+| "Git ocupado" (`git-busy`) también cuando un lock ajeno impide la calma del motor | § 3, paso 1 | D4 |
+| El aviso nombra la operación en curso y el worktree | Validación 3 | D1 |
+
+- **Marcadores** (D2): con el ámbito de refs acotado (undo, redo, `undo --since`), un marcador de operación en curso cuenta solo en los worktrees del plan. Los locks del directorio común cuentan siempre. La restauración, que mueve todas las ramas, mantiene los marcadores del worktree principal: una operación en curso en `main` la sigue deteniendo (asimetría aceptada en el MVP: detiene de más, nunca escribe de más).
+- **Rama en uso** (D3): la rama que reescribe un rebase o que dejó un bisect en un worktree fuera del ámbito tiene `HEAD` separado en ese worktree, pero está en uso: undo y restauración responden `ref-in-use` y no la mueven.
+- **Regla de negocio** (D-TMC-28, BR-TMC-EDGE-004): una operación de Git en curso en otro worktree no bloquea el undo de este, salvo que use una rama que el undo movería.
+- **Lock ajeno y calma** (D4): si la calma del motor no llega en su límite (ADR-TMC-003, Enmienda 2026-10-21, `fix/tm-restore-calm-mark`) y hay un lock ajeno en el worktree pedido o en el directorio común, la respuesta es `git-busy`; si no lo hay, `repo-busy`, como antes. Si el worktree no se puede abrir para comprobarlo, `repo-busy` (falla cerrado). Un lock que aparece y desaparece puede dar `repo-busy`, que también deja el repo igual. El lock sigue sin borrarse nunca.
+- **Aviso** (D1, D5): el rechazo nombra la operación en curso y el worktree, en un campo opcional de la respuesta detrás de una capacidad; un cliente sin ella recibe la respuesta de antes. El oplog guarda solo el código del rechazo.
+- **Herencia** (D7): redo y undo selectivo siguen esta regla: precondiciones antes del previo y repetidas bajo los locks del aplicador, con el mismo detalle.
+
+**Validación 3, ampliada** (definida en DS-US-TMC-015 § 9.4; tests por implementar): el rechazo nombra la operación y el worktree; un merge a medias en el worktree principal no bloquea el undo de un agente en otro worktree; la rama que reescribe un rebase en otro worktree no se mueve (`ref-in-use`); un `index.lock`, un lock de rama o `packed-refs.lock` ajenos dan `git-busy` en undo y en restauración, con los mismos bytes tras el rechazo.

@@ -573,7 +573,7 @@ Todas son **Decisión del orquestador (2026-10-27), validada por Arquitecto**, s
 
 **Interacción con el eco tardío de un restore (#256)**: ADR-TMC-003 lo da por **cerrado** (Enmienda 2026-10-21, `fix/tm-restore-calm-mark`: la marca en calma espera a las ramas y a todo `git` vivo). Queda el límite "enlace por ventana, no por proceso": un `git` ajeno en el mismo worktree puede cerrar antes la ventana de eco. Para el redo el efecto es un `redo-invalidated` o un `nothing-to-undo` de más, nunca una escritura indebida: el repo no cambia y el previo del undo sigue en el timeline para restaurarlo. Lo vigila `a_redo_right_after_an_undo_is_not_invalidated_by_its_echo`.
 
-**Enmienda propuesta a ADR** (no aplicada):
+**Enmienda propuesta a ADR** (aplicada el 2026-10-27 en la Enmienda (2026-10-27, US-TMC-012, US-TMC-003 y US-TMC-010) de ADR-TMC-003):
 
 | # | ADR | Cambio |
 |---|---|---|
