@@ -20,6 +20,7 @@ use gitraptor_api::messages::{
 };
 use gitraptor_api::{Actor, AgentKind as ApiAgentKind, AgentOrigin, Timings, Untrusted, clock};
 
+use super::attribution::{actor_of, effective_of};
 use super::{
     Daemon, Field, RegisterRequest, RegistrationError, RepoCommandError, WithdrawRequest, env,
     now_ms, profile_error_kind,
@@ -479,7 +480,7 @@ impl Daemon {
     }
 
     /// Publishes the current view of persisted sessions (`session.state`).
-    fn publish_sessions(&self, published: Vec<(String, String)>, t_recv: u64) {
+    pub(super) fn publish_sessions(&self, published: Vec<(String, String)>, t_recv: u64) {
         let t_persisted = clock::monotonic_ns();
         for (repo_id, session_id) in published {
             let Some((_, store)) = self.stores.iter().find(|(id, _)| *id == repo_id) else {
@@ -641,7 +642,10 @@ impl Daemon {
             .sessions_for_worktree(&worktree)
             .map_err(|_| RegistrationError::Internal)?
             .into_iter()
-            .filter(|s| s.end_cause.is_none() && same_agent(&s.agent, &request.agent))
+            // The agent in force: a session corrected to that agent is already it (D6).
+            .filter(|s| {
+                s.end_cause.is_none() && same_agent(&effective_of(store, s).agent, &request.agent)
+            })
             .collect();
         // The caller's own session first; the developer confirms the most
         // recent one of that agent.
@@ -655,7 +659,8 @@ impl Daemon {
             .cloned();
         let (session, outcome) = match same {
             Some(session) => {
-                if session_actor(store, &session) == registered_actor(&session.agent) {
+                let current = effective_of(store, &session).agent;
+                if session_actor(store, &session) == registered_actor(&current) {
                     (session, RegistrationOutcome::AlreadyRegistered)
                 } else {
                     store
@@ -801,7 +806,10 @@ impl Daemon {
     /// The observed worktree that holds `folder` (BR-VAL-002): the longest
     /// root, for nested worktrees. Outside every one, whether it is a Git
     /// repo the engine does not observe or not a worktree at all.
-    fn locate_worktree(&self, folder: &Path) -> Result<(String, PathBuf), RegistrationError> {
+    pub(super) fn locate_worktree(
+        &self,
+        folder: &Path,
+    ) -> Result<(String, PathBuf), RegistrationError> {
         let folder = crate::observe::canonical(folder);
         let found = self
             .stores
@@ -912,7 +920,7 @@ fn registered(
 
 /// The same agent (BR-CONS-004): the same kind and, for an "other agent",
 /// the same declared name, without case or surrounding spaces.
-fn same_agent(a: &Agent, b: &Agent) -> bool {
+pub(super) fn same_agent(a: &Agent, b: &Agent) -> bool {
     let fold = |n: &Option<String>| n.as_deref().map(|n| n.trim().to_lowercase());
     a.kind == b.kind && fold(&a.name) == fold(&b.name)
 }
@@ -926,7 +934,7 @@ fn registered_actor(agent: &Agent) -> Actor {
     }
 }
 
-fn api_kind(kind: AgentKind) -> ApiAgentKind {
+pub(super) fn api_kind(kind: AgentKind) -> ApiAgentKind {
     match kind {
         AgentKind::ClaudeCode => ApiAgentKind::ClaudeCode,
         AgentKind::Other => ApiAgentKind::Other,
@@ -1032,29 +1040,11 @@ fn state_of(session: &Session, latest: Option<&(String, i64)>) -> (SessionStateV
     }
 }
 
-/// Effective attribution of a session (ADR-GRP-013 § 2): its initial one
-/// and the records in force. Here only a confirmation changes it: the
-/// origin becomes "registered" (P16). Corrections belong to US-GRP-010.
+/// Effective attribution of a session (ADR-GRP-013 § 2): its initial one folded with its records
+/// in force, read now (see [`effective`]). Every consumer (sessions, history, the Time Machine)
+/// reads it from here, so none keeps a copy that a later record would make stale.
 pub(super) fn session_actor(store: &RepoStore, session: &Session) -> Actor {
-    let confirmed = session.initial_origin == Origin::Registered
-        || store
-            .attribution_records(&session.session_id)
-            .unwrap_or_default()
-            .iter()
-            .any(|r| r.kind == RecordKind::Confirm);
-    Actor::Agent {
-        kind: api_kind(session.agent.kind),
-        name: session
-            .agent
-            .name
-            .clone()
-            .map(gitraptor_api::UntrustedName::new),
-        origin: if confirmed {
-            AgentOrigin::Registered
-        } else {
-            AgentOrigin::Detected
-        },
-    }
+    actor_of(&effective_of(store, session))
 }
 
 fn session_view(

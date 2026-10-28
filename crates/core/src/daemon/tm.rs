@@ -119,6 +119,10 @@ impl Daemon {
     pub(super) fn raw_events(&self, repo_id: &str, worktree: &Path) -> Option<Vec<RawGitEvent>> {
         let (_, store) = self.stores.iter().find(|(id, _)| id == repo_id)?;
         let events = store.events_for_worktree(worktree).ok()?;
+        // One read of each session's attribution per call: what is read is always the attribution
+        // in force now, never kept past this call.
+        let mut requesters: std::collections::HashMap<String, Requester> =
+            std::collections::HashMap::new();
         Some(
             events
                 .into_iter()
@@ -129,7 +133,12 @@ impl Daemon {
                     let actor = e
                         .session_id
                         .as_deref()
-                        .map_or(Requester::Unattributed, |id| requester_of(store, id));
+                        .map_or(Requester::Unattributed, |id| {
+                            requesters
+                                .entry(id.to_owned())
+                                .or_insert_with(|| requester_of(store, id))
+                                .clone()
+                        });
                     Some(RawGitEvent {
                         seq: e.seq,
                         kind,
