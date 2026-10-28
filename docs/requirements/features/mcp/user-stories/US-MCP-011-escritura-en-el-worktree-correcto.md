@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: high
 created: 2026-10-04
-updated: 2026-10-21
+updated: 2026-10-27
 domain: GRP
 epic: E-001
 feature: mcp
@@ -43,7 +43,7 @@ BR-MCP-VAL-005 (parte: `expect_worktree` solo estrecha) · BR-MCP-EDGE-006 (suba
 ## Dependencias
 
 - **Historias**: US-MCP-009. De la Time Machine: US-TMC-015 (operación de Git en curso).
-- **Externas**: ADR-MCP-001 (DEP-MCP-1, no existe): `expect_worktree`. ADR-CKP-002 (**propuesto**; DEP-MCP-2 vía ADR-CKP-002): las precondiciones de operación en curso y HEAD separado son del ejecutor y se revalidan antes de ejecutar (Q-MCP-30). Bloqueos de arquitectura.
+- **Externas**: ADR-MCP-001 (existe): `expect_worktree`. ADR-CKP-002 (aceptado): las precondiciones de operación en curso y HEAD separado son del ejecutor y se revalidan antes de ejecutar (Q-MCP-30). Sin bloqueos de arquitectura; la dependencia real es US-MCP-009 en `main` (PR #289), y la liberación va junto con US-MCP-009 y US-MCP-010 (DS-US-MCP-011 D13).
 - **Relación**: `safe_rebase` (US-MCP-018) y `create_worktree` (US-MCP-019) reutilizan `expect_worktree` y estas precondiciones. US-MCP-009 reserva ya el parámetro `expect_worktree` de `safe_commit` y lo rechaza como `invalid-params` hasta que esta historia lo active (DS-US-MCP-009 D13); con US-MCP-010 no hay orden (D-11, v1.4).
 
 ## Criterios de Aceptación
@@ -96,4 +96,4 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 ## Diseño y Dev Spec
 
 - **Diseño:** no aplica.
-- **Dev Spec:** pendiente (Arquitecto, tras ADR-MCP-001 y ADR-CKP-002).
+- **Dev Spec:** [DS-US-MCP-011](../dev-specs/US-MCP-011-dev-spec.md) (2026-10-27).
