@@ -186,6 +186,47 @@ impl RepoReader {
         Ok(Self { repo })
     }
 
+    /// Open the Git directory `git_dir` as is, with `worktree` as its working tree, so the
+    /// worktree's `.git` entry is never re-resolved: whatever it points to now, the index,
+    /// config and refs read are those of `git_dir`. The permissions and trust rules are those of
+    /// [`Self::open`].
+    ///
+    /// # Errors
+    ///
+    /// [`ReadError::NotARepository`] when `git_dir` is not a Git directory,
+    /// [`ReadError::Untrusted`] when it is not trusted, and [`ReadError::Unavailable`] when it
+    /// cannot be opened or `worktree` is not a readable directory.
+    pub fn open_worktree(
+        git_dir: &Path,
+        worktree: &Path,
+        options: &ReaderOptions,
+    ) -> Result<Self, ReadError> {
+        crate::paths::validate(git_dir)?;
+        crate::paths::validate(worktree)?;
+        let mut open = gix::open::Options::default()
+            .permissions(permissions(options.ignore_ambient_config))
+            .bail_if_untrusted(true)
+            .open_path_as_is(true);
+        if options.force_reduced_trust {
+            open = open.with(gix::sec::Trust::Reduced);
+        }
+        let mut repo = gix::open_opts(git_dir, open).map_err(|e| {
+            let message = e.to_string();
+            if message.contains("is considered unsafe") {
+                ReadError::Untrusted(message)
+            } else if !git_dir.join("HEAD").is_file() {
+                ReadError::NotARepository(message)
+            } else {
+                ReadError::Unavailable(message)
+            }
+        })?;
+        repo.set_workdir(Some(worktree.to_path_buf()))
+            .map_err(|e| ReadError::Unavailable(format!("worktree: {e}")))?;
+        neutralize_programs(&mut repo)?;
+        repo.objects.ignore_replacements = true;
+        Ok(Self { repo })
+    }
+
     /// Open the repository at `path` for one in-memory dry merge: the permissions of
     /// [`Self::open`] with the system config and attributes off on every platform (finding them
     /// may run `git`), untrusted repositories refused and replacement objects ignored.

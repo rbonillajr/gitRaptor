@@ -72,9 +72,7 @@ pub(super) fn plan_op(
         .head_commit
         .clone()
         .unwrap_or_else(|| ZERO_OID.to_owned());
-    let reader = RepoReader::open(&facts.root, &ReaderOptions::default())
-        .map_err(|_| rejected(RejectReason::RepoIdentityChanged))?;
-    let view = WorktreeView::read(&facts.root, reader).map_err(rejected)?;
+    let view = read_view(facts)?;
     let selection = select(a, &view).map_err(|(r, path)| {
         REFUSED_PATH.with(|p| *p.borrow_mut() = path);
         rejected(r)
@@ -98,6 +96,15 @@ pub(super) fn plan_op(
             authorship: crate::guardrails::plan_gate::commit_facts(&repo.common_dir, &a.message),
         }),
     })
+}
+
+/// The worktree as the registry's gate opened it: its Git directory with the root as an explicit
+/// work tree, so the worktree's `.git` is not re-resolved and swapping it after the gate cannot
+/// change what the plan reads.
+fn read_view(facts: &RepoFacts) -> Result<WorktreeView, PlanError> {
+    let reader = RepoReader::open_worktree(&facts.git_dir, &facts.root, &ReaderOptions::default())
+        .map_err(|_| rejected(RejectReason::RepoIdentityChanged))?;
+    WorktreeView::read(&facts.root, reader).map_err(rejected)
 }
 
 /// The step of a checked plan. Its Git directory comes from the facts the registry's gate
@@ -248,6 +255,16 @@ impl ProtectedStep for CommitStep {
     }
 
     fn run(&mut self, ctx: &mut StepCtx<'_>) -> Result<StepOutput, StepError> {
+        // Both commands are built before `add` touches the index, so a refusal to build the
+        // commit can never leave paths staged.
+        let op = if self.selection.all_staged {
+            UserOp::CommitStaged
+        } else {
+            UserOp::CommitPaths {
+                paths: self.selection.paths.clone(),
+            }
+        };
+        let commit = self.command(&op, Some(&self.message))?;
         if !self.selection.add_first.is_empty() {
             let add = UserOp::AddPaths {
                 paths: self.selection.add_first.clone(),
@@ -262,15 +279,8 @@ impl ProtectedStep for CommitStep {
                 return Err(StepError::unchanged(stop));
             }
         }
-        let op = if self.selection.all_staged {
-            UserOp::CommitStaged
-        } else {
-            UserOp::CommitPaths {
-                paths: self.selection.paths.clone(),
-            }
-        };
-        let message = self.message.clone();
-        let ran = self.launch(ctx, &op, Some(&message), &self.cancel.clone())?; // The tip decides, whatever `git` printed or how it ended (its output is the hooks'
+        let ran = run_git(ctx, commit, &self.cancel.clone());
+        // The tip decides, whatever `git` printed or how it ended (its output is the hooks'
         // text, never trusted).
         match self.tip()? {
             Some(new) if new != self.old => Ok(StepOutput {
@@ -289,3 +299,7 @@ impl ProtectedStep for CommitStep {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "commit_tests.rs"]
+mod tests;
