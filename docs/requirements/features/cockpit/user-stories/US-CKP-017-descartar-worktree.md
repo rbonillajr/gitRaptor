@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: high
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-28
 feature: cockpit
 related:
   context:
@@ -84,4 +84,4 @@ _Pendiente — lo completa el Arquitecto (Dev Spec). Cuarentena y bloqueo: ADR-C
 ## Diseño y Dev Spec
 
 - **Diseño:** DSYS-GRP-001 (ConfirmPrompt con default No).
-- **Dev Spec:** [DS-US-CKP-017](../dev-specs/US-CKP-017-descartar-worktree.md) (draft).
+- **Dev Spec:** [DS-US-CKP-017](../dev-specs/US-CKP-017-descartar-worktree.md) (approved).
