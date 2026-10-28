@@ -69,9 +69,9 @@ IF ruta existe OR ruta no válida (UNC, SEC-02) → rechazo + motivo + acción
 ELSE → continuar con BR-CKP-ELIG-005
 ```
 
-**Ejemplo**: rama `feat/pagos` en `/code/shop` → ruta propuesta `/code/shop-feat-pagos`. Si ya existe, error "la ruta ya existe; elige otra" y nada cambia. Rama `feat..pagos` → "nombre de rama no válido".
+**Ejemplo**: rama `feat/pagos` en `/code/shop` → ruta propuesta `/code/shop-feat-pagos`. Si ya existe, error "la ruta ya existe; elige otra" y nada cambia. Rama `feat..pagos` → "nombre de rama no válido". Una ruta con caracteres que no se pueden copiar con seguridad se muestra sin orden de lanzamiento (DS-US-CKP-018 C8).
 
-**Fuentes**: Q-CKP-13; SEC-02.
+**Fuentes**: Q-CKP-13; SEC-02; DS-US-CKP-018.
 
 ### BR-CKP-VAL-002: Texto no confiable saneado antes de pintarlo
 
@@ -91,7 +91,7 @@ FOR EACH texto de origen repo o agente:
 
 ### BR-CKP-VAL-003: El valor del editor se interpreta sin shell
 
-**Descripción**: el valor del editor (configuración, o `$VISUAL`/`$EDITOR`) se separa en palabras sin shell ni expansiones. Un valor con metacaracteres de shell se rechaza con su motivo. Es una diferencia declarada con Git, que sí usa shell. La clave del editor solo se admite en el perfil y en la configuración local personal, nunca en la del equipo.
+**Descripción**: el valor del editor (configuración, o `$VISUAL`/`$EDITOR`) se separa en palabras sin shell ni expansiones. Un valor con metacaracteres de shell se rechaza con su motivo. Es una diferencia declarada con Git, que sí usa shell. La clave del editor solo se admite en el perfil y en la configuración local personal, nunca en la del equipo. Gramática (DS-US-CKP-013 K4): palabras separadas por espacios; las comillas `'…'` y `"…"` solo agrupan espacios, sin escapes ni expansión. Se rechazan en cualquier posición `; & | < > $ \` ( ) { } [ ] * ? ~ ! # % ^`, saltos de línea y caracteres de control, y `\` fuera de Windows (en Windows, `(` y `)` se admiten dentro de comillas); también `=` en la primera palabra y un programa con ruta relativa. Un valor rechazado de un nivel de configuración cede al nivel siguiente y la TUI pide confirmación (Q-CKP-55). En Windows, un `.cmd`, `.bat` o `.ps1` se rechaza (Q-CKP-56).
 
 **Criticidad**: Media
 
@@ -104,7 +104,7 @@ ELSE argv = separar_en_palabras(editor) + [ruta]
 
 **Ejemplo**: `code --wait` → se lanza con dos palabras más la ruta. `vim; rm -rf ~` → rechazado: "el editor contiene caracteres de shell no admitidos".
 
-**Fuentes**: Q-CKP-9; Q24 de motor-local; DEP-CKP-13.
+**Fuentes**: Q-CKP-9; Q24 de motor-local; DEP-CKP-13; Q-CKP-55, Q-CKP-56; DS-US-CKP-013.
 
 ---
 
@@ -316,11 +316,12 @@ REQUIRE base confirmada                    ELSE desactivado + acción para confi
 REQUIRE BR-CKP-VAL-001
 → BR-CKP-WF-002
 al terminar → mostrar cómo lanzar el agente en la ruta creada            (BRD § 6.4)
+Deshacer → descarte (BR-CKP-ELIG-004) del worktree creado; con sesión presente, no se deshace   (Q-CKP-57)
 ```
 
-**Ejemplo**: se crea `feat/pagos` en `/code/shop-feat-pagos` → "Worktree listo. Para lanzar Claude Code: cd /code/shop-feat-pagos && claude".
+**Ejemplo**: se crea `feat/pagos` en `/code/shop-feat-pagos` → "Worktree listo. Para lanzar Claude Code: cd /code/shop-feat-pagos && claude · u Deshacer".
 
-**Fuentes**: Q-CKP-13; BRD § 6.4.
+**Fuentes**: Q-CKP-13; BRD § 6.4; Q-CKP-57, Q-CKP-58.
 
 ### BR-CKP-ELIG-006: Acciones de lectura: ver diff y abrir en el editor
 
@@ -333,11 +334,12 @@ al terminar → mostrar cómo lanzar el agente en la ruta creada            (BRD
 IF worktree no disponible → desactivadas + motivo                         (BR-CKP-EDGE-003)
 ELSE ofrecidas en cualquier estado de sesión
 abrir en editor → BR-CKP-VAL-003; sin editor → BR-CKP-EDGE-007
+capa distinta de `cockpit` → abrir en editor desactivada + motivo 'actúas como <agente>: abre raptor desde tu propia terminal para usar el editor' (Q-CKP-54)
 ```
 
 **Ejemplo**: claude-1 Activo en `feat-pagos` → el desarrollador abre el diff y el worktree en su editor sin afectar al agente.
 
-**Fuentes**: Q-CKP-8, Q-CKP-9.
+**Fuentes**: Q-CKP-8, Q-CKP-9; Q-CKP-54.
 
 ---
 
@@ -381,7 +383,9 @@ símbolos: ● Activo · ◐ Inactivo · ○ Terminado (con fallback ASCII)
 
 **Ejemplo**: merge de `feat-pagos` → permitido → snapshot → merge → toast "Integrado feat-pagos en main · u Deshacer". Con el disco lleno, el snapshot falla y el merge no ocurre: "no se pudo tomar el snapshot previo; no se integró nada".
 
-**Fuentes**: Q-CKP-10, Q-CKP-12, Q-CKP-15; D-TMC-10; ADR-TMC-004; ADR-GRP-004 § 3; DEP-CKP-7, DEP-CKP-10.
+> **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO** (Q-CKP-59, DS-US-CKP-021 H6): "Deshacer desde el historial" se ofrece sobre operaciones del oplog (`protected` y `restore`, terminadas o interrumpidas, con punto y no deshechas), siempre con su `operation_id`. Un evento de Git crudo, un snapshot manual, un undo, un redo o una creación de worktree (Q-CKP-58: se deshace descartando el worktree, `D` en su fila) no se deshacen desde la TUI en el MVP: el historial lo dice y remite a `raptor undo` en su worktree. Si otro actor cambió después lo que Deshacer devolvería, la TUI muestra el solape y no ofrece continuar (D-TMC-27). Deshacer nombra una sola raíz, la última del ámbito que sea fila disponible; con `not-last-operation` no deshace y muestra el trabajo posterior.
+
+**Fuentes**: Q-CKP-10, Q-CKP-12, Q-CKP-15; D-TMC-10; ADR-TMC-004; ADR-GRP-004 § 3; DEP-CKP-7, DEP-CKP-10, Q-CKP-59, Q-CKP-58.
 
 ### BR-CKP-WF-003: Merge o rebase detenido por conflicto
 
@@ -775,7 +779,9 @@ IF la Time Machine publica aviso de purga → mostrarlo + notificar "visto"
 
 **Ejemplo**: al abrir la TUI aparece "3 snapshots de más de 30 días se purgarán a partir de mañana a las 10:00".
 
-**Fuentes**: BR-TMC-TIME-001.
+> **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO** (DS-US-CKP-021 H12, H13): la TUI no pide el aviso al abrir el historial; lo entrega DS-US-TMC-016 T010 (`surface = tui`, `presented = true`), y esa entrega es la que cuenta como "visto". El historial repite el aviso vigente hasta su fecha de purga. Texto en la TUI: "{count} snapshots de más de {days} días se purgarán a partir de {when}", con `when` relativo ("hoy/mañana a las HH:MM" o "el dd mmm a las HH:MM"); en inglés "{count} snapshots older than {days} days will be purged from {when}" ("today/tomorrow at HH:MM", "on dd mmm at HH:MM"). El escenario 4 de US-CKP-021 usa ese literal (cambio del PO, 2026-10-28).
+
+**Fuentes**: BR-TMC-TIME-001; DS-US-CKP-021.
 
 ---
 
@@ -847,7 +853,7 @@ IF la Time Machine publica aviso de purga → mostrarlo + notificar "visto"
 
 **Criticidad**: Baja
 
-**Ejemplo**: sin editor → "No hay editor configurado. Define $EDITOR o la clave del editor en tu perfil".
+**Ejemplo**: sin editor → "No hay editor configurado. Define $EDITOR o la clave cockpit.editor en tu perfil".
 
 **Fuentes**: Q-CKP-9.
 
@@ -927,3 +933,4 @@ Cada regla tendrá al menos un escenario Gherkin, incluido uno negativo, en su h
 |---------|-------|-------|---------|
 | 0.1 | 2026-10-04 | PO (AADD) | Versión inicial: 45 reglas a partir de Q-CKP-1 a Q-CKP-30 (decisión del orquestador, validada por PO y Arquitecto) y de las decisiones heredadas de motor-local, Time Machine y Guardrails. |
 | 0.2 | 2026-10-28 | PO (AADD); decisiones del orquestador (2026-10-28), validadas por el PO y el Arquitecto | Revisión de la Dev Spec DS-US-CKP-019. Q-CKP-52: sin cola, "pedir confirmación" deniega solo cuando pide un agente; la persona pasa con aviso (aplica Q-GRD-46 en BR-CKP-AUTH-001, regla formal y nota). Q-CKP-53: la fila con ⛔ sube solo en la TUI que pidió la acción y mientras la acción siga pendiente (BR-CKP-WF-001). Escenario 5 de US-CKP-019 reescrito como esquema por solicitante. Sin reglas nuevas. |
+| 0.3 | 2026-10-28 | PO (AADD); decisiones del orquestador (2026-10-28), validadas por Arquitecto y PO | Revisiones de las Dev Specs DS-US-CKP-013, DS-US-CKP-018 y DS-US-CKP-021. VAL-003: gramática del valor del editor, valor rechazado cede al nivel siguiente con confirmación (Q-CKP-55) y en Windows solo `.exe`/`.com` (Q-CKP-56). ELIG-006: abrir en el editor desactivado fuera de la capa `cockpit` (Q-CKP-54). EDGE-007: el ejemplo nombra `cockpit.editor`. ELIG-005: Deshacer de una creación = descarte del worktree creado (Q-CKP-57, Q-CKP-58). VAL-001: ruta sin orden de lanzamiento si no se puede copiar con seguridad. Q-CKP-59: Deshacer desde el historial solo sobre operaciones del oplog, con `operation_id` (BR-CKP-WF-002). BR-CKP-TIME-004: la entrega de DS-US-TMC-016 T010 es el "visto"; texto compacto con fecha relativa. Sin reglas nuevas. |
