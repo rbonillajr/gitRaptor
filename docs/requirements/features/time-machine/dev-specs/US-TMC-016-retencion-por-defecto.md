@@ -177,6 +177,8 @@ flowchart TD
 
 **Candidatos por edad** (T005): punto en `complete` o `purge-cancelled`, con ref en el almacén, `!tampered`, `recorded_ms ≤ ahora − retención` y no protegido. La retención la lee `profile::settings::retention_days(dirs, repo_id)` (T002) en cada pasada: local ?? perfil ?? 30. Un nivel de equipo no cuenta: el esquema ya descarta la clave allí con `key-not-allowed-at-level`. La presentación de los diagnósticos es de US-TMC-017.
 
+**Configuración ignorada** (T005; PO, hallazgo B): si el documento del perfil o el local del repo está ignorado por un diagnóstico (PQ-8: `applicable()` es `None` con el archivo presente), la pasada no anuncia ni ejecuta nada (`SkipCause::SettingsIgnored`, log `tm_retention_skipped`). Sin eso, un valor fuera de rango en otra clave devolvería `retentionDays` a 30 y quien tenía 90 vería anunciados puntos de 31 a 90 días.
+
 **Anuncio** (T003, T005): si hay candidatos que ningún aviso cubre, una sola escritura del oplog (`Oplog::announce_purge`) registra el aviso con su detalle y pasa cada candidato a `purge-announced`, con `{"notice": <id>}` como detalle de la transición. Detalle del aviso: `{"cause": "age", "count", "from_ms", "to_ms", "bytes_upto", "retention_days"}`. `bytes_upto` es la suma de `CompleteInfo.unique_size_bytes`: es una cota superior, porque los puntos posteriores pueden compartir esos objetos (D9). Un aviso cubre un **conjunto fijo**: los candidatos que aparecen después llevan su propio aviso y su propia gracia (D-TMC-38).
 
 **Ejecución** (T005), solo para avisos con gracia vencida y bajo `repo_lock::try_lock(<ruta del almacén>)`. Si el lock está ocupado (un undo, una restauración o una operación del ejecutor), se reintenta en el siguiente latido. Para cada punto `purge-announced` del aviso:
@@ -194,7 +196,8 @@ Luego, en lotes de `PURGE_BATCH`: un `set_snapshot_states(…, PurgeIntent)` (un
 - Corre en el hilo del módulo, que es de clase `Background` cuando exista TS-GRP-005. Con el modo de ahorro activo se aplaza (ADR-GRP-015 § 2); US-TMC-022 añade la excepción del tope superado.
 
 **Aviso en el cliente** (T001, T008-T010):
-- Con la capacidad `timemachine.purge-notices`, `timemachine.notices` entrega también los avisos de purga pendientes del repo (`notices::take_purges`): una vez, marcados con el canal de la conexión. La primera entrega por CLI o TUI arranca la gracia. Sin la capacidad no se entregan ni se marcan: la gracia no empieza, que es lo seguro.
+- Con la capacidad `timemachine.purge-notices`, `timemachine.notices` entrega también los avisos de purga pendientes del repo (`notices::take_purges`): marcados con el canal de la conexión **solo si la petición dice que se pintan** (`NoticesParams.presented = true`). La primera entrega pintada por CLI o TUI arranca la gracia. Sin `presented` el aviso viaja en la respuesta y no se marca: se repite en la siguiente. Sin la capacidad no se entregan ni se marcan: la gracia no empieza, que es lo seguro.
+- **Visto = pintado** (PO, hallazgo A): la CLI manda `presented = true` solo con la salida en una terminal y sin `--json`; la TUI siempre, con `surface = tui`. Un agente que ejecuta `raptor status` o `raptor timeline --json` desde su shell nunca arranca la gracia.
 - La CLI los muestra en `raptor status`, `raptor timeline`, `raptor undo` y `raptor restore`. La TUI los muestra en su widget de notificaciones al conectar y en cada refresco del estado.
 
 **Timeline**: con la misma capacidad, una entrada cuyo punto anterior según la regla de `prior_point` está `purged` lleva `protection.level = purged` con su `snapshot_id`, en vez de caer en silencio a un punto más antiguo. Restaurar un punto purgado sigue respondiendo `target-unavailable` (`restore.rs:326`).
@@ -252,7 +255,8 @@ flowchart LR
 - `TmNoticeKind::Purge` (`purge`), al final.
 - `TmNotice.purge: Option<PurgeNoticeView>` con `#[serde(default, skip_serializing_if = "Option::is_none")]`.
 - `PurgeNoticeView { cause: PurgeCause, count: u32, from_utc_ms: i64, to_utc_ms: i64, bytes_upto: u64, retention_days: Option<u32>, purge_from_utc_ms: i64 }`. `purge_from_utc_ms` = primera entrega interactiva + 24 h (la de esta entrega si es la primera).
-- `PurgeCause { Age, Size }` (`age`, `size`); `Size` lo usa US-TMC-022.
+- `PurgeCause { Age, Limit, Quota }` (`age`, `limit`, `quota`); `Limit` y `Quota` los usa US-TMC-022, pero se declaran aquí para no cambiar la forma después.
+- `NoticesParams.presented: bool` (`serde(default)`), que solo envía un cliente con la capacidad: el daemon solo marca la entrega de un aviso de purga si es `true`.
 - `ProtectionLevel::Purged` (`purged`), al final.
 - `CAP_TM_PURGE_NOTICES = Capability::new("timemachine.purge-notices")` en `GROUP.capabilities` del archivo del módulo (ADR-GRP-016, "Añadir una capacidad").
 - **Depende:** —
@@ -309,6 +313,7 @@ flowchart LR
 **Reglas**
 - `plan.rs`: `age_candidates(views, protected, retention_days, refs, now) -> Vec<String>`, puro.
 - `job.rs`: el orden de § Una pasada. Lee con el lock del oplog del repo (`TmRepos::repo`) y lo suelta antes de tocar el almacén. Ejecuta bajo `repo_lock::try_lock`. Lotes de `PURGE_BATCH`.
+- Configuración ignorada (§ Diseño): antes de leer filas, si `profile_settings(dirs)` o `local_settings(dirs, repo_id)` tienen un documento presente que no se aplica, la pasada termina con `SkipCause::SettingsIgnored` sin anunciar ni ejecutar.
 - `PassReport { announced, purged, cancelled, skipped: Option<SkipCause> }`. Log `tm_retention_pass` con `repo` (id) y recuentos, nunca rutas.
 - Seam de fallos solo en debug (`PurgeFault`: después de la intención, después de borrar refs) para el escenario 6.
 - Si `SnapshotRefs::delete` devuelve error, el lote se cierra en la misma pasada como lo cierra la recuperación (`recovery.rs` paso 5): con ref → `purge-cancelled`, sin ref → `purged`. Ningún punto se queda en `purge-intent` (no disponible) hasta el siguiente arranque.
@@ -351,7 +356,7 @@ flowchart LR
 
 **Reglas**
 - `take_purges(oplog, channel, now_ms, logger)`: avisos `purge` pendientes del repo, marcados con `channel`, con `PurgeNoticeView` del detalle. Entrega al menos una vez, como `take_interruptions`.
-- `tm_notices`: con `self.has(CAP_TM_PURGE_NOTICES)`, interrupciones y purgas ordenadas por `recorded_ms`; sin ella, como hoy.
+- `tm_notices`: con `self.has(CAP_TM_PURGE_NOTICES)`, interrupciones y purgas ordenadas por `recorded_ms`; sin ella, como hoy. Las purgas solo se marcan con `params.presented`; una conexión MCP nunca las marca (`is_mcp()`).
 - Timeline con la capacidad: la regla de `Points` elige también entre puntos `purged` y, si el mejor está purgado, da `ProtectionLevel::Purged`. Sin la capacidad, como hoy.
 - **Depende:** T001, T003
 - **Refs:** ADR-TMC-007 § 4.2-4.3, SEC-TMC-09
@@ -364,12 +369,13 @@ flowchart LR
 **Ubicación.** `apps/cli/src/undo/notices.rs`, `apps/cli/src/commands/status.rs`, `apps/cli/src/commands/timeline.rs` (**MODIFY**); `apps/cli/i18n/{en,es}/timemachine.txt` (**MODIFY**, al final)
 
 **Reglas**
-- `show_pending` pinta `TmNoticeKind::Purge` con `tm-notice.purge-age`; `raptor status` la llama como ya hacen `undo`, `restore` y `timeline`. El cliente pide `timemachine.purge-notices` en `connection.accept` (ADR-GRP-016, paso 3).
+- `show_pending` pinta `TmNoticeKind::Purge` con `tm-notice.purge-age`; `raptor status` la llama como ya hacen `undo`, `restore` y `timeline`. El cliente pide `timemachine.purge-notices` en `connection.accept` (ADR-GRP-016, paso 3; lo hace solo `ClientOptions::new`).
+- `presented = true` solo si la salida va a una terminal (`IsTerminal`) y sin `--json`; con `--json` el aviso sale en el JSON y no arranca la gracia.
 - Fechas en la zona local; tamaño con el formateador de `resources.txt`.
 - Timeline: `timeline.level.purged`.
 - **Depende:** T001
 - **Refs:** NFR-TMC-14, SEC-12
-- **Aceptación:** `every_notice_has_its_message` cubre `Purge`; `status_shows_pending_tm_notices`
+- **Aceptación:** `every_notice_has_its_message` cubre `Purge`; `status_shows_pending_tm_notices`; `presented_only_on_a_terminal_without_json`
 
 ### T010 — Mostrar el aviso en la TUI
 
@@ -377,9 +383,12 @@ flowchart LR
 
 **Ubicación.** `apps/cli/src/tui/` (**MODIFY**: al conectar y en cada refresco del estado llama a `timemachine.notices` y lo pasa a `widgets/notification.rs`; `widgets/timeline.rs` pinta `purged`); `apps/cli/src/present/i18n.rs` (**MODIFY**)
 
+**Reglas**
+- La TUI llama a `timemachine.notices` con `surface = tui` y `presented = true`: la entrega en la TUI arranca la gracia.
+
 - **Depende:** T001
 - **Refs:** ADR-CKP-003, NFR-TMC-14
-- **Aceptación:** `tui_shows_the_purge_notice` (backend falso), `a11y_tests` sin regresión
+- **Aceptación:** `tui_shows_the_purge_notice` (backend falso), `tui_delivery_marks_tui_and_starts_the_grace` (la llamada lleva `surface = tui` y `presented = true`; con el daemon en proceso, `first_interactive_delivery_ms` queda fijado), `a11y_tests` sin regresión
 
 ### T011 — Probar los escenarios
 
@@ -427,7 +436,7 @@ pub const PURGE_BATCH: usize = 500;                  // ⚠️ ASSUMPTION
 pub const MAX_DELETION_WALK: usize = 2_000;          // ⚠️ ASSUMPTION
 
 pub struct PassReport { pub announced: usize, pub purged: usize, pub cancelled: usize, pub skipped: Option<SkipCause> }
-pub enum SkipCause { EventsUnreadable, OplogUnreadable, RepoBusy, StoreUnavailable }
+pub enum SkipCause { EventsUnreadable, OplogUnreadable, RepoBusy, StoreUnavailable, SettingsIgnored }
 
 // retention/protect.rs
 pub(crate) trait DeletionProbe { fn vanished(&self, older: &str, newer: &str, worktree_key: &str) -> io::Result<bool>; }
@@ -458,7 +467,7 @@ impl StoreRepo { pub fn repack_cruft(&self, ctx: &WriteContext) -> Result<()>; }
 
 | Método | Canal | Parámetros | Resultado |
 |---|---|---|---|
-| `timemachine.notices` | CLI/TUI (no MCP) | sin cambios | `NoticesResult`; con `timemachine.purge-notices`, también `TmNotice { kind: purge, purge: PurgeNoticeView }` |
+| `timemachine.notices` | CLI/TUI (no MCP) | con la capacidad, `presented: bool` (por defecto `false`) | `NoticesResult`; con `timemachine.purge-notices`, también `TmNotice { kind: purge, purge: PurgeNoticeView }` |
 | `timemachine.timeline` | CLI/TUI | sin cambios | con `timemachine.purge-notices`, `protection.level = purged` |
 
 ### Forma del error y del cuerpo de respuesta
@@ -531,7 +540,10 @@ _Sin migración._ Ya existen la tabla `notices` (`kind = 'purge'`), los estados 
 | 2. Sin aviso visto no se purga (nunca mostrado) | `never_shown_means_never_purged`: aviso sin entregar; pasadas a +48 h y +30 días; nada purgado; los puntos de 40 días se restauran bit a bit (`store.verify`) |
 | 2. (mostrado hace menos de 24 h) | `shown_23_hours_ago_is_not_enough`: entrega por CLI en T; pasada en T + 23 h → nada purgado |
 | 2. (solo MCP) | `an_mcp_delivery_does_not_start_the_grace`: entrega marcada con `Channel::Mcp`; `first_interactive_delivery_ms` = `None`; nada purgado |
-| 3. La cuota no adelanta la purga | `a_full_quota_does_not_bring_the_purge_forward`: puntos de 10 y 20 días y una pasada → ningún aviso y nada purgado. Esta ficha se mezcla antes que DS-US-TMC-022 y no tiene contabilidad de tamaño: la prueba fija que la edad es la única causa de purga. DS-US-TMC-022 la repite con `SimProbe`: repo en su cuota y total por debajo del 80 % del tope → ningún aviso (`a_repo_at_its_quota_pauses_alone`) |
+| 3. La cuota no purga puntos recientes ni protegidos (escenario cambiado por el PO, TQ-24 → a) | `a_full_quota_does_not_purge_recent_or_protected_points`: puntos de 2 y 5 días y el previo protegido de una operación de 40 días, una pasada → ningún aviso y nada purgado. Esta ficha se mezcla antes que DS-US-TMC-022 y no mide tamaños: aquí fija que la edad no toca nada de eso. DS-US-TMC-022 la repite con `SimProbe` y el repo por encima de su cuota (`a_quota_never_purges_recent_or_protected_points`) |
+| 2. (lectura de un agente) | `a_json_or_non_tty_read_does_not_start_the_grace`: `timemachine.notices` con `surface = cli` y `presented = false` (lo que manda `raptor status --json` o sin terminal), varias veces → `first_interactive_delivery_ms` = `None`; pasada a +48 h → nada purgado |
+| 2. (TUI) | `the_tui_delivery_starts_the_grace`: entrega con `surface = tui` y `presented = true` → gracia arrancada; pasada a +24 h + 1 min → purgados |
+| Configuración ignorada | `an_ignored_profile_announces_nothing`: perfil con `retentionDays` 90 y otra clave fuera de rango, puntos de 40 días → `SkipCause::SettingsIgnored`, ningún aviso |
 | 4. El previo a la última destructiva nunca se purga | `the_prior_of_the_last_destructive_operation_stays`: operación protegida hace 45 días con su previo de 46; aviso visto y gracia vencida → el previo sigue `complete`; los demás de más de 30 días se purgan. Variantes: `two_worktrees_keep_their_own_prior`, `an_interrupted_operations_prior_stays`, `a_raw_reset_45_days_ago_keeps_its_point` |
 | 5. Nada que purgar | `nothing_to_purge_records_nothing`: todos de menos de 30 días → ni aviso ni transición; el oplog verifica su cadena |
 | 6. Purga interrumpida | `an_interrupted_purge_leaves_every_point_whole`: `PurgeFault` tras la intención → recuperación (`Oplog::recover`) → `purge-cancelled` y restaurables bit a bit. Tras borrar refs → `purged`. Ninguno a medias; huella igual |
@@ -547,8 +559,8 @@ _Sin migración._ Ya existen la tabla `notices` (`kind = 'purge'`), los estados 
 | Plataforma | Cómo se verifica | Pendiente |
 |---|---|---|
 | macOS | `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` | — |
-| Linux | `us_tmc_016.rs` con `cfg(any(macos, linux))` | **Pendiente: etapa de validación multiplataforma** (e2e) |
-| Windows | Compila; la pasada y la purga no dependen del SO salvo el `repack` del Git del sistema | **Pendiente: etapa de validación multiplataforma** |
+| Linux | `us_tmc_016.rs` con `cfg(any(macos, linux))` | **Pendiente: etapa de validación multiplataforma** (e2e; XP-49) |
+| Windows | Compila; la pasada y la purga no dependen del SO salvo el `repack` del Git del sistema | **Pendiente: etapa de validación multiplataforma** (XP-49: `repack --cruft` con packs abiertos por el lector, e2e del aviso) |
 
 ---
 
@@ -557,7 +569,8 @@ _Sin migración._ Ya existen la tabla `notices` (`kind = 'purge'`), los estados 
 - La purga solo borra refs `refs/tm/snap/*` del almacén privado (`is_snapshot_id` en `delete_refs`); nunca escribe en el repo del usuario (BR-TMC-CONS-004, huella en cada test).
 - Las filas no se borran: el oplog sigue siendo solo de inserción y encadenado (SEC-TMC-09). Un punto marcado como manipulado nunca es candidato.
 - Falla cerrado: sin eventos crudos legibles, sin oplog legible o con el repo ocupado, la pasada no ejecuta nada.
-- Nada se borra sin aviso visto en CLI o TUI: MCP no arranca la gracia, y un cliente sin la capacidad no recibe ni marca el aviso.
+- Nada se borra sin aviso visto en CLI o TUI: MCP no arranca la gracia, una lectura con `--json` o sin terminal tampoco (`presented`), y un cliente sin la capacidad no recibe ni marca el aviso.
+- Con la configuración ignorada por un diagnóstico, nada se anuncia ni se purga.
 - `repack --cruft` y `prune` pasan por la lista cerrada de la capa de escritura, sin configuración ni hooks del usuario (TQ-13), con gracia de 1 h para las capturas en curso. La gracia solo vale porque toda reutilización refresca el objeto y el estado del escritor se olvida antes de mantener (T006): sin eso, una captura concurrente puede sellar un punto que nombra objetos ya borrados (NFR-01).
 - Log sin rutas: ids del repo y recuentos (SEC-12).
 
@@ -573,7 +586,7 @@ Corre `/security-review --scope devspec docs/requirements/features/time-machine/
 | TS-TMC-001 / TS-TMC-003 (almacén y capa de escritura) | `delete_refs`, `repack`, `prune`; T006 añade `repack_cruft` |
 | US-TMC-001 / US-TMC-004 | Los previos y las capturas que se protegen o se purgan |
 | US-TMC-017 | Presentación de los diagnósticos de `retentionDays`; aquí solo se lee |
-| US-TMC-022 | Reutiliza la pasada y el aviso con `PurgeCause::Size` |
+| US-TMC-022 | Reutiliza la pasada y el aviso con `PurgeCause::Limit` y `PurgeCause::Quota` |
 | TS-GRP-005 | Clase `Background` del hilo y modo de ahorro. Sin ella, el hilo hereda la prioridad y el mantenimiento no se aplaza; no bloquea |
 | US-TMC-007 | Filtros y huecos del timeline; el nivel `purged` es de esta ficha |
 
@@ -605,18 +618,20 @@ Corre `/security-review --scope devspec docs/requirements/features/time-machine/
 | D8 | La CLI muestra los avisos también en `raptor status`; la TUI, al conectar y en cada refresco. Sin eso, quien no usa `undo`, `restore` ni `timeline` no vería nunca el aviso y nada se purgaría | **Decisión del orquestador (2026-10-28), validada por Arquitecto** |
 | D9 | El tamaño que libera un aviso se muestra como cota superior ("hasta X"): la suma de `unique_size_bytes`, porque los puntos posteriores pueden compartir objetos | **Decisión del orquestador (2026-10-28), validada por Arquitecto** |
 | D10 | La retención se lee en cada pasada con `retention_days` (local ?? perfil ?? 30); los diagnósticos y sus pruebas de niveles son de US-TMC-017 | **Decisión del orquestador (2026-10-28), validada por Arquitecto** |
+| D12 | Solo arranca la gracia el aviso pintado: la CLI marca la entrega con `presented = true` solo en una terminal y sin `--json`; la TUI siempre, con `surface = tui` (PO, hallazgo A) | **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO** |
+| D13 | Con el perfil o la configuración local ignorados por un diagnóstico, la pasada no anuncia ni purga (`SettingsIgnored`, PO, hallazgo B) | **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO** |
 | D11 | El timeline marca como `purged` la entrada cuyo mejor punto anterior se purgó, con la capacidad, en vez de caer en silencio a un punto más antiguo (ADR-TMC-007 § 4.3, "punto purgado") | **Decisión del orquestador (2026-10-28), validada por Arquitecto** |
 
 ### Decisiones de negocio nuevas (para `business-rules.md`, las integra el orquestador)
 
 | ID | Decisión |
 |---|---|
-| D-TMC-37 | "Corresponde purgar": el trabajo de purga de cada repo corre al arrancar el daemon, cada 24 h y como mucho un minuto después de que venza la gracia de un aviso. Por tamaño, también al pasar del 80 % del tope (US-TMC-022). Cada pasada ejecuta solo lo que anunció un aviso con la gracia vencida y anuncia lo nuevo. **Decisión del orquestador (2026-10-28), validada por Arquitecto** |
-| D-TMC-38 | Cada aviso de purga cubre un conjunto fijo de puntos. Solo esos puntos se purgan cuando vence su gracia; los que pasan a ser candidatos después llevan su propio aviso y sus 24 h. Si al purgar un punto anunciado ya no cumple (se amplió la retención, pasó a protegido o el tamaño ya bajó), no se purga y sigue disponible. El aviso dice cuántos puntos, de qué periodo, cuánto espacio como máximo y desde cuándo se purgarán. **Decisión del orquestador (2026-10-28), validada por Arquitecto** |
+| D-TMC-37 | "Corresponde purgar": el trabajo de purga de cada repo corre al arrancar el daemon, cada 24 h y como mucho un minuto después de que venza la gracia de un aviso; por tamaño, también al pasar del 80 % del tope total o de la cuota del repo (US-TMC-022). Cada pasada purga solo lo que anunció un aviso con la gracia vencida y anuncia lo nuevo; sin ningún aviso visto, solo anuncia. Mientras la configuración del perfil o la local del repo esté ignorada por un diagnóstico (PQ-8), la pasada no anuncia ni purga nada: un error en otra clave no puede adelantar una purga (falla cerrado). **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO** |
+| D-TMC-38 | Cada aviso de purga cubre un conjunto fijo de puntos: solo esos se purgan cuando vence su gracia; los que pasan a ser candidatos después llevan su propio aviso y sus 24 h. El aviso por edad y el de la cuota son de un repo; el del tope total es uno solo, visible desde cualquier repo observado, lista los puntos de cada repo, y verlo en cualquiera arranca la gracia de todos los que anuncia. Un aviso cuenta como visto solo si se pinta en una terminal (la CLI con terminal y sin `--json`) o en la TUI; leerlo por MCP, con `--json` o sin terminal no arranca la gracia. Si al purgar un punto anunciado ya no cumple (se amplió la retención, pasó a protegido o el tamaño ya bajó del 70 %), no se purga y sigue disponible. El aviso dice cuántos puntos, de qué periodo, cuánto espacio como máximo y desde cuándo se purgarán. Si tras purgar por tamaño se sigue en el 80 % o más, la siguiente ronda lleva su propio aviso y su gracia. **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO** |
 
 ### Preguntas abiertas nuevas
 
-_Ninguna propia; las de tamaño están en DS-US-TMC-022 (TQ-24, TQ-25)._
+_Ninguna propia. TQ-24 y TQ-25 (DS-US-TMC-022) están cerradas._
 
 ### Enmiendas a ADR
 
@@ -629,6 +644,6 @@ _Ninguna propia; las de tamaño están en DS-US-TMC-022 (TQ-24, TQ-25)._
 
 | ID | Nota | Acción | Owner |
 |---|---|---|---|
-| G1 | El escenario 3 ("la cuota no adelanta la purga") sigue siendo cierto con US-TMC-022 para la **cuota por repo**; el tope total sí purga por tamaño los puntos de 7 días o más. Ver TQ-24 en DS-US-TMC-022 | Validar con el PO | PO |
+| G1 | TQ-24 cerrada → (a): la cuota por repo también purga por tamaño (DS-US-TMC-022). El escenario 3 de US-TMC-016 pasa a "la cuota no purga puntos recientes ni protegidos"; la historia la actualiza el PO | Ninguna | PO |
 | G2 | `TmRejectReason`, `GROUP.capabilities` e `i18n/*/timemachine.txt` son puntos calientes compartidos con US-TMC-022 y otras fichas: variantes y claves al final | Ninguna | — |
-| G3 | Un desarrollador que solo trabaja por MCP nunca arranca la gracia y nada se purga por edad. Es lo que decide ADR-TMC-007 § 4.2; con US-TMC-022, el disco queda acotado porque la captura se detiene | Ninguna | — |
+| G3 | Un desarrollador que solo trabaja por MCP, o un agente que lee `raptor status --json`, nunca arranca la gracia y nada se purga por edad. Es lo que decide ADR-TMC-007 § 4.2 (validado por el PO); con US-TMC-022, el disco queda acotado porque la captura se detiene | Ninguna | — |

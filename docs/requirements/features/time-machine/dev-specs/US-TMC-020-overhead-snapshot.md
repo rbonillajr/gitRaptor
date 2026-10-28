@@ -98,7 +98,7 @@ Punto de partida en el código:
 |---|---|---|---|
 | G1 | **Escalón 2 sin cablear en producción** (`hint: None`). El gate del banco con pistas sintéticas mediría un camino que el usuario no recorre | El gate (no el inicio) | T003 lo cablea; el escenario `protected` del banco usa el `StoreSnapshotter` real con un `EngineLink` de banco que devuelve las pistas como lo haría el daemon |
 | G2 | **10 worktrees bajo carga**: TS-TMC-001 § 8, pasada B, 217 ms ❌ (árboles 114–233 ms, cola 23–26 ms). El remedio previsto, una sola barrera por snapshot, es de TS-TMC-002 (TS-TMC-001 § 9) | **Release** | Si `--gate reference` falla con 10 worktrees tras T003, la historia no cierra: se abre la tarea de TS-TMC-002 con la cifra. No se mete aquí |
-| G3 | **La TUI no lanza hoy ninguna operación protegida** (no hay `operation.run` ni `timemachine.undo` en `apps/cli/src/tui/`) | **Release** del escenario 3 en la TUI | T007 entrega el mapeo de la notificación y la línea de estado con snapshot test; la prueba e2e en la TUI llega con la primera acción protegida de la TUI (duda al PO) |
+| G3 | **La TUI no lanza hoy ninguna operación protegida** (no hay `operation.run` ni `timemachine.undo` en `apps/cli/src/tui/`) | **Release** del escenario 3 en la TUI | T007 entrega el mapeo de la notificación y la línea de estado con snapshot test. La prueba e2e se traslada por escrito a **US-CKP-014** (integrar la rama de un agente con una tecla: la primera historia del Cockpit que lanza desde la TUI una operación protegida con snapshot previo, cadena TS-CKP-002/TS-CKP-003). Su Dev Spec debe llevar la comprobación "la TUI muestra el progreso del previo y lo borra con la respuesta" (PO, punto 10; esta ficha no toca archivos del Cockpit) |
 | G4 | **TS-GRP-005 PR-B sin implementar** (`crates/core/src/work_class` no existe). Su T010 pone `raptor-prior`, `raptor-conn` y el hashing del previo en `UserInitiated`; su T013 añade el escenario `saturated` al mismo `tm_snapshot.rs` | No | Ver § Dependencias: no se crea ningún hilo nuevo y los escenarios del banco van en funciones propias para que el rebase sea trivial |
 
 ---
@@ -325,7 +325,8 @@ flowchart LR
 - `apps/cli/src/progress.rs` (**CREATE**: `ProgressLine`: una línea en stderr reescrita con `\r` y borrada al terminar)
 - `apps/cli/src/lib.rs` o `main.rs` (**MODIFY**: una línea `mod progress;`)
 - `apps/cli/src/undo/confirm/mod.rs` (**MODIFY**: `call` usa `call_observing` con `ProgressLine` cuando `interactive`)
-- `apps/cli/i18n/{en,es}/timemachine.txt` (**MODIFY**: claves `prior.progress`, `prior.progress-files`; texto de `prior.timeout`)
+- `apps/cli/i18n/{en,es}/timemachine.txt` (**MODIFY**: claves `prior.progress`, `prior.progress-files`; `prior.timeout` pasa a `prior.timeout.stalled` y `prior.timeout.too-large`)
+- `crates/api/src/timemachine.rs` (**MODIFY**: `PriorFailedData.timeout: Option<PriorTimeout { cause: PriorTimeoutCause { Stalled, TooLarge }, read_bytes: u64 }>`, `serde(default, skip_serializing_if)`; el daemon solo lo rellena a una conexión con `timemachine.prior-progress`, porque `PriorFailedData` es `deny_unknown_fields`)
 
 **Reglas**
 - Solo si stderr es una TTY y no hay `--json` (D11). Sin TTY o con `--json` las notificaciones se consumen y se ignoran: stdout no cambia.
@@ -336,6 +337,8 @@ flowchart LR
 - **Aceptación:** `cargo test -p gitraptor-cli --lib progress` y `--test us_tmc_020_process`
 - **Guard ⛔6.1:** `progress::the_line_is_cleared_before_the_result`
 - **Guard ⛔6.2:** `us_tmc_020_process::undo_shows_progress_on_a_tty_and_not_with_json` (pty; daemon de prueba con `progress_after = 0`)
+- **Guard ⛔6.3:** `prior_timeout_names_its_cause_in_en_and_es` (`Stalled` → "dejó de avanzar… reinténtalo"; `TooLarge` → "demasiado grande… X MB leídos… .gitignore"; sin `timeout`, el texto de `stalled`)
+- Regla: el motivo sigue siendo `prior-timeout` (`PriorFailure::Timeout`); `TooLarge` es llegar al tope de 100 s, `Stalled` es pasar 10 s sin avance. Nunca se sugiere subir el tope: no hay clave (D-TMC-42)
 
 ### T007 — Progreso en la TUI
 
@@ -409,7 +412,7 @@ flowchart LR
 - DS-INF-GRP-002: el banco `tm_snapshot` pasa a correr en CI, con su tabla de calibración.
 - ADR-TMC-006: Enmienda (gate en CI con `--gate`; overhead medido en `ProtectedOperation`; plazo con avance y tope, D-TMC-42; escalón 2 cableado; cifras de Linux).
 - `non-functional.md`: NFR-TMC-04 con la verificación real y las cifras de Linux.
-- Historia `status: implemented` con backlog e hito (lo comprueba el orquestador al mezclar).
+- Historia `status: implemented` con backlog e hito (lo comprueba el orquestador al mezclar) **solo si** `protected_10wt` pasa `--gate reference`. Si sigue en rojo (G2): las partes se mezclan (progreso, plazo por avance, banco y gate), US-TMC-020 queda `partially-implemented` ("en parte") y se abre la tarea de TS-TMC-002 (una barrera por snapshot) con la cifra, con prioridad en M2. Si esa tarea no cierra el gate, se escala a Rene: es un Should bloqueado y, por el criterio 1 de M2, o se implementa o Rene lo saca (PO, punto 13).
 
 - **Depende:** todas
 
@@ -531,7 +534,7 @@ _No aplica: sin claves nuevas._ Los plazos son constantes; los tests los fijan p
 | Cola del escritor (aviso) | 10 ms p95 | ADR-TMC-004 § 2 |
 | Delta de referencia | 100 archivos / ~20 MB | ADR-TMC-006 § 2 |
 | Plazo sin avance | 10 s | D-TMC-42 (era el plazo absoluto) |
-| Tope del previo | 100 s desde la aceptación de la petición, cola incluida (< 120 s de `WRITE_CALL_TIMEOUT`) | D-TMC-42; TQ-27 |
+| Tope del previo | 100 s fijos desde la aceptación de la petición, cola incluida (< 120 s de `WRITE_CALL_TIMEOUT`); sin clave | D-TMC-42; TQ-27 cerrada |
 | Umbral y periodo del progreso | 1 s y 1 s | D-TMC-43; story § Requisitos técnicos |
 | Paso del contador de bytes | 256 KiB | Igual que el sondeo de `write_blob_stream` |
 | Techos de regresión de CI | Los de la calibración de T009 | INF-GRP-002 |
@@ -542,7 +545,8 @@ _No aplica: sin claves nuevas._ Los plazos son constantes; los tests los fijan p
 |---|---|---|
 | `prior.progress` | saving the work first… {elapsed} s, {read} MB read | guardando el trabajo primero… {elapsed} s, {read} MB leídos |
 | `prior.progress-files` | saving the work first… {elapsed} s, {done} of {total} files, {read} MB read | guardando el trabajo primero… {elapsed} s, {done} de {total} archivos, {read} MB leídos |
-| `prior.timeout` (cambia el texto, no los marcadores) | not run: saving the work first stopped advancing or took too long; nothing changed | no se ejecutó: guardar el trabajo primero dejó de avanzar o tardó demasiado; nada cambió |
+| `prior.timeout.stalled` (sustituye a `prior.timeout`) | not run: saving the work first stopped advancing; nothing changed; try again | no se ejecutó: guardar el trabajo primero dejó de avanzar y nada cambió; reinténtalo |
+| `prior.timeout.too-large` | not run: the uncommitted work is too large to save in time ({read} MB read); nothing changed. If they are generated files, add them to .gitignore: ignored files are not saved in snapshots nor protected | no se ejecutó: el trabajo sin commitear es demasiado grande para guardarlo a tiempo ({read} MB leídos) y nada cambió. Si son archivos generados, añádelos al .gitignore: los ignorados no se guardan en los snapshots ni se protegen |
 | TUI `PriorProgress` | saving the work first · {elapsed} s · {read} MB | guardando el trabajo primero · {elapsed} s · {read} MB |
 
 El aspecto (formato de MB, si hay barra) queda pendiente de diseño; las claves y los marcadores son el contrato.
@@ -602,8 +606,8 @@ Regla del proyecto: **ninguna cifra de tiempo en tests debug**. Los gates de ren
 | Plataforma | Cómo se verifica | Pendiente |
 |---|---|---|
 | macOS | `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`, banco `--gate reference` en el Mac de referencia | — |
-| Linux | Banco en `ubuntu-latest` en cada PR (primeras cifras de Linux para ADR-TMC-006); tests de proceso | Cifra absoluta frente a 200 ms en máquina dedicada: **Pendiente: etapa de validación multiplataforma** |
-| Windows | Compila; `PriorWatch` y la captura son portables | Banco, canal (cliente Unix-only en CI) y CLI: **Pendiente: etapa de validación multiplataforma** (receta de la máquina Windows con el binario release) |
+| Linux | Banco en `ubuntu-latest` en cada PR (primeras cifras de Linux para ADR-TMC-006); tests de proceso | Cifra absoluta frente a 200 ms en máquina dedicada: **Pendiente: etapa de validación multiplataforma** (XP-51) |
+| Windows | Compila; `PriorWatch` y la captura son portables | Banco, canal (cliente Unix-only en CI) y CLI: **Pendiente: etapa de validación multiplataforma** (receta de la máquina Windows con el binario release) (XP-51) |
 
 ---
 
@@ -661,19 +665,22 @@ Corre `/security-review --scope devspec docs/requirements/features/time-machine/
 | D9 | El límite absoluto de 200 ms bloquea en la máquina de referencia (`--gate reference`, informe en el PR); en runners compartidos se reporta y bloquea la regresión confirmada (Decisión de Rene 2026-10-07 en ADR-TMC-006 § 4) | **Decisión del orquestador (2026-10-28), validada por Arquitecto** |
 | D10 | El progreso lleva fase, tiempo, archivos y bytes; sin porcentaje ni ETA: el total de bytes no se conoce sin un stat extra en la ruta crítica | **Decisión del orquestador (2026-10-28), validada por Arquitecto** |
 | D11 | La CLI pinta el progreso solo en stderr con TTY y sin `--json`, en una línea que se borra al terminar: la salida de máquina no cambia | **Decisión del orquestador (2026-10-28), validada por Arquitecto** |
+| D12 | `prior-timeout` lleva la causa (`Stalled` o `TooLarge`, con lo leído) solo a clientes con `timemachine.prior-progress`; la CLI pinta dos textos y nunca sugiere subir el tope (PO, punto 11) | **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO** |
+| D13 | Con el gate de 10 worktrees en rojo, la historia queda `partially-implemented`, la barrera única de TS-TMC-002 entra en M2 con prioridad y, si no basta, se escala a Rene (PO, punto 13) | **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO** |
+| D14 | La e2e del progreso en la TUI la hereda US-CKP-014, la primera historia del Cockpit que lanza una operación protegida (PO, punto 10) | **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO** |
 
 ### Decisiones de negocio nuevas (para `business-rules.md`, las integra el orquestador)
 
 | ID | Decisión |
 |---|---|
-| D-TMC-42 | Un snapshot previo que sigue avanzando no se corta: la operación espera mientras la captura avance, hasta un tope de 100 s contados desde que el daemon aceptó la petición (la espera en cola incluida). Si la captura pasa 10 s sin avanzar o llega al tope, la operación no se ejecuta, el repo no cambia y el motivo es el de hoy (`prior-timeout`). **Decisión del orquestador (2026-10-28), validada por Arquitecto** |
-| D-TMC-43 | Si guardar el snapshot previo pasa de 1 s, la CLI y la TUI muestran que se está guardando el trabajo primero, con el tiempo y lo leído, y lo actualizan cada segundo hasta la respuesta. El MCP no recibe progreso (su respuesta llega al terminar), y la CLI no lo muestra con `--json` ni sin terminal. **Decisión del orquestador (2026-10-28), validada por Arquitecto** |
+| D-TMC-42 | Un snapshot previo que sigue avanzando no se corta: la operación espera mientras la captura avance (cambio de fase, un archivo más escrito o más contenido leído), hasta un tope fijo de 100 s contados desde que el daemon aceptó la petición, con la espera en cola incluida. Si la captura pasa 10 s sin avanzar o llega al tope, la operación no se ejecuta, el repo no cambia y el motivo es `prior-timeout`, con dos textos: "dejó de avanzar; reinténtalo" o "el trabajo sin commitear es demasiado grande para guardarlo a tiempo (X MB leídos); si son archivos generados, añádelos al .gitignore: los ignorados no se guardan ni se protegen". Los dos plazos son fijos, sin clave en el perfil, y nunca se sugiere subirlos. La captura tardía queda como punto del timeline, nunca como previo. Sustituye el plazo absoluto de 10 s de TS-TMC-004. Cierra TQ-27. **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO** |
+| D-TMC-43 | Si guardar el snapshot previo pasa de 1 s, la CLI y la TUI muestran que se está guardando el trabajo primero, con el tiempo y lo leído, y lo actualizan cada segundo hasta la respuesta. El MCP no recibe progreso (su respuesta llega al terminar), y la CLI no lo muestra con `--json` ni sin terminal. **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO** |
 
 ### Preguntas abiertas nuevas
 
-| ID | Pregunta | Por defecto mientras tanto | Dueño |
+| ID | Pregunta | Respuesta | Dueño |
 |---|---|---|---|
-| TQ-27 | ¿100 s es un tope aceptable para el previo de un repo con archivos sin seguimiento muy grandes (unos 14 GB a 145 MB/s)? Al agotarse, ¿el motivo debe sugerir ignorar esos archivos o subir el tope en el perfil? | Tope fijo de 100 s, sin clave de configuración; motivo `prior.timeout` sin sugerencia | PO + Arquitecto |
+| TQ-27 | ¿100 s es un tope aceptable para el previo de un repo con archivos sin seguimiento muy grandes (unos 14 GB a 145 MB/s)? ¿Qué dice el motivo al agotarse? | **Cerrada**: 10 s sin avance y 100 s fijos desde la aceptación, sin clave en el perfil; dos textos de `prior-timeout` (dejó de avanzar / demasiado grande, que sugiere `.gitignore` y no subir el tope) (D-TMC-42) | PO + Arquitecto |
 
 ### Enmiendas a ADR (las aplica T011)
 
