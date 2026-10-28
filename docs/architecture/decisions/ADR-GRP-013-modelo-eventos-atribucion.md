@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-07
+updated: 2026-10-28
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
@@ -28,7 +28,7 @@ El motor guarda en el perfil (ADR-GRP-006) los eventos de Git, las sesiones de a
 - Una sesión terminada no se reactiva, y un agente registrado figura presente hasta que se **retira su registro**, lo que termina su sesión (Q41, BR-WF-001).
 - Lo que el motor no vio ocurrir queda "sin atribuir", aunque hubiera un agente registrado antes del hueco (BR-EDGE-005).
 - Todo sobrevive a reinicios (Q6, BR-CONS-005).
-- **P16** (¿una sesión confirmada por registro pasa a origen "registrado"?): resuelta. **Decisión de Rene (2026-10-07)**: sí. Abierta para el PO: **P17** (¿al retirar una corrección, sus eventos vuelven a la atribución detectada?).
+- **P16** (¿una sesión confirmada por registro pasa a origen "registrado"?): resuelta. **Decisión de Rene (2026-10-07)**: sí. Abierta para el PO: **P17** (¿al retirar una corrección, sus eventos vuelven a la atribución detectada?) → resuelta el 2026-10-27 (Q50, decisión del orquestador validada por PO y Arquitecto): sí.
 
 ## Decisión
 
@@ -63,7 +63,7 @@ Los cambios de estado de las sesiones (inicio, activo, inactivo, terminado) se g
   - **Confirmación** (registro del mismo agente ya detectado, Q39): misma sesión y mismo agente. **No activa la evidencia por registro de § 3**: la sesión sigue atribuyendo solo con S2b, S3 o S4. ⚠️ **ASSUMPTION** dependiente de **P16** (supuesto: sí): el origen pasa a "registrado".
   - **Corrección**: agente corregido con origen "registrado". Como todos los eventos de la sesión apuntan a ella, la corrección alcanza **desde el inicio de la sesión** (Q37) y no toca los eventos de otras sesiones. No crea sesiones ni marca el worktree como compartido (Q33).
   - **Retiro de registro** (Q41, BR-WF-001): no cambia la atribución de la sesión; la termina con causa "registro retirado" y deja de ser presente, así que deja de contar para decidir si el worktree es compartido (§ 3). Una sesión terminada no se reabre.
-  - **Retiro de corrección**: deja sin efecto la corrección retirada y vuelve la atribución anterior. ⚠️ **ASSUMPTION** dependiente de **P17** (supuesto: sí): los eventos que la corrección había reatribuido vuelven también, porque se resuelven desde la sesión.
+  - **Retiro de corrección**: deja sin efecto la corrección retirada y vuelve la atribución anterior. ⚠️ **ASSUMPTION** dependiente de **P17** (supuesto: sí): los eventos que la corrección había reatribuido vuelven también, porque se resuelven desde la sesión. → resuelta el 2026-10-27 (Q50, decisión del orquestador validada por PO y Arquitecto): sí; el supuesto queda confirmado (BR-CONS-002 sin supuesto).
 - **Precondiciones de la corrección** (las aplica el daemon): la pide el desarrollador (BR-AUTH-001, controles de ADR-GRP-005) y la sesión tiene atribución inicial detectada; si en el worktree no hay ninguna, se rechaza e indica que se use el registro (Q38).
 - **Autorización del retiro de registro** (la aplica el daemon con los controles de ADR-GRP-005 § 6). ⚠️ **ASSUMPTION** pendiente de confirmar por Rene: el desarrollador puede retirar cualquier registro; un agente solo el suyo, es decir, el de la sesión que él mismo registró en el worktree que es su cwd (la misma regla que para registrarse). Un agente que intenta retirar otro registro recibe un rechazo que queda en el registro de auditoría.
 - **La detección no escribe registros**: actualizar la presencia o la actividad de una sesión detectada no cambia su atribución, así que una detección posterior no deshace una corrección vigente (BR-CONS-002).
@@ -116,7 +116,7 @@ Los cambios de estado de las sesiones (inicio, activo, inactivo, terminado) se g
 - ✅ "Humano" no se puede emitir porque el contrato no tiene esa variante (Q34).
 - ✅ Los huecos quedan señalados y sus cambios nunca se atribuyen a un agente (BR-EDGE-005); la Time Machine sabe qué periodos no tienen atribución.
 - ✅ La evidencia guardada por evento permite medir la precisión de la detección (SPIKE-GRP-001).
-- ⚠️ **Depende de P17**, abierta para el PO (P16 resuelta: **Decisión de Rene (2026-10-07)**). **Mitigación**: el modelo cubre ambas respuestas cambiando solo la regla de resolución, no los datos.
+- ⚠️ **Depende de P17**, abierta para el PO (P16 resuelta: **Decisión de Rene (2026-10-07)**). **Mitigación**: el modelo cubre ambas respuestas cambiando solo la regla de resolución, no los datos. → resuelta el 2026-10-27 (Q50, decisión del orquestador validada por PO y Arquitecto): sí; deja de ser dependencia.
 - ⚠️ BR-CONS-002 no dice qué pasa al retirar una corrección **si la sesión ya terminó** ("si la sesión sigue presente, vuelve la atribución detectada"). ⚠️ **ASSUMPTION**: se resuelve igual que con la sesión presente. **Pendiente para el PO**.
 - ⚠️ En un worktree compartido, los cambios de archivos quedan casi siempre "sin atribuir" en el MVP, porque no hay atribución por archivo (Q7). **Mitigación**: los eventos de Git con evidencia de una sola sesión (por ejemplo, un commit por ascendencia de procesos) sí se atribuyen.
 - ⚠️ Resolver el actor exige un cruce entre evento y sesión. **Mitigación**: índices por sesión y por worktree, y la atribución efectiva de cada sesión en memoria del daemon; se mide en INF-GRP-002 dentro del presupuesto de ADR-GRP-011.
@@ -148,7 +148,7 @@ Pruebas con repos y perfiles temporales; las sesiones se simulan con la interfaz
 
 - **Reglas**: BR-CONS-002, BR-CONS-003, BR-CONS-004, BR-CONS-005, BR-WF-001, BR-AUTH-001, BR-EDGE-003, BR-EDGE-004, BR-EDGE-005.
 - **Historias**: US-GRP-002, US-GRP-004, US-GRP-005, US-GRP-006, US-GRP-007, US-GRP-008, US-GRP-009, US-GRP-010, US-GRP-011.
-- **Decisiones del context**: Q6, Q7, Q25, Q26, Q31, Q33, Q34, Q35, Q36, Q37, Q38, Q39, Q41; preguntas abiertas P16 y P17.
+- **Decisiones del context**: Q6, Q7, Q25, Q26, Q31, Q33, Q34, Q35, Q36, Q37, Q38, Q39, Q41; preguntas abiertas P16 y P17 (P17 → resuelta el 2026-10-27 (Q50, decisión del orquestador validada por PO y Arquitecto): sí, Q50).
 - **ADRs**: ADR-GRP-005 (único escritor, controles del canal), ADR-GRP-006 (almacén por repo), ADR-GRP-010 (reconciliación), ADR-GRP-012 (señales y evidencia).
 - **Enablers**: TS-GRP-001, SPIKE-GRP-001, INF-GRP-001, INF-GRP-002.
 - **Features consumidoras**: F-001-03 Time Machine y F-001-04 Guardrails.

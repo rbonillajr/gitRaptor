@@ -63,7 +63,7 @@ Guardar un punto recuperable antes de toda operación de GitRaptor y capturar a 
 | US-TMC-008 | 003 § 5 | TS-TMC-002 | Atribución vigente frente a solicitante congelado |
 | US-TMC-009 | 001, 002, 003, 005 | TS-TMC-001..004 | Alcance de la restauración (D-TMC-20) |
 | US-TMC-010 | 003, 005 | TS-TMC-002, 003, 004 | Conjunto por periodo |
-| US-TMC-011 | 003, 005 | TS-TMC-002, 003, 004 | Conjunto por agente (bloqueada por P17) |
+| US-TMC-011 | 003, 005 | TS-TMC-002, 003, 004 | Conjunto por agente (bloqueada por P17 → resuelta el 2026-10-27 (Q50, decisión del orquestador validada por PO y Arquitecto): sí; desbloqueada) |
 | US-TMC-012 | 005 § 5 | — | Detección del solape (dueña) |
 | US-TMC-013 | 005 § 2-3 | TS-TMC-004 | Regla base y confirmación (dueña) |
 | US-TMC-014 | 002 § 4 | TS-TMC-003 | Aviso de ya empujado |
@@ -153,4 +153,4 @@ La arquitectura de motor-local ya está en `main` (PR #8) y los puntos 1 a 5 est
 - **Evasión del árbol de procesos** (aceptado en ADR-TMC-005): un proceso del mismo usuario que se desacopla (doble fork, `setsid`, `launchctl`, `systemd-run`, `osascript`) puede pasar por "sin atribuir" y confirmar. Mitigado con el snapshot previo de cada operación; la auditoría del oplog es manipulable por el mismo usuario (SEC-TMC-09).
 - **Disco del almacén** (TQ-1, TQ-5): medido por SPIKE-TMC-001 en macOS y aceptable (un mes de capturas, unos 200 MiB tras consolidar). El riesgo son los archivos grandes de los previos garantizados frente a las cuotas de SEC-TMC-12. Linux y Windows sin medir.
 - **Continuidad del motor** (SPIKE-TMC-001, E2): el p95 de NFR-04 depende de que TS-GRP-002/003 expongan las rutas cambiadas desde una marca (§ 7.2). Sin eso, el previo hace detección completa y no cumple el presupuesto.
-- **P17 de motor-local**: bloquea US-TMC-011 (D-TMC-22).
+- **P17 de motor-local**: bloquea US-TMC-011 (D-TMC-22) → resuelta el 2026-10-27 (Q50, decisión del orquestador validada por PO y Arquitecto): sí; US-TMC-011 desbloqueada y D-TMC-22 cumplida.

@@ -71,7 +71,7 @@ La inmutabilidad se impone en el esquema: los triggers rechazan `UPDATE` y `DELE
 
 - El **solicitante** de una operación se congela al registrarla (D-TMC-18).
 - El **actor** de los eventos y de los cambios entre capturas se resuelve **en cada consulta** con la atribución vigente del motor (ADR-GRP-013 § 2). Cuando el motor publica que la atribución de una sesión cambió, la Time Machine invalida sus cachés; no reescribe nada (Q37).
-- La dependencia de P17 (retirar una corrección) afecta solo a la resolución vigente, no a este modelo; por eso el undo por agente sigue bloqueado (D-TMC-22).
+- La dependencia de P17 (retirar una corrección) afecta solo a la resolución vigente, no a este modelo; por eso el undo por agente sigue bloqueado (D-TMC-22) → resuelta el 2026-10-27 (Q50, decisión del orquestador validada por PO y Arquitecto): sí; US-TMC-011 desbloqueada y D-TMC-22 cumplida.
 
 ### 6. Recuperación al arrancar el daemon
 
