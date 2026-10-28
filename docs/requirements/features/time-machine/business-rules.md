@@ -33,6 +33,7 @@ related:
     - US-TMC-019
     - US-TMC-020
     - US-TMC-021
+    - US-TMC-024
 tags:
   - time-machine
   - snapshots
@@ -165,14 +166,23 @@ un solo undo → un solo snapshot previo → un redo lo rehace entero
 
 **Descripción**: el desarrollador elige un snapshot del timeline y el repo vuelve a ese estado. Solo se puede restaurar a un punto que tenga snapshot completo. La restauración lleva snapshot previo, así que se puede deshacer.
 
+**Trabajo de otro actor** (D-TMC-30, 2026-10-27; US-TMC-024): restaurar retira todo lo posterior al punto dentro de su alcance, así que, antes de cambiar nada, el solicitante recibe el plan: el trabajo de otro actor que se perderá, con su actor y su momento. Ese trabajo solo se retira con la confirmación interactiva de BR-TMC-AUTH-001, que cubre exactamente lo listado; un solicitante agente nunca confirma y recibe un rechazo, y en Windows y por MCP también se rechaza. Una edición sin commitear en un worktree del conjunto distinto de aquel donde se pide cuenta como trabajo de otro actor ("sin agente"); en el worktree donde se pide, es del solicitante si este queda "sin atribuir" y de otro actor si es un agente (D-TMC-27). Si al aplicar aparece un cambio posterior que no estaba en el plan, o no se puede comprobar que no apareció ninguno, la restauración se detiene, el repo no cambia y no se ofrece continuar (D-TMC-27); pedirla de nuevo da un plan nuevo. Lo retirado se recupera deshaciendo la restauración (NFR-01).
+
 **Criticidad**: Alta
 
 **Regla formal**:
 ```
 REQUIRE punto con snapshot completo
 alcance = worktree donde se pide + ramas y worktrees cambiados después del punto   (D-TMC-20)
+plan = trabajo posterior al punto que se retirará, con actor y momento                         (D-TMC-30)
+edición sin commitear en un worktree del conjunto ≠ W → trabajo de otro actor ("sin agente")
+IF el plan incluye trabajo de otro actor THEN BR-TMC-AUTH-001 (confirmación del plan mostrado; agente, Windows, MCP: rechazo)
 snapshot previo → restaurar → registrar la restauración
+IF al aplicar aparece un cambio posterior fuera del plan THEN detener; el repo no cambia; sin continuar   (D-TMC-27, D-TMC-30)
+IF no se puede comprobar que no apareció ninguno THEN detener (motivo propio); el repo no cambia
 ```
+
+**Ejemplo (D-TMC-30)**: después de las 10:00 claude-1 hizo un commit en `feat-login` → `raptor restore` al punto de las 10:00, pedido "sin atribuir" en macOS, lista ese commit y pide confirmarlo; sin confirmación, nada cambia. Si claude-1 edita `api.rs` en `feat-login` entre la confirmación y la aplicación, la restauración se detiene y muestra ese cambio. Si quien pide es claude-2, se rechaza sin pedir confirmación.
 
 ---
 
@@ -290,6 +300,7 @@ Constraint: push / gc / trabajo de un agente no exponen ni alteran snapshots
 - Solo cuentan los cambios posteriores al cambio que se deshace. Un archivo o una rama que el cambio deshecho no tocó y que otro actor cambió después se deja como está y se informa.
 - Las ediciones de archivos sin evento de Git no tienen actor en el MVP y cuentan como "sin agente", aunque las haya hecho un agente. Por eso, si un agente edita sin Git el mismo archivo después de su propia operación, deshacer esa operación también se detiene por solape.
 - Si no se puede separar el cambio deshecho de lo posterior, el undo se detiene igual, con ese motivo: nunca se escribe a ciegas (NFR-01).
+- La restauración, que por definición retira todo lo posterior al punto, aplica el solape a su manera: lista el trabajo de otro actor y lo retira solo con confirmación, y se detiene ante lo que no estaba en su plan (D-TMC-30, BR-TMC-WF-003).
 
 **Criticidad**: Alta
 
@@ -376,7 +387,7 @@ restauración: una operación en curso en el worktree principal la detiene siemp
 
 ## Decisiones de negocio
 
-D-TMC-1 a D-TMC-25 están en [context.md § Decisiones tomadas](./context.md#decisiones-tomadas). Las siguientes salen de las Dev Specs de US-TMC-003, US-TMC-010, US-TMC-012 y US-TMC-015.
+D-TMC-1 a D-TMC-25 están en [context.md § Decisiones tomadas](./context.md#decisiones-tomadas). D-TMC-26 a D-TMC-29 salen de las Dev Specs de US-TMC-003, US-TMC-010, US-TMC-012 y US-TMC-015; D-TMC-30, de la historia del solape de la restauración (TQ-18, US-TMC-024).
 
 | # | Decisión | Fuente | Fecha | Decidido por | Reglas afectadas |
 |---|----------|--------|-------|--------------|------------------|
@@ -384,6 +395,7 @@ D-TMC-1 a D-TMC-25 están en [context.md § Decisiones tomadas](./context.md#dec
 | D-TMC-27 | (D-TMC-13, TQ-6) En el MVP, un undo o un redo detenido por solape no se continúa: la única decisión es no seguir y el repo no cambia. El solape se mide por archivo y por rama, y las ediciones sin evento de Git cuentan como "sin agente", aunque las haya hecho un agente. Continuar a pesar del solape o fusionar por fragmentos queda para después del MVP. | DS-US-TMC-012 D3, D11 | 2026-10-27 | Orquestador, validada por Arquitecto y PO; abierta a veto de Rene | BR-TMC-CONS-005, BR-TMC-WF-001 |
 | D-TMC-28 | Una operación de Git en curso en un worktree que el undo no toca no bloquea ese undo, salvo que la operación use una rama que el undo movería: entonces se detiene por rama en uso. La restauración se sigue deteniendo con una operación en curso en el worktree principal. El aviso nombra la operación y el worktree. | DS-US-TMC-015 D1, D2, D3 | 2026-10-27 | Orquestador, validada por Arquitecto y PO; abierta a veto de Rene | BR-TMC-EDGE-004 |
 | D-TMC-29 | `raptor undo --since` cuenta todas las operaciones del worktree en el periodo, de cualquier actor, como un solo undo. Lo de otro actor nunca se excluye en silencio: un solicitante "sin atribuir" necesita la confirmación interactiva para el trabajo de un agente (rechazo en Windows y por MCP) y un solicitante agente recibe un rechazo. Para excluir lo de otros está `--agent` (US-TMC-011). | DS-US-TMC-010 D1, D4 | 2026-10-27 | Orquestador, validada por Arquitecto y PO; abierta a veto de Rene | BR-TMC-WF-002, BR-TMC-AUTH-001 |
+| D-TMC-30 | (TQ-18, D-TMC-13) La restauración retira, con la confirmación interactiva de BR-TMC-AUTH-001, el trabajo de otro actor que lista su plan: antes de cambiar nada, el solicitante ve qué trabajo de otro actor se perderá, con su actor y su momento, y lo confirma; el snapshot previo lo deja recuperable (NFR-01). Se detiene ante lo que no está en el plan: un cambio posterior aparecido entre el plan y la aplicación, o la imposibilidad de comprobar que no apareció ninguno, detiene la restauración sin cambiar el repo y sin opción de continuar (D-TMC-27). Una edición sin commitear en un worktree del conjunto distinto de aquel donde se pide cuenta como trabajo de otro actor ("sin agente"). Un solicitante agente nunca confirma: si el plan incluye trabajo de otro actor, recibe un rechazo; en Windows y por MCP también se rechaza (D-TMC-23). | US-TMC-024; DS-US-TMC-012 TQ-18, G1, G5 | 2026-10-27 | Orquestador, validada por PO y Arquitecto; abierta a veto de Rene | BR-TMC-WF-003, BR-TMC-CONS-005, BR-TMC-AUTH-001 |
 
 ---
 
@@ -421,3 +433,4 @@ Cada regla tendrá al menos un escenario Gherkin, incluido uno negativo, en su h
 | 0.5 | 2026-10-03 | PO (AADD) | Rene Bonilla acepta TQ-1 a TQ-17 del Arquitecto. CONS-002: lista cerrada de credenciales excluida por defecto, con opción en el perfil, y repos anidados excluidos; ambos declarados y no tocados al restaurar (TQ-16, TQ-15; D-TMC-16 actualizada). AUTH-001: en Windows, rechazo sin confirmación en el MVP (TQ-14; D-TMC-23 actualizada) y rechazo siempre por MCP (TQ-7). WF-001: pila de undo por worktree (TQ-9). CONS-003 y EDGE-002: tope por archivo, cuotas y hueco "sin espacio" (TQ-5). CONS-004: excepción de liberar el bloqueo propio al arrancar. TIME-001: aviso visto + 24 h (TQ-11); `forget` fuera del MVP (TQ-17, D-TMC-24). EDGE-003: fallo a mitad sin rollback automático (TQ-10). |
 | 0.6 | 2026-10-09 | Orquestador, validada por Arquitecto/PO | US-TMC-005: CONS-003 añade el previo vía hooks de Guardrails (rebase y borrado de rama local), R2 abierto para `checkout -f`/`restore`/`reset --hard`, y los cupos de `previo_hook` como ⚠️ ASSUMPTION (los globales solo cuentan agentes, Q-GRD-37). |
 | 0.7 | 2026-10-27 | Orquestador, validada por Arquitecto y PO | Dev Specs de US-TMC-003, US-TMC-010, US-TMC-012 y US-TMC-015: nueva sección "Decisiones de negocio" con D-TMC-26 a D-TMC-29. WF-001: redos seguidos y motivo de la invalidación (D-TMC-26). WF-002: undo por periodo sin `--agent`, de cualquier actor y sin exclusiones silenciosas (D-TMC-29). CONS-005: alcance del MVP del solape, sin continuar, por archivo y por rama, ediciones sin Git como "sin agente" (D-TMC-27). EDGE-004: el aviso nombra la operación y el worktree, una operación en curso en otro worktree no bloquea salvo rama en uso, y el undo tras un abort (D-TMC-28). |
+| 0.8 | 2026-10-27 | Orquestador, validada por PO y Arquitecto | Solape de la restauración (TQ-18): nueva US-TMC-024 y D-TMC-30. WF-003: la restauración lista el trabajo de otro actor que retirará y lo retira solo con confirmación (rechazo para un agente, en Windows y por MCP); las ediciones sin commitear de otro worktree del conjunto cuentan como de otro actor; un cambio fuera del plan, o no poder comprobarlo, la detiene sin continuar. CONS-005: remite a WF-003 para la restauración. |

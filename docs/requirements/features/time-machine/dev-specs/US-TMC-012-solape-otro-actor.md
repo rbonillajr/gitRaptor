@@ -85,7 +85,7 @@ _No gaps que bloqueen la implementación._ Las decisiones de diseño están en �
 
 | ID | Gap | Severidad | Alcance | Owner |
 |---|---|---|---|---|
-| G1 | TQ-18 (resuelta): la restauración sigue sin solape. La Enmienda (2026-10-08, US-TMC-009) de ADR-TMC-005 dice "sin cubrir hasta US-TMC-012"; esta ficha entrega el módulo genérico y no lo engancha en `restore_to` (punto marcado "Next, in this order: Guardrails and the overlap"). Lo cubre una historia de usuario aparte, todavía por crear, y bloquea el **cierre de M2** (fila "no pisar a otro" de release-plan), no la implementación de esta ficha | Bloquea liberación | — | Orquestador / PO |
+| G1 | TQ-18 (resuelta): la restauración sigue sin solape. La Enmienda (2026-10-08, US-TMC-009) de ADR-TMC-005 dice "sin cubrir hasta US-TMC-012"; esta ficha entrega el módulo genérico y no lo engancha en `restore_to` (punto marcado "Next, in this order: Guardrails and the overlap"). Lo cubre una historia de usuario aparte, [US-TMC-024](../user-stories/US-TMC-024-solape-restauracion.md), y bloquea el **cierre de M2** (fila "no pisar a otro" de release-plan), no la implementación de esta ficha | Bloquea liberación | — | Orquestador / PO |
 
 ---
 
@@ -577,7 +577,7 @@ Corre `/security-review --scope devspec docs/requirements/features/time-machine/
 | Ítem / no-objetivo | Historia que lo cubre | Gate (cómo se verifica) |
 |---|---|---|
 | Continuar a pesar del solape o fusionar por fragmentos | D-TMC-27; TQ-6 → b (más adelante) | el contrato no tiene parámetro para continuar |
-| Solape en la restauración | Historia de usuario aparte, por crear (TQ-18); bloquea el cierre de M2 | `git diff --stat` sin cambios en `restore.rs` |
+| Solape en la restauración | Historia de usuario aparte, [US-TMC-024](../user-stories/US-TMC-024-solape-restauracion.md) (TQ-18); bloquea el cierre de M2 | `git diff --stat` sin cambios en `restore.rs` |
 | Solape del redo | US-TMC-003 (DS-US-TMC-003) | `TM_REDO` sigue `NOT_IMPLEMENTED` en esta entrega |
 | Undo por periodo o por agente (varios cambios deshechos) | US-TMC-010, US-TMC-011 | `OverlapInput.undone` y `reference` ya aceptan varios; `undo_last` pasa uno |
 | Guardrails en el undo | US-TMC-021 | el hueco marcado sigue en `undo::plan` |
@@ -602,7 +602,7 @@ Todas son **Decisión del orquestador (2026-10-27), validada por Arquitecto**, s
 | D9 | El momento de un conflicto es la hora del punto que lo mostró por primera vez (`seen_utc_ms`); el del cambio deshecho, la de su operación o la de su base | `RawGitEvent` no trae hora y la cadencia de captura (≤ 5 s, `CaptureConfig`) acota el error |
 | D10 | La lista de conflictos no se guarda en el oplog; el rechazo sí, con su motivo | Se recalcula de los puntos; no multiplica rutas en filas inmutables |
 | D11 | Tras un solape, la única opción del MVP es no seguir (D-TMC-27) | D-TMC-13 deja decidir al desarrollador; continuar exige la fusión por fragmentos (TQ-6 → b) o un control nuevo |
-| D12 | `overlap::check` recibe varios cambios deshechos y varios actores de referencia | US-TMC-010 y US-TMC-011 (otro arquitecto) y la restauración (TQ-18) lo reutilizan sin cambiar su firma |
+| D12 | `overlap::check` recibe varios cambios deshechos y varios actores de referencia | US-TMC-010 y US-TMC-011 (otro arquitecto) y la restauración (US-TMC-024, TQ-18) lo reutilizan sin cambiar su firma |
 | D13 | El orden de ADR-TMC-005 § 4 se mantiene para la fase 1 (confirmación, Guardrails, solape, precondiciones); la fase 2 va tras el previo (enmienda E1) | Mover el solape antes de la confirmación cambiaría el orden validado; el coste es una confirmación que acaba en `overlap` (Notas, G3) |
 
 **Decisiones de negocio nuevas** (las anota el PO en `context.md`):
@@ -624,16 +624,16 @@ Todas son **Decisión del orquestador (2026-10-27), validada por Arquitecto**, s
 
 | ID | Pregunta | Resolución |
 |---|---|---|
-| TQ-18 | ¿Quién cubre el solape de la restauración ("sin cubrir hasta US-TMC-012", ADR-TMC-005, Enmienda 2026-10-08)? | **Decisión del orquestador (2026-10-27), validada por Arquitecto y PO**: una historia de usuario aparte (la crea el PO), que reutiliza `overlap::check` (D12) en `restore_to` y bloquea el cierre de M2. Queda pendiente una decisión de producto para esa historia: la restauración retira con la confirmación de US-TMC-013 lo que lista su plan y se detiene ante lo que aparezca fuera de él. La restauración tiene varios dueños y varios worktrees, y para ella "otro actor" es todo lo posterior al punto que no está en el plan |
+| TQ-18 | ¿Quién cubre el solape de la restauración ("sin cubrir hasta US-TMC-012", ADR-TMC-005, Enmienda 2026-10-08)? | **Decisión del orquestador (2026-10-27), validada por Arquitecto y PO**: una historia de usuario aparte ([US-TMC-024](../user-stories/US-TMC-024-solape-restauracion.md)), que reutiliza `overlap::check` (D12) en `restore_to` y bloquea el cierre de M2. Queda pendiente una decisión de producto para esa historia: la restauración retira con la confirmación de US-TMC-013 lo que lista su plan y se detiene ante lo que aparezca fuera de él. La restauración tiene varios dueños y varios worktrees, y para ella "otro actor" es todo lo posterior al punto que no está en el plan |
 
-**Enmiendas propuestas a ADR** (no aplicadas; las aplica el orquestador si las aprueba):
+**Enmiendas propuestas a ADR** (aplicadas el 2026-10-27: E1, E2 y E4 en la Enmienda (2026-10-27, US-TMC-012) de ADR-TMC-005; E3 en la Enmienda (2026-10-27, US-TMC-012, US-TMC-003 y US-TMC-010) de ADR-TMC-003):
 
 | # | ADR | Cambio |
 |---|---|---|
 | E1 | ADR-TMC-005 § 4 | El solape se evalúa en dos fases: la de los puntos capturados en su sitio del orden, y la de la cola tras el previo y las precondiciones, desde `ready` |
 | E2 | ADR-TMC-005 § 5 | "Otro actor" se compara con quien produjo el estado que se sobrescribe; una ruta cambiada sin evento es "sin atribuir"; los tramos los cortan solo puntos limpios; sin base para un agente, `overlap-unverified`; las rutas que solo tocó otro actor se conservan |
 | E3 | ADR-TMC-003 § 3 y § 4 | `ready → rejected` también por el solape de la cola. La frase "incluidas las ediciones posteriores del mismo actor" no se cumple en el MVP para un agente: sus ediciones son "sin atribuir", así que solapan (mismo archivo) o se conservan (otro) |
-| E4 | ADR-TMC-005, Enmienda (2026-10-08, US-TMC-009) | "Sin cubrir hasta US-TMC-012" pasa a "sin cubrir hasta la historia del solape de la restauración (TQ-18)" |
+| E4 | ADR-TMC-005, Enmienda (2026-10-08, US-TMC-009) | "Sin cubrir hasta US-TMC-012" pasa a "sin cubrir hasta la historia del solape de la restauración (US-TMC-024, TQ-18)" |
 
 ## Enmienda a la historia (aplicada)
 
@@ -646,5 +646,5 @@ Aplicada el 2026-10-27 en [US-TMC-012](../user-stories/US-TMC-012-solape-otro-ac
 | G2 | Un agente que deshace su operación tras editar él mismo el mismo archivo choca con su propio cambio, porque su edición es "sin atribuir" (D3). Seguro, pero confuso: el texto dice "sin agente" | Revisar cuando el motor atribuya ediciones | Arquitecto |
 | G3 | Un "sin atribuir" puede confirmar un undo de un agente y recibir después `overlap` (D13) | Medir en uso; si molesta, enmendar el orden de ADR-TMC-005 § 4 | Orquestador |
 | G4 | Ventana residual: una edición de otro actor entre un evento y su captura queda en B y cuenta como parte del cambio deshecho. Se recupera con el previo del undo (NFR-01) | Ninguna | — |
-| G5 | `raptor restore` sigue sin solape hasta la historia de TQ-18: restaurar un punto puede sobrescribir lo que un undo habría detenido, con su propio previo | El PO crea la historia antes del cierre de M2 | PO |
+| G5 | `raptor restore` sigue sin solape hasta [US-TMC-024](../user-stories/US-TMC-024-solape-restauracion.md) (TQ-18): restaurar un punto puede sobrescribir lo que un undo habría detenido, con su propio previo | Historia creada (US-TMC-024, 2026-10-27); bloquea el cierre de M2 | PO |
 | G6 | `TmRejectReason`, `every_rejection_has_a_message` y `i18n/*/timemachine.txt` son puntos calientes que también tocan US-TMC-003 (redo) y US-TMC-010/011: variantes y claves al final de cada lista para que el rebase sea trivial | Ninguna | — |
