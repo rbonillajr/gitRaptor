@@ -129,6 +129,7 @@ impl Setup {
             hook: Hook::ReferenceTransaction,
             operation: op,
             authorship: None,
+            exception_token: None,
         };
         serde_json::to_value(serve_as(registry, &params, caller)).unwrap()
     }
