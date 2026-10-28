@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: high
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-27
 domain: GRP
 epic: E-001
 feature: mcp
@@ -87,7 +87,7 @@ Ejemplos:
 **Escenario: Lo que el motor no observó se declara**
 
 Dado el motor no observó "shop" entre las 10:00 y las 10:20
-Cuando el agente pide `explain_history` de ese periodo
+Cuando el agente pide `explain_history` y la página abarca ese periodo
 Entonces la respuesta declara el hueco de observación y la cobertura de los eventos afectados
 
 ## Requisitos Técnicos
@@ -97,4 +97,4 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 ## Diseño y Dev Spec
 
 - **Diseño:** no aplica.
-- **Dev Spec:** pendiente (Arquitecto, tras ADR-MCP-001 y DEP-MCP-6).
+- **Dev Spec:** [DS-US-MCP-017](../dev-specs/US-MCP-017-dev-spec.md) (2026-10-27).
