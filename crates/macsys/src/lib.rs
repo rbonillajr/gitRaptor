@@ -26,3 +26,6 @@ mod ffi_kinfo;
 #[cfg(target_os = "macos")]
 #[allow(unsafe_code)]
 mod ffi_procargs;
+#[cfg(target_os = "macos")]
+#[allow(unsafe_code)]
+mod ffi_qos;
