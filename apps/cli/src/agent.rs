@@ -5,10 +5,17 @@
 //! The engine decides who asks: the developer names the worktree; an agent
 //! registers in the worktree it works in, as the agent it is
 //! (ADR-GRP-005 § 6.6). Every text from the engine is untrusted (SEC-12).
+//!
+//! `raptor agent correct` and `raptor agent uncorrect` correct the attribution of a detected
+//! session, or withdraw that correction: reserved to the developer.
 
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+use gitraptor_api::attribution::{
+    AttributionChangeResult, AttributionCorrectParams, AttributionRejectedData,
+    AttributionRejection, AttributionWithdrawParams, SessionCandidate,
+};
 use gitraptor_api::messages::{
     AgentSupport, DeclaredAgent, RegistrationOutcome, RegistrationRegisterParams,
     RegistrationRegisterResult, RegistrationRejectedData, RegistrationRejection,
@@ -20,6 +27,7 @@ use gitraptor_api::untrusted::sanitize;
 use gitraptor_core::client::ClientError;
 use serde_json::json;
 
+use crate::events::{actor_name, local_time};
 use crate::i18n::t;
 use crate::status::wire;
 use crate::{command_path, engine, error_text, refusal_text};
@@ -164,6 +172,157 @@ fn rejection_text(reason: RegistrationRejection, agent: &DeclaredAgent) -> Strin
         &[("agent", &shown(agent))],
     )
 }
+
+/// `raptor agent correct <agent> [--worktree <path>] [--session <id>] [--json]`: reserved.
+pub fn correct(
+    agent: &str,
+    worktree: Option<PathBuf>,
+    session: Option<String>,
+    json: bool,
+) -> ExitCode {
+    const CMD: &str = "raptor agent correct";
+    let agent = declared(agent);
+    let params = AttributionCorrectParams {
+        agent: agent.clone(),
+        worktree: command_path(worktree).to_string_lossy().into_owned(),
+        session_id: session.clone(),
+    };
+    let mut client = match engine(CMD) {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+    match client.call::<_, AttributionChangeResult>(methods::ATTRIBUTION_CORRECT, &params) {
+        Ok(result) => {
+            if json {
+                println!("{}", json!(result));
+            } else {
+                println!(
+                    "{}",
+                    t(
+                        "correction.done",
+                        &[
+                            ("previous", &actor_name(&result.previous)),
+                            ("actor", &actor_name(&result.actor)),
+                        ],
+                    )
+                );
+                if result.matches_detected {
+                    println!("{}", t("correction.hint-uncorrect", &[]));
+                }
+            }
+            ExitCode::SUCCESS
+        }
+        Err(err) => correction_fail(CMD, Some(&agent), session.as_deref(), err),
+    }
+}
+
+/// `raptor agent uncorrect [--worktree <path>] [--session <id>] [--json]`: reserved.
+pub fn uncorrect(worktree: Option<PathBuf>, session: Option<String>, json: bool) -> ExitCode {
+    const CMD: &str = "raptor agent uncorrect";
+    let params = AttributionWithdrawParams {
+        worktree: command_path(worktree).to_string_lossy().into_owned(),
+        session_id: session.clone(),
+    };
+    let mut client = match engine(CMD) {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+    match client.call::<_, AttributionChangeResult>(methods::ATTRIBUTION_WITHDRAW, &params) {
+        Ok(result) => {
+            if json {
+                println!("{}", json!(result));
+            } else {
+                println!(
+                    "{}",
+                    t(
+                        "correction.withdrawn",
+                        &[("actor", &actor_name(&result.actor))]
+                    )
+                );
+            }
+            ExitCode::SUCCESS
+        }
+        Err(err) => correction_fail(CMD, None, session.as_deref(), err),
+    }
+}
+
+fn correction_fail(
+    command: &str,
+    agent: Option<&DeclaredAgent>,
+    session: Option<&str>,
+    err: ClientError,
+) -> ExitCode {
+    let message = match err {
+        ClientError::Rpc(err) if err.code == code::RESERVED_REFUSED => {
+            refusal_text(&err, "correction.reserved")
+        }
+        ClientError::Rpc(err) if err.code == methods::ATTRIBUTION_REJECTED.code => {
+            match err
+                .data
+                .and_then(|d| serde_json::from_value::<AttributionRejectedData>(d).ok())
+            {
+                Some(data) => correction_rejection_text(&data, agent, session),
+                None => t("error.attribution-rejected", &[]),
+            }
+        }
+        ClientError::Rpc(err) if err.code == code::INVALID_PARAMS => {
+            match err
+                .data
+                .and_then(|d| serde_json::from_value::<InvalidData>(d).ok())
+            {
+                Some(d) => t(&format!("invalid.{}", wire(&d.reason)), &[]),
+                None => t("error.invalid-params", &[]),
+            }
+        }
+        other => error_text(other),
+    };
+    eprintln!("{command}: {message}");
+    ExitCode::FAILURE
+}
+
+/// The reason in words; for an ambiguous session, the candidates to pick with `--session`.
+fn correction_rejection_text(
+    data: &AttributionRejectedData,
+    agent: Option<&DeclaredAgent>,
+    session: Option<&str>,
+) -> String {
+    let key = format!("correction.reason.{}", wire(&data.reason));
+    let mut out = match data.reason {
+        AttributionRejection::UnknownSession => {
+            t(&key, &[("session", &sanitize(session.unwrap_or_default()))])
+        }
+        AttributionRejection::SameAgent => {
+            t(&key, &[("actor", &agent.map(shown).unwrap_or_default())])
+        }
+        _ => t(&key, &[]),
+    };
+    for candidate in &data.candidates {
+        out.push('\n');
+        out.push_str(&candidate_line(candidate));
+    }
+    out
+}
+
+fn candidate_line(c: &SessionCandidate) -> String {
+    let key = if c.present {
+        "correction.candidate"
+    } else {
+        "correction.candidate-ended"
+    };
+    // The agent name last: an "other agent" declares it.
+    t(
+        key,
+        &[
+            ("session", &sanitize(&c.session_id)),
+            ("time", &local_time(c.started_utc_ms, 0)),
+            ("agent", &actor_name(&c.actor)),
+        ],
+    )
+}
+
+#[cfg(test)]
+#[path = "agent_correction_tests.rs"]
+mod correction_tests;
 
 #[cfg(test)]
 mod tests {
