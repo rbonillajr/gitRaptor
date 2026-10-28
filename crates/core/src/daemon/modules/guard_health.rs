@@ -41,9 +41,11 @@ pub(super) fn start(daemon: &Daemon) -> Option<Box<dyn DaemonModule>> {
         every: check_every(),
         last_event: HashMap::new(),
     };
-    let join = std::thread::Builder::new()
-        .name("raptor-guard-health".into())
-        .spawn(move || worker.run(&rx));
+    let join = crate::work_class::spawn_unpooled(
+        crate::work_class::WorkClass::Utility,
+        "raptor-guard-health",
+        move || worker.run(&rx),
+    );
     let Ok(join) = join else {
         daemon.logger.warn("guard_health_unavailable", &[]);
         return None;
