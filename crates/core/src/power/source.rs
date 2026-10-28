@@ -42,5 +42,5 @@ impl PowerSource for FakePowerSource {
 
 /// The source of this OS: `Unknown` everywhere until T007.
 pub fn platform_source() -> Arc<dyn PowerSource> {
-    todo!("T003")
+    Arc::new(UnknownPowerSource)
 }
