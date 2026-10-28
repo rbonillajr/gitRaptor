@@ -2,10 +2,10 @@
 id: US-GRD-009
 title: "Los agentes entregan commits pequeños y con el formato que exige el equipo"
 type: us
-status: draft
+status: implemented
 priority: medium
 created: 2026-10-04
-updated: 2026-10-21
+updated: 2026-10-28
 feature: guardrails
 related:
   context:
@@ -126,3 +126,7 @@ Completado por el Arquitecto (2026-10-21). El detalle y su justificación están
 
 - **Diseño:** no aplica.
 - **Dev Spec:** [DS-US-GRD-009](../dev-specs/US-GRD-009-tamano-diff-formato-commit.md) (lista para implementar y liberar; Q-GRD-48, Q-GRD-49 y Q-GRD-51 decididas el 2026-10-21).
+
+## Estado de la implementación (2026-10-28)
+
+Implementado en: PR #296. Dev Spec: [DS-US-GRD-009](../dev-specs/US-GRD-009-tamano-diff-formato-commit.md) (§ 10: resultados y residuos). Verificado en macOS; Linux lo cubre el CI; Windows: **Pendiente: etapa de validación multiplataforma**. Pendiente: medición de coste de D15 y el escenario por MCP (US-MCP-009 / US-GRD-016).

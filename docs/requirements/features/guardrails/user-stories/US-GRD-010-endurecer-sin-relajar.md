@@ -5,7 +5,7 @@ type: us
 status: partially-implemented
 priority: high
 created: 2026-10-04
-updated: 2026-10-09
+updated: 2026-10-28
 feature: guardrails
 related:
   context:
@@ -86,6 +86,6 @@ Cubiertos por `crates/core/tests/us_grd_010.rs` (verificado en macOS; Linux lo c
 
 **Falta:**
 
-- Las filas 5 y 6 (límite de diff): la clave es de US-GRD-009, que sigue en borrador.
+- ~~Las filas 5 y 6 (límite de diff)~~: cerradas por US-GRD-009 (PR #296): el límite personal solo endurece y se anota la relajación ignorada (`RelaxKey::DiffSize`).
 - La decisión real con los permisos: US-GRD-007 sigue en borrador y el guard aún aplica solo el mínimo y las políticas. Las filas de permisos y «no afecta a otro clon» se verifican sobre el valor efectivo (`Layers::permissions()`), no sobre un `push → Deny`. La decisión real es hoy más estricta, que es la dirección segura.
 - Los niveles personales no están protegidos contra escritura del agente (R-GRD-4, trinquete de Q-GRD-32).
