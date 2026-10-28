@@ -194,6 +194,10 @@ pub(crate) const fn method(name: &'static str, reserved: bool, mcp: bool) -> Met
 }
 
 /// A reserved method declared ahead of the story that implements it.
+#[allow(
+    dead_code,
+    reason = "no method waits for its story now; the next one declared ahead uses it"
+)]
 pub(crate) const fn pending(name: &'static str, story: &'static str) -> MethodSpec {
     MethodSpec {
         name,
