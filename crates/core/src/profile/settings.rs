@@ -144,8 +144,18 @@ pub fn watch_backend(dirs: &ProfileDirs) -> gitraptor_policy::settings::WatchBac
 /// `engine.powerSaving` of the profile (ADR-GRP-015 § 2, D15): `auto` when absent or when the
 /// document cannot be applied.
 pub fn power_saving(dirs: &ProfileDirs) -> gitraptor_api::resources::PowerSavingSetting {
-    let _ = dirs;
-    todo!("T004")
+    use gitraptor_api::resources::PowerSavingSetting;
+    use gitraptor_policy::settings::PowerSaving;
+    match profile_settings(dirs)
+        .applicable()
+        .and_then(|s| s.engine.as_ref())
+        .and_then(|e| e.power_saving)
+        .unwrap_or_default()
+    {
+        PowerSaving::Auto => PowerSavingSetting::Auto,
+        PowerSaving::On => PowerSavingSetting::On,
+        PowerSaving::Off => PowerSavingSetting::Off,
+    }
 }
 
 #[cfg(test)]
