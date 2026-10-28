@@ -640,6 +640,10 @@ _Ninguna propia. TQ-24 y TQ-25 (DS-US-TMC-022) están cerradas._
 | E1 | ADR-TMC-007 § 4.4 | "Tras una purga que borró refs, el mantenimiento corre `repack -a -d --cruft --cruft-expiration=1.hour.ago`: el geométrico no suelta los objetos que ya estaban en packs. La consolidación geométrica diaria y el `prune` siguen igual." Tras la revisión: toda escritura que reutiliza un objeto lo refresca, y el estado del escritor se olvida antes de un `repack --cruft` o un `prune` | Aplicada (2026-10-28) |
 | E2 | ADR-TMC-002 § 2 | Añadir `repack -a -d -q --cruft --cruft-expiration=1.hour.ago` a la lista cerrada de comandos sobre el almacén | Aplicada (2026-10-28) |
 
+## Enmienda (2026-10-28, US-CKP-021)
+
+**Decisión del orquestador (2026-10-28), validada por Arquitecto y PO.** Origen: [DS-US-CKP-021](../../cockpit/dev-specs/US-CKP-021-historial-aviso-purga.md) H12 y H13; BR-CKP-TIME-004. **T010**, añadir: "La TUI guarda en el modelo los avisos de purga vigentes hasta su `purge_from_utc_ms` (además del toast), y el historial de US-CKP-021 los pinta (H12). Texto de la TUI: compacto con fecha relativa (DS-US-CKP-021 H13): es '{count} snapshots de más de {days} días se purgarán a partir de {when}', en '{count} snapshots older than {days} days will be purged from {when}'."
+
 ## Notas del autor
 
 | ID | Nota | Acción | Owner |

@@ -555,6 +555,10 @@ Corre `/security-review --scope devspec docs/requirements/features/time-machine/
 | E5 | ADR-TMC-007, Enmienda 2026-10-05 y Enmienda 2026-10-28 (US-TMC-022) | La cuota por repo purga por tamaño con la misma regla que el tope (80 % → 70 %, 7 días, aviso y gracia), con aviso por repo; el aviso del tope total es uno solo, visible desde cualquier repo; los repos que ya no se observan no se purgan solos (TQ-24 → a, TQ-25) | Aplicada (2026-10-28), en la Enmienda (2026-10-28, US-TMC-022) de ADR-TMC-007; TQ-24 (a) abierta a veto de Rene |
 | E4 | ADR-TMC-003 § 2 (Diario) | Migración del diario: entradas `capture-paused` y `capture-resumed` (hueco "sin espacio") | Aplicada (2026-10-28) |
 
+## Enmienda (2026-10-28, US-CKP-021)
+
+**Decisión del orquestador (2026-10-28), validada por Arquitecto y PO.** Origen: [DS-US-CKP-021](../../cockpit/dev-specs/US-CKP-021-historial-aviso-purga.md) H13. **T008**, añadir: "En la TUI, los avisos de tope y de cuota usan la fecha relativa de DS-US-CKP-021 H13."
+
 ## Notas del autor
 
 | ID | Nota | Acción | Owner |

@@ -6,7 +6,7 @@ status: draft
 feature: mcp
 domain: MCP
 created: 2026-10-21
-updated: 2026-10-21
+updated: 2026-10-28
 story: US-MCP-019
 scope: backend
 frontend_surface: false
@@ -781,6 +781,19 @@ Propuestas y **sin aplicar**: cada dueño las aplica en su documento.
 | E5 | 2026-10-21 | D2, D5, D6, D8, D11 | Los cambios de la columna "Enmienda" de § Decisiones validadas (ADR-GRP-007, ADR-CKP-002 § 1, § 5 y § 12, ADR-MCP-001 § 5, ADR-GRP-016, `api-contract-ipc.md`) | Los ADR citados | Arquitecto |
 
 ---
+
+## Enmienda (2026-10-28, US-CKP-018)
+
+**Decisión del orquestador (2026-10-28), validada por Arquitecto y PO.** Origen: [DS-US-CKP-018](../../cockpit/dev-specs/US-CKP-018-crear-worktree.md) C3, C5 y C14 (G5).
+
+- **T004, paso 2.1**: "`args.path` es `Some` → si los brazos de prueba están pedidos, se delega en `test_arms::plan_op`; si no, el brazo sirve la ruta explícita con las reglas de DS-US-CKP-018 T002 (forma final con `check_final_path`, ≤ 1024 bytes, `check_new_worktree_path` tres veces, `create_dir` y verificación posterior)". La prueba `an_explicit_path_is_us_ckp_018s` se sustituye por `with_test_arms_an_explicit_path_still_goes_to_the_test_arm`.
+- **T001, paso 3**: `worktree_template.rs` expone `pub fn check_final_path(&Path) -> Result<(), TemplateError>` (componentes de 1 a 255 bytes, sin nombres de dispositivo de Windows), que `render` usa para su resultado.
+- **§ Fuera de alcance, fila "Deshacer la creación"**: "US-CKP-018, con un descarte del worktree creado y solo desde el panel de resultado (DS-US-CKP-018 C5)".
+- **D3 (enmienda condicional, C14 / G5)**: añadir "Con `BaseBranchView.pending` presente (capacidad `engine.base-pending`, DS-US-GRP-016), el sitio responde `base-unconfirmed` (motivo existente) para todas las capas. Se aplica cuando DS-US-GRP-016 esté en `main`".
+
+## Enmienda (2026-10-28, US-CKP-013)
+
+**Decisión del orquestador (2026-10-28), validada por Arquitecto y PO.** Origen: [DS-US-CKP-013](../../cockpit/dev-specs/US-CKP-013-abrir-en-editor.md) (G3). `Settings.cockpit` (`Cockpit`) es compartida con US-CKP-013 (`editor`, `editorKind`); quien entre primero en `main` crea la sección.
 
 ## Notas del autor
 

@@ -7,7 +7,7 @@ feature: cockpit
 domain: GRP
 story: TS-CKP-005
 created: 2026-10-05
-updated: 2026-10-08
+updated: 2026-10-28
 related:
   adrs: [ADR-CKP-003, ADR-GRP-003, ADR-GRP-002]
   nfrs: [NFR-09, NFR-10]
@@ -103,6 +103,10 @@ Los tests no usan motor, canal, repos ni perfil.
 - Caducidad de 5 s del toast y su historial: update de **INF-CKP-001**.
 - Acento y paleta finales (DSYS-GRP-001 § 8): siguen abiertos. Los snapshots se regeneran cuando se cierren.
 - Linux y Windows (anchura de símbolos, consola de Windows, la galería en vivo): **Pendiente: etapa de validación multiplataforma**.
+
+## Enmienda (2026-10-28, US-CKP-021)
+
+**Decisión del orquestador (2026-10-28), validada por Arquitecto y PO.** Origen: [DS-US-CKP-021](./US-CKP-021-historial-aviso-purga.md) H5. **TimelineList**: "La columna de actor se ajusta entre 12 y 26 columnas al actor más largo visible (DS-US-CKP-021 H5)."
 
 ## Estado de la implementación (2026-10-08)
 

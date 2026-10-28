@@ -627,6 +627,10 @@ No aplicadas por esta DS; las aplica el PR de la historia o quedan anotadas en �
 | Deshacer desde el historial | US-CKP-021 |
 | Atribución commit→evento | DEP-CKP-2 (motor-local) |
 
+## Enmienda (2026-10-28, US-CKP-013)
+
+**Decisión del orquestador (2026-10-28), validada por Arquitecto y PO.** Origen: [DS-US-CKP-013](./US-CKP-013-abrir-en-editor.md). Completa X12 con la lista común de teclas ocupadas de la revisión: `a`, `c` (DS-016), `d` (DS-012), `D` (DS-017), `e` (DS-013), `m`, `o`/`u` (DS-014), `r`, `t` (DS-021), `w` (DS-018), `x` (DS-019), `?`.
+
 ## Notas del autor
 
 - Riesgo: un `node_modules/` grande hace lento el recorrido; el tope de X4 lo acota y la lista se marca truncada, nunca vacía.

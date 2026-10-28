@@ -4,7 +4,7 @@ title: "Dev Spec — Timeline del repo: qué cambió, cuándo y quién"
 type: dev-spec
 status: implemented
 created: 2026-10-08
-updated: 2026-10-08
+updated: 2026-10-28
 story: US-TMC-006
 scope: backend
 frontend_surface: false
@@ -495,6 +495,10 @@ Cambios propuestos a [US-TMC-006](../user-stories/US-TMC-006-timeline-que-cuando
 - **Nuevo, tope de rutas**: Dado un commit que cambió 25 archivos, Cuando se consulta el timeline, Entonces figuran 20 rutas, "+5 más" y el total real, sin contenido ni mensajes.
 - **Nuevo, undo en el timeline**: Dado un undo hecho por un agente, Cuando se consulta el timeline, Entonces la entrada del undo figura con su solicitante tal como se registró y con lo que deshizo, aunque la atribución cambie después.
 - **Requisitos Técnicos**: la tercera viñeta pasa a "El texto de actor sin atribuir lo pone el cliente (`sin agente`); el contrato solo tiene agente o `unattributed`".
+
+## Enmienda (2026-10-28, US-TMC-008)
+
+**Decisión del orquestador (2026-10-28), validada por Arquitecto y PO.** Origen: [DS-US-TMC-008](./US-TMC-008-timeline-atribucion-vigente.md) D2; D-TMC-45. Precisa D8 y la fila "Corregir la atribución y reatribuir" de § Fuera de alcance: "`SessionActors` se construye con la página de `sessions.list` más las sesiones de las operaciones protegidas que falten, pedidas con `session_actors` (DS-US-TMC-008 D2)".
 
 ## Notas del autor
 
