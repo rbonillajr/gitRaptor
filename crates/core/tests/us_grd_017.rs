@@ -139,6 +139,7 @@ impl Raw {
     /// an operation that wants a prior.
     fn delete_branch(&mut self, common_dir: &std::path::Path) -> Value {
         let params = EvaluateParams {
+            exception_token: None,
             repo_id: "0000-ffff".into(),
             common_dir: common_dir.to_string_lossy().into_owned(),
             hook: Hook::ReferenceTransaction,

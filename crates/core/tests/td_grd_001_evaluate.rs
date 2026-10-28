@@ -86,6 +86,7 @@ fn new_ref(remote_ref: &str, oid: &str) -> PushUpdate {
 
 fn push(common: &std::path::Path, updates: Vec<PushUpdate>) -> EvaluateParams {
     EvaluateParams {
+        exception_token: None,
         repo_id: "0000-ffff".into(),
         common_dir: common.to_string_lossy().into_owned(),
         hook: Hook::PrePush,

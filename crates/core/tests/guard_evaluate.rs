@@ -31,6 +31,7 @@ fn no_git() -> ResolveConfig {
 
 fn params(common_dir: &std::path::Path, refname: &str) -> EvaluateParams {
     EvaluateParams {
+        exception_token: None,
         repo_id: "0000-ffff".into(),
         common_dir: common_dir.to_string_lossy().into_owned(),
         hook: Hook::ReferenceTransaction,
@@ -185,6 +186,7 @@ mod commit_authorship {
         coauthors: Vec<Option<AgentKind>>,
     ) -> EvaluateParams {
         EvaluateParams {
+            exception_token: None,
             repo_id: "0000-ffff".into(),
             common_dir: common.to_string_lossy().into_owned(),
             hook: Hook::CommitMsg,
@@ -374,6 +376,7 @@ mod protected_branches_and_forbidden_paths {
     fn update(common: &std::path::Path, refname: &str, old: &str, new: &str) -> EvaluateParams {
         let value = |v: &str| RefValue::Oid(v.to_owned());
         EvaluateParams {
+            exception_token: None,
             repo_id: "0000-ffff".into(),
             common_dir: common.to_string_lossy().into_owned(),
             hook: Hook::ReferenceTransaction,
@@ -590,6 +593,7 @@ mod policies_cost {
             ..Caller::default()
         };
         let evaluation = |new: &str| EvaluateParams {
+            exception_token: None,
             repo_id: "0000-ffff".into(),
             common_dir: common.to_string_lossy().into_owned(),
             hook: Hook::ReferenceTransaction,

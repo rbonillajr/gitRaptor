@@ -218,6 +218,7 @@ fn precedence_row7_protected_branches_union() {
         },
     );
     let params = EvaluateParams {
+        exception_token: None,
         repo_id: REPO_ID.into(),
         common_dir: s.common.to_string_lossy().into_owned(),
         hook: Hook::ReferenceTransaction,

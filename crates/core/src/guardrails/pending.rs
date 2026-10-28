@@ -63,6 +63,8 @@ pub struct Entry {
     /// What the confirmation of the team baseline showed (its fingerprint): applied only if the
     /// team level still gives the same one.
     pub fingerprint: Option<String>,
+    /// What a conscious exception announced it would skip (US-GRD-006).
+    pub exception: Option<super::exception::ExceptionPlan>,
 }
 
 impl Entry {
@@ -76,6 +78,8 @@ impl Entry {
             action: self.kind,
             applies_at_ms: self.applies_at_ms,
             window_ms: self.window_ms,
+            // Shown only once `guard.status` serves the exception kind.
+            exception: None,
         }
     }
 }
@@ -126,8 +130,13 @@ impl PendingActions {
         action_id: &str,
         plan: super::exception::ExceptionPlan,
     ) {
-        let _ = (repo_id, action_id, plan);
-        todo!()
+        if let Some(entry) = self
+            .by_repo
+            .get_mut(repo_id)
+            .filter(|e| e.action_id == action_id)
+        {
+            entry.exception = Some(plan);
+        }
     }
 
     /// Opens the window of `kind` in `repo_id`. One at a time per repo.
@@ -156,6 +165,7 @@ impl PendingActions {
             window_ms,
             restores: None,
             fingerprint: None,
+            exception: None,
         };
         let view = entry.view();
         self.by_repo.insert(repo_id.to_owned(), entry);

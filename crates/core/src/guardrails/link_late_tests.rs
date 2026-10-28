@@ -41,6 +41,7 @@ fn an_invalid_request_of_a_direct_child_is_kept_in_late() {
     };
     // A relative common directory and an empty repo id: rejected before any read.
     let params = EvaluateParams {
+        exception_token: None,
         repo_id: String::new(),
         common_dir: "relative/.git".into(),
         hook: Hook::ReferenceTransaction,

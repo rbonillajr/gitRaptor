@@ -30,12 +30,15 @@ pub struct GuardRegistry {
     pending: Mutex<super::pending::PendingActions>,
     /// The installs to check and the state seen of each (US-GRD-004).
     protection: Mutex<super::protection::Protection>,
+    /// The conscious exception tokens (US-GRD-006): issued by the loop, presented by
+    /// `guard.evaluate` on the connection threads.
+    exceptions: super::exception::Tokens,
 }
 
 impl GuardRegistry {
     /// The exception tokens of this daemon.
     pub fn exceptions(&self) -> &super::exception::Tokens {
-        todo!()
+        &self.exceptions
     }
 
     /// A registry for the daemon of `dirs`.
@@ -46,6 +49,7 @@ impl GuardRegistry {
             log: super::log::LogSink::default(),
             pending: Mutex::default(),
             protection: Mutex::default(),
+            exceptions: super::exception::Tokens::default(),
         }
     }
 
