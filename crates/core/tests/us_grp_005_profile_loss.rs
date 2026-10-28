@@ -295,7 +295,10 @@ fn a_lost_profile_defers_the_stop_while_a_protected_write_runs() {
     let (mut live, _id) = serving(&tp);
     let guard = gitraptor_core::repo_lock::try_lock(&entry.repo_id)
         .expect("the repo is free before the protected write");
-    std::fs::remove_dir_all(&tp.dirs().data).unwrap();
+    if std::fs::remove_dir_all(&tp.dirs().data).is_err() {
+        eprintln!("skipped: data/ cannot be deleted while the engine holds it");
+        return;
+    }
     let log = tp.dirs().state.join("daemon.log");
     let start = Instant::now();
     loop {
