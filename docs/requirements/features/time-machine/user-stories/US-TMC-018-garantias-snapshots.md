@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: high
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-28
 domain: GRP
 epic: E-001
 feature: time-machine
@@ -15,7 +15,8 @@ related:
   rules:
     - BR-TMC-001
   stories: [US-TMC-001]
-covers: [BR-TMC-CONS-004, D-TMC-3, D-TMC-11]
+  specs: [DS-US-TMC-018]
+covers: [BR-TMC-CONS-004, D-TMC-3, D-TMC-11, D-TMC-40, D-TMC-41]
 blocked_by: []
 tags: [time-machine, snapshots, garantias]
 ---
@@ -32,7 +33,7 @@ tags: [time-machine, snapshots, garantias]
 
 ## Reglas cubiertas
 
-BR-TMC-CONS-004 (escrituras propias, explícitas y recuperables; tres garantías) · D-TMC-3, D-TMC-11 — ver [business-rules.md](../business-rules.md)
+BR-TMC-CONS-004 (escrituras propias, explícitas y recuperables; tres garantías) · D-TMC-3, D-TMC-11, D-TMC-40 (alcance de "ningún agente los altera": Git y archivos del repo; escribir en la carpeta de datos de GitRaptor queda fuera y solo se detecta la alteración de un snapshot), D-TMC-41 (un snapshot no depende de nada del repo; dentro de la retención solo lo retira la purga) — ver [business-rules.md](../business-rules.md)
 
 ## Criterios de Aceptación
 
@@ -68,10 +69,10 @@ Entonces el estado de los worktrees, las ramas visibles y los cambios pendientes
 ## Diseño y Dev Spec
 
 - **Diseño (flujo/UX):** Pendiente de diseño.
-- **Dev Spec:** pendiente (lo genera el Arquitecto).
+- **Dev Spec:** [DS-US-TMC-018](../dev-specs/US-TMC-018-garantias-snapshots.md)
 
 ## Dependencias
 
 - **Historias**: US-TMC-001.
 - **Externas**: ninguna. El mecanismo y la ubicación los decide el Arquitecto con estas garantías (D-TMC-11).
-- **Transversal**: transversal (lo define el Arquitecto): verificación en repos temporales, nunca en un repo real; mismo comportamiento en Windows, macOS y Linux; mensajes en inglés y español.
+- **Transversal**: transversal (lo define el Arquitecto): verificación en repos temporales, nunca en un repo real; mismo comportamiento en Windows, macOS y Linux; mensajes en inglés y español. Se cierra en macOS y Linux; en Windows, la huella con el daemon y que el mantenimiento del usuario no quede bloqueado (TQ-26): **Pendiente: etapa de validación multiplataforma** (XP-48).
