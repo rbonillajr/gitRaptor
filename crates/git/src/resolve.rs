@@ -250,11 +250,13 @@ pub fn resolve(config: &ResolveConfig, invoker: &Invoker) -> Resolution {
         }
         match query_version(&canonical, invoker) {
             Ok(v) if v >= MIN_VERSION => {
+                let path = if cfg!(windows) {
+                    real_git_of_launcher(&canonical, invoker).unwrap_or(canonical)
+                } else {
+                    canonical
+                };
                 return Resolution::Found {
-                    git: SystemGit {
-                        path: canonical,
-                        version: v,
-                    },
+                    git: SystemGit { path, version: v },
                     diagnostics,
                 };
             }
@@ -272,6 +274,53 @@ fn query_version(git: &Path, invoker: &Invoker) -> Result<GitVersion, String> {
         .map_err(|e| e.to_string())?;
     let text = String::from_utf8_lossy(&stdout);
     GitVersion::parse(&text).ok_or_else(|| "unexpected `git version` output".to_owned())
+}
+
+/// Git for Windows: `<root>\cmd\git.exe` is a launcher that starts the real
+/// `<root>\<mingw64|ucrt64|clangarm64|mingw32>\bin\git.exe`. The engine runs the real one, so the
+/// `git` it starts is the process that runs the hooks (ADR-GRP-009 § 4, ADR-GRD-007 Validation
+/// 12). Which one is real is said by the launcher itself (`--exec-path`); it must be in that
+/// layout under the same root, pass the same owner and DACL checks and report the same
+/// `git version`. `None` (the launcher stays) when any of that fails.
+fn real_git_of_launcher(launcher: &Path, invoker: &Invoker) -> Option<PathBuf> {
+    let exec_path = invoker
+        .run(launcher, None, Subcommand::ExecPath, &[])
+        .and_then(|o| o.into_success("git --exec-path"))
+        .ok()?;
+    let exec_path = PathBuf::from(String::from_utf8(exec_path).ok()?.trim());
+    let (root, mingw) = launcher_layout(launcher, &exec_path)?;
+    let same = |a: &Path, b: &Path| matches!((crate::paths::canonicalize(a), crate::paths::canonicalize(b)), (Ok(a), Ok(b)) if a == b);
+    if !same(root, mingw.parent()?) {
+        return None;
+    }
+    let real = check_executable(&mingw.join("bin").join("git.exe")).ok()?;
+    (version_text(launcher, invoker)? == version_text(&real, invoker)?).then_some(real)
+}
+
+/// The root of a Git for Windows launcher (`<root>\cmd\git.exe`) and the `<root>\<mingw>`
+/// folder its `--exec-path` (`<root>\<mingw>\libexec\git-core`) points into, read from the
+/// paths alone. Whether both roots are one folder is for the caller to check on the disk.
+fn launcher_layout<'a>(launcher: &'a Path, exec_path: &'a Path) -> Option<(&'a Path, &'a Path)> {
+    let name = |p: &Path| p.file_name()?.to_str().map(str::to_ascii_lowercase);
+    let cmd = launcher.parent()?;
+    if name(launcher)? != "git.exe" || name(cmd)? != "cmd" {
+        return None;
+    }
+    let libexec = exec_path.parent()?;
+    let mingw = libexec.parent()?;
+    let known = ["mingw64", "ucrt64", "clangarm64", "mingw32"];
+    (name(exec_path)? == "git-core"
+        && name(libexec)? == "libexec"
+        && known.contains(&name(mingw)?.as_str()))
+    .then_some((cmd.parent()?, mingw))
+}
+
+fn version_text(git: &Path, invoker: &Invoker) -> Option<String> {
+    let stdout = invoker
+        .run(git, None, Subcommand::Version, &[])
+        .and_then(|o| o.into_success("git version"))
+        .ok()?;
+    Some(String::from_utf8(stdout).ok()?.trim().to_owned())
 }
 
 /// Check a candidate without executing it (SEC-10) and return its canonical path.
@@ -330,6 +379,42 @@ fn check_owner_and_mode(_path: &Path, _meta: &std::fs::Metadata) -> Result<(), R
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// ADR-GRP-009 § 4: the Git for Windows layouts, and what is not one of them.
+    #[test]
+    fn the_launcher_layout_is_read_from_the_paths() {
+        let p = |s: &str| PathBuf::from(s);
+        let launcher = p("C:/Program Files/Git/cmd/git.exe");
+        let exec = p("C:/Program Files/Git/ucrt64/libexec/git-core");
+        assert_eq!(
+            launcher_layout(&launcher, &exec),
+            Some((
+                Path::new("C:/Program Files/Git"),
+                Path::new("C:/Program Files/Git/ucrt64")
+            ))
+        );
+        let upper = p("C:/Program Files/Git/CMD/GIT.EXE");
+        let mingw = p("C:/Program Files/Git/MINGW64/libexec/git-core");
+        assert!(launcher_layout(&upper, &mingw).is_some());
+
+        // Not a launcher: the real binary, a scoop shim, another name.
+        for not_launcher in [
+            "C:/Program Files/Git/ucrt64/bin/git.exe",
+            "C:/Users/u/scoop/shims/git.exe",
+            "C:/Program Files/Git/cmd/gitk.exe",
+        ] {
+            assert_eq!(launcher_layout(&p(not_launcher), &exec), None);
+        }
+        // An exec-path outside the layout.
+        for exec in [
+            "C:/Program Files/Git/usr/libexec/git-core",
+            "C:/Program Files/Git/ucrt64/lib/git-core",
+            "C:/elsewhere/git-core",
+            "git-core",
+        ] {
+            assert_eq!(launcher_layout(&launcher, &p(exec)), None, "{exec}");
+        }
+    }
 
     #[test]
     fn parses_versions() {
