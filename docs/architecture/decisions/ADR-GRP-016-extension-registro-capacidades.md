@@ -146,3 +146,28 @@ Cada cosa nueva se **declara en un archivo propio de su módulo** y se **registr
 - [ADR-GRP-005](./ADR-GRP-005-forma-motor-proceso-segundo-plano.md) § 4 y § 5 (enmienda del 2026-10-06), [ADR-CKP-003](./ADR-CKP-003-arquitectura-tui.md) § 4 N7 y § 10 (enmienda del 2026-10-06).
 - [Contrato del canal](../design/api-contract-ipc.md) (handshake, métodos y errores).
 - [Guía: cómo extender sin tocar archivos compartidos](../extender-sin-archivos-compartidos.md).
+
+## Enmienda (2026-10-27, US-GRP-010)
+
+**Decisión del orquestador (2026-10-27), validada por Arquitecto**. Origen: [DS-US-GRP-010](../../requirements/features/motor-local/dev-specs/US-GRP-010-dev-spec.md) D7 y § Enmiendas a ADR; número revisado por el Arquitecto el 2026-10-28 (la Dev Spec pedía `-33100`, que ya estaba reservado). Anota el bloque del módulo `attribution` y los bloques asignados y reservados hasta hoy, para que la siguiente Dev Spec no elija uno ocupado. No cambia la regla del § 3. El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| El módulo `attribution` usa el bloque `-33160` (`FIRST_ERROR_BLOCK - 8 * ERROR_BLOCK_LEN`) con `ATTRIBUTION_REJECTED` (`-33160`, `attribution-rejected`). Sus métodos `attribution.correct` y `attribution.withdraw-correction` ya estaban declarados (`NOT_IMPLEMENTED`), así que no hace falta capacidad | § 3 | DS-US-GRP-010 D7 |
+| Antes de elegir bloque, una Dev Spec consulta esta tabla además del código: un bloque reservado por una Dev Spec sin implementar no aparece en `crates/api` | § 3 | Revisión del 2026-10-28 |
+
+**Bloques a 2026-10-28**:
+
+| Bloque | Módulo | Estado | Fuente |
+|---|---|---|---|
+| `-33000` | — | Sin asignar (los módulos empezaron en `-33020`) | — |
+| `-33020` | `discovery` | En código | US-GRP-020 |
+| `-33040` | `guard` | En código | Guardrails |
+| `-33060` | `operation` | En código | DS-US-MCP-008 |
+| `-33080` | `mcp` | En código | DS-US-MCP-004 |
+| `-33100` | `registration` | Reservado | DS-US-MCP-006 |
+| `-33120` | `query` | Reservado | DS-US-CKP-012 |
+| `-33140` | `diff` | Reservado | DS-US-CKP-012 |
+| `-33160` | `attribution` | Reservado | DS-US-GRP-010 |
+
+Si dos PRs toman el mismo bloque, el test de bloques disjuntos falla al rebasar: el segundo toma el siguiente libre y actualiza esta tabla y su Dev Spec.

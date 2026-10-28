@@ -66,7 +66,7 @@ Heredan ADR-GRP-009 § 3 y añaden lo que fijan **SEC-TMC-02** (invocación sin 
 
 ### 3. Protocolo de aplicación (undo, redo, restauración)
 
-El planificador calcula un **estado destino** por worktree y por ref (ADR-TMC-003, ADR-TMC-005). El aplicador lo lleva al repo en este orden y anota cada paso en el diario (ADR-TMC-003):
+El planificador calcula un **estado destino** por worktree y por ref (ADR-TMC-003, ADR-TMC-005). Para el undo por agente, el destino es **selectivo**: solo unas rutas y ramas, partiendo del previo (Enmienda 2026-10-28, US-TMC-011). El aplicador lo lleva al repo en este orden y anota cada paso en el diario (ADR-TMC-003):
 
 1. **Precondiciones** (sin cambios si fallan): ninguna operación de Git en curso en un worktree afectado (`rebase-merge/`, `rebase-apply/`, `MERGE_HEAD`, `CHERRY_PICK_HEAD`, `REVERT_HEAD`, `BISECT_LOG`, `sequencer/`; BR-TMC-EDGE-004); ningún lock de Git presente (`index.lock`, `HEAD.lock`, locks de refs), que se reporta como "Git ocupado" y **nunca se borra**; repo disponible (`safe.directory`); árbol destino revalidado (SEC-TMC-04, SEC-TMC-09). Qué es un "worktree afectado" y cuándo un lock ajeno da "Git ocupado" antes de llegar aquí: Enmienda (2026-10-27, US-TMC-015), al final.
 2. **Snapshot previo garantizado** del ámbito (BR-TMC-CONS-001). Si falla, la operación no se ejecuta.
@@ -181,3 +181,21 @@ Aplicada desde DEP-CKP-7 de [CTX-CKP-001](../../requirements/features/cockpit/co
 - **Herencia** (D7): redo y undo selectivo siguen esta regla: precondiciones antes del previo y repetidas bajo los locks del aplicador, con el mismo detalle.
 
 **Validación 3, ampliada** (definida en DS-US-TMC-015 § 9.4; tests por implementar): el rechazo nombra la operación y el worktree; un merge a medias en el worktree principal no bloquea el undo de un agente en otro worktree; la rama que reescribe un rebase en otro worktree no se mueve (`ref-in-use`); un `index.lock`, un lock de rama o `packed-refs.lock` ajenos dan `git-busy` en undo y en restauración, con los mismos bytes tras el rechazo.
+
+## Enmienda (2026-10-28, US-TMC-011)
+
+**Decisión del orquestador (2026-10-27), validada por Arquitecto** (revisión de segunda opinión el 2026-10-28). Origen: [DS-US-TMC-011](../../requirements/features/time-machine/dev-specs/US-TMC-011-undo-por-agente.md) E2, D3, D7 y D10. Añade un modo al § 3; no cambia el orden del protocolo, sus precondiciones, el intercambio atómico ni la protección de último instante. El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| El aplicador admite un destino selectivo (`ApplyPlan.selective`): escribe solo las rutas (archivo e índice), las ramas y el `HEAD` indicados, cada uno con su valor, y deja el resto del worktree como está en el previo | § 3 | E2; D3 |
+| El modo selectivo y las rutas conservadas (`PlanWorktree.keep`, Enmienda 2026-10-27 de ADR-TMC-005) son excluyentes | § 3, paso 6 | E2 |
+| El modo selectivo nunca escribe una ruta que el previo excluye: el undo se rechaza antes del aplicador (`not-selectable`) | § 3, paso 2 y 6 | D7; NFR-01 |
+
+- **Por qué un modo y no un snapshot sintético** (D3): el destino del undo por agente no es un punto capturado (es "lo de antes" solo en lo que tocó el agente). Fabricar un punto en el almacén ensuciaría el timeline con estados que nadie capturó; el modo selectivo conserva el intercambio, la protección y el índice del protocolo.
+- **De dónde sale el contenido** (D7): del previo garantizado del undo, con las entradas del destino aplicadas encima; el destino del plan (`target_snapshot`) es el propio previo, así que el undo no depende de que el punto de la operación más antigua siga en el almacén. Los commits que las ramas del destino necesiten y el repo no tenga siguen el paso 4, desde el almacén.
+- **Refs** (paso 5): exactamente las ramas del destino, con valor esperado el del previo; `RefScope::Only` con esas ramas.
+- **Rutas** (D10): salen de árboles del repo leídos con gitoxide, nunca de la petición, y pasan la misma apertura relativa a la raíz y revalidación (SEC-TMC-04). Una ruta que no se puede escribir tal cual (no UTF-8, demasiado larga) rechaza el undo; nunca se recorta.
+- **Recuperación**: como todo undo, el selectivo tiene su previo garantizado; redo vuelve a él (NFR-01).
+
+**Validación añadida** (definida en DS-US-TMC-011 T005 y § 9.4; tests por implementar): el modo selectivo escribe solo sus rutas, borra una ruta ausente en su destino, mueve solo sus ramas, y con `keep` o con una ruta excluida no cambia nada.
