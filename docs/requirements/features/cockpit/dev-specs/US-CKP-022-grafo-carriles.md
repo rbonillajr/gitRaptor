@@ -2,7 +2,7 @@
 id: DS-US-CKP-022
 title: "Dev Spec — US-CKP-022: ver crecer la rama de cada agente sobre la base"
 type: dev-spec
-status: draft
+status: approved
 created: 2026-10-28
 updated: 2026-10-28
 story: US-CKP-022
@@ -88,23 +88,23 @@ El repo no tiene `architecture-constitution.md` en la cascada. Las restricciones
 
 ### Decisiones
 
-Cada decisión es **Decisión del orquestador (2026-10-28)**, pendiente de validar por Arquitecto y PO.
+Revisión del Arquitecto y del PO (2026-10-28). D1 a D3, D6 a D8 y D10 a D13: **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO**; D12 sigue como ⚠️ supuesto medible (N4). D4, D5 y D9: **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO (revisión, con cambios)**.
 
 | # | Decisión | Alternativa descartada y por qué |
 |---|---|---|
-| D1 | **Dos niveles.** El *panel* del cuerpo pinta un carril por fila con lo que ya publica el stream: rama, sesión y `DivergenceView` (`messages.rs:254`). No hace consulta y es en vivo por construcción. La *vista* a pantalla completa (`g`) pide los commits con `graph.lanes`. El panel es la región que cede espacio (D10); la vista no depende del tamaño | Un solo nivel con la consulta: el panel tendría que pedir commits con cada evento de cualquier agente, y en 80×24 no habría dónde mirar un commit |
-| D2 | **DEP-CKP-2 no existe en `main`: se crea.** El lector solo cuenta commits (`ahead_behind_commits`, `reader.rs:562`) y ningún método del protocolo los lista. Módulo `graph` con el método `graph.lanes` en `crates/api/src/methods/graph.rs` y sus tipos en `crates/api/src/graph.rs`. Método nuevo = capacidad aditiva que el cliente descubre en `hello.methods` (ADR-GRP-016 § 1); ninguna forma existente cambia. `mcp: false`. **Sin bloque de errores propio**: todo lo "no calculable" va en el resultado (D5, D3), y la cancelación y el exceso de consultas son los códigos del módulo `query` de DS-US-CKP-012 D1 | Un código `graph-unavailable`: tomaría el bloque `-33180` de la lista compartida por un caso que el resultado ya expresa |
-| D3 | **Qué es un carril.** Cada worktree del repo, salvo el que tiene sacada la rama base (ese es el tronco). Rama → carril con su nombre; `HEAD` separado → carril con el nombre de la carpeta; rama sin commits → carril "sin commits"; worktree no disponible → carril con su motivo y sin commits. Mismo orden que la flota (`fleet_order::order_key`, DS-US-CKP-002), así cada carril queda a la altura de su fila | Solo worktrees de agentes: una rama humana que se aleja también decide cuándo integrar, y la historia pide "un carril por worktree" |
-| D4 | **Commits de un carril.** `rev_walk([HEAD]).with_hidden([punta de la base])`, el mismo conjunto que cuenta `ahead` en `count_only_in` (`reader.rs:584`), así el total de la vista coincide con el ↑ del panel. Del más reciente al más antiguo por fecha de commit. Los primeros 50; el total se sigue contando hasta `MAX_DIVERGENCE_WALK` (10.000, `messages.rs:248`) con `exact`. El merge-base que se muestra es el primero de `merge_bases` (`reader.rs:530`). Sin `commit-graph` (`use_commit_graph(false)`, como `guard_paths.rs:208`): ese archivo lo puede escribir un agente | Orden topológico con líneas de merge: es un cliente Git completo, que BR-CKP-CALC-004 excluye |
-| D5 | **Base.** Solo la base confirmada (BR-CKP-CALC-004), con la misma fuente que `repo_base` (`daemon/mod.rs:1293`). Sin confirmar → sin carriles, "Base main sin confirmar: no calculable" (Q-CKP-49). Base inválida → "Sin rama base: no calculable". Rama base sin ref → "Rama base develop no encontrada: no calculable". Nunca se usa otra rama (BR-CKP-EDGE-001). El panel aplica la misma regla con lo que publica el stream (`DivergenceView::BaseMissing`, `NoBase` y el estado de la base) | Dibujar contra la base resuelta sin confirmar: el ↑ mezclaría commits de una rama que el desarrollador no eligió, y DS-US-CKP-012 D5 ya trata la base sin confirmar como "no calculable" |
-| D6 | **Datos de cada commit.** `oid` (40 hex; la TUI muestra 7), `summary` (primera línea del mensaje, hasta 256 bytes, como `Untrusted`), `committed_utc_ms` y `merge` (dos o más padres). Ni autor ni correo: la flota se mira en pantalla compartida (`model.rs:408-410`) y la autoría declarada tiene su capacidad (`events.authorship`, ADR-GRP-013 Enmienda). Sin campo de actor (D7) | Sin asunto: un carril de hashes no deja reconocer un commit; el asunto ya se lee con `git log` en el mismo worktree y `graph.lanes` no sale al MCP |
-| D7 | **Actor por commit: "sin atribuir" en el MVP.** La relación commit→evento está "pendiente de motor-local" (ADR-GRP-013, línea de DEP-CKP-2). La respuesta no lleva actor y la vista escribe "sin atribuir" en cada commit. Cuando motor-local la publique, entra como campo opcional `actor` detrás de la capacidad `graph.commit-actor` (aditiva, ADR-GRP-016 § 1) sin tocar el resto (Q-CKP-50) | Unir ya los commits con los eventos `commit` por `new_commit` (`messages.rs:580`): un rebase o un `--amend` solo deja evento de la punta, y los intermedios saldrían sin atribuir sin decir por qué; esa decisión es de motor-local |
-| D8 | **Color por carril, nunca por commit.** El del primer agente de la sesión del worktree, con el mismo `AgentColors` (`model/agent_colors.rs`) y la misma elección que la fila de la flota (`view.rs:540`). Sin sesión → `LaneOwner::Unattributed` en tenue con "carpeta · sin agente". La paleta es `agent.1`…`agent.8` de DSYS-GRP-001 (Okabe-Ito, variante clara y oscura) | Un color por commit según su actor: con D7 todos serían tenues y se perdería quién lleva cada rama |
-| D9 | **Vista en vivo.** Abierta, la vista se marca desactualizada con cada `git.event` del repo, con cada snapshot y con cada cambio de cabeza, ↑↓ o base de sus worktrees en el stream. Desactualizada, se vuelve a pedir si no hay otra en vuelo y pasó 1 s desde la última petición; mientras llega, se ve la anterior con "actualizando…". El desplazamiento se ancla al primer commit visible (`oid`); si desapareció, a la cabecera de su carril | La foto de DS-US-CKP-012 D9: la historia es "ver crecer la rama"; el diff se lee línea a línea y salta, el grafo crece por arriba y el ancla lo evita |
-| D10 | **Espacio** (BR-CKP-EDGE-005). `view` pasa `BodyPlan { graph: true, .. }` cuando el repo tiene al menos un carril o un mensaje de base. `layout` no cambia (DS-US-CKP-005 D2, `layout.rs:91-99`): el grafo es la primera región que cede. Sin región, la pista `g grafo` sigue en la barra y abre la vista a pantalla completa | Mostrar siempre una línea mínima del grafo: en 80×24 con alertas se la quitaría a la lista |
-| D11 | **Tecla `g`** (libre en `keymap.rs:84-135` y en las DS de cockpit: `d`, `m`, `u`, `o`, `r`, `f`, `?` ya están tomadas). Abre y cierra la vista; `Esc` también la cierra; `↑`/`↓` (`k`/`j`) desplazan una línea; `q` sale de la TUI. Con la vista abierta, las teclas de fila no actúan. Motor sin `graph.lanes` → nota "el motor no ofrece el grafo; reinícialo" y ningún `Cmd` | Reutilizar `Enter`: abre el repo en el selector (DS-US-CKP-012 D11) |
-| D12 | **Topes** (⚠️ **ASSUMPTION**, § Valores numéricos). 32 carriles (`lanes_total` y `cut: lanes`), 50 commits por carril, plazo de 2 s (el de DS-US-CKP-012 D4), 256 bytes de asunto, respuesta ≤ 768 KiB. Un carril que no termina en plazo sale `too-slow`; un tope nunca es un error. Peor caso: 32 × 50 × ~350 B ≈ 560 KiB | Error al pasar un tope: el desarrollador no vería nada justo con la flota grande |
-| D13 | **"N más" no se despliega en el MVP.** El carril termina en una fila tenue "22 más"; con total no exacto, "al menos 9.950 más". No hay paginación (Q-CKP-51) | Paginar con cursor: otro parámetro y otro estado en la TUI para un caso que la historia no pide |
+| D1 | **Dos niveles.** **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO**. El *panel* del cuerpo pinta un carril por fila con lo que ya publica el stream: rama, sesión y `DivergenceView` (`messages.rs:254`). No hace consulta y es en vivo por construcción. La *vista* a pantalla completa (`g`) pide los commits con `graph.lanes`. El panel es la región que cede espacio (D10); la vista no depende del tamaño | Un solo nivel con la consulta: el panel tendría que pedir commits con cada evento de cualquier agente, y en 80×24 no habría dónde mirar un commit |
+| D2 | **DEP-CKP-2 no existe en `main`: se crea.** **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO**. El lector solo cuenta commits (`ahead_behind_commits`, `reader.rs:562`) y ningún método del protocolo los lista. Módulo `graph` con el método `graph.lanes` en `crates/api/src/methods/graph.rs` y sus tipos en `crates/api/src/graph.rs`. Método nuevo = capacidad aditiva que el cliente descubre en `hello.methods` (ADR-GRP-016 § 1); ninguna forma existente cambia. `mcp: false`. **Sin bloque de errores propio**: todo lo "no calculable" va en el resultado (D5, D3), y la cancelación y el exceso de consultas son los códigos del módulo `query` de DS-US-CKP-012 D1 | Un código `graph-unavailable`: tomaría el bloque `-33180` de la lista compartida por un caso que el resultado ya expresa |
+| D3 | **Qué es un carril.** **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO**. Cada worktree del repo, salvo el que tiene sacada la rama base (ese es el tronco). Rama → carril con su nombre; `HEAD` separado → carril con el nombre de la carpeta; rama sin commits → carril "sin commits"; worktree no disponible → carril con su motivo y sin commits. Mismo orden que la flota (`fleet_order::order_key`, DS-US-CKP-002), así cada carril queda a la altura de su fila | Solo worktrees de agentes: una rama humana que se aleja también decide cuándo integrar, y la historia pide "un carril por worktree" |
+| D4 | **Commits de un carril.** **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO (revisión, con cambios)**. `rev_walk([HEAD]).with_hidden([punta de la base])`, del más reciente al más antiguo por fecha de commit. El recorrido sale de una función privada nueva `only_in_walk(tip, hidden)` en `reader.rs`, que pasan a usar `count_only_in` (`reader.rs:579-597`) y `lane`: el total de la vista sale del mismo código que el ↑ del stream, con la misma política de `commit-graph`. Esa política es la que hoy tiene `count_only_in` (por defecto); pasarla a `use_commit_graph(false)`, como hace `guard_paths.rs:207`, cambiaría las dos a la vez y queda fuera de esta historia. Los primeros 50; el total se sigue contando hasta `MAX_DIVERGENCE_WALK` (10.000, `messages.rs:248`) con `exact`. El merge-base que se muestra es el primero de `merge_bases` (`reader.rs:530`) | Un recorrido propio en `lane` con otra política de `commit-graph`: el total de la vista podría no coincidir con el ↑ del panel. Orden topológico con líneas de merge: es un cliente Git completo, que BR-CKP-CALC-004 excluye |
+| D5 | **Base.** **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO (revisión, con cambios)**. Solo la base confirmada (BR-CKP-CALC-004). El nombre y si está confirmada salen del `BaseBranchView` del repo (`messages.rs:228`) en el mismo estado del motor que publica `engine.snapshot`: panel y vista no pueden discrepar (`repo_base`, `daemon/mod.rs:1293`, es privada de `daemon` y alimenta ese estado). Sin confirmar → sin carriles y "Base main sin confirmar: confirma la rama base para ver los carriles", con la acción "confírmala con `raptor guard confirm`" (Q-CKP-49). Base inválida → "Sin rama base: no calculable". Rama base sin ref → "Rama base develop no encontrada: no calculable". Nunca se usa otra rama (BR-CKP-EDGE-001). El panel aplica la misma regla con lo que publica el stream (`DivergenceView::BaseMissing`, `NoBase` y `BaseStatusView`) | Dibujar contra la base resuelta sin confirmar: el ↑ mezclaría commits de una rama que el desarrollador no eligió, y DS-US-CKP-012 D5 ya trata la base sin confirmar como "no calculable". Leer la base con `repo_base` desde el canal: es privada y abriría una segunda fuente |
+| D6 | **Datos de cada commit.** **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO**. `oid` (40 hex; la TUI muestra 7), `summary` (primera línea del mensaje, hasta 256 bytes, como `Untrusted`), `committed_utc_ms` y `merge` (dos o más padres). Ni autor ni correo: la flota se mira en pantalla compartida (`model.rs:408-410`) y la autoría declarada tiene su capacidad (`events.authorship`, ADR-GRP-013 Enmienda). Sin campo de actor (D7) | Sin asunto: un carril de hashes no deja reconocer un commit; el asunto ya se lee con `git log` en el mismo worktree y `graph.lanes` no sale al MCP |
+| D7 | **Actor por commit: "sin atribuir" en el MVP.** **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO**. La relación commit→evento está "pendiente de motor-local" (ADR-GRP-013, línea de DEP-CKP-2). La respuesta no lleva actor y la vista escribe "sin atribuir" en cada commit. Cuando motor-local la publique, entra como campo opcional `actor` detrás de la capacidad `graph.commit-actor` (aditiva, ADR-GRP-016 § 1) sin tocar el resto (Q-CKP-50) | Unir ya los commits con los eventos `commit` por `new_commit` (`messages.rs:580`): un rebase o un `--amend` solo deja evento de la punta, y los intermedios saldrían sin atribuir sin decir por qué; esa decisión es de motor-local |
+| D8 | **Color por carril, nunca por commit.** **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO**. El del primer agente de la sesión del worktree, con el mismo `AgentColors` (`model/agent_colors.rs`) y la misma elección que la fila de la flota (`view.rs:540`). Sin sesión → `LaneOwner::Unattributed` en tenue con "carpeta · sin agente". La paleta es `agent.1`…`agent.8` de DSYS-GRP-001 (Okabe-Ito, variante clara y oscura) | Un color por commit según su actor: con D7 todos serían tenues y se perdería quién lleva cada rama |
+| D9 | **Vista en vivo, con coste acotado.** **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO (revisión, con cambios)**. (1) Abierta, la vista se marca desactualizada solo con un `git.event` del repo o con un cambio en el stream de rama, divergencia, base o conjunto de worktrees; un snapshot sin esos cambios no cuenta. El stream no lleva el oid de `HEAD` (`HeadView`, `messages.rs:292`), así que un `--amend` solo se ve por `git.event`, que se queda como disparador. (2) Desactualizada, se vuelve a pedir si no hay otra en vuelo y pasó `max(REFRESH_MIN, 2 × duración de la última respuesta)` desde la última petición: la vista no ocupa más de ~50 % del pool de un hilo de DS-012 D4. (3) El daemon guarda en `channel/graph.rs` una caché por carril con clave `(oid de HEAD, punta de la base)`, acotada por D12 (≤ 560 KiB por repo): un refresco solo recorre los carriles que cambiaron. Mientras llega, se ve la anterior con "actualizando…". El desplazamiento se ancla al primer commit visible (`oid`); si desapareció, a la cabecera de su carril | La foto de DS-US-CKP-012 D9: la historia es "ver crecer la rama". Refrescar cada 1 s sin caché ni espaciado: con consultas de hasta 2 s satura el pool de un hilo y el `diff.worktree` de otra TUI recibe `query-busy` |
+| D10 | **Espacio** **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO**. (BR-CKP-EDGE-005). `view` pasa `BodyPlan { graph: true, .. }` cuando el repo tiene al menos un carril o un mensaje de base. `layout` no cambia (DS-US-CKP-005 D2, `layout.rs:91-99`): el grafo es la primera región que cede. Sin región, la pista `g grafo` sigue en la barra y abre la vista a pantalla completa | Mostrar siempre una línea mínima del grafo: en 80×24 con alertas se la quitaría a la lista |
+| D11 | **Tecla `g`** **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO**. (libre en `keymap.rs:84-135` y en las DS de cockpit: `d`, `m`, `u`, `o`, `r`, `f`, `?` ya están tomadas). Abre y cierra la vista; `Esc` también la cierra; `↑`/`↓` (`k`/`j`) desplazan una línea; `q` sale de la TUI. Con la vista abierta, las teclas de fila no actúan. Motor sin `graph.lanes` → nota "el motor no ofrece el grafo; reinícialo" y ningún `Cmd` | Reutilizar `Enter`: abre el repo en el selector (DS-US-CKP-012 D11) |
+| D12 | **Topes** **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO**. (⚠️ **ASSUMPTION**, § Valores numéricos). 32 carriles (`lanes_total` y `cut: lanes`), 50 commits por carril, plazo de 2 s (el de DS-US-CKP-012 D4), 256 bytes de asunto, respuesta ≤ 768 KiB. Un carril que no termina en plazo sale `too-slow`; un tope nunca es un error. Peor caso: 32 × 50 × ~350 B ≈ 560 KiB | Error al pasar un tope: el desarrollador no vería nada justo con la flota grande |
+| D13 | **"N más" no se despliega en el MVP.** **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO**. El carril termina en una fila tenue "22 más"; con total no exacto, "al menos 9.950 más". No hay paginación (Q-CKP-51) | Paginar con cursor: otro parámetro y otro estado en la TUI para un caso que la historia no pide |
 
 ## 📋 Índice
 
@@ -162,7 +162,7 @@ sequenceDiagram
     H->>U: EngineMsg::Graph {ticket, result} (T004)
     U->>U: GraphState listo, vista a pantalla completa (T005, T006)
     loop mientras la vista está abierta
-        Note over U: git.event o cambio de ↑↓ → desactualizada, tras 1 s → Cmd::Graph (D9)
+        Note over U: git.event o cambio en el stream → desactualizada, espaciado de D9 → Cmd::Graph
     end
     opt Esc o g con una petición en vuelo
         U->>H: Cmd::CancelQuery {ticket} (DS-012)
@@ -215,10 +215,11 @@ T001 → {T002, T005} → T006 (tras T005) → T003 (tras T002 y G1), T004 (tras
 
 **Ubicación.**
 - `crates/git/src/lane.rs` (**CREATE**): `LaneLimits`, `GitLane`, `GitLaneCommit`, `impl RepoReader { pub fn lane(..) }`
+- `crates/git/src/reader.rs` (**MODIFY**): `fn only_in_walk(tip, hidden)` privada al crate; `count_only_in` (`:579-597`) pasa a usarla sin cambiar su resultado
 - `crates/git/src/lib.rs` (**MODIFY**): `pub mod lane;` y una línea en el doc comment de la frontera ("[`lane`] lista los commits de una rama sobre la base, para el grafo")
 
 **Reglas**
-- Recorrido según D4: `rev_walk([head]).with_hidden([base_tip]).use_commit_graph(false)`, ordenado por fecha de commit, más reciente primero. Se guardan los primeros `max_commits`; el resto solo se cuenta hasta `max_walk` (`Count::Exact` o `Count::AtLeast`, `reader.rs:148`).
+- Recorrido según D4 con `only_in_walk(head, base_tip)`, la misma que usa `count_only_in`, ordenado por fecha de commit, más reciente primero. Se guardan los primeros `max_commits`; el resto solo se cuenta hasta `max_walk` (`Count::Exact` o `Count::AtLeast`, `reader.rs:148`).
 - `merge_base`: el primero de `merge_bases(head, base_tip)`. Vacío → `Err(LaneGap::NoMergeBase)`; no se recorre nada.
 - Por commit: `summary` = bytes del mensaje hasta el primer `\n`, cortados a `max_summary_bytes` en límite de carácter UTF-8 tras `from_utf8_lossy`; `committed_s` de la firma del committer; `merge` = dos o más padres. Nunca autor ni correo (D6).
 - `stop()` se mira cada 64 commits; si devuelve `true`, `Err(LaneGap::TooSlow)`: nunca una ventana parcial presentada como completa.
@@ -233,14 +234,15 @@ T001 → {T002, T005} → T006 (tras T005) → T003 (tras T002 y G1), T004 (tras
 **Objetivo.** El daemon responde los carriles de un repo a la conexión que los pidió, sin bloquear su lector ni el stream.
 
 **Ubicación.**
-- `crates/core/src/channel/graph.rs` (**CREATE**): resolver repo, base y worktrees en el estado del motor; llamar a `lane` por carril; mapear a `gitraptor_api::graph`
+- `crates/core/src/channel/graph.rs` (**CREATE**): resolver repo, base y worktrees en el estado del motor; llamar a `lane` por carril; mapear a `gitraptor_api::graph`; caché por carril (D9)
 - `crates/core/src/channel/mod.rs` (**MODIFY**): `mod graph;`
 - `crates/core/src/channel/conn.rs` (**MODIFY**): brazo `GRAPH_LANES` en `dispatch` (`:703`), junto a los de DS-012
 
 **Reglas**
 - El brazo: `repo_id` desconocido → `NOT_FOUND`. Si no, registra el token en `conn.queries` y encola en `ctx.query` (DS-012 D2, D3); en vuelo o cola llena → `query-busy`. Conexión MCP → `not_found` por `mcp: false` (`offered`, `conn.rs:674`).
-- El trabajo: base con la fuente de `repo_base` (`daemon/mod.rs:1293`). No confirmada, inválida o sin ref → `base: NotComputable {reason}` y `lanes` vacío (D5). Si no, `base_tip` con `resolve_ref`. Repo no listo → `NotComputable {reason: repo-unavailable}`.
+- El trabajo: base del `BaseBranchView` del repo en el estado del motor que publica `engine.snapshot` (D5). No confirmada, inválida o sin ref → `base: NotComputable {reason}` y `lanes` vacío (D5). Si no, `base_tip` con `resolve_ref`. Repo no listo → `NotComputable {reason: repo-unavailable}`.
 - Carriles según D3, en el orden de `engine.snapshot`; la TUI los reordena (D3). Hasta 32 (`cut: lanes`, `lanes_total`). Cada uno abre su worktree con `RepoReader::open` (sin descubrimiento hacia arriba) y lee `head()`. Worktree no disponible → `LaneState::NotComputable {reason: worktree-unavailable}`; rama sin commits → `no-commits`; `LaneGap` → su motivo; `ReadError` → `unreadable`.
+- Caché por carril (D9): clave `(oid de HEAD, punta de la base)`; un acierto no recorre nada. Se vacía al cambiar la base y nunca pasa de los topes de D12 (≤ 560 KiB por repo). Vive en `ServerCtx` con el canal y no se persiste.
 - Plazo de 2 s desde que empieza el trabajo; pasado, los carriles que faltan salen `too-slow`. Tamaño serializado ≤ 768 KiB: si no cabe, se quitan commits del final de los carriles más largos y `cut: bytes`.
 - Al terminar: token cancelado → `query-cancelled`; si no, `Response::ok(id, GraphLanes)` al `Outbox`. La respuesta no pasa por el logger ni por la auditoría (como DS-012 T003). Los logs llevan `repo_id`, duración, carriles y `cut`.
 
@@ -276,12 +278,12 @@ T001 → {T002, T005} → T006 (tras T005) → T003 (tras T002 y G1), T004 (tras
 - `apps/cli/src/model.rs` (**MODIFY**): `Ui.graph: Option<GraphState>`, `RepoView.base_confirmed: bool`, `EngineReplica.graph: bool`, `ConnEvent::Graph(bool)`, `EngineMsg::Graph`, `Cmd::Graph`, `Notice::GraphUnsupported`
 - `apps/cli/src/present/ingest.rs` (**MODIFY**): `repo()` (`:53`) rellena `base_confirmed` con `snapshot.repo.base.status == BaseStatusView::Confirmed`
 - `apps/cli/src/present/i18n.rs` (**MODIFY**): `Text::KeyGraph` y el texto de `GraphUnsupported`, en en y es
-- `apps/cli/src/tui/update.rs` (**MODIFY**): `Action::Graph`; con `Ui.graph` abierto, `Up`/`Down`/`Later`/`Graph` van a `graph::scroll`/`graph::close`; `EngineMsg::Graph` a `graph::apply_reply`; `EngineMsg::{Snapshot, Event}` del repo a `graph::mark_stale` (D9)
+- `apps/cli/src/tui/update.rs` (**MODIFY**): `Action::Graph`; con `Ui.graph` abierto, `Up`/`Down`/`Later`/`Graph` van a `graph::scroll`/`graph::close`; `EngineMsg::Graph` a `graph::apply_reply`; `EngineMsg::{Snapshot, Event}` del repo a `graph::mark_stale` solo si es un `git.event` o cambian rama, divergencia, base o conjunto de worktrees (D9)
 
 **Reglas**
 - `g` sin repo en pantalla no hace nada. Motor sin `graph.lanes` → `Notice::GraphUnsupported` y ningún `Cmd` (D11). Si no, `Ui.graph = Some(Loading { ticket })` y `Cmd::Graph`.
 - `Esc` o `g` con la vista abierta: `Ui.graph = None` y, si hay petición en vuelo, `Cmd::CancelQuery`.
-- `mark_stale` marca `stale`. `tick` (en cada `update`, con el reloj monótono de la TUI) emite `Cmd::Graph` si `stale`, no hay petición en vuelo y pasó `REFRESH_MIN` desde la última (D9).
+- `mark_stale` marca `stale`. `tick` (en cada `update`, con el reloj monótono de la TUI) emite `Cmd::Graph` si `stale`, no hay petición en vuelo y pasó `max(REFRESH_MIN, 2 × last_duration)` desde la última (D9). `apply_reply` guarda `last_duration` (de la petición a la respuesta).
 - `apply_reply`: un `ticket` que no es el actual se descarta; `Ok` sustituye el resultado y conserva el ancla de D9; `busy` deja `stale` para el siguiente `tick`; `lost` y `refused` muestran su mensaje y conservan el último resultado si lo hay.
 - `q` sigue saliendo con la vista abierta.
 
@@ -304,7 +306,7 @@ T001 → {T002, T005} → T006 (tras T005) → T003 (tras T002 y G1), T004 (tras
 **Reglas**
 - **Panel**: un `LaneModel` por carril (D3) en el orden de la flota. `owner` según D8; `ahead`/`behind` de `DivergenceView::Counted` (con `exact: false`, la cifra con `+`); `conflict: false` (lo cablea US-CKP-006). `base`: `Base::Found(nombre)` con base confirmada; si no, `Base::Missing(mensaje de D5)` y `lanes` vacío. `GraphModel` y `graph_lanes.rs` no cambian.
 - **Vista**: título "grafo de shop sobre main · a las 14:03:12" y, con `stale` o petición en vuelo, "actualizando…". Por carril, una cabecera con el glifo de carril en su color, "feat-pagos · claude-1" y "72 commits desde a1b2c3d"; luego una fila por commit: nodo en el color del carril, hash de 7, asunto, "sin atribuir" en tenue (D7) y la hora relativa con `Text::Ago`; `merge` → "(merge)". Al final, "22 más" o "al menos N más" en tenue (D13). Carril no calculable → su cabecera y el motivo ("no disponible", "sin commits", "sin merge-base con main", "tardó demasiado", "no se pudo leer"). `cut` → "truncado: más de 32 carriles" / "truncado: respuesta demasiado grande".
-- Base no calculable: ningún carril, solo el mensaje de D5, exacto: "Rama base develop no encontrada: no calculable".
+- Base no calculable: ningún carril, solo el mensaje de D5, exacto: "Rama base develop no encontrada: no calculable"; sin confirmar, "Base main sin confirmar: confirma la rama base para ver los carriles" y la acción con `raptor guard confirm`.
 - Rutas, ramas y asuntos solo como `SafeText` (`SafeText::from_untrusted`, SEC-12). Cadenas enteras en el catálogo, sin concatenar frases. Solo tokens (`agent.n`, `git.branch.base`, `text.muted`, `status.warning`) y glifos de `Glyphs`.
 
 - **Depende:** T005
@@ -424,6 +426,7 @@ pub const REFRESH_MIN: std::time::Duration = std::time::Duration::from_secs(1);
 pub struct GraphState {
     pub in_flight: Option<u64>,           // ticket
     pub last_request: Option<std::time::Instant>,
+    pub last_duration: std::time::Duration,   // espaciado de D9
     pub stale: bool,
     pub shown: Option<Shown>,             // último resultado, ya saneado
     pub failure: Option<QueryFailure>,
@@ -505,7 +508,8 @@ _No aplica — los topes son constantes de GitRaptor (§ Valores numéricos); no
 | Asunto por commit | ≤ 256 bytes | ⚠️ **ASSUMPTION** (D6) |
 | Plazo por consulta | 2 s | DS-US-CKP-012 D4 |
 | Respuesta serializada | ≤ 768 KiB | DS-US-CKP-012 D4; `MAX_MESSAGE_BYTES` 1 MiB |
-| Refresco mínimo de la vista | 1 s | ⚠️ **ASSUMPTION** (D9); el orden de NFR-04 (500 ms p95) |
+| Espaciado del refresco de la vista | `max(1 s, 2 × última duración)` | ⚠️ **ASSUMPTION** (D9); ≤ ~50 % del pool de DS-012 D4 |
+| Caché de carriles por repo | ≤ 560 KiB | D9 y D12 |
 | Comprobación del token | cada 64 commits | ⚠️ **ASSUMPTION** |
 | Nodos por carril en el panel | 6 | `MAX_NODES` (`graph_lanes.rs:51`), sin cambio |
 | Altura mínima del panel | 6 filas | `GRAPH_MIN` (`layout.rs:23`), sin cambio |
@@ -549,9 +553,9 @@ Repo `shop` con `gitraptor_testkit::Fixture`: `main` confirmada y sacada en el w
 
 **Daemon (`crates/core/tests/graph_query.rs`):** `lanes_total_matches_the_ahead_of_the_stream`; `unconfirmed_base_has_no_lanes`; `the_base_worktree_is_not_a_lane`; `unavailable_and_unborn_worktrees_are_lanes_with_a_reason`; `cancel_answers_query_cancelled`; `mcp_connection_does_not_see_graph_lanes`; `responses_are_never_logged_nor_persisted` (asuntos con un token plantado; gitleaks sobre perfil y logs con 0 hallazgos); `limits_cut_and_never_fail` (`lanes`, `bytes`, plazo → `too-slow`).
 
-**Git (`crates/git`):** `lane_walks_head_minus_base_newest_first`, `lane_total_is_exact_until_the_walk_limit`, `lane_without_merge_base_is_a_gap`, `summary_is_the_first_line_cut_on_a_char_boundary`, `commit_graph_file_is_not_used` (un `commit-graph` falso en `objects/info` no cambia el resultado), `repo_intact::lane_writes_nothing`.
+**Git (`crates/git`):** `lane_walks_head_minus_base_newest_first`, `lane_total_is_exact_until_the_walk_limit`, `lane_without_merge_base_is_a_gap`, `summary_is_the_first_line_cut_on_a_char_boundary`, `lane_total_equals_count_only_in` (mismo `only_in_walk`, mismo total que el ↑), `repo_intact::lane_writes_nothing`.
 
-**TUI (unidad):** `tui::graph::tests::refresh_waits_one_second_and_one_in_flight`, `tui::graph::tests::anchor_survives_new_commits_on_top`, `tui::graph::tests::a_reply_for_an_old_ticket_is_dropped`, `tui::graph::tests::closing_while_loading_cancels`, `present::graph::tests::panel_follows_fleet_order_and_session_color`, `present::graph::tests::summaries_with_controls_are_sanitized` (`\x1b]52;…`, RLO, U+2028), `present::graph_text::tests::every_text_has_both_languages`.
+**TUI (unidad):** `tui::graph::tests::refresh_spacing_is_twice_the_last_duration_and_one_in_flight`, `tui::graph::tests::a_snapshot_without_changes_does_not_mark_stale`, `graph_query::second_refresh_hits_the_lane_cache`, `tui::graph::tests::anchor_survives_new_commits_on_top`, `tui::graph::tests::a_reply_for_an_old_ticket_is_dropped`, `tui::graph::tests::closing_while_loading_cancels`, `present::graph::tests::panel_follows_fleet_order_and_session_color`, `present::graph::tests::summaries_with_controls_are_sanitized` (`\x1b]52;…`, RLO, U+2028), `present::graph_text::tests::every_text_has_both_languages`.
 
 ### 9.5 Plataformas
 
@@ -562,10 +566,10 @@ macOS en el PR. Linux y Windows: *Pendiente: etapa de validación multiplataform
 ## Gate de seguridad
 
 - [ ] **Texto no confiable (SEC-12, NFR-02)**: rutas, ramas y asuntos llegan como `Untrusted`/`UntrustedName` y se pintan solo como `SafeText` tras el saneado de ADR-CKP-003 § 8. El modelo y la vista no tienen `Untrusted` (`tui_boundaries.rs`).
-- [ ] **Sin ejecución (NFR-02, SEC-09)**: ni shell ni `git` hijo; `gix` sin filtros y sin `commit-graph` (D4). El único parámetro es un `repo_id` opaco.
+- [ ] **Sin ejecución (NFR-02, SEC-09)**: ni shell ni `git` hijo; `gix` sin filtros; el recorrido es el mismo `only_in_walk` del ↑ (D4). El único parámetro es un `repo_id` opaco.
 - [ ] **Solo lectura (NFR-01)**: el lector no escribe índice, refs, config ni objetos; `repo_intact::lane_writes_nothing`.
 - [ ] **Fuera del MCP**: `graph.lanes` con `mcp: false`; no pasa por el bus, el logger, la auditoría ni el perfil. Residuo G3.
-- [ ] **Denegación de servicio (SEC-08)**: la consulta comparte la cuota de DS-012 (1 en vuelo por conexión, cola de 4), plazo de 2 s, topes de D12, refresco ≥ 1 s y el rate limit de la conexión.
+- [ ] **Denegación de servicio (SEC-08)**: la consulta comparte la cuota de DS-012 (1 en vuelo por conexión, cola de 4), plazo de 2 s, topes de D12, espaciado y caché de D9 y el rate limit de la conexión.
 
 ---
 
@@ -601,18 +605,18 @@ No aplicadas por esta DS; las aplica T007.
 | N1 | El panel cuenta desde el stream y la vista desde la consulta: pueden diferir un instante tras un commit. El ↑ del panel y el total de la vista cuentan el mismo conjunto (D4), así que convergen en el siguiente refresco | Ninguna | — |
 | N2 | El dispatch de `conn.rs` es compartido (guía, § Qué sigue siendo compartido): T003 añade un brazo junto a los de DS-012 | Rebasar con cuidado | Orquestador |
 | N3 | `QueryFailure`: si DS-012 deja `DiffFailure` con `Unavailable(DiffUnavailable)`, T004 lo generaliza o crea su enum; decidir al rebasar sobre DS-012 sin cambiar el comportamiento | Ninguna | Worker de T004 |
-| N4 | Los topes de D12 no están medidos; si INF-GRP-002 muestra que 32 × 50 filas pasan el presupuesto de pintado (100 ms p95), se bajan aquí | Medir en el banco | Arquitecto |
+| N4 | Los topes de D12 no están medidos; si INF-GRP-002 muestra que 32 × 50 filas pasan el presupuesto de pintado (100 ms p95), se bajan aquí. Peor caso a medir (Arquitecto): 32 carriles × recorrido de 10.000 commits en 2 s; con la caché de D9 solo se paga la primera vez | Medir en el banco | Arquitecto |
 
 ### Preguntas abiertas
 
 | ID | Pregunta | Por qué importa | Para |
 |----|----------|-----------------|------|
-| Q-CKP-49 | Con la base sin confirmar, ¿el grafo no muestra carriles ("Base main sin confirmar: no calculable", D5) o los dibuja contra la base resuelta marcada "sin confirmar"? | BR-CKP-CALC-004 dice "base confirmada" y DS-012 D5 hace lo mismo con el diff; la fila de la flota sí muestra ↑↓ contra la base resuelta, y el panel vacío puede extrañar en un repo recién observado | PO |
-| Q-CKP-50 | ¿Se espera a que motor-local publique commit→evento (D7) o se une ya cada commit con el evento `commit` de su `new_commit`, sabiendo que los commits intermedios de un rebase o un `--amend` quedarían "sin atribuir"? | Con la unión, la mayoría de commits de un agente saldrían con su actor desde el MVP; sin ella, todos dicen "sin atribuir", que es lo que pide el escenario 3 | PO y Arquitecto |
-| Q-CKP-51 | ¿Valen 50 commits por carril (S-CKP-2) y "N más" sin desplegar (D13)? | Un agente con 200 commits solo enseña una cuarta parte; desplegar obliga a paginar la consulta | PO (diseño) |
+| ~~Q-CKP-49~~ | ~~Con la base sin confirmar, ¿el grafo no muestra carriles o los dibuja contra la base resuelta marcada "sin confirmar"?~~ **Cerrada.** Decisión del orquestador (2026-10-28), validada por PO: sin carriles hasta confirmar la base, con el texto "Base main sin confirmar: confirma la rama base para ver los carriles" y cómo confirmarla (D5) | BR-CKP-CALC-004 dice "base confirmada" | PO |
+| ~~Q-CKP-50~~ | ~~¿Se espera a que motor-local publique commit→evento o se une ya cada commit con el evento `commit` de su `new_commit`?~~ **Cerrada.** Decisión del orquestador (2026-10-28), validada por Arquitecto y PO: se espera a motor-local (D7); la capacidad aditiva `graph.commit-actor` queda reservada | Los intermedios de un rebase o un `--amend` saldrían sin atribuir sin decir por qué | PO y Arquitecto |
+| ~~Q-CKP-51~~ | ~~¿Valen 50 commits por carril (S-CKP-2) y "N más" sin desplegar (D13)?~~ **Cerrada.** Decisión del orquestador (2026-10-28), validada por PO: se aceptan 50 commits y "N más" sin desplegar | Desplegar obligaría a paginar la consulta | PO (diseño) |
 
 ## Estado
 
-- Hecho: Dev Spec en `draft` con T001 a T007; decisiones D1 a D13 pendientes de validar por Arquitecto y PO.
-- Pendiente: G1 (DS-US-CKP-012 T003 a T005 en `main`) para T003 y T004; Q-CKP-49 a Q-CKP-51.
+- Hecho: Dev Spec `approved` con T001 a T007; D1 a D13 validadas por Arquitecto y PO (2026-10-28), D4, D5 y D9 con cambios; Q-CKP-49 a Q-CKP-51 cerradas.
+- Pendiente: G1 (DS-US-CKP-012 T003 a T005 en `main`; el brazo de `conn.rs::dispatch`, `:703`, es punto compartido y DS-012 entra primero) para T003, T004 y T007; medir el peor caso de N4.
 - Siguiente paso: T001 en rojo; T002 y T005/T006 (panel) pueden ir antes que DS-012.
