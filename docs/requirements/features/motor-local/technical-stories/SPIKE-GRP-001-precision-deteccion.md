@@ -8,7 +8,7 @@ domain: GRP
 priority: high
 complexity: medium
 created: 2026-10-03
-updated: 2026-10-08
+updated: 2026-10-28
 related:
   adrs: [ADR-GRP-012, ADR-GRP-013, ADR-GRP-005]
   stories: [US-GRP-007, US-GRP-008, US-GRP-009]
@@ -109,6 +109,14 @@ tags: [motor-local, spike, deteccion, atribucion, claude-code, dogfooding, preci
 
 - **Lectura**: en esta suite, sin hooks, S3 pierde la carrera en ~5 % de los commits rápidos y no en el 75 %, y la pista cubre esos casos. La ventaja de S4 sigue siendo la misma: elimina la carrera.
 - **Riesgo real que deja ver (sin cambio en esta rama)**: un `git` de solo lectura de otro proceso en el repo justo después del commit del agente (la extensión de Git de un editor o el prompt de la terminal) produce el mismo `ambiguous`: el commit queda sin atribuir y sin pista. Cuántas veces pasa se medirá en el dogfooding real (log `s3_evidence` con `outcome=ambiguous`). Relajar la regla es una decisión del PO o de Rene.
+
+## Enmienda 2026-10-28 (Q52): S2a y S2b no aplican al MVP
+
+**Decisión del orquestador (2026-10-28), validada por Arquitecto y PO (Q52).** Origen: [DS-US-GRP-008](../dev-specs/US-GRP-008-dev-spec.md) G1 y la Enmienda (2026-10-28) de ADR-GRP-012.
+
+- **S2a, S2b, la comparación S2a frente a S2b (PQ-2), la robustez del adaptador y la comprobación de privacidad de transcripts no aplican al MVP.** El adaptador de transcripts pasa a un enabler posterior al MVP, que se decide con los datos de este spike. La validación del MVP es la de S1 + S3 ± S4 que ya hacía el cambio del 2026-10-05.
+- **"0 cambios humanos atribuidos a Claude Code"** se cumple por construcción para los cambios sin commitear: en el MVP todos figuran "sin atribuir" (Q52, Q53). Para los commits se sigue midiendo, y el log `s3_evidence` gana el contador `sessions_not_writing` (DS-US-GRP-008 D4): cuántos commits dejan de atribuirse por S3 porque el `git` de la sesión no escribía.
+- La meta del 90 % se mide sobre sesiones (Q9) y no cambia.
 
 ## Estado de la implementación (2026-10-08)
 

@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-06
 date: 2026-10-06
 created: 2026-10-06
-updated: 2026-10-06
+updated: 2026-10-28
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
@@ -171,3 +171,18 @@ Cada cosa nueva se **declara en un archivo propio de su módulo** y se **registr
 | `-33160` | `attribution` | Reservado | DS-US-GRP-010 |
 
 Si dos PRs toman el mismo bloque, el test de bloques disjuntos falla al rebasar: el segundo toma el siguiente libre y actualiza esta tabla y su Dev Spec.
+
+## Enmienda (2026-10-28, US-GRP-008, US-GRP-011 y US-GRP-016: capacidades nuevas)
+
+**Decisión del orquestador (2026-10-28), validada por Arquitecto.** Origen: las Dev Specs de la tabla. Anota las capacidades que declaran, como la Enmienda (2026-10-27) anota los bloques de errores, para que la siguiente Dev Spec no repita un nombre. No cambia ninguna regla. El `status` sigue en `accepted`.
+
+| Capacidad | Archivo del módulo | Qué cambia de forma | Quién la pide | Fuente |
+|---|---|---|---|---|
+| `observation.change-attribution` | `crates/api/src/methods/observation.rs` | `WorktreeView.changes_actor` (actor de los cambios sin commitear; en el MVP, siempre `unattributed`) | CLI y TUI de `crates/core`; no `raptor-mcp` | DS-US-GRP-008 D2 |
+| `sessions.shared` | `crates/api/src/methods/sessions.rs` | `SessionView.presence` (`WorktreePresenceView`: compartido y sesiones presentes del worktree) | CLI y TUI; no `raptor-mcp` | DS-US-GRP-011 D2, D5 |
+| `engine.base-pending` | `crates/api/src/methods/engine.rs` | `BaseBranchView.pending` (`PendingBaseView`) | CLI y TUI; no `raptor-mcp` | DS-US-GRP-016 D4 |
+
+Dos reglas que las tres cumplen y que conviene dejar escritas:
+
+- Un campo nuevo dentro de un tipo `deny_unknown_fields` se quita, para la conexión sin la capacidad, en **todas** sus salidas. `RepoView` sale hoy por `repo.add`, `engine.snapshot` y `scope.snapshot`, que ya pasan por `shape_special_states` en `conn.rs`, y un evento sale por `Outbox`. Si se olvida una, un cliente anterior falla al deserializar.
+- Los tipos siguen en `crates/api/src/messages.rs`, que sigue compartido (§ Qué sigue siendo compartido de la guía). Las tres Dev Specs tocan ahí tipos distintos y se mergean en serie.

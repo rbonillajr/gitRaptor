@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-09
+updated: 2026-10-28
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
@@ -331,3 +331,17 @@ En los dos casos, un `git` ajeno de otro worktree podría crear un commit en la 
 **Presentación**: `raptor timeline` muestra la pista `inferred` igual que `raptor events` (US-GRD-019, § 2 y § 3 de la Enmienda de autoría).
 
 Implementación y tests: TS-GRP-008.
+
+## Enmienda (2026-10-28, US-GRP-008: S2 fuera del MVP y S3 solo con un `git` que escribe)
+
+**Decisión del orquestador (2026-10-28), validada por Arquitecto y PO (Q52, Q53, Q54)** para el alcance; la regla de S3, **validada por Arquitecto**. Origen: [DS-US-GRP-008](../../requirements/features/motor-local/dev-specs/US-GRP-008-dev-spec.md) D1, D3, D4 y D5. El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| **S2 (S2a y S2b) fuera del MVP.** La configuración del MVP es la degradación "solo procesos" (alternativa 3): S1 + S3 ± S4 y el registro. El adaptador de transcripts pasa a un enabler posterior al MVP, que se decide con los datos de SPIKE-GRP-001. Sin S2b no hay evidencia por archivo, así que todo cambio sin commitear figura "sin atribuir" (`WorktreeView.changes_actor`), también el de Claude Code y el de un "otro agente" registrado. El registro de la regla 3 atribuye su sesión y sus eventos de Git, no sus cambios sin commitear | Señales (S2a, S2b), Regla de combinación (puntos 2, 3 y 5), Adaptador de transcripts (S2) | Q52, Q53 |
+| **S3 solo con un `git` que escribe.** Un `git` de la sesión es evidencia de un evento solo si empezó antes del aviso, su cwd está en el worktree del evento, **su subcomando puede mover una ref o el `HEAD`** (`commit`, `merge`, `rebase`, `cherry-pick`, `revert`, `am`, `pull`, `reset`, `checkout`, `switch`, `bisect`, `branch`, `update-ref`, `symbolic-ref`, `stash`, `tag`, `push`, `worktree`; `fetch` no, porque no produce eventos) **y no redirige su destino** (la misma lectura de la Enmienda 2026-10-09). Lo que no se puede leer no cuenta. Cierra el hueco por el que un commit escrito sin `git` visible (un editor que escribe en proceso, o un `git --git-dir` con cwd fuera del repo) salía de Claude Code junto a un `git` de solo lectura de la sesión | S3, regla 2 | DS-US-GRP-008 D4 |
+| **Consecuencia en Windows**: sin lectura del argv no se sabe si el `git` escribe, así que S3 no atribuye. Un commit de Claude Code se atribuye allí solo con S4 (Guardrails instalado) o queda "sin atribuir" con la pista. No toca la meta del 90 %, que se mide sobre sesiones (Q9) | S3, Consecuencias | DS-US-GRP-008 D4 |
+| **La pista `single-session` no es atribución** (Q54): el actor sigue "sin atribuir", la pista lleva su propia etiqueta y no cuenta para el undo por agente, la meta del 90 % ni la comprobación de autoría. PO y Arquitecto aceptan el riesgo residual que la Enmienda (2026-10-06, carrera S3) dejaba a Rene; Rene puede vetarlo | Enmienda (2026-10-06, carrera S3) | Q54 |
+| **Validación**: la variante "metadatos" (S2b) de la aportación por señal y la fila de la Enmienda (2026-10-05) "S2a y S2b quedan abiertas hasta que US-GRP-008 conecte el adaptador" dejan de aplicar al MVP. SPIKE-GRP-001 mide S1 + S3 ± S4 y el contador `sessions_not_writing` | Validación, Enmienda (2026-10-05) | SPIKE-GRP-001 (Enmienda 2026-10-28) |
+
+El comentario del hueco de GitKraken en `detect/mod.rs` deja de describir un riesgo de atribuir a Claude Code un cambio humano. Sigue abierto en TD-GRP-004 que un `git` de la sesión que escribe a la vez que el commit humano gane (regla 6).
