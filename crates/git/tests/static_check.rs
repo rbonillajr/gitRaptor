@@ -59,6 +59,41 @@ mod repo_intact {
             "process launch outside invoke.rs: {offenders:?}"
         );
     }
+
+    /// TS-CKP-001 T010 (SEC-09, L-04): the dry merge never reaches the merge platform, which
+    /// would read drivers and attributes from the repository, nor the attribute stack.
+    #[test]
+    fn dry_merge_never_calls_the_merge_platform_nor_the_attribute_stack() {
+        const FORBIDDEN: &[&str] = &[
+            "merge_trees",
+            "merge_commits",
+            "merge_resource_cache",
+            "tree_merge_options",
+            "Repository::attributes",
+            ".attributes(",
+            ".attributes_only(",
+            ".attributes_with_",
+        ];
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("dry_merge");
+        let mut files = Vec::new();
+        rust_files(&dir, &mut files);
+        assert!(!files.is_empty(), "crates/git/src/dry_merge has no sources");
+        let mut offenders = Vec::new();
+        for file in files {
+            let text = std::fs::read_to_string(&file).unwrap();
+            for p in FORBIDDEN {
+                if text.contains(p) {
+                    offenders.push(format!("{}: {p}", file.display()));
+                }
+            }
+        }
+        assert!(
+            offenders.is_empty(),
+            "the dry merge calls what reads the repository's merge rules: {offenders:?}"
+        );
+    }
 }
 
 /// ADR-TMC-002 § 1 (Enmienda 2026-10-04) and Validación 1: gitoxide writes only in the store

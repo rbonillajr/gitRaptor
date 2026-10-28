@@ -29,6 +29,10 @@ pub const PROGRAMS: &[&str] = &[
     "hook-post-checkout",
 ];
 
+/// Every program armed by [`Canary::arm_extended`] on top of [`PROGRAMS`]: a custom merge driver
+/// (`merge.<x>.driver`, reached through `merge=<x>` in every place Git reads attributes from).
+pub const MERGE_PROGRAMS: &[&str] = &["merge-driver"];
+
 /// An armed fixture. Markers live in `<root>/markers`, scripts in `<root>/bin`.
 pub struct Canary {
     pub f: Fixture,
@@ -41,6 +45,21 @@ impl Canary {
     /// filter, so the blob differs from the working file (as with an LFS pointer), and its stat
     /// is left dirty: Git would run the filter to compare contents.
     pub fn arm(f: Fixture) -> Self {
+        Self::arm_with(f, false)
+    }
+
+    /// [`Canary::arm`] plus the merge surface (TS-CKP-001, SEC-09, L-04): `merge.evil.driver` is a
+    /// marker program and `merge=evil` is set in the tree (committed `.gitattributes`), the index
+    /// (a different staged version), the working tree (a third one), `info/attributes` and
+    /// `core.attributesFile`; `refs/replace/*` and `info/grafts` rewrite history. Nothing that
+    /// merges may run the driver nor honor the rewritten history. Do all `git` work of the test
+    /// (worktrees, branches, commits) before calling it: afterwards every `git` runs the armed
+    /// hooks. A merge driver marker is in [`MERGE_PROGRAMS`].
+    pub fn arm_extended(f: Fixture) -> Self {
+        Self::arm_with(f, true)
+    }
+
+    fn arm_with(f: Fixture, merge: bool) -> Self {
         let bin = f.root.join("bin");
         let markers = f.root.join("markers");
         std::fs::create_dir_all(&bin).unwrap();
@@ -49,12 +68,20 @@ impl Canary {
         let f = &c.f;
 
         // Commit a.txt through a real clean filter, before arming anything.
-        f.write(".gitattributes", "*.txt filter=evil diff=evil\n");
+        let tree_attrs = if merge {
+            "*.txt filter=evil diff=evil\n*.dat merge=evil\n*.cfg merge=evil\n"
+        } else {
+            "*.txt filter=evil diff=evil\n"
+        };
+        f.write(".gitattributes", tree_attrs);
         f.write("a.txt", "alpha\n");
         f.git(&["config", "filter.evil.clean", "tr a-z A-Z"]);
         f.git(&["add", ".gitattributes", "a.txt"]);
         f.git(&["commit", "-q", "-m", "filtered"]);
         c.signed_commit_on_main();
+        if merge {
+            c.rewrite_history_and_attributes(tree_attrs);
+        }
 
         c.config("filter.evil.clean", &c.arm_program("filter-clean", "cat"));
         c.config("filter.evil.smudge", &c.arm_program("filter-smudge", "cat"));
@@ -74,6 +101,13 @@ impl Canary {
         c.config("pager.log", &c.arm_program("pager", "cat"));
         c.config("credential.helper", &c.arm_program("credential", "exit 0"));
         c.config("core.fsmonitor", &c.arm_program("fsmonitor-hook", "exit 1"));
+        if merge {
+            c.config(
+                "merge.evil.driver",
+                &c.arm_program("merge-driver", "exit 1"),
+            );
+            c.config("merge.evil.name", "evil");
+        }
         let event = c.markers.join("trace2-event").display().to_string();
         let normal = c.markers.join("trace2-normal").display().to_string();
         c.config("trace2.eventTarget", &event);
@@ -121,6 +155,34 @@ impl Canary {
             .collect();
         out.sort();
         out
+    }
+
+    /// The merge surface of [`Canary::arm_extended`], written before any program is armed.
+    fn rewrite_history_and_attributes(&self, tree_attrs: &str) {
+        let f = &self.f;
+        // Index: a staged version of `.gitattributes`; working tree: a third one.
+        let staged = format!("{tree_attrs}*.bin merge=evil\n");
+        f.write(".gitattributes", &staged);
+        f.git(&["add", ".gitattributes"]);
+        f.write(".gitattributes", &format!("{staged}*.dat -merge\n"));
+        // `info/attributes` and `core.attributesFile`.
+        let info = f.repo.join(".git/info");
+        std::fs::create_dir_all(&info).unwrap();
+        std::fs::write(info.join("attributes"), "* merge=evil\n").unwrap();
+        let global = self.bin.join("attributes");
+        std::fs::write(&global, "* merge=evil\n").unwrap();
+        f.git(&["config", "core.attributesFile", global.to_str().unwrap()]);
+        // `refs/replace/*` (the filtered commit is replaced by its grandparent) and a graft that
+        // cuts the signed tip from its history.
+        let tip = f.git(&["rev-parse", "HEAD"]).trim().to_owned();
+        let filtered = f.git(&["rev-parse", "HEAD~1"]).trim().to_owned();
+        let older = f.git(&["rev-parse", "HEAD~2"]).trim().to_owned();
+        let root = f
+            .git(&["rev-list", "--max-parents=0", "HEAD"])
+            .trim()
+            .to_owned();
+        f.git(&["replace", "-f", &filtered, &older]);
+        std::fs::write(info.join("grafts"), format!("{tip} {root}\n")).unwrap();
     }
 
     /// A commit with a `gpgsig` header on `main`, so `log.showSignature` would call `gpg`.

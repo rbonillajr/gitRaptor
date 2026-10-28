@@ -41,6 +41,14 @@ pub struct PredictConfig {
     pub merger: PredictMerger,
 }
 
+impl PredictConfig {
+    /// The configuration of a real daemon (`for_current_user`, `run_process`): the worker is
+    /// this binary, resolved once by `current_exe`; `Off` when it cannot be resolved.
+    pub fn for_daemon() -> Self {
+        unimplemented!("T006")
+    }
+}
+
 /// The other side of a pair: the base branch or another worktree.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum PairSide {

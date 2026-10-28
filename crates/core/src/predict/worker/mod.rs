@@ -27,6 +27,8 @@ pub const WORKER_RSS_POLL: Duration = Duration::from_millis(20);
 pub const WORKER_IDLE_EXIT: Duration = Duration::from_secs(60);
 /// Largest frame either side accepts.
 pub const MAX_WORKER_FRAME: usize = 4 * 1024 * 1024;
+/// The version the worker announces in its first frame and the daemon expects.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// `rewrites_limit` of the second job of a pair with modify/delete or rename conflicts.
 pub const REWRITES_LIMIT_ESCALATED: usize = 100_000;
 
@@ -69,6 +71,13 @@ pub struct WorkerMerger {
 impl WorkerMerger {
     pub fn new(config: WorkerConfig) -> Self {
         let _ = config;
+        unimplemented!("T006")
+    }
+
+    /// A merger that expects the worker to answer `version` in its first frame instead of
+    /// [`VERSION`] (tests of the mismatch: relaunched once, then `Unavailable`).
+    pub fn with_expected_version(config: WorkerConfig, version: &str) -> Self {
+        let _ = (config, version);
         unimplemented!("T006")
     }
 
