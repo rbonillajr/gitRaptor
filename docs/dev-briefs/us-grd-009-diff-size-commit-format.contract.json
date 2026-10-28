@@ -1,0 +1,280 @@
+{
+  "source": {
+    "kind": "devspec",
+    "ref": "docs/requirements/features/guardrails/dev-specs/US-GRD-009-tamano-diff-formato-commit.md"
+  },
+  "suite": {
+    "command": "node tools/test/nextest-junit.mjs"
+  },
+  "layers": {
+    "runtime": {
+      "commands": [
+        {
+          "id": "suite",
+          "cmd": "node tools/test/nextest-junit.mjs"
+        }
+      ],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "criteria": [
+    {
+      "id": "GRD009-DIFF-LIMIT",
+      "statement": "Esc. 1 / D7: con límite 400, un commit del agente de 400 líneas se ejecuta y uno de 1200 no (motivo con «1200» y «400»), también con --no-verify y commit-tree + update-ref; rama, índice y working tree intactos y el mensaje sigue en COMMIT_EDITMSG",
+      "verify": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test guard_us_grd_009 -- --test-threads=4 diff_limit_decides_the_commit",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_009.rs"
+      ]
+    },
+    {
+      "id": "GRD009-FORMAT-DENY",
+      "statement": "Esc. 2: «arreglos varios» con Conventional Commits no se ejecuta; el motivo nombra Conventional Commits, la lista de tipos y un ejemplo válido por la gramática, sin repetir el mensaje",
+      "verify": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test guard_us_grd_009 -- --test-threads=4 an_unformatted_message_is_denied_with_a_valid_example",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_009.rs"
+      ]
+    },
+    {
+      "id": "GRD009-FORMAT-OK",
+      "statement": "Esc. 3: «fix: handle empty branch name» se ejecuta",
+      "verify": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test guard_us_grd_009 -- --test-threads=4 a_formatted_message_is_accepted",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_009.rs"
+      ]
+    },
+    {
+      "id": "GRD009-NOCONFIG",
+      "statement": "Esc. 4: sin límite ni formato en ningún nivel, 5000 líneas con «wip» se ejecutan",
+      "verify": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test guard_us_grd_009 -- --test-threads=4 nothing_is_required_without_configuration",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_009.rs"
+      ]
+    },
+    {
+      "id": "GRD009-ACTOR",
+      "statement": "D3 / Esc. 5: la persona pasa con appliesTo por defecto; con everyone, no",
+      "verify": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test guard_us_grd_009 -- --test-threads=4 the_person_passes_unless_everyone",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_009.rs"
+      ]
+    },
+    {
+      "id": "GRD009-ASK",
+      "statement": "D4: effect ask deniega al agente (ask-unavailable, cuenta en el KPI); la persona con everyone pasa con aviso y no cuenta",
+      "verify": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test guard_us_grd_009 -- --test-threads=4 ask_denies_the_agent_and_warns_the_person",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_009.rs"
+      ]
+    },
+    {
+      "id": "GRD009-SUBCOMMANDS",
+      "statement": "D6: rebase -i que aplasta, reword sin formato y cherry-pick grande se deniegan; fast-forward a rama existente y pull del remoto no",
+      "verify": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test guard_us_grd_009 -- --test-threads=4 every_new_commit_is_evaluated_whatever_the_subcommand",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_009.rs"
+      ]
+    },
+    {
+      "id": "GRD009-MERGES",
+      "statement": "D6/D9: fusión «Merge branch 'x'» pasa sin contar tamaño; un commit normal con «Merge stuff» no",
+      "verify": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test guard_us_grd_009 -- --test-threads=4 merges_are_judged_by_their_message_only",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_009.rs"
+      ]
+    },
+    {
+      "id": "GRD009-GIT-MSGS",
+      "statement": "D9: git revert, commit --fixup y --squash de un commit con formato pasan",
+      "verify": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test guard_us_grd_009 -- --test-threads=4 git_written_messages_pass",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_009.rs"
+      ]
+    },
+    {
+      "id": "GRD009-COUNTING",
+      "statement": "D7: renombrar un archivo de 2000 líneas cuenta 0, un binario cuenta 0 y exclude [Cargo.lock] no cuenta el lockfile",
+      "verify": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test guard_us_grd_009 -- --test-threads=4 renames_binaries_and_exclusions_are_not_lines",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_009.rs"
+      ]
+    },
+    {
+      "id": "GRD009-ALL-REASONS",
+      "statement": "BR-CALC-001: tamaño + formato + ruta prohibida en un commit dan las tres razones en una decisión",
+      "verify": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test guard_us_grd_009 -- --test-threads=4 every_broken_rule_is_named_together",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_009.rs"
+      ]
+    },
+    {
+      "id": "GRD009-PERSONAL-LIMIT",
+      "statement": "US-GRD-010 filas 5 y 6: equipo 400 y local 200 → 200; equipo 400 y local 1000 → 400 con relajación ignorada anotada",
+      "verify": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test guard_us_grd_009 -- --test-threads=4 a_personal_level_only_lowers_the_limit",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_009.rs"
+      ]
+    },
+    {
+      "id": "GRD009-TEAM-FORMAT",
+      "statement": "S-GRD-2 / Q-GRD-51: el formato del equipo no lo cambia un nivel personal; rige el del primer nivel que lo declare (suelo, worktree, personal)",
+      "verify": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test guard_us_grd_009 -- --test-threads=4 the_team_format_is_not_changed_by_a_personal_level",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_009.rs"
+      ]
+    },
+    {
+      "id": "GRD009-LOG",
+      "statement": "D16: cada denegación llega a raptor guard log con su regla y sin nada del mensaje",
+      "verify": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test guard_us_grd_009 -- --test-threads=4 commit_policy_denials_reach_the_decision_log",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_009.rs"
+      ]
+    },
+    {
+      "id": "GRD009-DEGRADED",
+      "statement": "D14: en modo degradado aplican las reglas everyone del suelo, las agents no, y el mínimo sigue",
+      "verify": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test guard_us_grd_009 -- --test-threads=4 degraded_mode_applies_the_floor_rules_for_everyone",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_009.rs"
+      ]
+    },
+    {
+      "id": "GRD009-CAPABILITY",
+      "statement": "D10: capacidad guard.commit-policies en los dos sentidos (sin ella el daemon no aplica nada; el cliente ante un daemon sin ella aplica las reglas everyone del suelo)",
+      "verify": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-core --test us_grd_009 -- --test-threads=4 commit_policies_capability_both_ways",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grd_009.rs"
+      ]
+    },
+    {
+      "id": "GRD009-FLOOR-CONFIRM",
+      "statement": "D2: subir maxLines o añadir exclude en el suelo no relaja hasta confirmar; bajarlo endurece en el acto",
+      "verify": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-core --test us_grd_009 -- --test-threads=4 a_floor_relaxation_waits_for_its_confirmation",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grd_009.rs"
+      ]
+    },
+    {
+      "id": "GRD009-BOUNDS",
+      "statement": "D15: topes (blob, total, archivos, commits): conteo «al menos» cuando ya supera, unverifiable cuando no; nunca se permite por un tope",
+      "verify": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-core --test us_grd_009 -- --test-threads=4 bounds_never_allow",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grd_009.rs"
+      ]
+    },
+    {
+      "id": "GRD009-LAZY-READ",
+      "statement": "D15: con solo commitFormat no se lee ningún árbol; sin reglas aplicables no se lee nada",
+      "verify": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-core --test us_grd_009 -- --test-threads=4 nothing_is_read_that_no_rule_needs",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grd_009.rs"
+      ]
+    },
+    {
+      "id": "GRD009-GRAMMAR",
+      "statement": "D8/D9: gramática de Conventional Commits y mensajes de Git (tipos, mayúsculas, ámbito, !, «: », descripción vacía, segunda línea, 4096 bytes, no UTF-8; fusión, revert/reapply, prefijos anidados); propiedad: nunca entra en pánico",
+      "verify": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-policy --test us_grd_009_commit_policies -- --test-threads=4 grammar_",
+      "layer": "runtime",
+      "tests": [
+        "crates/policy/tests/us_grd_009_commit_policies.rs"
+      ]
+    },
+    {
+      "id": "GRD009-RULES",
+      "statement": "D2–D4/D11: tabla de combinación, exclusiones por regla, appliesTo × actor, effect, una razón por regla incumplida, ninguna razón con texto del mensaje",
+      "verify": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-policy --test us_grd_009_commit_policies -- --test-threads=4 rules_",
+      "layer": "runtime",
+      "tests": [
+        "crates/policy/tests/us_grd_009_commit_policies.rs"
+      ]
+    },
+    {
+      "id": "GRD009-CONFIG",
+      "statement": "D1: formas de policies.diffSize y commitFormat, límites, valores desconocidos al más estricto, policy-not-supported ya no sale (por la API pública de gitraptor-policy)",
+      "verify": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-policy --test us_grd_009_commit_policies -- --test-threads=4 config_",
+      "layer": "runtime",
+      "tests": [
+        "crates/policy/tests/us_grd_009_commit_policies.rs"
+      ]
+    },
+    {
+      "id": "GRD009-NUMSTAT-ORACLE",
+      "statement": "D7/T004: líneas por archivo de fresh_commit_changes iguales a git diff --numstat -M sobre el corpus (añadir, borrar, modificar, CRLF, renombrado exacto y parcial, binario, submódulo, modo, commit raíz, amend) y topes",
+      "verify": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-git --test fresh_commit_changes -- --test-threads=4",
+      "layer": "runtime",
+      "tests": [
+        "crates/git/tests/fresh_commit_changes.rs"
+      ]
+    }
+  ],
+  "constraints": {
+    "deny_paths": [
+      "apps/cli/tests/guard_us_grd_009.rs",
+      "crates/core/tests/us_grd_009.rs",
+      "crates/policy/tests/us_grd_009_commit_policies.rs",
+      "crates/git/tests/fresh_commit_changes.rs",
+      "docs/ARTIFACTS.md",
+      "docs/architecture/decisions/ADR-GRD-008*"
+    ],
+    "allow_dependency_changes": false
+  },
+  "scope": {
+    "projects": [
+      "gitraptor-policy",
+      "gitraptor-git",
+      "gitraptor-api",
+      "gitraptor-core",
+      "gitraptor-cli"
+    ]
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 900000,
+    "suiteTimeoutMs": 2400000
+  },
+  "hops": {
+    "design": {
+      "agent": "main-loop",
+      "model": "sonnet"
+    },
+    "critic": {
+      "agent": "nassa-core:plan-critic",
+      "model": "opus"
+    },
+    "tester": {
+      "agent": "nassa-core:criterion-tester",
+      "model": "sonnet"
+    },
+    "build": {
+      "agent": "nassa-dev-rust:rust-expert",
+      "model": "sonnet"
+    },
+    "review": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "opus"
+    },
+    "conformance": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "sonnet"
+    }
+  }
+}
