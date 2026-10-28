@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: high
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-28
 feature: guardrails
 related:
   context:
@@ -16,6 +16,8 @@ related:
     - US-GRD-001
     - US-GRD-004
     - US-GRD-007
+  specs:
+    - DS-US-GRD-016
 tags:
   - guardrails
   - capa-mcp
@@ -33,12 +35,12 @@ tags:
 
 ## Reglas cubiertas
 
-BR-CONS-002 (misma decisión y motivo en las dos capas) · BR-WF-002 (estados "Solo MCP" y "Completa" y sus transiciones por la allowlist) · BR-AUTH-004 (ninguna herramienta MCP edita la configuración ni decide en la cola) — ver [business-rules.md](../business-rules.md)
+BR-CONS-002 (misma decisión y motivo en las dos capas) · BR-WF-002 (estados "Solo MCP" y "Completa" y sus transiciones por la allowlist) · BR-AUTH-004 (ninguna herramienta MCP edita la configuración ni decide en la cola) · Q-GRD-52 (una operación sin herramienta MCP se cumple con "ninguna herramienta la ejecuta" y la misma decisión con las dos capas) · Q-GRD-53 (el escenario 3 usa un commit en rama protegida) · Q-GRD-54 (los hooks inactivos son un diagnóstico, no un cambio de estado) — ver [business-rules.md](../business-rules.md)
 
 ## Dependencias
 
 - **Historias**: US-GRD-001 (decisión y mínimo seguro), US-GRD-004 (estados de protección por la vía de hooks), US-GRD-007 (permisos del equipo, para el catálogo completo).
-- **Externas**: **bloqueada** por el Servidor MCP F-001-05 (herramientas y allowlist, NFR-02). El esquema del catálogo ya no la bloquea: lo fija ADR-GRP-007, que cerró P8 al aceptarse el 2026-10-04.
+- **Externas**: ya no está bloqueada por el Servidor MCP F-001-05: ADR-MCP-001 está aceptado, la allowlist existe (US-MCP-002) y `safe_commit` está en main (PR #289). El esquema del catálogo lo fija ADR-GRP-007. Quedan pendientes US-MCP-018 (`safe_rebase`) y US-MCP-019 (`create_worktree`): cada una trae su fila de extremo a extremo de este esquema antes de liberarse (Q-GRD-52); hasta entonces rebase y crear worktree se verifican por el plan del ejecutor con capa `mcp`.
 - **Transversal**: Windows, macOS y Linux.
 
 ## Criterios de Aceptación
@@ -71,9 +73,10 @@ Ejemplos:
 
 **Escenario: El mismo intento por las dos capas recibe la misma decisión**
 
-Dado el repo "demo" en estado "Completa"
-Cuando se intenta borrar la rama base por la herramienta MCP y después con Git directo
-Entonces las dos veces se deniega con el mismo motivo y queda constancia de la capa en el registro
+Dado el repo "demo" en estado "Completa", con "release/1.0" protegida por el equipo
+Cuando Claude Code intenta un commit en "release/1.0" por la herramienta MCP y después con Git directo
+Entonces las dos veces se deniega con la misma regla y el mismo nivel
+  Y el registro guarda una entrada por cada intento, con su capa
 
 **Esquema del escenario: El estado de protección sigue a la allowlist**
 
@@ -96,9 +99,14 @@ Entonces no existe ninguna
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección)._
+- El plan del ejecutor aplica los permisos del equipo de las operaciones que sabe que ejecuta, con la misma función que los hooks; `safe_commit` ya decide con ella y deja su entrada con capa `mcp`.
+- El rechazo `policy-denied` de las herramientas MCP nombra cada regla con su nivel.
+- El estado de protección tiene cuatro valores, derivados en el daemon con la allowlist del MCP, y cada entrada o salida de la allowlist queda en el registro.
+- Toda herramienta MCP de escritura es una operación del catálogo que decide el ejecutor; ninguna edita la configuración ni decide en la cola.
+- Las operaciones sin herramienta MCP se verifican por paridad del motor y por la ausencia de herramienta (Q-GRD-52 y Q-GRD-53, aceptadas).
+- Detalle, tareas y pruebas en la [Dev Spec DS-US-GRD-016](../dev-specs/US-GRD-016-misma-decision-por-mcp.md).
 
 ## Diseño y Dev Spec
 
 - **Diseño:** no aplica.
-- **Dev Spec:** pendiente (Arquitecto, coordinado con F-001-05).
+- **Dev Spec:** [DS-US-GRD-016](../dev-specs/US-GRD-016-misma-decision-por-mcp.md) (draft, 2026-10-28).
