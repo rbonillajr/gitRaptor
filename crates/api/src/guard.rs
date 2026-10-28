@@ -72,6 +72,14 @@ pub enum Rule {
     /// A commit touches a forbidden path (`policies.forbiddenPaths`, US-GRD-008).
     #[serde(rename = "policy.forbidden-path")]
     ForbiddenPath,
+    /// A commit changes more lines than the limit (`policies.diffSize`, US-GRD-009). Only with
+    /// `guard.commit-policies`.
+    #[serde(rename = "policy.diff-size")]
+    DiffSize,
+    /// A commit message does not follow the format (`policies.commitFormat`, US-GRD-009). Only
+    /// with `guard.commit-policies`.
+    #[serde(rename = "policy.commit-format")]
+    CommitFormat,
     /// An agent's commit changes the Guardrails configuration (`.gitraptor/`). A product rule:
     /// no key turns it off. Only with `guard.config-protection`; without it the daemon sends it
     /// as `policy.forbidden-path`.
@@ -164,6 +172,12 @@ pub enum Cause {
     /// A `permission.*` rule with `ask`: it needs a human confirmation that is not available, so
     /// it is applied as `deny` (US-GRD-007). Only with `guard.permissions`.
     AskUnavailable,
+    /// `policy.commit-format`: the type of the message is not in the list of the repo
+    /// (US-GRD-009).
+    TypeNotAllowed,
+    /// `policy.commit-format`: the first line is followed by a body with no blank line between
+    /// (US-GRD-009).
+    BodyNotSeparated,
 }
 
 /// Kind of a labelled parameter.
@@ -183,6 +197,14 @@ pub enum ParamKind {
     Pattern,
     /// A path a commit touches (US-GRD-008).
     Path,
+    /// Lines a commit changes, or `≥N` when a bound cut the count (US-GRD-009).
+    Lines,
+    /// The limit of lines of a `diffSize` rule (US-GRD-009).
+    Limit,
+    /// How many commits of a movement break a rule (US-GRD-009).
+    Commits,
+    /// The types a `commitFormat` rule accepts, comma separated (US-GRD-009).
+    Types,
 }
 
 /// One labelled, untrusted parameter of a reason.
@@ -529,6 +551,11 @@ pub enum NotPreventable {
     /// removing a worktree, to creating one without a new branch nor to a push of tags only;
     /// `merge` only stops at the branch (US-GRD-007). Only with `guard.permissions`.
     PermissionReach,
+    /// The size of the diff and the format of the message are checked in the commits that reach
+    /// a local branch: not in a commit pushed without having been in a branch, on the server, in
+    /// what a merge resolves, and the messages Git writes (merge, revert, fixup) are not
+    /// required (US-GRD-009). Only with `guard.commit-policies`.
+    CommitPolicyReach,
 }
 
 /// Refs backend of the repo (`extensions.refStorage`).

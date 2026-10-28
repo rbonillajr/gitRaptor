@@ -98,7 +98,7 @@ pub struct NewCommits {
 }
 
 /// A commit of the walk and its parents.
-type WalkedCommit = (gix::ObjectId, Vec<gix::ObjectId>);
+pub(crate) type WalkedCommit = (gix::ObjectId, Vec<gix::ObjectId>);
 
 /// Why the read stopped.
 struct Stop;
@@ -168,7 +168,7 @@ impl RepoReader {
 
     /// The new commits of `old → new` with their parents, newest first; `None` when a bound is
     /// reached or something cannot be read (the caller reports it as unverifiable).
-    fn walk_fresh(
+    pub(crate) fn walk_fresh(
         &self,
         old: Option<&str>,
         new: &str,
