@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: medium
 created: 2026-10-03
-updated: 2026-10-04
+updated: 2026-10-28
 feature: motor-local
 related:
   context:
@@ -14,6 +14,7 @@ related:
     - BR-GRP-001
   stories:
     - US-GRP-007
+  specs: [DS-US-GRP-013]
 tags:
   - motor-local
   - configuracion-tres-niveles
@@ -57,8 +58,9 @@ Ejemplos:
 **Escenario: El ajuste de un repo no afecta a los demás**
 
 Dado el perfil con umbral de 10 minutos y la configuración local personal de "demo" con 15 minutos
-Cuando se consulta el umbral efectivo de "demo" y de "otro"
-Entonces el de "demo" es 15 minutos y el de "otro" es 10 minutos
+Cuando una sesión de "Claude Code" en "demo" y otra en "otro" dejan de tener actividad a la vez
+Entonces la de "otro" pasa a "Inactivo" a los 10 minutos sin actividad
+  Y la de "demo" pasa a "Inactivo" a los 15 minutos sin actividad
 
 **Escenario: Un cambio en la configuración se aplica sin que el motor la escriba**
 

@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: medium
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-28
 feature: motor-local
 related:
   context:
@@ -16,6 +16,7 @@ related:
     - US-GRP-004
     - US-GRP-005
     - US-GRP-009
+  specs: [DS-US-GRP-006]
 tags:
   - motor-local
   - repos-observados
@@ -58,9 +59,9 @@ Entonces el historial de "demo" contiene de nuevo los 3 eventos con sus atribuci
 
 **Escenario: Un agente registrado no puede añadir ni retirar repos**
 
-> US-GRP-001 (Must) ya exige el rechazo para cualquier agente (Q40); aquí se comprueba con un agente registrado en un repo observado.
+> US-GRP-001 (Must) ya exige el rechazo para cualquier agente (Q40); aquí se comprueba con un agente registrado en un repo observado. En el MVP, "agente" es un proceso que el motor reconoce como agente, hoy solo Claude Code; el rechazo a Codex o Cursor llega con su soporte (Q59).
 
-Dado el repo "demo" observado y "otro agente: Codex" registrado en "feat-login"
+Dado el repo "demo" observado y "Claude Code" registrado en "feat-login"
 Cuando ese agente pide añadir el repo "otro" o retirar "demo"
 Entonces el motor rechaza la petición indicando que solo el desarrollador puede cambiar los repos observados
   Y la lista de repos observados no cambia
