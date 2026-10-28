@@ -186,3 +186,43 @@ fn cli_rejects_unc_and_relative_repo_paths() {
         ));
     }
 }
+
+#[test]
+fn push_config_and_textconv_drivers_are_read_with_a_fixed_argv() {
+    let f = busy_repo();
+    let log = MemoryArgvLog::default();
+    let invoker = f.invoker().with_argv_sink(Arc::new(log.clone()));
+    let cli = GitCli::new(&f.git, &invoker, &f.repo).unwrap();
+    let main = RefName::new("main").unwrap();
+    assert_eq!(cli.config_get(&ConfigKey::PushDefault).unwrap(), None);
+    assert!(cli.textconv_drivers().unwrap().is_empty());
+    f.git(&["config", "push.default", "upstream"]);
+    f.git(&["config", "remote.pushDefault", "fork"]);
+    f.git(&["config", "branch.main.pushRemote", "origin"]);
+    f.git(&["config", "diff.canary.textconv", "/bin/false"]);
+    f.git(&["config", "diff.canary.textconvx", "/bin/false"]);
+    assert_eq!(
+        cli.config_get(&ConfigKey::PushDefault).unwrap(),
+        Some("upstream".into())
+    );
+    assert_eq!(
+        cli.config_get(&ConfigKey::RemotePushDefault).unwrap(),
+        Some("fork".into())
+    );
+    assert_eq!(
+        cli.config_get(&ConfigKey::BranchPushRemote(main)).unwrap(),
+        Some("origin".into())
+    );
+    assert_eq!(cli.textconv_drivers().unwrap(), vec!["canary".to_owned()]);
+    let argv = format!("{:?}", log.entries());
+    assert!(argv.contains("--get-regexp"), "{argv}");
+    assert!(
+        !argv.contains("/bin/false"),
+        "values are never read: {argv}"
+    );
+    f.git(&["config", "diff.a b.textconv", "/bin/false"]);
+    assert!(matches!(
+        cli.textconv_drivers(),
+        Err(ReadError::InvalidInput(_))
+    ));
+}
