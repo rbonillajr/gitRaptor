@@ -88,4 +88,4 @@ _Pendiente — lo completa el Arquitecto (Dev Spec)._
 ## Diseño y Dev Spec
 
 - **Diseño:** DSYS-GRP-001.
-- **Dev Spec:** [DS-US-CKP-015](../dev-specs/US-CKP-015-rebasar-rama-agente.md) (draft).
+- **Dev Spec:** [DS-US-CKP-015](../dev-specs/US-CKP-015-rebasar-rama-agente.md) (approved).
