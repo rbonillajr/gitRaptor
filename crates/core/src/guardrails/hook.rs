@@ -153,6 +153,24 @@ pub fn run(args: &HookArgs, env: &HookEnv, input: &[u8]) -> HookOutcome {
                 return minimum;
             }
             return match second_line(args, env, input) {
+                // A second line that adds nothing keeps the warnings of the first decision (an
+                // `ask` the person runs, US-GRD-009).
+                Some(outcome)
+                    if outcome.allowed()
+                        && minimum
+                            .decision
+                            .as_ref()
+                            .is_some_and(|d| !d.notices.is_empty())
+                        && outcome
+                            .decision
+                            .as_ref()
+                            .is_none_or(|d| d.notices.is_empty()) =>
+                {
+                    HookOutcome {
+                        authorship_unavailable: outcome.authorship_unavailable,
+                        ..minimum
+                    }
+                }
                 Some(outcome) => outcome,
                 None => minimum,
             };
@@ -300,7 +318,10 @@ fn ref_transaction(
                 None => continue,
             }
         }
-        if !fastpath::is_governed(&refname) {
+        // A remote-tracking ref that is written reaches the daemon too, for the commit policies
+        // (an agent parks a commit there with `update-ref`).
+        let parks = refname.starts_with("refs/remotes/") && !raw.new.is_zero();
+        if !fastpath::is_governed(&refname) && !parks {
             continue;
         }
         if fastpath::is_prune(as_fast(&raw.old), as_fast(&raw.new), &refname, &args.common) {
@@ -669,15 +690,15 @@ fn read_regular(path: &Path, max: u64) -> Option<Vec<u8>> {
 /// Asks the daemon; without an authentic daemon of this instance, degraded mode.
 fn decide(args: &HookArgs, env: &HookEnv, full: Operation) -> HookOutcome {
     let asked = ask_daemon(args, &full);
-    let (decision, granted, permissions) = match asked {
-        Asked::Decision(mut decision, granted, permissions) => {
+    let (decision, granted, permissions, commit_policies) = match asked {
+        Asked::Decision(mut decision, granted, permissions, commit_policies) => {
             // A daemon that does not convert a failed prior (a version apart) must not leave
             // less than degraded mode does (BR-EDGE-005).
             snapshot_required::client_fallback(&full, &mut decision, granted);
-            (Some(decision), granted, permissions)
+            (Some(decision), granted, permissions, commit_policies)
         }
         // Only refs Guardrails does not govern: no permission reaches them.
-        Asked::Nothing(granted) => (None, granted, true),
+        Asked::Nothing(granted) => (None, granted, true, true),
         Asked::NotAuthentic if only_ungoverned(&full) => {
             return ungoverned_alone(args, &full, Signal::NotAuthentic);
         }
@@ -696,9 +717,11 @@ fn decide(args: &HookArgs, env: &HookEnv, full: Operation) -> HookOutcome {
         full,
         Operation::RefTransaction { .. } | Operation::Push { .. }
     );
+    // The same for a daemon that does not know `guard.commit-policies`: the diff size and the
+    // commit format of the floor for everyone (D10, D14).
     if outcome.allowed()
         && governed
-        && !granted.policies
+        && (!granted.policies || !commit_policies)
         && let Some(denied) = floor_rules_for_everyone(args, &full)
     {
         return denied;
@@ -745,8 +768,9 @@ fn client_permissions(
 }
 
 enum Asked {
-    /// The decision, what the daemon granted and whether it granted `guard.permissions`.
-    Decision(Decision, Granted, bool),
+    /// The decision, what the daemon granted and whether it granted `guard.permissions` and
+    /// `guard.commit-policies`.
+    Decision(Decision, Granted, bool, bool),
     /// Nothing is left to ask once the daemon's capability is known (an all-ungoverned push to a
     /// daemon without `guard.policies`).
     Nothing(Granted),
@@ -787,8 +811,9 @@ fn ask_daemon(args: &HookArgs, full: &Operation) -> Asked {
         authorship: None,
     };
     let permissions = served(methods::CAP_GUARD_PERMISSIONS.name);
+    let commit_policies = served(methods::CAP_GUARD_COMMIT_POLICIES.name);
     match client.call::<_, Decision>(methods::GUARD_EVALUATE, &params) {
-        Ok(decision) => Asked::Decision(decision, granted, permissions),
+        Ok(decision) => Asked::Decision(decision, granted, permissions, commit_policies),
         Err(_) => Asked::Failed,
     }
 }
@@ -800,12 +825,14 @@ fn ask_daemon(args: &HookArgs, full: &Operation) -> Asked {
 pub fn floor_rules_for_everyone(args: &HookArgs, full: &Operation) -> Option<HookOutcome> {
     let reader = evaluate::open(&args.common)?;
     let floor = super::policies::floor(&reader);
+    let commit_floor = super::commit_policies::floor_everyone(&reader);
     let mut eval = gitraptor_policy::guard::Evaluation::allow();
     // The governed refs get the rules for everyone; the ungoverned ones of a push (template 3
     // on) get every forbidden-path rule, as in degraded mode: the actor cannot be told apart.
     if let Some(op) = push_scope(full.clone(), args.template, false) {
         let commit = evaluate::CommitContext {
             policies: floor.everyone_only(),
+            commit_policies: commit_floor,
             ..evaluate::CommitContext::default()
         };
         eval = evaluate::evaluate_commit(&reader, &args.common, &op, Vec::new(), commit);
@@ -996,6 +1023,7 @@ fn degraded(args: &HookArgs, env: &HookEnv, full: &Operation, cause: Degraded) -
         // The rules for everyone of the floor still apply without the daemon (D11).
         let commit = evaluate::CommitContext {
             policies: floor.everyone_only(),
+            commit_policies: super::commit_policies::floor_everyone(&reader),
             ..client_permissions(&reader, env, &op)
         };
         eval = evaluate::evaluate_commit(&reader, &args.common, &op, bases, commit);

@@ -136,6 +136,7 @@ fn reason_text(reason: &Reason, denied: &DeniedOp) -> String {
             "guard.reason.authorship-human-author",
             &[("level", &level_text(reason.level))],
         ),
+        (Rule::DiffSize | Rule::CommitFormat, _) => commit_policy_text(reason),
         (
             Rule::ProtectedBranch | Rule::ForbiddenPath | Rule::ConfigProtected,
             Some(Cause::Unverifiable),
@@ -178,6 +179,88 @@ fn reason_text(reason: &Reason, denied: &DeniedOp) -> String {
             Some(op) => permission_text(reason, op, cause),
             None => t("guard.deny.internal", &[]),
         },
+    }
+}
+
+/// The example a format denial gives, built from the list of types the rule accepts: `feat` when
+/// it is listed, else the first one, with a fixed description. It never repeats the message.
+fn commit_format_example(types: &[Param]) -> String {
+    let raw = types
+        .iter()
+        .find(|p| p.kind == ParamKind::Types)
+        .map(|p| p.value.raw().to_owned())
+        .unwrap_or_default();
+    let mut listed = raw.split(", ").filter(|t| !t.is_empty());
+    let ty = listed
+        .clone()
+        .find(|t| *t == "feat")
+        .or_else(|| listed.next())
+        .unwrap_or("feat");
+    format!("«{}»", t("guard.example.commit-format", &[("type", &ty)]))
+}
+
+/// The fixed template of a diff size or commit format reason. An `ask` an agent cannot get
+/// confirmed keeps the template of the rule and says so; none says how to change the rule.
+fn commit_policy_text(reason: &Reason) -> String {
+    let p = &reason.params;
+    let level = level_text(reason.level);
+    let oid = find(p, ParamKind::Oid);
+    let asked = reason.cause == Some(Cause::AskUnavailable);
+    let cause = if asked { None } else { reason.cause };
+    let text = match (reason.rule, cause) {
+        (Rule::DiffSize, Some(Cause::Unverifiable)) => t(
+            "guard.reason.diff-size-unverifiable",
+            &[
+                ("oid", &oid),
+                ("limit", &find(p, ParamKind::Limit)),
+                ("level", &level),
+            ],
+        ),
+        (Rule::DiffSize, _) if p.iter().any(|x| x.kind == ParamKind::Commits) => t(
+            "guard.reason.diff-size-commits",
+            &[
+                ("commits", &find(p, ParamKind::Commits)),
+                ("limit", &find(p, ParamKind::Limit)),
+                ("level", &level),
+                ("oid", &oid),
+                ("lines", &find(p, ParamKind::Lines)),
+            ],
+        ),
+        (Rule::DiffSize, _) => t(
+            "guard.reason.diff-size",
+            &[
+                ("oid", &oid),
+                ("lines", &find(p, ParamKind::Lines)),
+                ("limit", &find(p, ParamKind::Limit)),
+                ("level", &level),
+            ],
+        ),
+        (_, Some(Cause::Unverifiable)) => t(
+            "guard.reason.commit-format-unverifiable",
+            &[("level", &level)],
+        ),
+        (_, Some(Cause::BodyNotSeparated)) => t(
+            "guard.reason.commit-format-body",
+            &[("oid", &oid), ("level", &level)],
+        ),
+        (_, cause) => t(
+            if cause == Some(Cause::TypeNotAllowed) {
+                "guard.reason.commit-format-type"
+            } else {
+                "guard.reason.commit-format"
+            },
+            &[
+                ("oid", &oid),
+                ("level", &level),
+                ("types", &find(p, ParamKind::Types)),
+                ("example", &commit_format_example(p)),
+            ],
+        ),
+    };
+    if asked {
+        format!("{text} {}", t("guard.reason.policy-ask-unavailable", &[]))
+    } else {
+        text
     }
 }
 
@@ -242,6 +325,11 @@ fn level_text(level: Level) -> String {
 fn notice_text(notice: &Reason) -> Option<String> {
     if notice.rule == Rule::AuthorshipHumanAuthor {
         return Some(t("guard.notice.authorship-human-author", &[]));
+    }
+    // An `ask` of the diff size or the commit format that the person runs.
+    if matches!(notice.rule, Rule::DiffSize | Rule::CommitFormat) {
+        let rule = t(log_rule_key(notice.rule), &[]);
+        return Some(t("guard.notice.policy-ask-developer", &[("rule", &rule)]));
     }
     // An `ask` the person runs (it is not confirmed, the person is doing it).
     operation_key(notice.rule).map(|op| {
@@ -370,6 +458,7 @@ fn not_preventable_text(n: NotPreventable) -> String {
             NotPreventable::PolicyReach => "guard.np.policy-reach",
             NotPreventable::PolicyFloor => "guard.np.policy-floor",
             NotPreventable::PermissionReach => "guard.np.permission-reach",
+            NotPreventable::CommitPolicyReach => "guard.np.commit-policy-reach",
         },
         &[],
     )
@@ -1119,6 +1208,14 @@ fn now_ms() -> i64 {
         .map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))
 }
 
+/// The `guard.log.rule.*` key of the diff size and commit format rules.
+fn log_rule_key(rule: Rule) -> &'static str {
+    match rule {
+        Rule::DiffSize => "guard.log.rule.diff-size",
+        _ => "guard.log.rule.commit-format",
+    }
+}
+
 /// The fixed name of a logged rule.
 fn log_rule_text(reason: &LoggedReason) -> String {
     let rule = match reason.rule {
@@ -1128,6 +1225,7 @@ fn log_rule_text(reason: &LoggedReason) -> String {
         Rule::AuthorshipHumanAuthor => "guard.log.rule.human-author",
         Rule::ProtectedBranch => "guard.log.rule.protected-branch",
         Rule::ForbiddenPath => "guard.log.rule.forbidden-path",
+        Rule::DiffSize | Rule::CommitFormat => log_rule_key(reason.rule),
         Rule::ConfigProtected => "guard.log.rule.config-protected",
         Rule::RelaxIgnored => "guard.log.rule.relax-ignored",
         Rule::Degraded
