@@ -4,7 +4,7 @@ title: "Reglas de Negocio — Guardrails"
 type: business-rules
 status: draft
 created: 2026-10-03
-updated: 2026-10-21
+updated: 2026-10-28
 domain: GRP
 epic: E-001
 feature: guardrails
@@ -56,7 +56,7 @@ tags:
 
 **Feature**: Guardrails (F-001-04)
 **Enlace a contexto**: [`context.md`](./context.md) (CTX-GRD-001)
-**Última actualización**: 2026-10-21 (Q-GRD-48, Q-GRD-49 y Q-GRD-51, revisión de la Dev Spec DS-US-GRD-009; Q-GRD-47 y Q-GRD-50, revisión de la Dev Spec DS-US-GRD-006). Antes, 2026-10-09 (Q-GRD-39 a Q-GRD-45, revisión de las Dev Specs DS-US-GRD-007 y DS-US-GRD-011; antes, BR-EDGE-005: alcance, límites declarados y decisiones Q-GRD-36 a Q-GRD-38 de la revisión de DS-US-GRD-017). Antes, 2026-10-06 (BR-AUTH-005, política de autoría de los commits, por D6 del BRD y Q-GRD-34; después, aclaración del punto 4 por decisión del PO). Antes, 2026-10-04 (Q-GRD-28 a Q-GRD-31, resultados de SPIKE-GRD-001 en macOS; antes, Q-GRD-17 a Q-GRD-27 y sus aplicaciones derivadas: Q-GRD-12 en la versión del worktree, confirmación inicial y configuración antes de confirmar, unión de la rama base por historia; ver Changelog). Antes, 2026-10-03 (versión inicial)
+**Última actualización**: 2026-10-28 (Q-GRD-52 a Q-GRD-54, revisión de la Dev Spec DS-US-GRD-016; Q-GRD-55 a Q-GRD-57, revisión de la Dev Spec DS-US-GRD-013). Antes, 2026-10-21 (Q-GRD-48, Q-GRD-49 y Q-GRD-51, revisión de la Dev Spec DS-US-GRD-009; Q-GRD-47 y Q-GRD-50, revisión de la Dev Spec DS-US-GRD-006). Antes, 2026-10-09 (Q-GRD-39 a Q-GRD-45, revisión de las Dev Specs DS-US-GRD-007 y DS-US-GRD-011; antes, BR-EDGE-005: alcance, límites declarados y decisiones Q-GRD-36 a Q-GRD-38 de la revisión de DS-US-GRD-017). Antes, 2026-10-06 (BR-AUTH-005, política de autoría de los commits, por D6 del BRD y Q-GRD-34; después, aclaración del punto 4 por decisión del PO). Antes, 2026-10-04 (Q-GRD-28 a Q-GRD-31, resultados de SPIKE-GRD-001 en macOS; antes, Q-GRD-17 a Q-GRD-27 y sus aplicaciones derivadas: Q-GRD-12 en la versión del worktree, confirmación inicial y configuración antes de confirmar, unión de la rama base por historia; ver Changelog). Antes, 2026-10-03 (versión inicial)
 
 ---
 
@@ -162,7 +162,7 @@ orden de restricción: denegar > pedir confirmación > permitir
 
 > **Decisión del orquestador (2026-10-09), validada por el PO y el Arquitecto** (Q-GRD-40): qué cuenta como cada operación. **Commit**: todo commit nuevo que llega a una rama, también por `cherry-pick`, `revert`, `am` o plumbing; no los commits de un rebase (permiso rebase) ni los que crea un merge o un pull (permiso merge). El commit que cierra una fusión con `git commit` cuenta como commit **y** merge, porque la resolución de conflictos es contenido nuevo. **Push** incluye el push forzado y el borrado de una rama remota: el forzado necesita además force-push permitido, y el borrado, borrar rama. **Borrar rama** incluye renombrar una rama, porque el nombre viejo desaparece.
 
-> **Decisión del orquestador (2026-10-09), validada por el PO y el Arquitecto** (Q-GRD-41): con Git directo, un merge denegado deja **la rama sin mover**, pero el working tree puede quedar con la fusión a medias; el motivo dice cómo volver al estado anterior. Merge sigue publicado como no impedible con Git directo (BR-EDGE-003) y la promesa completa la verifica la capa MCP.
+> **Decisión del orquestador (2026-10-09), validada por el PO y el Arquitecto** (Q-GRD-41): con Git directo, un merge denegado deja **la rama sin mover**, pero el working tree puede quedar con la fusión a medias; el motivo dice cómo volver al estado anterior. Merge sigue publicado como no impedible con Git directo (BR-EDGE-003) y la promesa completa la verifica la capa MCP. En el MVP no hay herramienta MCP de merge: un agente solo integra por Git directo, con este límite (Q-GRD-52).
 
 **Ejemplos**:
 - Configuración del equipo: force-push = denegar → un agente intenta un force-push → denegado.
@@ -348,6 +348,8 @@ Acción si los hooks dejan de estar activos sin que el desarrollador los desinst
 
 Un diagnóstico no es un estado: no cambia qué capas están activas. Desaparece cuando el desarrollador confirma.
 
+> **Decisión del orquestador (2026-10-28), validada por el PO y el Arquitecto** (Q-GRD-54; precisa las transiciones con "dejan de estar activos por otra causa"): en el MVP la mitad de hooks del estado cuenta los hooks **instalados** con el permiso del desarrollador, no los activos en cada momento. Si los hooks dejan de estar activos sin que el desarrollador los desinstale desde Guardrails (borrados, reemplazados, desactivados), el estado no cambia: aparece el diagnóstico **hooks inactivos**, con su causa y la acción sugerida, y el aviso de pérdida de siempre. Así una pérdida pasajera no hace saltar el estado y la transición no se registra dos veces. Condición del PO: el diagnóstico se muestra **junto al estado**, en cada sitio donde se presenta el estado (CLI, TUI, vista MCP), para que "Completa" o "Solo hooks" nunca se lean como Git crudo cubierto cuando no lo está. Desaparece cuando los hooks vuelven a estar activos. Desinstalar desde Guardrails sí cambia el estado, como dice la tabla de transiciones.
+
 > **Decisión del orquestador (2026-10-09), validada por el PO y el Arquitecto** (Q-GRD-44): un suelo del equipo ilegible o parcial en la rama principal **no** se muestra como relajación pendiente, porque no se puede confirmar. El estado lo muestra como configuración del equipo ilegible o parcial (BR-EDGE-004), sin acción para confirmar, y sigue rigiendo el suelo confirmado. El estado lista además, por repo y por worktree, cada nivel de la configuración que no se puede leer o se lee solo en parte (Q-GRD-45).
 
 **Aviso de pérdida** (ADR-GRD-005 § 5; US-GRD-004): cuando los hooks dejan de estar activos sin que el desarrollador los desinstale desde Guardrails, el aviso dice la causa y la acción sugerida (`raptor guard install`, que es un comando reservado y nunca se ejecuta solo). Para no saturar al desarrollador, el aviso de una misma causa en un repo se repite como máximo cada **10 minutos** (⚠️ **ASSUMPTION** de ADR-GRD-005 § 5, L-01, a confirmar con el uso); la primera transición siempre avisa y siempre se registra. Si no hay ningún cliente abierto, el aviso queda pendiente: el estado de protección lo muestra al abrir la CLI o la TUI.
@@ -358,14 +360,14 @@ Un diagnóstico no es un estado: no cambia qué capas están activas. Desaparece
 - Repo recién observado, sin allowlist ni hooks → Sin protección.
 - Se añade a la allowlist del MCP y no tiene configuración → Solo MCP, con el conjunto mínimo aplicado (BR-EDGE-001).
 - Repo con hooks instalados que no está en la allowlist → Solo hooks: un agente con Git crudo recibe la decisión; las herramientas MCP no operan sobre ese repo.
-- Otro gestor de hooks reemplaza los de Guardrails en un repo Completa → Solo MCP, con aviso.
+- Otro gestor de hooks reemplaza los de Guardrails en un repo Completa → sigue en Completa, con el diagnóstico "hooks inactivos" junto al estado y el aviso de pérdida (Q-GRD-54).
 - Se retira el repo de la observación con hooks activos → los hooks siguen aplicando las reglas, con actor "sin atribuir", y se avisa (Q-GRD-15).
 - Repo Solo hooks con la rama base confirmada al instalar; llega a la rama principal un cambio que desactiva el conjunto mínimo → sigue en Solo hooks, con el diagnóstico "relajación pendiente de confirmar" y la acción para confirmarla (Q-GRD-25).
 - Repo Solo MCP sin confirmación inicial de su rama base → sigue en Solo MCP, con el diagnóstico "rama base no confirmada" y la acción para confirmarla (Q-GRD-25).
 
-**Cómo se verifica**: un repo en cada uno de los cuatro estados; cada transición de la lista; retirar los hooks por fuera de Guardrails y comprobar el cambio de estado y el aviso; un repo sin configuración en Solo MCP aplica el conjunto mínimo; cada diagnóstico aparece con su acción y desaparece al confirmar, sin cambiar el estado.
+**Cómo se verifica**: un repo en cada uno de los cuatro estados; cada transición de la lista; retirar los hooks por fuera de Guardrails y comprobar que el estado no cambia, que el diagnóstico "hooks inactivos" aparece junto al estado y que llega el aviso (Q-GRD-54); un repo sin configuración en Solo MCP aplica el conjunto mínimo; cada diagnóstico aparece con su acción y desaparece al confirmar, sin cambiar el estado.
 
-**Referencias**: BRD BR-12; NFR-02; BR-AUTH-001 (motor-local); BR-EDGE-001; Q-GRD-4, Q-GRD-15, Q-GRD-21, Q-GRD-23, Q-GRD-25, Q-GRD-44, Q-GRD-45; dependencia con F-001-02 y F-001-05.
+**Referencias**: BRD BR-12; NFR-02; BR-AUTH-001 (motor-local); BR-EDGE-001; Q-GRD-4, Q-GRD-15, Q-GRD-21, Q-GRD-23, Q-GRD-25, Q-GRD-44, Q-GRD-45, Q-GRD-54; dependencia con F-001-02 y F-001-05.
 
 ---
 
@@ -378,6 +380,8 @@ Un diagnóstico no es un estado: no cambia qué capas están activas. Desaparece
 > **Decisión** (Q-GRD-19, Rene Bonilla, 2026-10-04; D5): en el MVP se **acepta un riesgo residual** para desinstalar la protección y para la excepción consciente: cada uso se anuncia, abre una ventana en la que se puede cancelar y queda auditado, con la aceptación del riesgo en cada acción. **Relajar con el comando de edición y aprobar una petición de la cola exigen un factor de autenticación del sistema operativo**, fuera del canal del agente; sin él, esas acciones no se ofrecen (gate antes de US-GRD-013 y US-GRD-015).
 >
 > **Decisión** (Q-GRD-21 y Q-GRD-22, Rene Bonilla, 2026-10-04; D7 y D8): **confirmar en una máquina un cambio de la configuración del equipo que relaja** (incluidos desactivar el conjunto mínimo y cambiar la rama base) es una acción reservada nueva. También lo es la confirmación inicial de la rama base y de la configuración del equipo, que se hace **al instalar la protección o con una confirmación explícita**, nunca al añadir el repo a la observación (Q-GRD-23). Si esa configuración inicial trae relajaciones (por ejemplo, desactivar el conjunto mínimo), la confirmación pasa por el anuncio y la ventana para cancelar de Q-GRD-19. Usa el mismo mecanismo que las demás acciones reservadas del MVP y muestra qué cambia y de dónde viene. El factor de autenticación del sistema operativo se aplicará también aquí cuando exista, pero no la bloquea.
+>
+> **Decisión del orquestador (2026-10-28), validada por el PO y el Arquitecto** (Q-GRD-55): **cambiar la rama base con el comando de edición no cuenta como relajar con el comando** y no pide el factor de autenticación. El comando solo escribe el cambio en el working tree; el cambio rige cuando llega a la rama principal y el humano lo confirma en su máquina con la acción reservada de Q-GRD-21, que es donde está el control. El comando es solo del humano (BR-AUTH-004). Condición del PO: al escribir el cambio, el comando le dice al desarrollador que la nueva rama base no rige hasta que llegue a la rama principal y la confirme.
 
 **Aplicabilidad**: Siempre.
 
@@ -619,12 +623,16 @@ Constraint: decisión(operación, repo, configuración, actor) es independiente 
 
 **Comportamiento en conflicto**: no debe darse. Si una operación no se puede evaluar en una capa (BR-EDGE-003), esa limitación se declara; no se sustituye por otra decisión.
 
+> **Decisión del orquestador (2026-10-28), validada por el PO y el Arquitecto** (Q-GRD-52): la capa MCP solo cubre una operación si existe una herramienta MCP que la ejecute. En el MVP no hay herramienta para push, force-push, `reset --hard`, borrar rama, merge ni borrar worktree: un agente no puede hacerlas por MCP y solo le queda Git directo, cubierto por los hooks. Para esas operaciones, "pedirla a través de una herramienta MCP" se cumple con dos comprobaciones: ninguna herramienta la ejecuta, y Guardrails da la misma decisión y el mismo motivo con la capa MCP y con la capa de hooks. Las que ya ejecuta GitRaptor por su cuenta (rebase, merge, crear y borrar worktree) se comprueban además en esa ejecución con la capa MCP. Cuando una historia añada una herramienta MCP para una operación del catálogo, su caso de extremo a extremo entra en la misma comprobación antes de liberarse. Consecuencia aceptada: en el MVP el merge de un agente solo llega por Git directo, con el límite de Q-GRD-41 (la rama no se mueve, el working tree puede quedar a medias); la promesa completa del merge espera a una herramienta MCP de merge.
+>
+> **Decisión del orquestador (2026-10-28), validada por el PO y el Arquitecto** (Q-GRD-53): la misma decisión por las dos capas se comprueba de extremo a extremo con un intento que ambas capas cubren: el commit de un agente en una rama protegida, por la herramienta de commit y por `git commit`. Las dos veces se deniega con la misma regla y el mismo nivel, y el registro guarda una entrada por intento con su capa (BR-CONS-004). El borrado de la rama base, sin herramienta MCP, se comprueba en la decisión de Guardrails con las dos capas (Q-GRD-52).
+
 **Ejemplos**:
 - Force-push a `main` por la herramienta MCP → denegado. El mismo force-push con Git crudo y hooks instalados → denegado con el mismo motivo.
 
-**Cómo se verifica**: cada escenario de BR-VAL-002 y BR-VAL-003 se ejecuta por las dos capas con el mismo resultado y motivo.
+**Cómo se verifica**: cada escenario de BR-VAL-002 y BR-VAL-003 se ejecuta por las dos capas con el mismo resultado y motivo; si la operación no tiene herramienta MCP, como dice Q-GRD-52.
 
-**Referencias**: BRD BR-12; dependencia con F-001-05.
+**Referencias**: BRD BR-12; dependencia con F-001-05; Q-GRD-41, Q-GRD-52, Q-GRD-53.
 
 ---
 
@@ -761,6 +769,10 @@ Constraint: nada cambia fuera del repo
 - **Es recuperable**: la configuración anterior se puede recuperar después del cambio.
 - **No hace commit** (S-GRD-3): un cambio en la configuración del equipo queda en el working tree para que el desarrollador lo revise y lo commitee. Ese cambio **no se aplica hasta que se commitea** en el worktree de la operación (Q-GRD-17), y allí solo cuenta si endurece. Si relaja, solo se aplica cuando llega a la rama principal y el humano lo confirma en su máquina (Q-GRD-20, Q-GRD-21). Los cambios del comando en los niveles personales se aplican al escribirse.
 
+> **Decisión del orquestador (2026-10-28), validada por el PO y el Arquitecto** (Q-GRD-56): **recuperar**. Antes de cada escritura, el comando guarda en el perfil de GitRaptor una copia del archivo que reemplaza y conserva las ⚠️ **ASSUMPTION** 10 últimas por archivo (a revisar con el uso). Tras escribir, dice dónde quedó la copia. El desarrollador recupera el valor anterior copiando esa copia sobre el archivo o volviendo a usar el comando; en el nivel de equipo, lo commiteado se recupera además con Git. No hay comando de restaurar mientras relajar con el comando no esté disponible, porque restaurar puede relajar. Si no había archivo, no hay copia y el comando lo dice.
+>
+> **Decisión del orquestador (2026-10-28), validada por el PO y el Arquitecto** (Q-GRD-57): **cambios hechos a mano en los niveles personales**. Los niveles personales no se versionan y editarlos a mano es lo normal: el comando parte del archivo tal como está, con las ediciones a mano incluidas, y no las pierde. Solo rechaza si el archivo cambia entre que lo lee y lo escribe, o si no se puede leer (un archivo personal ilegible nunca se reescribe). En el nivel de equipo rige la regla de arriba (cambios sin commitear que no hizo el comando). **Formato**: en los tres niveles el comando reescribe el archivo con un formato canónico (sangría de 2 espacios, claves en orden) y conserva las claves que no conoce. Si el archivo no estaba ya en ese formato, lo avisa antes de escribir; en el nivel de equipo el aviso dice que el diff incluirá el cambio de formato.
+
 **Aplicabilidad**: Toda escritura del comando, en cualquiera de los tres niveles.
 
 **Criticidad**: Alta
@@ -784,7 +796,7 @@ Constraint: la configuración anterior a cada cambio se puede recuperar
 
 **Cómo se verifica**: edición con cambios a mano sin commitear (no se pierden); prueba de interrupción a mitad de escritura (NFR-12); recuperación del valor anterior; el comando no crea commits.
 
-**Referencias**: NFR-01, NFR-12; Q27 de motor-local; S-GRD-3; Q-GRD-17, Q-GRD-20, Q-GRD-21; BR-AUTH-001.
+**Referencias**: NFR-01, NFR-12; Q27 de motor-local; S-GRD-3; Q-GRD-17, Q-GRD-20, Q-GRD-21, Q-GRD-56, Q-GRD-57; BR-AUTH-001.
 
 ---
 
@@ -1059,3 +1071,4 @@ Cada regla debe reflejarse en al menos un escenario Gherkin de su historia. Cada
 | 1.14 | 2026-10-09 | PO (AADD); decisiones del orquestador (2026-10-09), validadas por el PO y el Arquitecto, y Q-GRD-43 del PO | Revisión de las Dev Specs DS-US-GRD-007 y DS-US-GRD-011. BR-VAL-002: "pedir confirmación" cuenta en el KPI como denegación (Q-GRD-39, pendiente de Rene Bonilla), qué cuenta como cada operación (Q-GRD-40) y el merge con Git directo protege solo la rama (Q-GRD-41). BR-EDGE-003: apartado "alcance de los permisos con Git directo" (Q-GRD-41, Q-GRD-42). BR-EDGE-004: solo los niveles del equipo ilegibles o parciales fuerzan el mínimo (Q-GRD-43, precisa Q-GRD-26, pendiente de Rene Bonilla), un suelo roto no es relajación pendiente (Q-GRD-44) y dónde avisa (Q-GRD-45). BR-WF-002 y BR-CONS-004 recogen Q-GRD-44 y Q-GRD-45. Sin reglas nuevas: 24 reglas. |
 | 1.15 | 2026-10-21 | PO (AADD); decisiones del orquestador (2026-10-21), validadas por el PO (Q-GRD-48 y Q-GRD-49, también por el Arquitecto) | Revisión de la Dev Spec DS-US-GRD-009: nota de BR-VAL-003 (el límite de diff y el formato de commit aplican por defecto a los agentes, Q-GRD-48; mensajes que escribe Git, Q-GRD-49) y regla de BR-CONS-001 (un solo formato, el del primer nivel que lo fije, Q-GRD-51). Sin reglas nuevas. |
 | 1.16 | 2026-10-21 | PO (AADD); decisiones del orquestador (2026-10-21), validadas por Arquitecto y PO | Revisión de la Dev Spec DS-US-GRD-006. Q-GRD-47: la excepción consciente cubre en el MVP push, borrado de rama local y rebase no interactivo (BR-AUTH-003, BR-AUTH-001). Q-GRD-50: salta también las ramas protegidas y las rutas prohibidas con `appliesTo: everyone`; enmienda la nota de Q-GRD-35 (BR-VAL-003). BR-CONS-004: la cancelación (también con Ctrl-C) registra quién canceló. |
+| 1.17 | 2026-10-28 | PO (AADD); decisiones del orquestador (2026-10-28), validadas por el PO y el Arquitecto | Revisión de las Dev Specs DS-US-GRD-016 y DS-US-GRD-013. Q-GRD-52: la capa MCP solo cubre una operación con herramienta; sin ella se comprueba que ninguna herramienta la ejecuta y que la decisión es la misma con las dos capas; el merge de un agente solo llega por Git directo en el MVP (BR-CONS-002, nota de Q-GRD-41 en BR-VAL-002). Q-GRD-53: la misma decisión por las dos capas, de extremo a extremo con un commit en rama protegida (BR-CONS-002). Q-GRD-54: la mitad de hooks del estado es "instalada"; la pérdida no cambia el estado y se muestra el diagnóstico "hooks inactivos" junto al estado, condición del PO (BR-WF-002, ejemplo y verificación). Q-GRD-55: cambiar la rama base con el comando no es relajar con el comando; el comando avisa de que rige al confirmarla (BR-AUTH-001). Q-GRD-56 y Q-GRD-57: copias del archivo anterior en el perfil; los niveles personales parten del archivo tal como está; formato canónico con aviso (BR-CONS-006). Sin reglas nuevas. |

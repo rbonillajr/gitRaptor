@@ -4,7 +4,7 @@ title: "Reglas de Negocio — Cockpit"
 type: business-rules
 status: draft
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-28
 domain: GRP
 epic: E-001
 feature: cockpit
@@ -29,7 +29,7 @@ tags:
 
 **Feature**: Cockpit (F-001-02)
 **Enlace a contexto**: [context.md](./context.md) (CTX-CKP-001)
-**Última actualización**: 2026-10-04
+**Última actualización**: 2026-10-28 (Q-CKP-52 y Q-CKP-53, revisión de la Dev Spec DS-US-CKP-019). Antes, 2026-10-04 (versión inicial)
 
 Principio que atraviesa todas las reglas: **el Cockpit presenta, no calcula ni autoriza**. El estado lo publica el motor, la decisión la toma Guardrails y la escritura la hace el ejecutor del daemon como operación protegida.
 
@@ -359,7 +359,9 @@ símbolos: ● Activo · ◐ Inactivo · ○ Terminado (con fallback ASCII)
 
 **Ejemplo**: `feat-pagos` con ⚡ sube a la segunda posición aunque su sesión esté Inactiva. `feat-old` con claude-4 Terminado hace 30 h se oculta; con el filtro "ver terminadas" vuelve a verse.
 
-**Fuentes**: Q-CKP-2, Q-CKP-3, Q-CKP-28; BR-WF-001 (motor-local); Q3, Q41 de motor-local; DEP-CKP-4.
+> **Decisión del orquestador (2026-10-28), validada por el PO y el Arquitecto** (Q-CKP-53): **⛔ en la zona de atención**. La fila con ⛔ es la respuesta a una acción pedida en una TUI concreta: sube a la zona de atención **solo en la TUI que pidió la acción** y mientras esa acción siga pendiente de decidir (⚠️ **ASSUMPTION** 60 s, o 60 s tras la ventana de la excepción consciente; a revisar con el uso). Deja de subir cuando el desarrollador ejecuta la excepción, la cancela o el plazo vence. Los demás clientes no suben la fila: ven el recuento ⛔ de la cabecera, que publica el motor, y el anuncio de la excepción consciente, que llega a todos. La denegación queda en el registro de Guardrails aunque la fila deje de subir.
+
+**Fuentes**: Q-CKP-2, Q-CKP-3, Q-CKP-28, Q-CKP-53; BR-WF-001 (motor-local); Q3, Q41 de motor-local; DEP-CKP-4.
 
 ### BR-CKP-WF-002: Flujo de una acción de escritura
 
@@ -513,15 +515,18 @@ Constraint: sin notificación del SO ni campana (Won't en el MVP)
 **Regla formal**:
 ```
 decisión = Guardrails(operación, solicitante, capa = cockpit)          (DEP-CKP-10)
-IF decisión ∈ {denegar, pedir confirmación sin cola} → PolicyBanner ⛔ (regla + nivel)
+IF decisión ∈ {denegar, pedir confirmación sin cola y solicitante = agente} → PolicyBanner ⛔ (regla + nivel)   (Q-CKP-52)
   ofrecer excepción consciente UNLESS solicitante desciende de un agente
   excepción → anuncio + ventana 10 s (S-CKP-3) + auditoría → BR-CKP-WF-002
+IF pedir confirmación sin cola y solicitante = persona → aviso + BR-CKP-WF-002   (Q-GRD-46, Q-CKP-52)
 IF permitir → BR-CKP-WF-002
 ```
 
+> **Decisión del orquestador (2026-10-28), validada por el PO y el Arquitecto** (Q-CKP-52; aplica Q-GRD-46 de Rene Bonilla, 2026-10-17): sin cola publicada, "pedir confirmación" **deniega solo cuando el solicitante es un agente**, también cuando es una TUI lanzada desde su terminal (BR-CKP-AUTH-002): se presenta como denegada, con la regla, y no crea petición pendiente. Cuando pide la persona, la acción sigue el flujo normal (BR-CKP-WF-002) con el aviso de que la regla pide confirmación humana y se ejecuta porque la hace ella; su paso no es una denegación. Si Guardrails no puede demostrar quién pide, se deniega a todos (Q-GRD-46). Sustituye a "sin cola publicada, 'pedir confirmación' se trata como denegar" de la descripción, escrito antes de Q-GRD-46.
+
 **Ejemplo**: merge a `main`, protegida por el equipo → "⛔ main es rama protegida (equipo). [x] Excepción consciente". Tras confirmar, cuenta atrás de 10 s cancelable; al terminar, el merge sigue el flujo normal y queda auditado.
 
-**Fuentes**: Q-CKP-15, Q-CKP-26; Q-GRD-1, Q-GRD-24; ADR-GRD-007; S-GRD-9.
+**Fuentes**: Q-CKP-15, Q-CKP-26, Q-CKP-52; Q-GRD-1, Q-GRD-24, Q-GRD-46; ADR-GRD-007; S-GRD-9.
 
 ### BR-CKP-AUTH-002: Solicitante por ascendencia
 
@@ -921,3 +926,4 @@ Cada regla tendrá al menos un escenario Gherkin, incluido uno negativo, en su h
 | Versión | Fecha | Autor | Cambios |
 |---------|-------|-------|---------|
 | 0.1 | 2026-10-04 | PO (AADD) | Versión inicial: 45 reglas a partir de Q-CKP-1 a Q-CKP-30 (decisión del orquestador, validada por PO y Arquitecto) y de las decisiones heredadas de motor-local, Time Machine y Guardrails. |
+| 0.2 | 2026-10-28 | PO (AADD); decisiones del orquestador (2026-10-28), validadas por el PO y el Arquitecto | Revisión de la Dev Spec DS-US-CKP-019. Q-CKP-52: sin cola, "pedir confirmación" deniega solo cuando pide un agente; la persona pasa con aviso (aplica Q-GRD-46 en BR-CKP-AUTH-001, regla formal y nota). Q-CKP-53: la fila con ⛔ sube solo en la TUI que pidió la acción y mientras la acción siga pendiente (BR-CKP-WF-001). Escenario 5 de US-CKP-019 reescrito como esquema por solicitante. Sin reglas nuevas. |
