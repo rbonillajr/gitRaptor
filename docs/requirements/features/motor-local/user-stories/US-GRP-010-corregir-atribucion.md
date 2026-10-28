@@ -2,10 +2,10 @@
 id: US-GRP-010
 title: "El desarrollador corrige una atribución automática equivocada"
 type: us
-status: draft
+status: implemented
 priority: high
 created: 2026-10-03
-updated: 2026-10-27
+updated: 2026-10-28
 feature: motor-local
 related:
   context:
@@ -99,3 +99,5 @@ Ejemplos:
 
 - **Diseño (flujo/UX):** Pendiente de diseño.
 - **Dev Spec:** [DS-US-GRP-010](../dev-specs/US-GRP-010-dev-spec.md)
+
+Implementado en: PR #300. Pendiente: validación multiplataforma (XP-60).

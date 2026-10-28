@@ -2,7 +2,7 @@
 id: DS-US-GRP-010
 title: "Dev Spec — El desarrollador corrige una atribución automática equivocada"
 type: dev-spec
-status: draft
+status: implemented
 created: 2026-10-27
 updated: 2026-10-28
 story: US-GRP-010
@@ -59,6 +59,8 @@ tags: [motor-local, atribucion, correccion, sesiones, p17, cli, i18n, m2]
 ---
 
 # DS-US-GRP-010 · Corregir una atribución detectada
+
+Implementado en: PR #300. Ajustes de la preparación en `docs/dev-briefs/us-grp-010-attribution-correction.prep.md`; pendiente multiplataforma en XP-60.
 
 ## Contexto rápido
 
@@ -449,8 +451,8 @@ Además: core `the_time_machine_sees_the_current_attribution` (los eventos crudo
 | Plataforma | Cómo se verifica | Pendiente |
 |---|---|---|
 | macOS | `cargo clippy --workspace --all-targets -- -D warnings` y `cargo test --workspace` | — |
-| Linux | `us_grp_010.rs` con `cfg(any(macos, linux))` | **Pendiente: etapa de validación multiplataforma** (e2e) |
-| Windows | Compila; el canal no tiene transporte allí (D12 de US-GRP-009) | **Pendiente: etapa de validación multiplataforma** |
+| Linux | `us_grp_010.rs` con `cfg(any(macos, linux))` | **Pendiente: etapa de validación multiplataforma** (e2e; XP-60) |
+| Windows | Compila; el canal no tiene transporte allí (D12 de US-GRP-009) | **Pendiente: etapa de validación multiplataforma** (XP-60) |
 
 ---
 
