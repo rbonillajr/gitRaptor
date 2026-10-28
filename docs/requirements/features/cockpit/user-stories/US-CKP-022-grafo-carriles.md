@@ -16,6 +16,8 @@ related:
     - US-CKP-001
     - US-CKP-005
     - US-CKP-012
+  specs:
+    - DS-US-CKP-022
 tags:
   - cockpit
   - grafo
@@ -78,4 +80,4 @@ _Pendiente — lo completa el Arquitecto (Dev Spec)._
 ## Diseño y Dev Spec
 
 - **Diseño:** DSYS-GRP-001 (paleta por carril).
-- **Dev Spec:** pendiente. La ventana de 50 commits es supuesto (S-CKP-2); la afina diseño.
+- **Dev Spec:** [DS-US-CKP-022](../dev-specs/US-CKP-022-grafo-carriles.md) (status: draft). La ventana de 50 commits es supuesto (S-CKP-2); la afina diseño (Q-CKP-51).
