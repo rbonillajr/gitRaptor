@@ -581,8 +581,8 @@ fn safe_commit_commits_the_named_path_after_a_prior_with_the_hooks() {
     assert_eq!(
         keys,
         [
-            "operation_id",
             "oid",
+            "operation_id",
             "paths",
             "paths_total",
             "truncated",
@@ -672,7 +672,7 @@ fn a_commit_without_the_agent_trailer_is_denied_like_the_hook() {
     let refused = refusal(&result);
     assert_eq!(refused["code"], "policy-denied", "{result}");
     let rules = refused["params"]["rules"].as_array().expect("params.rules");
-    assert!(rules.iter().any(|r| r == "agents-commit"), "{result}");
+    assert!(rules.iter().any(|r| r == "authorship.trailer-required"), "{result}");
     assert!(refused["action"].is_string(), "{result}");
     assert_unchanged(&m, &before, commits);
     let entries = m.decisions();
@@ -713,7 +713,7 @@ fn the_hooks_under_a_safe_commit_reuse_the_bound_decision_and_log_once() {
     let mut agent = m.agent_session(&[]);
 
     // `warn`: the commit goes in and the decision leaves one notice.
-    let result = agent.commit("fix: warned, no trailer", Some(&["src/a.rs"]));
+    let result = agent.commit(&format!("fix: warned\n\n{CLAUDE}\n"), Some(&["src/a.rs"]));
 
     assert_committed(&result);
     assert_eq!(m.commits(), before + 1);
