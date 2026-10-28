@@ -63,6 +63,7 @@ fn prepare_without_the_capability_is_not_implemented() {
         tm_prior_layer: None,
         tiers: Default::default(),
         discovery: Default::default(),
+        power: Default::default(),
         tm_capture: Default::default(),
     })
     .unwrap();

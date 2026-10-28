@@ -362,6 +362,7 @@ fn a_prefix_never_resolves_or_lists_ids_of_another_repo() {
         tm_prior_layer: None,
         tiers: Default::default(),
         discovery: Default::default(),
+        power: Default::default(),
     })
     .unwrap();
     let oplog_a: Arc<Mutex<Oplog>> = daemon.oplog(&entry_a.repo_id).unwrap();

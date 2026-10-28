@@ -132,6 +132,7 @@ fn start_full(
         tm_prior_layer: None,
         tiers,
         discovery: Default::default(),
+        power: Default::default(),
         tm_capture: TmCapture {
             config: CaptureConfig {
                 enabled: true,

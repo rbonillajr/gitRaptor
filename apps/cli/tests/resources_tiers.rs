@@ -114,6 +114,7 @@ fn machine() -> Machine {
         },
         tm_capture: Default::default(),
         discovery: Default::default(),
+        power: Default::default(),
     })
     .unwrap();
     let handle = daemon.shutdown_handle();

@@ -255,6 +255,7 @@ fn config(tp: &TempProfile, operations: Option<OperationsWiring>) -> DaemonConfi
         tm_prior_layer: None,
         tiers: Default::default(),
         discovery: Default::default(),
+        power: Default::default(),
         tm_capture: Default::default(),
     }
 }
