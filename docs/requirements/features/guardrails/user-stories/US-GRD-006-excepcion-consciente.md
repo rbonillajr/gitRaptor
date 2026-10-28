@@ -2,7 +2,7 @@
 id: US-GRD-006
 title: "El desarrollador hace a conciencia una operación prohibida y queda constancia"
 type: us
-status: partially-implemented
+status: implemented
 priority: high
 created: 2026-10-04
 updated: 2026-10-28
@@ -109,8 +109,8 @@ Entonces la excepción se rechaza sin anunciarse y nada se ejecuta
 
 ## Estado de la implementación (2026-10-28)
 
-Implementado en: PR #295 (PR-A). Dev Spec: [DS-US-GRD-006](../dev-specs/US-GRD-006-excepcion-consciente.md).
+Implementado en: PR #295 (PR-A) y PR #301 (PR-B). Dev Spec: [DS-US-GRD-006](../dev-specs/US-GRD-006-excepcion-consciente.md).
 
-Parcial. PR-A deja el contrato (`crates/api`: métodos `guard.exception*` declarados por adelantado, `ExceptionToken` redactado, `EvaluateParams.exception_token`), la normalización pura del argv (`crates/policy/src/guard/exception.rs`) y el almacén de tokens (`crates/core/src/guardrails/exception.rs`: 128 bits del CSPRNG, solo el Sha256, comparación en tiempo constante, TTL hasta la primera presentación, consumo atómico de un solo uso). Lo cubren `crates/api/tests/us_grd_006_contract.rs`, `crates/policy/tests/us_grd_006_exception.rs` y `crates/core/tests/us_grd_006.rs`. No hay comportamiento observable: nadie emite tokens todavía.
+Completa: `raptor guard exec`, daemon, plantilla 4 del dispatcher, cliente del hook y suites e2e (escenarios 1 a 6 y suite de token de INF-GRD-001). Verificado en macOS; Linux lo cubre el CI de ubuntu.
 
-Falta PR-B: daemon, plantilla 4 del dispatcher, cliente del hook, `raptor guard exec`, mensajes y las suites e2e (escenarios 1 a 6 y la suite de token de INF-GRD-001, que bloquea el merge). Verificado en macOS; Linux lo cubre el CI de ubuntu y Windows es **Pendiente: etapa de validación multiplataforma**.
+Pendiente: Windows (ligadura por handle, Ctrl-C, Validación 12) en la etapa de validación multiplataforma; el escenario de D5 con `diffSize`/`commitFormat` en un rebase (`the_exception_skips_everyone_commit_policies_in_a_rebase`) queda sin test: US-GRD-009 ya está en main, pero el anuncio aún no evalúa esas reglas sobre los commits del rebase, así que hoy la excepción se rechaza (fail-closed); seguimientos de seguridad sin Critical ni High: M-01 c (filter/merge driver, `gpg.program`, `core.sshCommand` y `credential.helper` heredan el token en su entorno; un nieto no puede presentarlo), M-03 (el rechazo repetido de un token vivo aún salta el tope del registro), L-02 (`ExceptionToken` deriva `PartialEq`), L-03 (la relectura de drivers de la llamada 2 usa su `path`, no el worktree ligado).
