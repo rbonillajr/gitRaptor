@@ -2,7 +2,7 @@
 id: DS-US-CKP-015
 title: "Dev Spec — US-CKP-015: poner al día la rama de un agente sobre la base, con snapshot previo y Deshacer"
 type: dev-spec
-status: draft
+status: approved
 created: 2026-10-28
 updated: 2026-10-28
 story: US-CKP-015
@@ -57,7 +57,7 @@ lineage:
 constitution_gates: []
 validation:
   must_read_resolved: true
-  gaps_blocking: 2
+  gaps_blocking: 3
   ready_to_implement: true
   blocked_tasks: [T002, T003, T004, T005, T006, T007, T008]
   gaps_release: 1
@@ -78,30 +78,30 @@ Hoy:
 - El único brazo de rebase es el de prueba (`test_arms.rs:290-316`): rebasa y, si falla, lanza `git rebase --abort` siempre, sin mirar la capa. De ahí sale el comentario de `OperationOutcome::ConflictReverted` (`catalog.rs:952`, "An atomic rebase hit a conflict and was aborted"). No es lógica de producto (DS-TS-CKP-003 D14).
 - `crates/git` ya tiene `UserOp::RebaseOnto { onto }` con `--no-update-refs --no-autosquash --no-autostash` y `UserOp::RebaseAbort` (`crates/git/src/user_ops.rs:100-104`). `crates/policy` ya normaliza `PlanShape::Rebase` en `Operation::Rebase` más la transición de la rama, y registra `Expected::RebaseStart` y `Expected::RebaseOf` (`crates/policy/src/guard/plan.rs:187-214`).
 - **DS-US-CKP-014 no está implementada en `main`**: no existen `crates/core/src/executor/ops/merge.rs`, `ops/context.rs` ni `apps/cli/src/tui/write_flow.rs`. Esta DS depende de ella como orden (G1).
-- **DS-US-MCP-018** (draft) diseña el modo `atomic` del mismo brazo para la capa `mcp`, en `ops/rebase_onto_base.rs`, con un plan "layer-agnóstico, lo reutiliza US-CKP-015". Esta DS comparte ese archivo y su contrato (R2, R3, R7).
+- **DS-US-MCP-018** (draft) diseña el modo `atomic` del mismo brazo para la capa `mcp`, con un plan "layer-agnóstico, lo reutiliza US-CKP-015". Esta DS comparte el submódulo `ops/rebase_onto_base/` y el contrato (R2, R3, R7).
 
 Sin `architecture-constitution.md` en la cascada: las restricciones activas salen de [AGENTS.md](../../../../../AGENTS.md) y de los ADR citados, igual que DS-US-CKP-014 (`unsafe_code = forbid` y escritura con la Git CLI del sistema, ADR-GRP-001; protocolo congelado y códigos en `-32016`, ADR-GRP-016; argv fijo y sin shell, NFR-02). Ninguna tarea las viola.
 
 ### Decisiones
 
-Todas son **Decisión del orquestador (2026-10-28)**, pendiente de validar por Arquitecto y PO. Se reutilizan sin repetirlas I1, I2 (patrón de capacidad), I3 (patrón de motivos aditivos), I4, I8, I9, I10, I12, I13, I14 e I15 de DS-US-CKP-014, y L4/L5 de DS-US-CKP-024.
+Revisadas por Arquitecto y PO el 2026-10-28 contra el código de `main`: R1, R3, R4, R6 y R8 a R13 ratificadas; R2, R5, R7 y R14 cambiadas (revisión, con cambios). Se reutilizan sin repetirlas I1, I2 (patrón de capacidad), I3 (patrón de motivos aditivos), I4, I8, I9, I10, I12, I13, I14 e I15 de DS-US-CKP-014, y L4/L5 de DS-US-CKP-024.
 
 | ID | Decisión | Por qué / descartado |
 |----|----------|----------------------|
-| R1 | **Desde la TUI el rebase es siempre modo `stop`.** La capa `cockpit` fija el modo (ADR-CKP-002 § 9): si el rebase choca, el paso no aborta y el worktree del agente queda con el rebase en curso, como lo deja Git. Desenlace `stopped`. `conflict-reverted` (`catalog.rs:952`) solo existe en el modo `atomic` de la capa `mcp` (DS-US-MCP-018). El comentario de `catalog.rs:952` describe ese modo; el brazo de prueba que aborta siempre no es lógica de producto (D14) | Comprobado contra el código: el único aborto automático está en `test_arms.rs:307-316`. Descartado: abortar también en la TUI, que quita al humano la resolución en su editor (Q-CKP-11, BR-CKP-WF-003). Lo detenido, Abortar, Cancelar y el tiempo transcurrido son de US-CKP-016 (R14) |
-| R2 | **Un solo brazo para los dos modos**: `crates/core/src/executor/ops/rebase_onto_base.rs`, el archivo que fija DS-US-MCP-018 T004. Su `plan_op` es común. Esta DS añade el paso `StopRebase` (capa `cockpit`). Con `Layer::Mcp`, `step()` devuelve error antes de la operación protegida hasta que entre `AtomicRebase` de DS-US-MCP-018, que hace lo simétrico con `Layer::Cockpit`. La primera historia que entre crea el archivo y su línea en `ARMS`; la segunda añade su paso | `StepPlan.layer` (`executor/mod.rs:115`) ya lleva la capa; `plan_op` no la recibe y no la necesita. Descartado: un archivo por modo, que duplica el plan y su orden de rechazos |
-| R3 | **El contexto del plan es `OpsContext`/`EngineFacts` de DS-US-CKP-014 (I1)**, con un método nuevo: `EngineFacts::base_change_pending(repo_id) -> bool`, de la misma fuente que el diagnóstico `base-change-pending` del nivel del equipo. Nunca un segundo mecanismo para la base y las sesiones | DS-US-CKP-014 está aprobada y fija `EngineFacts` como la vía de los datos del motor a los brazos. DS-US-MCP-018 T002 propone `ProtectedBackend::plan_context` para los mismos datos: dos fuentes de la base confirmada y de las sesiones darían respuestas distintas entre el merge y el rebase. Se propone a DS-US-MCP-018 que reutilice `EngineFacts` ([Enmiendas que implica](#enmiendas-que-implica), Q-CKP-41) |
-| R4 | **Orden de rechazos de `plan_op`** (tras `check_common`, `facts.rs:72`, que ya da `operation-in-progress`, `detached-head`, `git-busy`, `worktree-locked`, `branch-checked-out-elsewhere` y `grafts`): contexto adjunto o `NotImplemented` → `dirty-worktree` (algo preparado o sin preparar en archivos seguidos, `Status::has_tracked_changes()` de I6) → `base-unconfirmed` (base no `Confirmed` o sin nombre) → `base-change-pending` → sesiones (R5) | Es el orden de DS-US-MCP-018 T004, con la base leída de `EngineFacts`. Los archivos sin seguimiento no bloquean (Q-CKP-37 para el merge, D6 de DS-US-MCP-018): Git no los toca salvo que el rebase fuera a sobrescribir uno, y entonces se niega (`failed-unchanged`); el snapshot previo los guarda. Validación del PO: Q-CKP-40 |
-| R5 | **Sesión presente = rechazo con las dos capas.** El brazo pone `other_session = true` si `EngineFacts::present_sessions` del worktree del agente no está vacío (Activas e Inactivas). La regla de `executor/mod.rs:521` pierde la condición `layer == Layer::Mcp`: con `rebase-onto-base`, `other_session` da `other-session-present` en las dos capas. Con capa `cockpit` el solicitante nunca es un agente, así que toda sesión presente es "otra"; DS-US-MCP-018 T002 sigue excluyendo la del solicitante con capa `mcp` | BR-CKP-ELIG-003 y BR-CKP-ELIG-001 (rebase "No" con sesión Activa o Inactiva) y BR-CKP-EDGE-004 (manda la más restrictiva, que con "cualquier sesión presente" se cumple sola). Hoy, con capa `cockpit`, `other_session` solo da el aviso `active-session` (`executor/mod.rs:583`), que se acepta: el rebase reescribiría la rama bajo un agente vivo. Descartado: un motivo nuevo, porque `other-session-present` ya dice esto (Q-MCP-21) |
-| R6 | **Trabajo afectado = `Affected::Other`** (I4): los commits reescritos son del agente y sin DEP-CKP-2 no se atribuyen. Con capa `cockpit` da el reto ligado a la huella: es la confirmación del plan de la historia (BR-CKP-AUTH-003, que incluye el rebase). En Windows, `confirmation-unavailable` con texto propio (como Q-CKP-36). La relajación de D13 de DS-US-MCP-018 (`Nobody` con capa `mcp`) pasa del brazo al ejecutor: una regla en `plan()` junto a la de R5 | `permission` (`executor/mod.rs:198`) con `Other` y capa `mcp` daría `foreign-work` a todo agente. El brazo no conoce la capa; el ejecutor sí. Así el valor conservador lo declara el brazo y la excepción por capa queda explícita y auditable en un solo sitio. Descartado: `Nobody` en el brazo, que quita la confirmación de BR-CKP-AUTH-003 en la TUI |
-| R7 | **Capacidad `operation.rebase`** (D1 de DS-US-MCP-018) para toda la forma nueva del rebase, también la de la TUI: `PrepareResult.rebase: Option<RebasePlanView>`, copiada de `OpPlan.expected["view"]` (I14) en `conn.rs` solo para `rebase-onto-base` y una conexión con la capacidad. Sin ella, la regla 1.1 del paso 2 de T001 de DS-US-MCP-018: `not-available-for-layer`, sin plan. `RebasePlanView` vive en `crates/api/src/rebase.rs` (archivo de DS-US-MCP-018 T001; lo crea quien entre primero) | Una capacidad por operación (patrón de I2). La TUI pide toda capacidad que conoce (ADR-GRP-016) |
-| R8 | **El paso `StopRebase` rebasa en el `git_dir` propio del worktree del agente** (patrón de I15): `RepoTarget { git_dir: facts.git_dir, work_tree: Some(facts.root) }` con `UserOp::RebaseOnto { onto }`. El desenlace se lee después y se compara con lo leído antes de lanzar (I8): éxito, sin rebase en curso, HEAD en la rama y nueva punta descendiente de `onto` → `done`; rebase en curso → `stopped`; sin rebase en curso, rama en `old_tip` y estado igual a `before` → `failed-unchanged`; cualquier otra cosa → `failed-changed` (Deshacer) | Con el directorio común Git usaría el HEAD y el índice del worktree principal y rebasaría otra rama. Clasificar contra `before` y no contra el plan evita que un cambio ajeno entre el cerrojo y el lanzamiento salga como `failed-changed` |
-| R9 | **"Ya al día" se decide en la TUI**, no en el plan: con `behind = 0` contra la base (`DivergenceView::Counted`), "Rebasar" sale desactivado con "ya está al día con <base>". El daemon no rechaza un rebase sin nada que hacer: `git rebase` termina sin cambios y el desenlace es `done` con la misma punta | El plan es común con el modo `atomic`, que devuelve `done` con `up_to_date` (DS-US-MCP-018). Descartado: un motivo `up-to-date` en el plan, que rompe esa forma |
-| R10 | **Elegibilidad de "Rebasar" en la TUI**: función pura `rebase_eligibility` en `tui/rebase.rs`, con el orden de T005. El worktree principal y la fila con HEAD separado salen desactivados en la TUI; el daemon solo revalida lo que `check_common` y el plan miden | BR-CKP-ELIG-001: son precondiciones de presentación. El worktree principal ("No" en la matriz) no se rechaza en el plan porque el plan es común con la capa `mcp`, donde un agente puede trabajar en el principal |
-| R11 | **Tecla `b`** ("rebasar sobre la base"), fila nueva en `keymap.rs`. Libre en el código y en las Dev Specs del Cockpit | `r` es Reintentar (`keymap.rs:90`); `m`, `u`, `o`, `d`, `f`, `y`, `s`, `n`, `j`, `k`, `q` y `?` están tomadas (DS-012, DS-014). Descartado: `R`, que se confunde con Reintentar, y `p`, que sugiere push (BR-CKP-CONS-002) |
-| R12 | **⚡ en el plan** con `EngineFacts::predicted_conflict(repo_id, worktree, base)` (L4 de DS-US-CKP-024): con `true`, `OpPlan.warnings` lleva `PredictedConflict` y entra en la huella (L5). La TUI pinta la línea solo si el plan trae el aviso; nunca lo deduce de su modelo de predicción. Si dice No, nada cambia | Mismo mecanismo y misma dependencia (G2) que el merge. Un aviso es UX (ADR-CKP-002 § 2, paso 3): sin predictor, `false` no abre ninguna escritura |
-| R13 | **Deshacer** = `timemachine.undo {worktree: raíz del worktree del agente, operation_id}` (I12). El ámbito del oplog es el worktree del agente y `refs/heads/<rama>`, así que Deshacer devuelve la rama a `old_tip` y el working tree a su estado previo. Con `stopped` no hay Deshacer hasta abortar (BR-CKP-WF-003, BR-TMC-EDGE-004) | `undo.rs` de DS-US-CKP-014 se reutiliza sin cambios: solo cambia el texto del toast |
-| R14 | **Frontera con US-CKP-016**: esta historia lanza el rebase, clasifica `stopped` en el paso y lo presenta con el texto genérico de DS-US-CKP-014 ("Rebase detenido"). Mientras corre, la TUI está en `Running` de `write_flow` ("Rebasando…"). US-CKP-016 añade la fila "Rebase en curso" con rutas sin fusionar, Abortar (`abort-in-progress`), Abrir en el editor, Cancelar (`operation.cancel`) y el tiempo transcurrido, y decide cómo se presenta un rebase cancelado que deja el rebase en curso (hoy el ejecutor fuerza `cancelled` con `Interrupt::Cancelled`, `executor/mod.rs:1041-1043`) | El paso tiene que clasificar bien desde el primer día; la salida del conflicto es de otra historia. Coordinado con DS-US-CKP-016, que asume que el rebase lanzado desde la TUI puede quedar "Rebase en curso" y Cancelarse: es exactamente lo que deja R1 |
+| R1 | **Desde la TUI el rebase es siempre modo `stop`.** La capa `cockpit` fija el modo (ADR-CKP-002 § 9): si el rebase choca, el paso no aborta y el worktree del agente queda con el rebase en curso, como lo deja Git. Desenlace `stopped`. `conflict-reverted` (`catalog.rs:952`) solo existe en el modo `atomic` de la capa `mcp` (DS-US-MCP-018). El comentario de `catalog.rs:952` describe ese modo; el brazo de prueba que aborta siempre no es lógica de producto (D14) **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO**. | Comprobado contra el código: el único aborto automático está en `test_arms.rs:307-316`. Descartado: abortar también en la TUI, que quita al humano la resolución en su editor (Q-CKP-11, BR-CKP-WF-003). Lo detenido, Abortar, Cancelar y el tiempo transcurrido son de US-CKP-016 (R14) |
+| R2 | **Un solo brazo para los dos modos, un archivo por historia** (ADR-GRP-016): `crates/core/src/executor/ops/rebase_onto_base/mod.rs` (`plan_op` común), `stop.rs` (`StopRebase`, esta historia) y `atomic.rs` (`AtomicRebase`, DS-US-MCP-018). `step()` elige el paso por `StepPlan.layer` (`executor/mod.rs:115`). **Con capa `mcp` y sin paso atómico armado, el rechazo va en `plan()`**: `ExecError::NotImplemented("US-MCP-018")`, en la función de reglas de R5 y R6. La primera historia que entre crea `mod.rs` y su línea en `ARMS`; la segunda añade su archivo. **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO (revisión, con cambios)**. | Un `step()` que devuelve `Err` hace que el ejecutor cierre como `Rejected` con `ExecError::Invalid` (`executor/mod.rs:956-960`), así que el rechazo tiene que llegar antes, al preparar. Una TUI o CLI lanzada por un agente tiene capa `mcp` y pide toda capacidad (`crates/api/src/client/mod.rs:168`): sin la regla llegaría al paso. Descartado: un archivo por modo con el plan duplicado, y un solo archivo que dos historias editan a la vez |
+| R3 | **El contexto del plan es `OpsContext`/`EngineFacts` de DS-US-CKP-014 (I1)**, con un método nuevo: `EngineFacts::base_change_pending(repo_id) -> bool`, de la misma fuente que el diagnóstico `base-change-pending` del nivel del equipo. Nunca un segundo mecanismo para la base y las sesiones. `read_plan_context` de DS-US-MCP-018 T002 (`confirmed_team_baseline`, `open_sessions`, `TeamLoader::load`) pasa a ser la implementación de producción en `daemon/operation_facts.rs`, no un canal por `ProtectedBackend`. **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO**. | DS-US-CKP-014 fija `EngineFacts` como la vía de los datos del motor a los brazos. Dos fuentes de la base confirmada y de las sesiones darían respuestas distintas entre el merge y el rebase ([Enmiendas que implica](#enmiendas-que-implica)) |
+| R4 | **Orden de rechazos de `plan_op`** (tras `check_common`, `facts.rs:72`, que ya da `operation-in-progress`, `detached-head`, `git-busy`, `worktree-locked`, `branch-checked-out-elsewhere` y `grafts`): contexto adjunto o `NotImplemented` → `dirty-worktree` (algo preparado o sin preparar en archivos seguidos, `Status::has_tracked_changes()` de I6) → `base-unconfirmed` (base no `Confirmed` o sin nombre) → `base-change-pending` → sesiones (R5) **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO**. | Es el orden de DS-US-MCP-018 T004, con la base leída de `EngineFacts`. Los archivos sin seguimiento no bloquean (Q-CKP-37 para el merge, D6 de DS-US-MCP-018): Git no los toca salvo que el rebase fuera a sobrescribir uno, y entonces se niega (`failed-unchanged`); el snapshot previo los guarda. Validación del PO: Q-CKP-40 |
+| R5 | **Sesión presente = rechazo con las dos capas, calculado en el ejecutor.** El brazo escribe los ids de las sesiones presentes del worktree del agente (Activas e Inactivas, `EngineFacts::present_sessions`) en `OpPlan.expected["sessions"]`, que entra en la huella. Para `rebase-onto-base`, el ejecutor calcula en `plan()` `other_session` = esas sesiones menos el `session_id` del `Requester::Agent` re-resuelto; con capa `cockpit` el solicitante no es un agente y cuentan todas. `other_session` da `other-session-present` en las dos capas. La regla vive en `crates/core/src/executor/rebase_rules.rs` (archivo propio, con R2 y R6), llamada con una línea desde `plan()` en lugar de la condición de `:521`. **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO (revisión, con cambios)**. | BR-CKP-ELIG-003 y BR-CKP-ELIG-001 (rebase "No" con sesión Activa o Inactiva) y BR-CKP-EDGE-004 (con "cualquier sesión presente" la más restrictiva se cumple sola). Hoy, con capa `cockpit`, `other_session` solo da el aviso `active-session` (`executor/mod.rs:580-582`), que se acepta. Descartado: `other_session` = todas en el brazo, que rompe `safe_rebase` porque la sesión del propio agente siempre está presente y `plan_op` no conoce al solicitante (D3 de DS-US-MCP-018) |
+| R6 | **Trabajo afectado = `Affected::Other`** (I4): los commits reescritos son del agente y sin DEP-CKP-2 no se atribuyen. Con capa `cockpit` da el reto ligado a la huella: es la confirmación del plan de la historia (BR-CKP-AUTH-003, que incluye el rebase). En Windows, `confirmation-unavailable` con texto propio (como Q-CKP-36). La relajación de D13 de DS-US-MCP-018 (`Nobody` con capa `mcp`) va en `executor/rebase_rules.rs`, la misma función de R5. **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO**. | `permission` (`executor/mod.rs:198`) con `Other` y capa `mcp` daría `foreign-work` a todo agente. El brazo no conoce la capa; el ejecutor sí. Así el valor conservador lo declara el brazo y la excepción por capa queda explícita en un solo sitio. Descartado: `Nobody` en el brazo, que quita la confirmación de BR-CKP-AUTH-003 en la TUI |
+| R7 | **Capacidad `operation.rebase`** (D1 de DS-US-MCP-018) para toda la forma nueva del rebase, también la de la TUI: `PrepareResult.rebase: Option<RebasePlanView>`, copiada de `OpPlan.expected["view"]` (I14) en `conn.rs`, y `OperationRunResult.rebase`. **La forma completa la fija un PR de contrato conjunto** (T002 de esta DS + T001 de DS-US-MCP-018, solo `crates/api`) antes de cualquier brazo, porque los tipos llevan `deny_unknown_fields`. Sin la capacidad, `-32004` con `implemented_by = US-CKP-015`, como el merge (I2). `RebasePlanView` vive en `crates/api/src/rebase.rs` y lleva `merges` y `merges_capped` (Q-CKP-42). **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO (revisión, con cambios)**. | Una capacidad por operación (patrón de I2). La TUI pide toda capacidad que conoce (ADR-GRP-016). Un cliente viejo no decodifica una forma que cambie después: por eso va primero y entera. Descartado: `not-available-for-layer`, que dice "no para tu capa" cuando lo que falta es la historia |
+| R8 | **El paso `StopRebase` rebasa en el `git_dir` propio del worktree del agente** (patrón de I15): `RepoTarget { git_dir: facts.git_dir, work_tree: Some(facts.root) }` con `UserOp::RebaseOnto { onto }`. El desenlace se lee después y se compara con lo leído antes de lanzar (I8): éxito, sin rebase en curso, HEAD en la rama y nueva punta descendiente de `onto` → `done`; rebase en curso → `stopped`; sin rebase en curso, rama en `old_tip` y estado igual a `before` → `failed-unchanged`; cualquier otra cosa → `failed-changed` (Deshacer) **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO**. | Con el directorio común Git usaría el HEAD y el índice del worktree principal y rebasaría otra rama. Clasificar contra `before` y no contra el plan evita que un cambio ajeno entre el cerrojo y el lanzamiento salga como `failed-changed` |
+| R9 | **"Ya al día" se decide en la TUI**, no en el plan: con `behind = 0` contra la base (`DivergenceView::Counted`), "Rebasar" sale desactivado con "ya está al día con <base>". El daemon no rechaza un rebase sin nada que hacer: `git rebase` termina sin cambios y el desenlace es `done` con la misma punta **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO**. | El plan es común con el modo `atomic`, que devuelve `done` con `up_to_date` (DS-US-MCP-018). Descartado: un motivo `up-to-date` en el plan, que rompe esa forma |
+| R10 | **Elegibilidad de "Rebasar" en la TUI**: función pura `rebase_eligibility` en `tui/rebase.rs`, con el orden de T005. El worktree principal y la fila con HEAD separado salen desactivados en la TUI; el daemon solo revalida lo que `check_common` y el plan miden **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO**. | BR-CKP-ELIG-001: son precondiciones de presentación. El worktree principal ("No" en la matriz) no se rechaza en el plan porque el plan es común con la capa `mcp`, donde un agente puede trabajar en el principal |
+| R11 | **Tecla `b`** ("rebasar sobre la base"), fila nueva en `keymap.rs`. Libre en el código y en las Dev Specs del Cockpit **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO**. | `r` es Reintentar (`keymap.rs:90`); `m`, `u`, `o`, `d`, `f`, `y`, `s`, `n`, `j`, `k`, `q` y `?` están tomadas (DS-012, DS-014). Descartado: `R`, que se confunde con Reintentar, y `p`, que sugiere push (BR-CKP-CONS-002) |
+| R12 | **⚡ en el plan** con `EngineFacts::predicted_conflict(repo_id, worktree, base)` (L4 de DS-US-CKP-024): con `true`, `OpPlan.warnings` lleva `PredictedConflict` y entra en la huella (L5). La TUI pinta la línea solo si el plan trae el aviso; nunca lo deduce de su modelo de predicción. Si dice No, nada cambia **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO**. | Mismo mecanismo y misma dependencia (G2) que el merge. Un aviso es UX (ADR-CKP-002 § 2, paso 3): sin predictor, `false` no abre ninguna escritura |
+| R13 | **Deshacer** = `timemachine.undo {worktree: raíz del worktree del agente, operation_id}` (I12). El ámbito del oplog es el worktree del agente y `refs/heads/<rama>`, así que Deshacer devuelve la rama a `old_tip` y el working tree a su estado previo. Con `stopped` no hay Deshacer hasta abortar (BR-CKP-WF-003, BR-TMC-EDGE-004). Depende del selector `operation_id` de `timemachine.undo` (G5). **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO**. | `undo.rs` de DS-US-CKP-014 se reutiliza sin cambios: solo cambia el texto del toast |
+| R14 | **Frontera con US-CKP-016**: esta historia lanza el rebase, clasifica `stopped` en el paso y lo presenta con el texto genérico de DS-US-CKP-014 ("Rebase detenido") hasta que el panel de T008 de DS-US-CKP-016 lo sustituya. Mientras corre, la TUI está en `Running` de `write_flow` con el texto "Rebase en curso" (el de S11 de DS-US-CKP-016). US-CKP-016 añade rutas sin fusionar, Abortar (`abort-in-progress`), Abrir en el editor, Cancelar (`operation.cancel`) y el tiempo transcurrido, y decide cómo se presenta un rebase cancelado que deja el rebase en curso (hoy el ejecutor fuerza `cancelled` con `Interrupt::Cancelled`, `executor/mod.rs:1041-1043`). **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO (revisión, con cambios)**. | El paso tiene que clasificar bien desde el primer día; la salida del conflicto es de otra historia. Coordinado con DS-US-CKP-016, que asume que el rebase lanzado desde la TUI puede quedar "Rebase en curso" y Cancelarse: es lo que deja R1 |
 
 ## ⚠️ Gaps y violaciones de la constitución
 
@@ -109,8 +109,9 @@ Todas son **Decisión del orquestador (2026-10-28)**, pendiente de validar por A
 |----|-----------|-----------|---------|--------|-------|
 | G1 | **Dependencia de orden**: DS-US-CKP-014 implementada (`OpsContext`, `EngineFacts`, `OperationCatalog::attach`, `Prepared.view`, `write_flow.rs`, `undo.rs`, `present/write_text.rs`, `Status::has_tracked_changes()`) y el cursor de fila de T006 de DS-US-CKP-012 (G3 de DS-US-CKP-014). Comprobado en `main` (2026-10-28): no existen `ops/merge.rs`, `ops/context.rs` ni `tui/write_flow.rs` | Bloqueante | T002, T003, T005, T006 | Mezclar DS-US-CKP-014 antes. T001 (tests en rojo con stubs propios) puede ir antes | Orquestador |
 | G2 | El predictor no publica su estado (PR-B de DS-TS-CKP-001 y `PredictionReader`, L6 de DS-US-CKP-024). Sin él, `predicted_conflict` da siempre `false` | Bloqueante | T007 | Cerrar G2 de DS-US-CKP-024 | Orquestador |
-| G3 | Coordinación con DS-US-MCP-018 (draft): archivo del brazo, capacidad `operation.rebase`, `crates/api/src/rebase.rs` y los motivos `dirty-worktree`, `base-unconfirmed` y `base-change-pending` son compartidos; su T002 propone otra fuente del contexto (R3) y su D13 pone `Nobody` en el brazo (R6). Quien entre primero crea; el segundo integra | Informativo |  | Q-CKP-41 y [Enmiendas que implica](#enmiendas-que-implica) | Arquitecto |
+| G3 | Coordinación con DS-US-MCP-018 (draft): la forma de `operation.rebase` sale de un PR de contrato conjunto (R7); el brazo se reparte en `rebase_onto_base/{mod,stop,atomic}.rs` (R2); el contexto y la regla de sesiones se enmiendan allí (R3, R5, R6). Ratificado por el Arquitecto (Q-CKP-41) | Informativo |  | Aplicar [Enmiendas que implica](#enmiendas-que-implica) a DS-US-MCP-018 | Orquestador |
 | G4 | La TUI no distingue un **cambio de base pendiente** (base confirmada con otra declarada por el equipo): `BaseStatusView` (`crates/api/src/messages.rs:237`) solo tiene `confirmed`, `unconfirmed` e `invalid`. El escenario "base pendiente de confirmar" de la historia es `unconfirmed` y queda cubierto; con un cambio pendiente, "Rebasar" sale ofrecido y el daemon rechaza con `base-change-pending` y su texto | Bloquea liberación |  | Publicar el cambio pendiente en la instantánea con US-CKP-009 y desactivarlo en T005 | Orquestador |
+| G5 | **Selector `operation_id` de `timemachine.undo`**: hoy responde `NOT_IMPLEMENTED` (`crates/core/src/channel/conn.rs:3582-3583`); lo crea X9/T004 de DS-US-CKP-017. Sin él, Deshacer desde el toast (R13) no deshace esta operación concreta | Bloqueante | T006 | Mezclar T004 de DS-US-CKP-017 antes de los tests de Deshacer | Orquestador |
 
 Ninguna violación: sin constitución, ver Contexto rápido.
 
@@ -122,7 +123,7 @@ sequenceDiagram
     participant T as TUI (update + write_flow)
     participant C as hilo del canal
     participant D as daemon (executor)
-    participant R as ops/rebase_onto_base.rs
+    participant R as ops/rebase_onto_base/
     participant TM as Time Machine
     participant G as git (hijo directo)
     T->>T: b sobre la fila: rebase_eligibility (T005)
@@ -141,7 +142,7 @@ sequenceDiagram
     R->>G: run_git (barrera, RebaseStart y RebaseOf ya registradas)
     G-->>R: salida, R lee el desenlace contra before (R8)
     D-->>C: OperationRunResult {operation_id, outcome}
-    C->>T: done → toast "Rebasada feat-login sobre main · u Deshacer" · stopped → "Rebase detenido" (US-CKP-016)
+    C->>T: done → toast "Rebasado feat-login sobre main · u Deshacer" · stopped → "Rebase detenido" (US-CKP-016)
     T->>C: u → LinkCmd::Operation(Undo {worktree del agente, operation_id})
 ```
 
@@ -155,11 +156,11 @@ sequenceDiagram
 |---|---|---|---|
 | T001 | Escribir en rojo los tests de contrato del daemon y de la TUI | — | `crates/core/tests/us_ckp_015_rebase.rs`, `apps/cli/tests/tui_rebase.rs`, stubs |
 | T002 | Crear el contrato (capacidad, motivos, `RebasePlanView`) y el dato de la base pendiente | T001 | `crates/api/src/rebase.rs`, `catalog.rs`, `methods/operation.rs`, `ops/context.rs`, `daemon/operation_facts.rs` |
-| T003 | Crear el plan común de `rebase-onto-base` y las dos reglas del ejecutor | T002 | `ops/rebase_onto_base.rs`, `ops/mod.rs`, `executor/mod.rs`, `channel/conn.rs` |
-| T004 | Crear el paso `StopRebase` y su desenlace | T003 | `ops/rebase_onto_base.rs` |
+| T003 | Crear el plan común de `rebase-onto-base` y las dos reglas del ejecutor | T002 | `ops/rebase_onto_base/mod.rs`, `ops/mod.rs`, `executor/rebase_rules.rs`, `channel/conn.rs` |
+| T004 | Crear el paso `StopRebase` y su desenlace | T003 | `ops/rebase_onto_base/stop.rs` |
 | T005 | Crear la elegibilidad de "Rebasar" en la TUI | T002 | `apps/cli/src/tui/rebase.rs` |
 | T006 | Pintar la acción, el prompt, el resultado y Deshacer, con textos en/es | T005 | `tui/{update,view,help,keymap,mod}.rs`, `present/rebase_text.rs` |
-| T007 | Añadir ⚡ al plan y al prompt | T003, T006, G2 | `ops/rebase_onto_base.rs`, `present/rebase_text.rs` |
+| T007 | Añadir ⚡ al plan y al prompt | T003, T006, G2 | `ops/rebase_onto_base/mod.rs`, `present/rebase_text.rs` |
 | T008 | Cerrar la historia | T001–T007 | `docs` |
 
 T004 y T005–T006 van en paralelo una vez está T003 (T005 solo necesita T002).
@@ -187,33 +188,36 @@ T004 y T005–T006 van en paralelo una vez está T003 (T005 solo necesita T002).
 **Objetivo.** El daemon sabe describir un plan de rebase a una conexión que lo entiende.
 
 **Ubicación.**
-- `crates/api/src/rebase.rs` (**CREATE** si DS-US-MCP-018 no lo creó; si existe, **MODIFY**): `RebasePlanView`. Una línea `pub mod rebase;` en `crates/api/src/lib.rs`.
+- **PR de contrato conjunto con T001 de DS-US-MCP-018** (R7): solo `crates/api`, antes de cualquier brazo, con la forma completa de `operation.rebase` (`PrepareResult.rebase`, `OperationRunResult.rebase`, motivos y avisos).
+- `crates/api/src/rebase.rs` (**CREATE**): `RebasePlanView`, con los tipos de DS-US-MCP-018. Una línea `pub mod rebase;` en `crates/api/src/lib.rs`.
 - `crates/api/src/catalog.rs` (**MODIFY**): `PrepareResult.rebase: Option<RebasePlanView>` con `#[serde(default, skip_serializing_if = "Option::is_none")]`; en `RejectReason`, las variantes que falten de `DirtyWorktree`, `BaseUnconfirmed` (DS-US-CKP-014) y `BaseChangePending` (DS-US-MCP-018), una línea por entrada.
 - `crates/api/src/methods/operation.rs` (**MODIFY** si falta): `CAP_OPERATION_REBASE = Capability::new("operation.rebase")` en el `GROUP` (hoy solo hay `operation.snapshot` en `:29` y `operation.guardrails` en `:33`).
 - `crates/core/src/executor/ops/context.rs` (**MODIFY**): `EngineFacts::base_change_pending(&self, repo_id: &str) -> bool`.
-- `crates/core/src/daemon/operation_facts.rs` (**MODIFY**): la implementación de producción, de la misma fuente que el diagnóstico `base-change-pending` del nivel del equipo (`TeamLoader::load`, `crates/policy/src/team.rs`).
+- `crates/core/src/daemon/operation_facts.rs` (**MODIFY**): la implementación de producción, con `read_plan_context` de DS-US-MCP-018 T002 (`TeamLoader::load`, `crates/policy/src/team.rs`) (R3).
+- `crates/git/src/reader.rs` (**MODIFY**): `RepoReader::count_merges(from, to, max) -> Count` (a crear), commits con más de un padre en `onto..old_tip` (Q-CKP-42).
 
 **Reglas**
-- Los motivos nuevos solo llegan a una conexión con `operation.rebase` (patrón de I3).
+- Los motivos nuevos solo llegan a una conexión con `operation.rebase` (patrón de I3). Sin la capacidad, `operation.prepare` de `rebase-onto-base` responde `-32004` con `implemented_by = US-CKP-015` (R7).
 - `RebasePlanView` sale de datos que ya están en la huella: no cambia lo que la huella compara (I14).
 - `base_change_pending` sin poder leer el nivel del equipo → `true` (falla cerrado: rechazo con motivo, nunca un rebase sobre una base dudosa).
 
 **Criterios de aceptación de la tarea**
 - [ ] `describe` y el esquema de `RejectReason` incluyen los motivos; `crates/api/tests/architecture.rs` sigue en verde (sin códigos nuevos).
-- [ ] Un cliente sin `operation.rebase` recibe `not-available-for-layer` sin plan (test en `conn.rs`; es el guard de la regla 1.1 de T001 de DS-US-MCP-018).
+- [ ] Un cliente sin `operation.rebase` recibe `-32004` con `implemented_by = US-CKP-015` (test en `conn.rs`).
 
 - **Depende:** T001
 - **Refs:** I2, I3 e I14 de DS-US-CKP-014; D1 y T001 de DS-US-MCP-018; ADR-GRP-016
-- **Aceptación:** `cargo test -p gitraptor-api` y `cargo test -p gitraptor-core channel::conn` en verde
+- **Aceptación:** `cargo test -p gitraptor-api`, `cargo test -p gitraptor-git reader` y `cargo test -p gitraptor-core channel::conn` en verde
 
 ### T003 — Crear el plan común y las dos reglas del ejecutor
 
 **Objetivo.** El daemon prepara un rebase con las precondiciones de BR-CKP-ELIG-003, igual para las dos capas.
 
 **Ubicación.**
-- `crates/core/src/executor/ops/rebase_onto_base.rs` (**CREATE** si DS-US-MCP-018 no lo creó): `plan_op`.
+- `crates/core/src/executor/ops/rebase_onto_base/mod.rs` (**CREATE** si DS-US-MCP-018 no lo creó): `plan_op` (R2).
 - `crates/core/src/executor/ops/mod.rs` (**MODIFY**): `OperationId::RebaseOntoBase` en `ARMS` (`:22`) y su brazo en `plan_op` y `step`; `RebaseOntoBase` sale de `TEST_ARMS` (`test_arms.rs`) cuando entra el de producción.
-- `crates/core/src/executor/mod.rs` (**MODIFY**): la regla de `:521` sin `layer == Layer::Mcp` (R5).
+- `crates/core/src/executor/rebase_rules.rs` (**CREATE**): una función con las reglas de capa del rebase (R2, R5, R6).
+- `crates/core/src/executor/mod.rs` (**MODIFY**): `mod rebase_rules;` y una llamada desde `plan()` en lugar de la condición de `:521`.
 - `crates/core/src/channel/conn.rs` (**MODIFY**): `PrepareResult.rebase` desde `Prepared.view` (R7).
 
 **Reglas**
@@ -224,22 +228,26 @@ De `plan_op`, en orden (lo común ya pasó por `check_common`):
 3. `EngineFacts::base`: si no es `Confirmed` o no tiene nombre → `base-unconfirmed`. `EngineFacts::base_change_pending` → `base-change-pending`.
 4. `onto` = punta de `refs/heads/<base>` leída del directorio común; nunca `resolve_main_branch` (lo que hace el brazo de prueba, `test_arms.rs:95-97`).
 5. Rama = `facts.head_branch` (HEAD separado ya cayó en `check_common`, `facts.rs:84`); `old_tip` = `facts.head_commit`.
-6. Recuento: `RepoReader::ahead_behind_commits` de `old_tip` frente a `onto` (los `ahead`), acotado (`Count::AtLeast` → `commits_capped = true`).
-7. `other_session` = `EngineFacts::present_sessions(repo_id, raíz del agente)` no vacío (R5).
+6. Recuento: `RepoReader::ahead_behind_commits` de `old_tip` frente a `onto` (los `ahead`), acotado (`Count::AtLeast` → `commits_capped = true`); merges con `RepoReader::count_merges` (`merges`, `merges_capped`).
+7. `expected["sessions"]` = ids de `EngineFacts::present_sessions(repo_id, raíz del agente)`, ordenados (R5). El brazo no decide `other_session`.
 8. `OpPlan`:
-   - `expected`: `{branch: "refs/heads/<rama>", old_tip, base: "refs/heads/<base>", onto, commits, mode: "stop", view}`. `onto` y `old_tip` en la huella: un commit del agente o de la base entre preparar y ejecutar da `state-changed`.
+   - `expected`: `{branch: "refs/heads/<rama>", old_tip, base: "refs/heads/<base>", onto, commits, merges, sessions, view}`. `onto` y `old_tip` en la huella: un commit del agente o de la base entre preparar y ejecutar da `state-changed`.
    - `warnings`: vacío hasta T007.
    - `affected`: `Affected::Other` (R6).
    - `governed`: `Some(PlanShape::Rebase { branch, upstream: "refs/heads/<base>", old_tip, onto })` (`plan.rs:23`).
-9. `RebasePlanView` en `expected["view"]`: nombre corto de la rama y de la base, `old_tip`, `onto`, recuento y tope.
+9. `RebasePlanView` en `expected["view"]`: nombre corto de la rama y de la base, `old_tip`, `onto`, recuentos de commits y de merges con sus topes.
 
 **Reglas del ejecutor**
-- `executor/mod.rs:521`: `if op_plan.other_session && op == OperationId::RebaseOntoBase` → `OtherSessionPresent`, sin mirar la capa. El resto del ejecutor no cambia.
-- La relajación de `affected` con capa `mcp` (R6) no es de esta historia: la añade DS-US-MCP-018 junto a esa regla. Sin ella, un agente recibe `foreign-work`, que es el valor seguro.
+`executor/rebase_rules.rs`, solo para `rebase-onto-base`, en este orden:
+1. Capa `mcp` sin `AtomicRebase` armado → `ExecError::NotImplemented("US-MCP-018")` (R2).
+2. `other_session` = `expected["sessions"]` menos el `session_id` del `Requester::Agent` re-resuelto (con capa `cockpit`, todas); no vacío → `OtherSessionPresent` (R5).
+3. Relajación de `affected` a `Nobody` con capa `mcp` (R6): la añade DS-US-MCP-018 aquí. Sin ella, un agente recibe `foreign-work`, que es el valor seguro.
+
+El resto del ejecutor no cambia.
 
 **Criterios de aceptación de la tarea**
 - [ ] `ops::tests::production_wiring_has_no_governed_arm_without_guardrails` sigue en verde: `RebaseOntoBase` se arma solo si la puerta decide.
-- [ ] Tests unitarios de `rebase_onto_base.rs` para cada motivo y su orden, con repos temporales.
+- [ ] Tests unitarios de `rebase_onto_base/mod.rs` y de `executor/rebase_rules.rs` para cada motivo y su orden, con repos temporales.
 - [ ] Un repo con `refs/replace` que sustituye la punta del agente rebasa el commit real (L-04).
 
 - **Depende:** T002
@@ -250,10 +258,10 @@ De `plan_op`, en orden (lo común ya pasó por `check_common`):
 
 **Objetivo.** El ejecutor de producción rebasa la rama del agente dentro de la operación protegida y deja el conflicto como lo deja Git.
 
-**Ubicación.** `crates/core/src/executor/ops/rebase_onto_base.rs` (**MODIFY**): `StopRebase` (`ProtectedStep`) y `classify_after`.
+**Ubicación.** `crates/core/src/executor/ops/rebase_onto_base/stop.rs` (**CREATE**): `StopRebase` (`ProtectedStep`) y `classify_after`; una línea `mod stop;` en `rebase_onto_base/mod.rs`.
 
 **Reglas**
-- `step()` construye `StopRebase` solo con `Layer::Cockpit`. Con `Layer::Mcp`, error antes de la operación protegida (sin intención ni previo) hasta `AtomicRebase` (R2).
+- `step()` construye `StopRebase` con `Layer::Cockpit` y `AtomicRebase` con `Layer::Mcp`. La capa `mcp` sin paso atómico nunca llega aquí: la rechaza `plan()` (R2).
 - `scope()`: `worktrees = [raíz del agente]`, `refs = ["refs/heads/<rama>"]`. `subtype()`: `"rebase-onto-base"`.
 - `run()`: lee `before` (punta de la rama, HEAD simbólico, operación en curso y estado del worktree del agente) y luego `UserGitCommand::new(git, RepoTarget { git_dir: facts.git_dir, work_tree: Some(facts.root) }, UserOp::RebaseOnto { onto }, None, session_env, rejecting_editor(None), home)` y `run_git(ctx, cmd, &plan.cancel)` (R8, I15). Sin transiciones propias: `RebaseStart` y `RebaseOf` ya las registra la ligadura de Guardrails (DS-TS-CKP-003 T006).
 - El Git y el `HOME` salen de `OpsContext`.
@@ -286,7 +294,7 @@ De `plan_op`, en orden (lo común ya pasó por `check_common`):
   4. Worktree principal → `MainWorktree`.
   5. HEAD separado → `Detached`, con "crea una rama o cámbiate a una" (Q-MCP-30).
   6. Base no confirmada o inválida → `BaseUnconfirmed`, con "confirma la rama base" y cómo (BR-CKP-WF-005; misma fuente que la regla 5 de T004 de DS-US-CKP-014).
-  7. Operación en curso en la fila → `InProgress` (BR-CKP-EDGE-002).
+  7. Operación en curso en la fila → `InProgress`, con el texto único "hay un <merge|rebase> en curso; abórtalo o termínalo primero" (BR-CKP-EDGE-002; mismo texto en DS-US-CKP-016 T007 y DS-US-CKP-017).
   8. Alguna sesión presente (Activa o Inactiva) en el worktree → `SessionPresent`, con "el agente sigue en este directorio; espera a que termine". Con varias sesiones basta una (BR-CKP-EDGE-004).
   9. Cambios preparados o sin preparar en archivos seguidos → `Dirty`, con "hay cambios sin commitear" (criterio de I6; el recuento de sin seguimiento no cuenta). Si `WorktreeState::Ready` aún lleva solo el total (`changes`, `model.rs:392`), la separación la añade T004 de DS-US-CKP-014; si no la añadió, esta tarea la añade en `present/ingest.rs` desde `staged` y `unstaged` de la instantánea (`messages.rs:337-338`).
   10. `behind = 0` contra la base → `UpToDate`, con "ya está al día con <base>" (R9).
@@ -308,10 +316,11 @@ De `plan_op`, en orden (lo común ya pasó por `check_common`):
 - `apps/cli/src/present/rebase_text.rs` (**CREATE**): textos en/es del plan, de los bloqueos de T005 y de los toasts. Una línea en `present/mod.rs`. Los motivos de rechazo nuevos (`dirty-worktree`, `base-change-pending`) van en `present/write_text.rs` (el `match` exhaustivo obliga).
 
 **Reglas**
-- ConfirmPrompt (`widgets/confirm.rs`, default No): título "Rebasar", pregunta "reescribir <n> commits de <actor> sobre <base>". El actor es el de la fila (I13); `commits_capped` → "<n>+ commits". Todos los avisos van en el mismo prompt (ADR-CKP-002 § 3).
-- Toast al terminar (5 s): `done` → "Rebasada <rama> sobre <base> · u Deshacer"; `done` con la misma punta → "<rama> ya estaba al día con <base>"; `aborted` → "no se pudo tomar el snapshot previo; no se rebasó nada"; `failed-unchanged` → el motivo y "no cambió nada"; `failed-changed` → el motivo y "u Deshacer"; `stopped` → "Rebase detenido" sin Deshacer (US-CKP-016 añade rutas, Abortar, editor y Cancelar); `rejected` → el texto de `write_text.rs`.
+- ConfirmPrompt (`widgets/confirm.rs`, default No): título "Rebasar", pregunta "reescribir hasta <n> commits de <actor> sobre <base>" ("hasta": Git descarta los que ya están en la base). El actor es el de la fila (I13); `commits_capped` → "<n>+ commits". Con `merges > 0`, una línea sin bloqueo y sin `WarningCode`: "se aplanan <m> merges de la rama (Deshacer los recupera)" (`merges_capped` → "<m>+", Q-CKP-42). Todos los avisos van en el mismo prompt (ADR-CKP-002 § 3).
+- Toast al terminar (5 s): `done` → "Rebasado <rama> sobre <base> · u Deshacer"; `done` con la misma punta → "<rama> ya estaba al día con <base>"; `aborted` → "no se pudo tomar el snapshot previo; no se rebasó nada"; `failed-unchanged` → el motivo y "no cambió nada"; si Git se negó por un archivo sin seguimiento que el rebase sobrescribiría, el texto nombra el archivo y qué hacer ("muévelo o bórralo y vuelve a rebasar"; design system § 4); `failed-changed` → el motivo y "u Deshacer"; `stopped` → "Rebase detenido" sin Deshacer, hasta que el panel de T008 de DS-US-CKP-016 sustituya este toast; `rejected` → el texto de `write_text.rs`.
 - En Windows, `confirmation-unavailable` → "en Windows todavía no se puede confirmar un rebase desde GitRaptor" (R6).
-- Deshacer: `undo.rs` sin cambios (R13); toast "Deshecho: <rama> vuelve a <oid7>".
+- Mientras corre: "Rebase en curso" (S11 de DS-US-CKP-016).
+- Deshacer: `undo.rs` sin cambios (R13); toast "Deshecho: <rama> vuelve a <oid7>". Sus tests esperan al selector `operation_id` (G5).
 - La salida de Git se ve con `o` sobre el toast (I11). Ningún push en ningún estado (BR-CKP-CONS-002). Plegado ASCII y sin color (DS-US-CKP-005).
 
 - **Depende:** T005
@@ -323,7 +332,7 @@ De `plan_op`, en orden (lo común ya pasó por `check_common`):
 **Objetivo.** Con ⚡ entre la rama y la base, el mismo prompt avisa del conflicto previsto antes de confirmar.
 
 **Ubicación.**
-- `crates/core/src/executor/ops/rebase_onto_base.rs` (**MODIFY**): `warnings.push(WarningCode::PredictedConflict)` si `EngineFacts::predicted_conflict(repo_id, raíz del agente, base)` (R12).
+- `crates/core/src/executor/ops/rebase_onto_base/mod.rs` (**MODIFY**): `warnings.push(WarningCode::PredictedConflict)` si `EngineFacts::predicted_conflict(repo_id, raíz del agente, base)` (R12).
 - `apps/cli/src/present/rebase_text.rs` (**MODIFY**): línea "⚡ conflicto previsto entre <rama> y <base>" antes de la pregunta, con plegado ASCII.
 
 **Reglas**
@@ -361,10 +370,13 @@ De `plan_op`, en orden (lo común ya pasó por `check_common`):
 | `crates/api/src/methods/operation.rs` | MODIFY (capacidad, si no está) | T002 |
 | `crates/core/src/executor/ops/context.rs` | MODIFY (`base_change_pending`) | T002 |
 | `crates/core/src/daemon/operation_facts.rs` | MODIFY | T002 |
-| `crates/core/src/executor/ops/rebase_onto_base.rs` | CREATE o MODIFY (plan, `StopRebase`) | T003, T004, T007 |
+| `crates/core/src/executor/ops/rebase_onto_base/mod.rs` | CREATE o MODIFY (plan) | T003, T007 |
+| `crates/core/src/executor/ops/rebase_onto_base/stop.rs` | CREATE (`StopRebase`) | T004 |
+| `crates/core/src/executor/rebase_rules.rs` | CREATE (reglas de capa) | T003 |
+| `crates/git/src/reader.rs` | MODIFY (`count_merges`) | T002 |
 | `crates/core/src/executor/ops/mod.rs` | MODIFY (`ARMS` y despacho) | T003 |
 | `crates/core/src/executor/ops/test_arms.rs` | MODIFY (sale `RebaseOntoBase` de `TEST_ARMS`) | T003 |
-| `crates/core/src/executor/mod.rs` | MODIFY (regla de `:521`) | T003 |
+| `crates/core/src/executor/mod.rs` | MODIFY (`mod rebase_rules;` y una llamada en `plan()`) | T003 |
 | `crates/core/src/channel/conn.rs` | MODIFY (`PrepareResult.rebase`) | T003 |
 | `crates/core/tests/us_ckp_015_rebase.rs` | CREATE | T001 |
 | `apps/cli/src/tui/rebase.rs` | CREATE | T005 |
@@ -388,6 +400,8 @@ pub struct RebasePlanView {
     pub onto: String,          // oid completo (hex)
     pub commits: u32,
     pub commits_capped: bool,
+    pub merges: u32,           // commits con más de un padre en onto..old_tip (Q-CKP-42)
+    pub merges_capped: bool,
 }
 
 // crates/api/src/catalog.rs (T002) — PrepareResult, campo nuevo (solo con operation.rebase)
@@ -397,6 +411,12 @@ pub rebase: Option<crate::rebase::RebasePlanView>,
 
 // crates/core/src/executor/ops/context.rs (T002) — método nuevo de EngineFacts (DS-US-CKP-014)
 fn base_change_pending(&self, repo_id: &str) -> bool;
+
+// crates/core/src/executor/rebase_rules.rs (T003)
+pub(super) fn rebase_rules(op_plan: &mut OpPlan, layer: Layer, who: &Who, atomic_armed: bool) -> Result<(), ExecError>;
+
+// crates/git/src/reader.rs (T002), a crear
+pub fn count_merges(&self, from: &str, to: &str, max: u64) -> Result<Count, ReadError>;
 
 // apps/cli/src/tui/rebase.rs (T005) — a crear
 pub enum RebaseBlock {
@@ -416,8 +436,9 @@ Lo que ya existe y se usa tal cual: `OperationId::RebaseOntoBase`, `OperationArg
 ### Firmas del stack
 
 ```rust
-// crates/core/src/executor/ops/rebase_onto_base.rs (T003, T004)
+// crates/core/src/executor/ops/rebase_onto_base/mod.rs (T003)
 pub(super) fn plan_op(ctx: &OpsContext, repo: &RepoHandle, facts: &RepoFacts) -> Result<OpPlan, PlanError>;
+// crates/core/src/executor/ops/rebase_onto_base/stop.rs (T004)
 pub(super) struct StopRebase { /* git_dir, root, branch, old_tip, onto, git, home, session_env */ }
 impl ProtectedStep for StopRebase { /* scope(), subtype() = "rebase-onto-base", run() */ }
 fn classify_after(before: &Before, after: &After, onto: &str) -> OperationOutcome;
@@ -433,8 +454,8 @@ pub fn rebase_eligibility(repo: &RepoView, row: &WorktreeRow, layer: Option<Laye
 
 | Método | Cambio | Con `operation.rebase` | Sin ella |
 |---|---|---|---|
-| `operation.prepare {operation: "rebase-onto-base", worktree: <raíz del agente>, args: {}, session_env}` | Forma: `rebase` y motivos nuevos | `PrepareResult` con `rebase`, `warnings`, `challenge` | `not-available-for-layer`, sin plan (regla 1.1 de T001 de DS-US-MCP-018) |
-| `operation.run {plan_id, accepted_warnings, confirmation}` | Ninguno | `OperationRunResult` con `outcome` y `git_output` (capa `cockpit`) | — |
+| `operation.prepare {operation: "rebase-onto-base", worktree: <raíz del agente>, args: {}, session_env}` | Forma: `rebase` y motivos nuevos | `PrepareResult` con `rebase`, `warnings`, `challenge` | `-32004`, `implemented_by = US-CKP-015` |
+| `operation.run {plan_id, accepted_warnings, confirmation}` | Forma: `OperationRunResult.rebase` (PR de contrato conjunto, R7) | `OperationRunResult` con `outcome`, `git_output` (capa `cockpit`) y `rebase` | — |
 | `timemachine.undo {worktree, operation_id}` | Ninguno | `UndoResult` | — |
 
 ### Forma del error y del cuerpo de respuesta
@@ -453,6 +474,7 @@ _No aplica — no hay clave de perfil ni de repo nueva; los flags del rebase son
 | Toast con Deshacer | 5 s | BR-CKP-WF-002 |
 | Espera de la barrera | 2 s | `REGISTRATION_WAIT`, I9 de DS-US-CKP-014 |
 | Tope del recuento de commits | el de `ahead_behind_commits` | `crates/git/src/reader.rs` |
+| Tope del recuento de merges | el mismo que el de commits | `count_merges`, a crear |
 | Tiempo máximo del rebase con capa `cockpit` | ninguno: solo Cancelar | BR-CKP-WF-008 |
 
 ## Modelo de datos
@@ -495,7 +517,9 @@ Además:
 - `us_ckp_015_rebase::an_agent_commit_between_prepare_and_run_is_state_changed`: `rejected` con `state-changed`, sin cambios (Validación 3 de ADR-CKP-002).
 - `us_ckp_015_rebase::other_branches_never_move`: con `rebase.updateRefs=true` y `rebase.autoStash=true` en la config, ninguna otra rama se mueve y no hay autostash (Validación 9 de ADR-CKP-002).
 - `us_ckp_015_rebase::a_real_rebase_matches_the_registered_transitions`: con una regla de Guardrails que deja rebasar a la capa `cockpit`, el `pre-rebase` casa con `RebaseStart` y la actualización final de la rama con `RebaseOf`, junto a las de `HEAD` y `ORIG_HEAD` que escribe `git rebase`. El brazo de prueba no lo había probado con Guardrails real.
-- `us_ckp_015_rebase::an_mcp_layer_never_gets_the_stop_mode`: capa `mcp` sin `AtomicRebase` → error antes de la operación protegida, sin intención en el oplog.
+- `us_ckp_015_rebase::an_mcp_layer_without_the_atomic_step_is_not_implemented` (R2): capa `mcp` sin `AtomicRebase` → `-32004` con `implemented_by = US-MCP-018` al preparar, sin plan ni intención en el oplog.
+- `rebase_rules::tests::the_requester_session_is_not_another_session` (R5): con capa `mcp`, la sesión del solicitante no cuenta; con capa `cockpit`, cuentan todas.
+- `us_ckp_015_rebase::merges_are_counted_and_flattened` (Q-CKP-42): rama con un merge → `RebasePlanView.merges = 1`, sin `WarningCode` nuevo; tras Deshacer el merge vuelve.
 - `us_ckp_015_rebase::the_remote_refs_never_change`: `refs/remotes/origin/*` iguales tras el rebase.
 - `tui::rebase::tests::an_up_to_date_branch_disables_rebase` (R9).
 
@@ -508,13 +532,13 @@ Se ejecuta en macOS. Linux y Windows: **Pendiente: etapa de validación multipla
 - [ ] **NFR-02, sin shell**: el único lanzamiento es `run_git` con `UserOp::RebaseOnto`; `onto` sale del plan, nunca de texto libre; sin `--exec`, sin `--update-refs`, sin autostash ni autosquash (`user_ops.rs:65-67`, `:100`). `crates/core/tests/executor_boundary.rs` en verde.
 - [ ] **Entradas validadas**: `rebase-onto-base` sigue con `NoArgs` y `deny_unknown_fields`; el worktree pedido debe ser la raíz de un worktree observado.
 - [ ] **Texto no confiable**: nombres de rama y salida de Git pasan por `UntrustedName`/`Untrusted` en el contrato y por `SafeText` en la TUI. La salida de Git solo va a capa `cockpit`.
-- [ ] **NFR-01**: sin snapshot previo no hay rebase (`aborted`); Deshacer devuelve la rama y el working tree; un conflicto deja el rebase en curso con el previo intacto; los tests usan repos temporales.
+- [ ] **NFR-01**: sin snapshot previo no hay rebase (`aborted`); Deshacer devuelve la rama y el working tree; un conflicto deja el rebase en curso con el previo intacto, y la foto posterior con el rebase a medias lleva la marca `mid_operation` (`crates/core/src/timemachine/prior_point.rs:121`, `store/capture.rs:717`), así que nunca es destino de un undo; los tests usan repos temporales.
 - [ ] **Capa**: el modo `stop` nunca se sirve a la capa `mcp`.
 - [ ] **Nunca red**: ningún `fetch` ni `push`.
 
 ## Cómo extender
 
-- **Modo `atomic` (US-MCP-018)**: su paso `AtomicRebase` en el mismo `rebase_onto_base.rs`; `step()` elige por `StepPlan.layer`. El plan no cambia.
+- **Modo `atomic` (US-MCP-018)**: su paso `AtomicRebase` en `rebase_onto_base/atomic.rs`; `step()` elige por `StepPlan.layer` y `rebase_rules.rs` deja de rechazar la capa `mcp`. El plan no cambia.
 - **Rutas en conflicto, Abortar y Cancelar (US-CKP-016)**: leen el `stopped` que deja `StopRebase` y el oplog de esta operación; no tocan el paso.
 - **Un motivo nuevo**: variante aditiva en `RejectReason` detrás de `operation.rebase` y su texto en `present/write_text.rs`.
 
@@ -522,10 +546,12 @@ Se ejecuta en macOS. Linux y Windows: **Pendiente: etapa de validación multipla
 
 No aplicadas por esta DS; las aplica el PR de la historia o quedan anotadas en él.
 
-- **DS-US-MCP-018 T002** (R3): el contexto del plan sale de `EngineFacts` (DS-US-CKP-014 I1), con métodos nuevos para lo que falte (`base_change_pending`, protección del force-push), en lugar de `ProtectedBackend::plan_context`.
-- **DS-US-MCP-018 D13** (R6): el brazo declara `Affected::Other`; la relajación a `Nobody` con capa `mcp` va en `plan()` del ejecutor, junto a la regla de `:521`, con el mismo comentario `TRADEOFF`.
-- **DS-US-MCP-018 T004, regla "otra sesión (`:514`, solo capa `mcp`)"** (R5): la regla vale para las dos capas; con capa `cockpit` toda sesión presente cuenta.
-- **ADR-CKP-003 § 2** (Acciones según la capa): "el rebase usa el modo `atomic`" en una TUI abierta por un agente queda sin ofrecer hasta US-MCP-018; mientras, "Rebasar" sale desactivado con `AgentLayer` (T005, regla 2). Q-CKP-41.
+- **DS-US-MCP-018 T001** (R7): su contrato y T002 de esta DS van en un **PR de contrato conjunto**, solo `crates/api`, antes de cualquier brazo: forma completa de `operation.rebase` (`PrepareResult.rebase` con `RebasePlanView`, `merges` incluido, y `OperationRunResult.rebase`). Sin la capacidad, `-32004` en lugar de `not-available-for-layer` (regla 1.1 del paso 2).
+- **DS-US-MCP-018 T002** (R3): `read_plan_context` (`confirmed_team_baseline`, `open_sessions`, `TeamLoader::load`) pasa a ser la implementación de producción de `EngineFacts` en `crates/core/src/daemon/operation_facts.rs` (DS-US-CKP-014 I1), con métodos nuevos para lo que falte (`base_change_pending`, protección del force-push). Se quitan `ProtectedBackend::plan_context` y `plan_op_in`.
+- **DS-US-MCP-018 D3** (R5): el brazo escribe los ids de sesiones presentes en `OpPlan.expected["sessions"]`; `other_session` lo calcula `executor/rebase_rules.rs` restando la sesión del solicitante re-resuelto. La regla de `:514`/`:521` vale para las dos capas.
+- **DS-US-MCP-018 D13** (R6): el brazo declara `Affected::Other`; la relajación a `Nobody` con capa `mcp` va en `executor/rebase_rules.rs`, con el mismo comentario `TRADEOFF`.
+- **DS-US-MCP-018 T004, archivos** (R2): el brazo es el submódulo `crates/core/src/executor/ops/rebase_onto_base/` con `mod.rs` (plan común), `stop.rs` (esta DS) y `atomic.rs` (`AtomicRebase`, `AbortRunner`). Al entrar `atomic.rs`, `rebase_rules.rs` deja de rechazar la capa `mcp` con `NotImplemented("US-MCP-018")`.
+- **ADR-CKP-003 § 2** (Acciones según la capa): "el rebase usa el modo `atomic`" en una TUI abierta por un agente queda sin ofrecer hasta US-MCP-018; mientras, "Rebasar" sale desactivado con `AgentLayer` (T005, regla 2), respaldado por el `NotImplemented` del daemon (R2). Ratificado en Q-CKP-41.
 - **Comentario de `OperationOutcome::ConflictReverted`** (`catalog.rs:952`): precisar "only in mode `atomic` (layer `mcp`)". Es documentación del código: va en el PR de la historia.
 
 ## Fuera de alcance
@@ -549,11 +575,11 @@ No aplicadas por esta DS; las aplica el PR de la historia o quedan anotadas en �
 
 | ID | Pregunta | Para |
 |----|----------|------|
-| Q-CKP-40 | ¿Un archivo sin seguimiento en el worktree del agente debe bloquear el rebase (R4), o solo los cambios en archivos seguidos, como el merge (Q-CKP-37) y `safe_rebase` (D6 de DS-US-MCP-018)? Propuesta: solo los seguidos. El escenario de la historia ("un archivo sin commitear") se lee como archivo seguido modificado | PO |
-| Q-CKP-41 | Coordinación con DS-US-MCP-018 (R2, R3, R5, R6): un solo brazo con dos pasos, `EngineFacts` como única fuente del contexto, `Affected::Other` en el brazo con la relajación de la capa `mcp` en el ejecutor, y `other-session-present` en las dos capas. ¿Se ratifica y se enmienda DS-US-MCP-018? ¿Se acepta "Rebasar" desactivado en una TUI de agente hasta US-MCP-018, frente a ADR-CKP-003 § 2? | Arquitecto |
-| Q-CKP-42 | `git rebase` sin `--rebase-merges` aplana los commits de merge de la rama del agente, y el plan cuenta los `ahead` con ellos. ¿Se avisa en el prompt cuando la rama tiene merges ("se aplanan N merges"), o basta con el recuento y Deshacer? Propuesta: aviso sin bloqueo, con un recuento de merges a crear en la capa de lectura | PO / Arquitecto |
+| ~~Q-CKP-40~~ | ~~¿Un archivo sin seguimiento en el worktree del agente debe bloquear el rebase (R4), o solo los cambios en archivos seguidos?~~ **Cerrada.** Decisión del orquestador (2026-10-28), validada por PO: solo bloquean los archivos seguidos, coherente con Q-CKP-37; el snapshot previo guarda los sin seguimiento. Si Git se niega por uno, el toast lo nombra y dice qué hacer (T006) | PO |
+| ~~Q-CKP-41~~ | ~~Coordinación con DS-US-MCP-018 y "Rebasar" desactivado en una TUI de agente frente a ADR-CKP-003 § 2~~ **Cerrada.** Decisión del orquestador (2026-10-28), validada por Arquitecto y PO (revisión, con cambios): ratificada con R2 (submódulo y `NotImplemented` en `plan()`), R3 (`read_plan_context` en `operation_facts.rs`), R5 (sesiones en `expected`, resta en el ejecutor) y R6. "Rebasar" desactivado con `AgentLayer` en una TUI de agente es aceptable mientras no exista US-MCP-018 | Arquitecto / PO |
+| ~~Q-CKP-42~~ | ~~¿Se avisa cuando la rama tiene merges que el rebase aplana?~~ **Cerrada.** Decisión del orquestador (2026-10-28), validada por Arquitecto y PO (revisión, con cambios): aviso sin bloqueo y sin `WarningCode` nuevo. `RebasePlanView.merges` (y `merges_capped`) con `RepoReader::count_merges` sobre `onto..old_tip`, en el PR de contrato de R7. El prompt dice "se aplanan N merges de la rama (Deshacer los recupera)" y "reescribir hasta N commits", porque Git descarta los que ya están en la base | PO / Arquitecto |
 
 ## Estado
 
-- Borrador. Pendiente de validar por Arquitecto y PO (R1 a R14, Q-CKP-40 a Q-CKP-42).
-- Implementable cuando entre DS-US-CKP-014 (G1); T007 espera a G2.
+- Aprobada (2026-10-28) por Arquitecto y PO, con los cambios aplicados. Sin preguntas abiertas.
+- Implementable en orden: T001 ya; T002 en el PR de contrato conjunto con DS-US-MCP-018; el resto cuando entre DS-US-CKP-014 (G1). T007 espera a G2 y los tests de Deshacer a G5.
