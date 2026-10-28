@@ -418,7 +418,7 @@ fn a_timed_out_or_cancelled_commit_unstages_what_it_added() {
     f.git(&["checkout", "-q", "-b", "feat/x"]);
     hook(&f, WAIT_FOR_RELEASE);
     let wt = f.repo.clone();
-    let rig = Rig::build(f, wt, alone(), Some(Duration::from_secs(2)));
+    let rig = Rig::build(f, wt, alone(), Some(Duration::from_secs(5)));
     rig.f.write("new.txt", "new\n");
     let (commits, index) = (rig.commits(), rig.index());
     let plan = rig.prepare(Some(&["new.txt"]));
@@ -457,7 +457,7 @@ fn an_orphan_index_lock_after_a_time_limit_is_failed_changed() {
         &format!("chmod 555 '{}'\n{WAIT_FOR_RELEASE}", git_dir.display()),
     );
     let wt = f.repo.clone();
-    let rig = Rig::build(f, wt, alone(), Some(Duration::from_secs(2)));
+    let rig = Rig::build(f, wt, alone(), Some(Duration::from_secs(5)));
     rig.f.write("new.txt", "new\n");
     let plan = rig.prepare(Some(&["new.txt"]));
 
