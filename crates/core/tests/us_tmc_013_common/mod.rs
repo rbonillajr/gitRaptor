@@ -185,6 +185,7 @@ pub fn start(
         tm_prior_layer: None,
         tiers: Default::default(),
         discovery: Default::default(),
+        power: Default::default(),
         // A capture of its own would add points the repo-intact checks do not expect.
         tm_capture: TmCapture {
             config: CaptureConfig {

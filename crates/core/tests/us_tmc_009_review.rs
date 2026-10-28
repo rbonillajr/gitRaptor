@@ -234,6 +234,7 @@ fn run_daemon(fx: Arc<Fixture>, tp: TempProfile, repo_id: String) -> Running {
         tm_prior_layer: None,
         tiers: Default::default(),
         discovery: Default::default(),
+        power: Default::default(),
         tm_capture: TmCapture::default(),
     };
     let daemon = Daemon::start(config).unwrap();

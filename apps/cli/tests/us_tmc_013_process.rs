@@ -266,6 +266,7 @@ fn machine(test_confirmation: Option<TestConfirmation>) -> Machine {
         tm_prior_layer: None,
         tiers: Default::default(),
         discovery: Default::default(),
+        power: Default::default(),
         tm_capture: Default::default(),
     })
     .unwrap();

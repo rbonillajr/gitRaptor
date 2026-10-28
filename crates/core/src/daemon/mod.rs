@@ -28,6 +28,7 @@ mod lock;
 mod log;
 mod mcp;
 mod modules;
+mod power;
 mod profile_loss;
 mod repos;
 mod serve;
@@ -80,6 +81,7 @@ use guard::recover_guardrails;
 pub use lock::{InstanceLock, LOCK_FILE, running_pid, wait_until_released};
 pub use log::{Field, LOG_FILE, Level, LogLimits, Logger};
 pub use mcp::McpMarkError;
+pub use power::PowerConfig;
 use shutdown::Control;
 pub(crate) use shutdown::McpContext;
 pub(crate) use shutdown::{GuardLogReply, GuardReply, GuardRequest, HealthReport};
@@ -187,6 +189,8 @@ pub struct DaemonConfig {
     pub tiers: TierConfig,
     /// Discovery roots (US-GRP-020).
     pub discovery: DiscoveryConfig,
+    /// The power source and how often it is read (TS-GRP-005).
+    pub power: PowerConfig,
 }
 
 /// A layer over the snapshotter of the Time Machine's own commands (tests).
@@ -229,6 +233,10 @@ impl DaemonConfig {
             },
             tiers,
             discovery: DiscoveryConfig::from_env(),
+            power: PowerConfig {
+                source: crate::power::platform_source(),
+                ..PowerConfig::default()
+            },
         })
     }
 }
@@ -717,6 +725,11 @@ impl Daemon {
         // (US-GRP-007). Clients and tests take it as "started".
         daemon.logger.info("daemon_started", &fields);
         Ok(daemon)
+    }
+
+    /// The power-saving mode, for the modules that follow it (TS-GRP-005, D7).
+    pub fn power(&self) -> crate::power::PowerMode {
+        todo!("T005")
     }
 
     pub fn state(&self) -> EngineState {

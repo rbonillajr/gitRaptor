@@ -1,0 +1,98 @@
+{
+  "source": {
+    "kind": "devspec",
+    "ref": "docs/requirements/features/motor-local/dev-specs/TS-GRP-005-dev-spec.md"
+  },
+  "suite": {
+    "command": "node tools/test/nextest-junit.mjs"
+  },
+  "layers": {
+    "runtime": {
+      "commands": [
+        {
+          "id": "suite",
+          "cmd": "node tools/test/nextest-junit.mjs"
+        }
+      ],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "criteria": [
+    {
+      "id": "T001",
+      "statement": "En macOS, qos::set_current(Utility) deja el hilo con QoS Utility y política de E/S IOPOL_UTILITY leídas del SO, y un hijo preparado con qos::lower_child(cmd, Background) corre con nice 10 (Guards 1.1 y 1.2)",
+      "verify": "cargo test -p gitraptor-macsys --test qos 2>&1 | grep -q 'test result: ok. 2 passed'",
+      "layer": "runtime",
+      "tests": ["crates/macsys/tests/qos.rs"]
+    },
+    {
+      "id": "T002",
+      "statement": "En macOS, un hilo lanzado con work_class::spawn en Utility lee Utility del SO; scoped baja y restaura la clase anterior al soltarse, nunca sube; un pool terminado (también con pánico) sale del registro de pools (Guards 2.1, 2.2, 2.3 y 2.5; 2.4, la plataforma sin soporte, solo compila y corre fuera de macOS)",
+      "verify": "cargo test -p gitraptor-core --test work_class 2>&1 | grep -q 'test result: ok. 4 passed'",
+      "layer": "runtime",
+      "tests": ["crates/core/tests/work_class.rs"]
+    },
+    {
+      "id": "T003",
+      "statement": "resolve sigue la tabla de D6; PowerMode::wait_change despierta en cuanto cambia la versión; con FakePowerSource y reloj simulado, el monitor publica un cambio de fuente en ≤ 60 s y no publica dos veces el mismo modo (Guards 3.1 a 3.4)",
+      "verify": "cargo test -p gitraptor-core --lib -- --exact power::tests::resolve_follows_the_setting_and_the_source power::tests::wait_change_returns_on_a_change power::monitor::tests::a_source_change_is_published_within_60_s power::monitor::tests::the_same_mode_is_not_published_twice 2>&1 | grep -q 'test result: ok. 4 passed'",
+      "layer": "runtime",
+      "tests": ["crates/core/src/power/tests.rs", "crates/core/src/power/monitor/tests.rs"]
+    },
+    {
+      "id": "T004",
+      "statement": "engine.powerSaving (auto|on|off) se acepta en el nivel de perfil y en equipo o local se ignora con el diagnóstico de niveles; profile::settings::power_saving devuelve Auto sin clave o con un documento inaplicable y el valor del perfil cuando lo hay (Guards 4.1 y 4.2)",
+      "verify": "cargo test -p gitraptor-policy --lib settings::document::power_saving_tests 2>&1 | grep -q 'test result: ok. 1 passed' && cargo test -p gitraptor-core --lib profile::settings::power_saving_tests 2>&1 | grep -q 'test result: ok. 1 passed'",
+      "layer": "runtime",
+      "tests": ["crates/policy/src/settings/document/power_saving_tests.rs", "crates/core/src/profile/settings/power_saving_tests.rs"]
+    },
+    {
+      "id": "T005",
+      "statement": "Con un daemon en un perfil temporal y una FakePowerSource, Daemon::power() pasa a ahorro en ≤ 60 s al cambiar la fuente con auto; on y off mandan sobre la fuente; el modo ya está resuelto antes de que arranquen los módulos (Guards 5.1 a 5.3)",
+      "verify": "cargo test -p gitraptor-core --test power_daemon 2>&1 | grep -q 'test result: ok. 3 passed'",
+      "layer": "runtime",
+      "tests": ["crates/core/tests/power_daemon.rs"]
+    },
+    {
+      "id": "T006",
+      "statement": "Ningún hilo de crates/core/src se crea con thread::Builder::new() o thread::spawn fuera de work_class/ salvo las excepciones listadas con su motivo; en macOS la reconciliación periódica del observador corre en Utility y el hilo vuelve a Default al terminar (Guards 6.1 y 6.2)",
+      "verify": "cargo test -p gitraptor-core --test work_class_boundary 2>&1 | grep -q 'test result: ok. 1 passed' && cargo test -p gitraptor-core --test observe_classes 2>&1 | grep -q 'test result: ok. 1 passed'",
+      "layer": "runtime",
+      "tests": ["crates/core/tests/work_class_boundary.rs", "crates/core/tests/observe_classes.rs"]
+    }
+  ],
+  "constraints": {
+    "deny_paths": [
+      "docs/ARTIFACTS.md",
+      "docs/architecture/decisions/ADR-GRD-008-factor-autenticacion-fuera-de-banda.md",
+      "crates/core/src/predict/**",
+      "crates/core/src/channel/**",
+      "crates/core/src/timemachine/**",
+      "crates/git/src/**",
+      "crates/api/src/**",
+      "apps/cli/src/tui/**",
+      "apps/cli/src/resources.rs"
+    ],
+    "allow_dependency_changes": false
+  },
+  "scope": {
+    "projects": [
+      "gitraptor-core",
+      "gitraptor-macsys",
+      "gitraptor-policy"
+    ]
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 600000,
+    "suiteTimeoutMs": 1800000
+  },
+  "hops": {
+    "design": { "agent": "main-loop", "model": "opus" },
+    "critic": { "agent": "nassa-core:plan-critic", "model": "opus" },
+    "tester": { "agent": "nassa-core:criterion-tester", "model": "sonnet" },
+    "build": { "agent": "nassa-dev-rust:rust-expert", "model": "opus" },
+    "review": { "agent": "nassa-dev-rust:rust-code-reviewer", "model": "opus" },
+    "conformance": { "agent": "nassa-dev-rust:rust-code-reviewer", "model": "sonnet" }
+  }
+}

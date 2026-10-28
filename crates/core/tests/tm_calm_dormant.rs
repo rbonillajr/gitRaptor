@@ -89,6 +89,7 @@ fn start(fx: Fixture) -> Running {
             ..TierConfig::default()
         },
         discovery: Default::default(),
+        power: Default::default(),
         tm_capture: TmCapture {
             config: CaptureConfig {
                 enabled: true,

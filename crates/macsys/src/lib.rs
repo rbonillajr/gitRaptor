@@ -11,6 +11,8 @@ pub mod process;
 
 #[cfg(target_os = "macos")]
 pub mod fsevents;
+#[cfg(target_os = "macos")]
+pub mod qos;
 
 #[cfg(target_os = "macos")]
 #[allow(unsafe_code)]

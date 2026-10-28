@@ -322,6 +322,9 @@ impl Walk {
 }
 
 #[cfg(test)]
+mod power_saving_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::settings::model::Operation;
