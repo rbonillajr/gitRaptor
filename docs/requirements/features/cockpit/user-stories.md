@@ -1,7 +1,7 @@
 ---
 mode: bulk
 generated: 2026-10-04T00:00Z
-updated: 2026-10-07
+updated: 2026-10-28
 generator: product-owner
 total_artifacts: 26
 expanded: 26
@@ -60,7 +60,7 @@ blocked:
 | [US-CKP-016](./user-stories/US-CKP-016-operacion-detenida.md) | Un merge o rebase que choca queda detenido y el desarrollador decide cómo salir | 4 | Must | TS-CKP-002, DEP-CKP-14, TS-CKP-005 | expanded |
 | [US-CKP-017](./user-stories/US-CKP-017-descartar-worktree.md) | El desarrollador descarta el trabajo de un agente sin miedo a perderlo | 3 | Must | TS-CKP-002, TS-CKP-003, TS-CKP-005 | expanded |
 | [US-CKP-018](./user-stories/US-CKP-018-crear-worktree.md) | El desarrollador prepara un worktree para un agente nuevo | 3 | Must | TS-CKP-002, TS-CKP-003, TS-CKP-005 | expanded |
-| [US-CKP-019](./user-stories/US-CKP-019-denegada-excepcion-consciente.md) | El desarrollador entiende por qué Guardrails frena una acción y puede hacer una excepción consciente | 3 | Must | TS-CKP-003 (DEP-CKP-10), TS-CKP-005 | expanded |
+| [US-CKP-019](./user-stories/US-CKP-019-denegada-excepcion-consciente.md) | El desarrollador entiende por qué Guardrails frena una acción y puede hacer una excepción consciente | 3 | Must | TS-CKP-003 (DEP-CKP-10), TS-CKP-005 | expanded ([DS](./dev-specs/US-CKP-019-denegada-excepcion-consciente.md), DS-US-CKP-019, 2026-10-28); depende de US-GRD-006 (PR-A), de DS-US-CKP-014 y de US-GRD-016 (escenario 5, Q-CKP-52) |
 | [US-CKP-020](./user-stories/US-CKP-020-trabajo-de-otro-actor.md) | Tocar el trabajo de otro actor exige confirmar el plan concreto | 3 | Must | TS-TMC-004, TS-CKP-002, TS-CKP-005 | expanded |
 | [US-CKP-021](./user-stories/US-CKP-021-historial-aviso-purga.md) | El desarrollador ve en la TUI el historial de operaciones y el aviso de purga | 3 | Must | DEP-CKP-5, TS-CKP-005 | expanded |
 | [US-CKP-022](./user-stories/US-CKP-022-grafo-carriles.md) | El desarrollador ve crecer la rama de cada agente sobre la base | 2 | Must | DEP-CKP-2, TS-CKP-005 | expanded |
@@ -192,3 +192,4 @@ Ninguna decisión de este índice cambia una decisión del requerimiento. Todas:
 | Versión | Fecha | Autor | Cambios |
 |---------|-------|-------|---------|
 | 1.1 | 2026-10-07 | PO (AADD) para Rene Bonilla | Nueva US-CKP-025 (propuesta A3 y hallazgo 1 del dogfooding, aceptados por Rene Bonilla el 2026-10-06): ola 1, Should. Fila del índice, DAG, olas, contratos compartidos, cobertura de BR-04 y D-US-CKP-8. `total_artifacts: 25`. Las versiones anteriores no tenían changelog en este índice (1.0 = índice del 2026-10-04) |
+| 1.2 | 2026-10-28 | PO (AADD); decisión del orquestador (2026-10-28), validada por el PO | US-CKP-019 tiene Dev Spec (DS-US-CKP-019), dependiente de US-GRD-006 (PR-A), de DS-US-CKP-014 y de US-GRD-016; Status sigue en `expanded`. Su escenario 5 pasa a esquema por solicitante (Q-CKP-52) y la subida de la fila ⛔ queda en la TUI que pidió la acción (Q-CKP-53) |
