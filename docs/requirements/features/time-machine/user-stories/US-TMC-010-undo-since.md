@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: medium
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-27
 domain: GRP
 epic: E-001
 feature: time-machine
@@ -15,7 +15,8 @@ related:
   rules:
     - BR-TMC-001
   stories: [US-TMC-002, US-TMC-012, US-TMC-013]
-covers: [BR-TMC-WF-001, BR-TMC-VAL-001, BR-TMC-AUTH-001, D-TMC-19, D-TMC-23]
+  specs: [DS-US-TMC-010]
+covers: [BR-TMC-WF-001, BR-TMC-WF-002, BR-TMC-VAL-001, BR-TMC-AUTH-001, D-TMC-19, D-TMC-23, D-TMC-29]
 blocked_by: []
 tags: [time-machine, undo, since]
 ---
@@ -32,7 +33,7 @@ tags: [time-machine, undo, since]
 
 ## Reglas cubiertas
 
-BR-TMC-WF-001 (ámbito: el worktree desde el que se invoca) · BR-TMC-VAL-001 (periodo inválido o vacío) · BR-TMC-AUTH-001 (operaciones de otro actor, D-TMC-23) — ver [business-rules.md](../business-rules.md)
+BR-TMC-WF-001 (ámbito: el worktree desde el que se invoca) · BR-TMC-VAL-001 (periodo inválido o vacío) · BR-TMC-WF-002 (undo por periodo sin `--agent`: cualquier actor, sin exclusiones silenciosas, D-TMC-29) · BR-TMC-AUTH-001 (operaciones de otro actor, D-TMC-23) — ver [business-rules.md](../business-rules.md)
 
 ## Criterios de Aceptación
 
@@ -89,7 +90,7 @@ Entonces la petición se rechaza con el motivo
 ## Diseño y Dev Spec
 
 - **Diseño (flujo/UX):** Pendiente de diseño.
-- **Dev Spec:** pendiente (lo genera el Arquitecto).
+- **Dev Spec:** [DS-US-TMC-010](../dev-specs/US-TMC-010-undo-since.md)
 
 ## Dependencias
 
