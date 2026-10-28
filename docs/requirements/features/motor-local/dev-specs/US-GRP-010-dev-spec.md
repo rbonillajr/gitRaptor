@@ -170,10 +170,10 @@ flowchart LR
 **Reglas**
 - Los dos métodos pasan de `pending(..)` a `method(.., true, false)`: siguen **reservados** y **fuera del MCP** (BR-AUTH-001, SEC-14). Sin capacidad nueva: hasta ahora siempre respondieron `NOT_IMPLEMENTED`, así que ningún cliente recibió otra forma (criterio de DS-US-TMC-006 D5).
 - `AttributionCorrectParams { agent: DeclaredAgent, worktree: String, session_id: Option<String> }` (`DeclaredAgent` de US-GRP-009: `claude-code` u `other` con nombre validado por `declared_agent_name`). `worktree` es obligatorio, como en `RegistrationWithdrawParams`: la CLI pone el cwd con `command_path` si no se da `--worktree`; el daemon lo valida con `validate::client_path` (NFR-02) y nunca lee el cwd del proceso llamante.
-- `AttributionChangeResult { repo_id, session_id, previous: Actor, actor: Actor }`: el resultado de los dos métodos (un solo tipo, § Contratos compartidos).
+- `AttributionChangeResult { repo_id, session_id, previous: Actor, actor: Actor, matches_detected: bool }`: el resultado de los dos métodos (un solo tipo, § Contratos compartidos).
 - `AttributionWithdrawParams { worktree: String, session_id: Option<String> }` → `AttributionChangeResult`.
 - Código nuevo del módulo: `error_block: Some(FIRST_ERROR_BLOCK - 8 * ERROR_BLOCK_LEN)` (−33160) y `ATTRIBUTION_REJECTED = ErrorSpec::new(-33160, "attribution-rejected")`. En código están tomados −33020 a −33080; −33100 lo reserva DS-US-MCP-006 (`registration`) y −33120 y −33140, DS-US-CKP-012 (`query`, `diff`). Si al rebasar otro módulo lo tomó, el test de bloques disjuntos falla: tomar el siguiente libre y cambiar el número aquí y en ADR-GRP-016. `data = AttributionRejectedData { reason: AttributionRejection, candidates: Vec<SessionCandidate> }` (`candidates` solo con `ambiguous-session`, a lo sumo 10; `skip_serializing_if` vacío).
-- `AttributionRejection` (kebab-case): `not-a-worktree`, `repo-not-observed`, `no-detected-attribution`, `ambiguous-session`, `unknown-session`, `same-agent`, `not-corrected`.
+- `AttributionRejection` (kebab-case): `not-a-worktree`, `repo-not-observed`, `no-detected-attribution`, `registered-session`, `ambiguous-session`, `unknown-session`, `same-agent`, `not-corrected`.
 - `SessionCandidate { session_id: String, actor: Actor, started_utc_ms: i64, present: bool }`. Sin rutas (SEC-12).
 - `attribution.changed` (declarado en `event.rs` para US-GRP-010) lleva `{repo_id, session_id, actor}`.
 
@@ -208,7 +208,7 @@ flowchart LR
 **Pasos**
 1. Destino: `locate_worktree` de US-GRP-009 (D4 de esa ficha) sobre `worktree`; fuera de todo worktree observado, `repo-not-observed` o `not-a-worktree`.
 2. Elegir la sesión (D4). Con `session_id`: una sesión de ese worktree, presente o terminada; si no, `unknown-session`. Sin él: las sesiones **presentes** del worktree con atribución detectada (origen inicial `detected`); una → esa; ninguna → `no-detected-attribution`; varias → `ambiguous-session` con las candidatas.
-3. Validar (D5): una sesión creada por registro (origen inicial `registered`) → `no-detected-attribution` (Q38: se usa el registro). El agente pedido igual al vigente → `same-agent`.
+3. Validar (D5): una sesión creada por registro (origen inicial `registered`), elegida con `--session` → `registered-session` (Q38, Q51: se retira el registro y se registra el correcto); sin `--session` y sin sesiones detectadas, `no-detected-attribution`. El agente pedido igual al vigente → `same-agent`. Con corrección activa, corregir al agente detectado es válido (otra corrección, D3) y el resultado lleva `matches_detected = true`, para que la CLI sugiera `raptor agent uncorrect` (D9).
 4. Escribir `WriteOp::AppendAttribution { session_id, kind: Correct, agent, author: Developer, recorded_ms: now }` en un `write_batch`. Nada más: ni la sesión ni sus eventos cambian.
 5. Retirar: misma elección de sesión, entre las que tienen corrección activa; sin ella, `not-corrected`. Escribe `WithdrawCorrection` con el agente de la corrección que retira (traza).
 6. Tras escribir: publicar `attribution.changed` y `session.state` de la sesión (como `publish_sessions`), y registrar en el log `attribution_corrected` / `attribution_correction_withdrawn` con repo, clase de agente y autor; nunca el nombre declarado sin sanear ni rutas (NFR-03).
@@ -308,8 +308,9 @@ pub struct AttributionCorrectParams { pub agent: DeclaredAgent,
 pub struct AttributionWithdrawParams { pub worktree: String,
     #[serde(default)] pub session_id: Option<String> }
 pub struct AttributionChangeResult { pub repo_id: String, pub session_id: String,
-    pub previous: Actor, pub actor: Actor }          // resultado de los dos métodos
-pub enum AttributionRejection { NotAWorktree, RepoNotObserved, NoDetectedAttribution,
+    pub previous: Actor, pub actor: Actor,
+    #[serde(default)] pub matches_detected: bool }   // resultado de los dos métodos; true si la corrección nueva es el agente detectado (D9)
+pub enum AttributionRejection { NotAWorktree, RepoNotObserved, NoDetectedAttribution, RegisteredSession,
     AmbiguousSession, UnknownSession, SameAgent, NotCorrected }
 pub struct AttributionRejectedData { pub reason: AttributionRejection,
     #[serde(default, skip_serializing_if = "Vec::is_empty")] pub candidates: Vec<SessionCandidate> }
@@ -386,6 +387,8 @@ _No aplica — la entrega no añade configuración._
 | `correction.reason.no-detected-attribution` | there is no detected attribution to correct here; to attribute work to an agent, register it with raptor agent register | aquí no hay ninguna atribución detectada que corregir; para atribuir trabajo a un agente, regístralo con raptor agent register |
 | `correction.reason.ambiguous-session` | several detected sessions are present here; choose one with --session | hay varias sesiones detectadas presentes aquí; elige una con --session |
 | `correction.reason.unknown-session` | this worktree has no session {session} | este worktree no tiene la sesión {session} |
+| `correction.reason.registered-session` | this session was registered; withdraw the registration with raptor agent withdraw and register the right agent | esta sesión se registró; retira el registro con raptor agent withdraw y registra el agente correcto |
+| `correction.hint-uncorrect` | this is the agent the engine detected: raptor agent uncorrect returns to it without adding another correction | es el agente que detectó el motor: raptor agent uncorrect vuelve a él sin añadir otra corrección |
 | `correction.reason.same-agent` | the session is already attributed to {actor}; nothing changed | la sesión ya está atribuida a {actor}; nada cambió |
 | `correction.reason.not-corrected` | this session has no correction to withdraw | esta sesión no tiene ninguna corrección que retirar |
 | `correction.reserved` | only the developer can correct an attribution | solo el desarrollador puede corregir una atribución |
@@ -436,7 +439,7 @@ Persistencia y reinicio (BR-CONS-005, escenario 5): no hay estado en memoria que
 | 4. Retirar devuelve la detectada | e2e `withdrawing_returns_the_detected_attribution`: `raptor agent uncorrect`; la sesión y `c1`, `c2` vuelven a Claude Code `detected` (Q50) |
 | 5. Persiste al reiniciar | e2e `the_correction_survives_an_engine_restart`: parar y relanzar el motor; la sesión y `c1`, `c2` siguen de Codex |
 | 6a. Repo no observado | core `correcting_in_an_unobserved_repo_is_rejected`: `repo-not-observed`; filas iguales |
-| 6b. Sin atribución detectada | core `correcting_without_a_detected_attribution_is_rejected`: `feat-pagos` → `no-detected-attribution`; el texto menciona el registro |
+| 6b. Sin atribución detectada | core `correcting_without_a_detected_attribution_is_rejected`: `feat-pagos` → `no-detected-attribution`; el texto menciona el registro. Y `a_registered_session_is_told_to_withdraw_it`: `--session <registrada>` → `registered-session`, filas iguales; e2e del texto en/es. Y `correcting_back_to_the_detected_agent_suggests_uncorrect`: con corrección activa, `correct Claude Code` → éxito con `matches_detected` y el texto de `correction.hint-uncorrect` |
 | 6c. Un agente corrige | core `an_agent_cannot_correct_and_it_is_audited`: `RESERVED_REFUSED`, auditado; filas iguales. e2e `an_agent_correcting_is_told_only_the_developer_can` (en y es) |
 
 Además: core `the_time_machine_sees_the_current_attribution` (los eventos crudos de `raw_events` y `SessionActors` siguen la corrección y su retirada, para US-TMC-008/011), `a_registered_session_cannot_be_corrected`, `ambiguous_sessions_list_candidates`, `correcting_an_ended_session_by_id`; e2e `repo_intact_correcting_does_not_modify_it` (huella del testkit). Unitarios de T001, T002 y T005.
@@ -487,12 +490,13 @@ Corre `/security-review --scope devspec docs/requirements/features/motor-local/d
 | # | Decisión | Origen |
 |---|---|---|
 | D1 | **P17 / Q50**: al retirar una corrección, los eventos que reatribuyó vuelven a la atribución detectada. Se acepta el supuesto de BR-CONS-002. Consecuencia de diseño: la atribución vigente de un evento es una función pura de (atribución detectada de su sesión, correcciones activas en el momento de la consulta), nunca un valor copiado; retirar es añadir un registro que desactiva la corrección | **Decisión del orquestador (2026-10-27), validada por PO y Arquitecto** |
-| D2 | Retirar devuelve la atribución que la sesión tendría sin ninguna corrección: la detectada, con origen `registered` si estaba confirmada (P16) | **Decisión del orquestador (2026-10-27), validada por Arquitecto** |
-| D3 | Una segunda corrección reemplaza a la primera; retirar vuelve a la detectada, nunca a una corrección anterior | **Decisión del orquestador (2026-10-27), validada por Arquitecto** |
+| D2 | Retirar devuelve la atribución que la sesión tendría sin ninguna corrección: la detectada, con origen `registered` si estaba confirmada (P16) | **Decisión del orquestador (2026-10-27), validada por Arquitecto y PO (Q51)** |
+| D3 | Una segunda corrección reemplaza a la primera; retirar vuelve a la detectada, nunca a una corrección anterior | **Decisión del orquestador (2026-10-27), validada por Arquitecto y PO (Q51)** |
 | D4 | Sesión a corregir: la única sesión detectada presente en el worktree; con varias, `ambiguous-session` con candidatas; `--session <id>` elige cualquiera del worktree, también una terminada | **Decisión del orquestador (2026-10-27), validada por Arquitecto** |
-| D5 | Una sesión creada por registro no se corrige (`no-detected-attribution`, Q38); corregir al agente vigente es `same-agent` | **Decisión del orquestador (2026-10-27), validada por Arquitecto** |
+| D5 | Una sesión creada por registro no se corrige: motivo propio `registered-session`, que dice retirar el registro y registrar el agente correcto (Q38, Q51); corregir al agente vigente es `same-agent` | **Decisión del orquestador (2026-10-27), validada por Arquitecto y PO (Q51)** |
 | D6 | Registrar compara con el agente **vigente** de las sesiones presentes: registrar el agente corregido no duplica | **Decisión del orquestador (2026-10-27), validada por Arquitecto** |
 | D7 | Código propio del módulo `attribution.rejected` (−33160) en vez de reutilizar `REGISTRATION_REJECTED`. La primera versión decía −33100, que ya reserva DS-US-MCP-006 para `registration` (−33120 y −33140 los reserva DS-US-CKP-012) | **Decisión del orquestador (2026-10-27), validada por Arquitecto** (ADR-GRP-016: la lista congelada no crece); número corregido en la revisión del 2026-10-28 |
+| D9 | Con corrección activa, corregir al agente detectado se acepta (D3) y el mensaje sugiere `raptor agent uncorrect` (`matches_detected` en el resultado; método nuevo, sin capacidad) | **Decisión del orquestador (2026-10-28), validada por Arquitecto** |
 | D8 | `worktree` obligatorio en los dos métodos, rellenado por la CLI con el cwd (`command_path`), como `registration.withdraw`; el daemon no lee el cwd del proceso llamante para un comando reservado | **Decisión del orquestador (2026-10-27), validada por Arquitecto** (revisión del 2026-10-28) |
 
 **Validación de P17 desde la arquitectura**: no hay problema serio. El modelo ya era así antes de esta ficha (eventos por `session_id`, registros append-only, proyección única), así que aceptar Q50 no cambia nada del almacén. El único coste es de lectura (plegar los registros en cada consulta), acotado por el número de registros de una sesión y memoizado por llamada. Riesgo a vigilar: un consumidor que copie el actor resuelto a un almacén propio (por ejemplo, una caché del timeline) dejaría de ver la retirada; por eso `attribution.changed` existe y ADR-TMC-003 § 5 pide invalidar cachés.
