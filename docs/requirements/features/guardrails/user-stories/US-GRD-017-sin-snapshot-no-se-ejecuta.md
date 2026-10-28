@@ -2,10 +2,10 @@
 id: US-GRD-017
 title: "Una operación destructiva permitida no se ejecuta sin un punto de recuperación"
 type: us
-status: partially-implemented
+status: implemented
 priority: high
 created: 2026-10-04
-updated: 2026-10-17
+updated: 2026-10-28
 feature: guardrails
 related:
   context:
@@ -90,7 +90,7 @@ Entonces la operación se ejecuta y la excepción queda en el registro
 - **Decisión**: en el daemon, entre el snapshot y el registro de decisiones, un `failed` (cualquier causa: plazo, disco, cuota, repo sin observar) convierte la decisión permitida en `deny` con `system.snapshot-failed` y la causa. Sin daemon, el cliente del hook deniega la misma operación (modo degradado). Un archivo enorme no tiene tope: el plazo vencido deniega, con una pista neutra en el mensaje.
 - **Contrato**: capacidad `guard.snapshot-required` (ADR-GRP-016). Un cliente sin ella recibe la misma denegación como `system.internal-error`, nunca un permiso.
 - **Cupos** (Q-GRD-37): los cupos globales del snapshot previo (por worktree y por repo) solo cuentan las peticiones de agentes; la persona solo gasta su cupo por solicitante. Lo trae US-TMC-005 o, si no, la DS (T008).
-- **Excepción consciente** (escenario "El humano decide seguir sin punto de recuperación"): con la excepción aplicada, el previo se intenta y, si falla, la operación sigue y el registro anota la regla saltada. Lo verifica US-GRD-006; hasta entonces la historia queda `partially-implemented`.
+- **Excepción consciente** (escenario "El humano decide seguir sin punto de recuperación"): con la excepción aplicada, el previo se intenta y, si falla, la operación sigue y el registro anota la regla saltada. Lo verifica `exception_runs_without_a_recovery_point` (US-GRD-006).
 - **Crates**: `crates/api` (regla, causas, capacidad), `crates/core` módulos `guardrails` (conversión, cliente del hook) y `timemachine` (cupos, T008) y el canal, `apps/cli` (mensajes en un archivo i18n propio).
 - **Dependencia**: implementable solo cuando US-TMC-005 esté mergeada.
 
@@ -101,8 +101,8 @@ Entonces la operación se ejecuta y la excepción queda en el registro
 
 ## Estado de la implementación (2026-10-17)
 
-Implementado en: PR #260. Dev Spec: [DS-US-GRD-017](../dev-specs/US-GRD-017-sin-snapshot-no-se-ejecuta.md).
+Implementado en: PR #260 y PR #301 (escenario de la excepción, US-GRD-006). Dev Spec: [DS-US-GRD-017](../dev-specs/US-GRD-017-sin-snapshot-no-se-ejecuta.md).
 
 Parcial. Los escenarios 1, 2 (los dos ejemplos) y 3 están cubiertos por `apps/cli/tests/us_grd_017_hook.rs`, y el contrato con clientes viejos por `crates/core/tests/us_grd_017.rs`. Verificado en macOS. Linux lo cubre el CI de ubuntu, y Windows es **Pendiente: etapa de validación multiplataforma** (XP-44).
 
-Falta el escenario de la excepción consciente: lo cierra US-GRD-006 (G2), que ya tiene el punto de enganche (D5). Deuda relacionada: [TD-TMC-001](../../time-machine/technical-stories/TD-TMC-001-previo-hook-plazo-y-cupo-sin-atribuir.md), porque ahora un previo lento o un cupo lleno deniega. Q-GRD-36, 37 y 38 siguen abiertas al veto de Rene.
+El escenario de la excepción consciente lo cubre `exception_runs_without_a_recovery_point` (`apps/cli/tests/guard_us_grd_006.rs`). Deuda relacionada: [TD-TMC-001](../../time-machine/technical-stories/TD-TMC-001-previo-hook-plazo-y-cupo-sin-atribuir.md), porque ahora un previo lento o un cupo lleno deniega. Q-GRD-36, 37 y 38 siguen abiertas al veto de Rene.
