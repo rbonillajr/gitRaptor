@@ -197,24 +197,50 @@ impl Machine {
     /// One MCP session started in `cwd` that calls `status` (unless
     /// `call` is false): the tool result, or `Null`.
     fn mcp_status_with(&self, server: &Path, cwd: &Path, call: bool) -> Value {
-        self.mcp_session(server, cwd, usize::from(call), &[])
+        self.mcp_session(server, cwd, usize::from(call), &[], false)
             .pop()
             .unwrap_or(Value::Null)
     }
 
     /// One MCP session started in `cwd`, with `env` on top of the machine's,
-    /// that calls `status` `calls` times in a row: the tool results.
+    /// that calls `status` `calls` times in a row: the tool results. With
+    /// `as_agent` the server runs as a child of the simulated agent, so its
+    /// connection counts for that agent's session and not for the shared
+    /// unattributed requester.
     fn mcp_session(
         &self,
         server: &Path,
         cwd: &Path,
         calls: usize,
         env: &[(&str, &str)],
+        as_agent: bool,
     ) -> Vec<Value> {
-        let mut child = Command::new(server)
+        let mut command = if as_agent {
+            let agent = self.f.root.join(FAKE_AGENT);
+            if !agent.exists() {
+                gitraptor_testkit::fixture::clone_binary(&std::env::current_exe().unwrap(), &agent);
+            }
+            let mut c = Command::new(&agent);
+            c.args([
+                "fake_agent_entry",
+                "--exact",
+                "--nocapture",
+                "--test-threads=1",
+            ]);
+            c
+        } else {
+            Command::new(server)
+        };
+        let mut child = command
             .env_clear()
             .envs(self.env())
             .envs(env.iter().copied())
+            .envs(as_agent.then(|| {
+                (
+                    FAKE_AGENT_ARGV,
+                    serde_json::to_string(&[server.to_str().unwrap()]).unwrap(),
+                )
+            }))
             .current_dir(cwd)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -231,7 +257,14 @@ impl Machine {
             loop {
                 let mut line = String::new();
                 assert!(stdout.read_line(&mut line).unwrap() > 0, "server closed");
-                let message: Value = serde_json::from_str(&line).unwrap();
+                // The simulated agent is a test binary: its harness writes
+                // text of its own around the server's lines.
+                let Some(message) = line
+                    .find('{')
+                    .and_then(|start| serde_json::from_str::<Value>(&line[start..]).ok())
+                else {
+                    continue;
+                };
                 if message["id"] == id {
                     return message;
                 }
@@ -727,7 +760,7 @@ fn a_refusal_says_what_happened_and_what_to_do_in_spanish() {
     m.ok(&["repo", "add", path(&m.f.repo)]);
     let id = m.repo_id(&m.f.repo);
     let result = m
-        .mcp_session(&server(), &m.f.repo, 1, &[("LANG", "es_ES.UTF-8")])
+        .mcp_session(&server(), &m.f.repo, 1, &[("LANG", "es_ES.UTF-8")], false)
         .remove(0);
     assert_refused(
         &result,
@@ -757,7 +790,10 @@ fn a_looping_agent_hits_its_connection_limit() {
     m.ok(&["repo", "add", path(&m.f.repo)]);
     m.ok(&["mcp", "enable", path(&m.f.repo)]);
 
-    let results = m.mcp_session(&server(), &m.f.repo, 80, &[]);
+    // The loop runs under the agent, so it spends that session's shared
+    // budget and not the one of the other connection below (S-03): what is
+    // checked is the cap of its own connection.
+    let results = m.mcp_session(&server(), &m.f.repo, 80, &[], true);
     assert_eq!(results[0]["isError"], false, "{}", results[0]);
     let limited = results
         .iter()

@@ -797,17 +797,20 @@ impl Connection<'_> {
             return After::Continue;
         }
         // An agent in a loop hits its connection's read limit before any
-        // check of its scope (US-MCP-005), then its requester's, shared by all
-        // its connections whatever the client (S-03): its CLI spends the same
-        // buckets as its MCP server. A write spends the requester's write
-        // budget here; an MCP connection's own is spent when it is prepared.
-        // The developer and the hook client hold no slot, so spend none.
+        // check of its scope (US-MCP-005), then its requester's (S-03). A
+        // write spends the requester's write budget whatever the client, so
+        // its CLI shares the burst of its MCP server; an MCP connection's own
+        // is spent when it is prepared. Only MCP reads spend the requester's
+        // read budget: a CLI that polls status counts per connection and
+        // against the global limit only. The developer and the hook client
+        // hold no slot, so spend none.
         if !reserved_like {
             let write = write_route(spec.name).is_some();
-            let catalog = write || spec.mcp;
+            let mcp = self.is_mcp();
+            let shared = write || (mcp && spec.mcp);
             let limits = &self.ctx.requester_limits;
-            let allowed = (!self.is_mcp() || write || self.mcp_read_bucket.take())
-                && (!catalog
+            let allowed = (!mcp || write || self.mcp_read_bucket.take())
+                && (!shared
                     || self.slot.as_ref().is_none_or(|slot| {
                         if write {
                             limits.take_write(slot.key())
