@@ -672,7 +672,10 @@ fn a_commit_without_the_agent_trailer_is_denied_like_the_hook() {
     let refused = refusal(&result);
     assert_eq!(refused["code"], "policy-denied", "{result}");
     let rules = refused["params"]["rules"].as_array().expect("params.rules");
-    assert!(rules.iter().any(|r| r == "authorship.trailer-required"), "{result}");
+    assert!(
+        rules.iter().any(|r| r == "authorship.trailer-required"),
+        "{result}"
+    );
     assert!(refused["action"].is_string(), "{result}");
     assert_unchanged(&m, &before, commits);
     let entries = m.decisions();
