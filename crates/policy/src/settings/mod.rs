@@ -9,6 +9,6 @@ pub mod strict;
 pub use diagnostic::{Code, Diagnostic, Limit, Location, SourceKind};
 pub use document::{Parsed, SourceStatus, parse_document};
 pub use model::{
-    Engine, Level, Observation, Operation, Permissions, Policies, Settings, TimeMachine,
-    WatchBackend, Watcher,
+    Engine, Level, Observation, Operation, Permissions, Policies, PowerSaving, Settings,
+    TimeMachine, WatchBackend, Watcher,
 };

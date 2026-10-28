@@ -45,6 +45,20 @@ pub struct Engine {
     pub watcher: Option<Watcher>,
     /// Observation tiers (ADR-GRP-010, Enmienda 2026-10-07, N7).
     pub observation: Option<Observation>,
+    /// Power saving: `auto` (default) saves on battery or in low power mode, `on` always,
+    /// `off` never (ADR-GRP-015 § 2).
+    #[schemars(extend("x-gitraptor-levels" = ["profile"]))]
+    pub power_saving: Option<PowerSaving>,
+}
+
+/// `engine.powerSaving`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum PowerSaving {
+    #[default]
+    Auto,
+    On,
+    Off,
 }
 
 /// `engine.observation` section: when an observed repo goes dormant and how

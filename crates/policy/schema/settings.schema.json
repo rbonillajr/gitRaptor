@@ -63,6 +63,13 @@
           "$ref": "#/$defs/Observation",
           "description": "Observation tiers (ADR-GRP-010, Enmienda 2026-10-07, N7)."
         },
+        "powerSaving": {
+          "$ref": "#/$defs/PowerSaving",
+          "description": "Power saving: `auto` (default) saves on battery or in low power mode, `on` always,\n`off` never (ADR-GRP-015 § 2).",
+          "x-gitraptor-levels": [
+            "profile"
+          ]
+        },
         "watcher": {
           "$ref": "#/$defs/Watcher",
           "description": "Watcher intervals (ADR-GRP-010 § 5)."
@@ -234,6 +241,15 @@
         "team",
         "local"
       ]
+    },
+    "PowerSaving": {
+      "description": "`engine.powerSaving`.",
+      "enum": [
+        "auto",
+        "on",
+        "off"
+      ],
+      "type": "string"
     },
     "TimeMachine": {
       "description": "`timeMachine` section.",
