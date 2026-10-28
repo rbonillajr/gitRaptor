@@ -260,3 +260,13 @@ Flujo de la excepción consciente en `raptor guard exec` ([DS-US-GRD-006](../../
 | El TTL del token se mide con reloj monotónico | § 3 | S-B3 |
 
 Las menciones de `reserved-action-pending` en el § 1 y en la Enmienda (2026-10-04, Cockpit) se leen como este anuncio para `raptor guard exec`; la del Cockpit conserva su forma. Notas de preparación: [prep PR-B](../../dev-briefs/us-grd-006-prb-exception-flow.prep.md).
+
+## Enmienda (2026-10-28, Windows: el `git` hijo directo)
+
+**Decisión del orquestador (2026-10-28), validada por Arquitecto.** El `status` sigue en `accepted`. Hallado en la ronda 4 de Windows real (2026-10-28): con el lanzador `cmd\git.exe` de Git for Windows, todo `raptor guard exec` se rechazaba con `not-the-child` (fallaba en cerrado).
+
+- **La ligadura sigue siendo estricta**: el `git` más cercano al hook debe ser el hijo directo del `raptor` solicitante (`crates/core/src/guardrails/exception.rs`, `p.git != child || p.git_parent != slot.requester`). No se aceptan cadenas de `git.exe`.
+- **En Windows se cumple** porque el motor lanza el binario real de Git for Windows, no el lanzador ([ADR-GRP-009 § 4, Enmienda 2026-10-28](./ADR-GRP-009-frontera-solo-lectura-git.md#enmienda-2026-10-28-git-for-windows-binario-real-del-lanzador)).
+- **Lo mismo vale para el hijo del ejecutor** (`crates/core/src/guardrails/link.rs`, `nearest_git` en `marks.child_link`): en Windows clasificaba como `Grandchild` el `git` del propio daemon.
+
+**Validación 12b** (Windows, ligadura): en Git for Windows, `raptor guard exec -- git push --force` se acepta. Si el binario real no se puede resolver, el resultado es `not-the-child` (fail-closed).

@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-20
+updated: 2026-10-28
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
@@ -319,3 +319,17 @@ Se añade a la lista **fuera de `crates/git`** (punto 2 de la Validación 5 de l
 ### Validación 7: canario con el trabajador
 
 Igual que en la Enmienda (2026-10-04, Cockpit), con un cambio: el único proceso hijo del predictor es el trabajador (el propio binario), y el trabajador no lanza ninguno. Lo comprueba una trampa de `PATH` que caza cualquier programa lanzado por nombre, y la auditoría dinámica de `exec` donde haya permisos. El *partial clone* con objetos ausentes sigue dando "no calculable" con 0 conexiones.
+
+## Enmienda (2026-10-28, Git for Windows: binario real del lanzador)
+
+**Decisión del orquestador (2026-10-28), validada por Arquitecto.** Cambia el § 4 en Windows. El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| Si el candidato validado es el lanzador `<raíz>\cmd\git.exe` de Git for Windows, el motor usa el binario real que indica el propio lanzador: `--exec-path` da `<raíz>\<mingw64\|ucrt64\|clangarm64\|mingw32>\libexec\git-core`, y el binario es `<raíz>\<mingw*>\bin\git.exe` de la misma raíz canonicalizada. Debe superar la validación de propietario y DACL (SEC-10) y dar la misma salida de `git version`. Si falla cualquiera de esas condiciones, se usa el lanzador, como antes. Nunca se usa el PATH, el registro ni una shell. El shim de Scoop no se mapea (hueco declarado) | § 4 | `crates/git/src/resolve.rs` (`real_git_of_launcher`, `launcher_layout`) |
+| Nuevo subcomando de lectura en la allowlist de invocación: `--exec-path`, con argv fijo | § 3, Validación 5 | Ídem |
+| La auditoría de `exec` admite el binario real como hijo del motor | Validación 7 | Ídem |
+
+**Por qué**: el `git` que arranca el motor (y `raptor guard exec`) tiene que ser el proceso que ejecuta los hooks. Con el lanzador hay un `git.exe` intermedio, y la ligadura del hijo de ADR-GRD-007 falla (ver su Enmienda 2026-10-28, Windows).
+
+**Verificado** en la máquina real con Windows 10 (Git 2.56.0.windows.1): el árbol de procesos con el lanzador es `raptor` → `cmd\git.exe` → `ucrt64\bin\git.exe` → `sh` → hook. El binario real, lanzado directo, ejecuta bien los hooks `#!/bin/sh`: Git for Windows antepone `/ucrt64/bin:/usr/bin` al PATH por su cuenta.
