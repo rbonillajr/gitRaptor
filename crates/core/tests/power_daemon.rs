@@ -5,6 +5,7 @@
 
 mod common;
 
+use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
 use std::sync::Arc;
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
@@ -60,8 +61,15 @@ impl Running {
 fn start(settings: Option<&str>, fake: &FakePowerSource, poll: Duration) -> Running {
     let tp = TempProfile::new();
     if let Some(text) = settings {
-        std::fs::create_dir_all(&tp.dirs().config).unwrap();
-        std::fs::write(tp.dirs().config.join("settings.json"), text).unwrap();
+        let config = tp.dirs().config;
+        // 0700 like the daemon's umask: `Profile::open` refuses a 0755 folder.
+        std::fs::DirBuilder::new()
+            .recursive(true)
+            .mode(0o700)
+            .create(&config)
+            .unwrap();
+        std::fs::set_permissions(&config, std::fs::Permissions::from_mode(0o700)).unwrap();
+        std::fs::write(config.join("settings.json"), text).unwrap();
     }
     let env = DaemonEnv::from_vars(std::env::vars_os());
     let config = DaemonConfig {
