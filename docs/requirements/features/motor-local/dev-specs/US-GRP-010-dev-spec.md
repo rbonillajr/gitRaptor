@@ -4,7 +4,7 @@ title: "Dev Spec — El desarrollador corrige una atribución automática equivo
 type: dev-spec
 status: draft
 created: 2026-10-27
-updated: 2026-10-27
+updated: 2026-10-28
 story: US-GRP-010
 feature: motor-local
 domain: GRP
@@ -35,6 +35,7 @@ must_read:
   - ../../../../architecture/extender-sin-archivos-compartidos.md
   - ../../../../../crates/core/src/daemon/sessions.rs
   - ../../../../../crates/core/src/daemon/tm.rs
+  - ../../../../../crates/core/src/daemon/shutdown.rs
   - ../../../../../crates/core/src/profile/store.rs
   - ../../../../../crates/core/src/profile/schema.rs
   - ../../../../../crates/api/src/methods/attribution.rs
@@ -168,10 +169,10 @@ flowchart LR
 
 **Reglas**
 - Los dos métodos pasan de `pending(..)` a `method(.., true, false)`: siguen **reservados** y **fuera del MCP** (BR-AUTH-001, SEC-14). Sin capacidad nueva: hasta ahora siempre respondieron `NOT_IMPLEMENTED`, así que ningún cliente recibió otra forma (criterio de DS-US-TMC-006 D5).
-- `AttributionCorrectParams { agent: DeclaredAgent, worktree: Option<String>, session_id: Option<String> }` (`DeclaredAgent` de US-GRP-009: `claude-code` u `other` con nombre validado por `declared_agent_name`).
-- `AttributionCorrectResult { repo_id, session_id, previous: Actor, actor: Actor }`.
-- `AttributionWithdrawParams { worktree: Option<String>, session_id: Option<String> }` → `AttributionWithdrawResult { repo_id, session_id, previous: Actor, actor: Actor }`.
-- Código nuevo del módulo: `error_block: Some(FIRST_ERROR_BLOCK - 5 * ERROR_BLOCK_LEN)` (−33100, el siguiente libre tras `mcp`) y `ATTRIBUTION_REJECTED = ErrorSpec::new(-33100, "attribution-rejected")`. `data = AttributionRejectedData { reason: AttributionRejection, candidates: Vec<SessionCandidate> }` (`candidates` solo con `ambiguous-session`, a lo sumo 10; `skip_serializing_if` vacío).
+- `AttributionCorrectParams { agent: DeclaredAgent, worktree: String, session_id: Option<String> }` (`DeclaredAgent` de US-GRP-009: `claude-code` u `other` con nombre validado por `declared_agent_name`). `worktree` es obligatorio, como en `RegistrationWithdrawParams`: la CLI pone el cwd con `command_path` si no se da `--worktree`; el daemon lo valida con `validate::client_path` (NFR-02) y nunca lee el cwd del proceso llamante.
+- `AttributionChangeResult { repo_id, session_id, previous: Actor, actor: Actor }`: el resultado de los dos métodos (un solo tipo, § Contratos compartidos).
+- `AttributionWithdrawParams { worktree: String, session_id: Option<String> }` → `AttributionChangeResult`.
+- Código nuevo del módulo: `error_block: Some(FIRST_ERROR_BLOCK - 8 * ERROR_BLOCK_LEN)` (−33160) y `ATTRIBUTION_REJECTED = ErrorSpec::new(-33160, "attribution-rejected")`. En código están tomados −33020 a −33080; −33100 lo reserva DS-US-MCP-006 (`registration`) y −33120 y −33140, DS-US-CKP-012 (`query`, `diff`). Si al rebasar otro módulo lo tomó, el test de bloques disjuntos falla: tomar el siguiente libre y cambiar el número aquí y en ADR-GRP-016. `data = AttributionRejectedData { reason: AttributionRejection, candidates: Vec<SessionCandidate> }` (`candidates` solo con `ambiguous-session`, a lo sumo 10; `skip_serializing_if` vacío).
 - `AttributionRejection` (kebab-case): `not-a-worktree`, `repo-not-observed`, `no-detected-attribution`, `ambiguous-session`, `unknown-session`, `same-agent`, `not-corrected`.
 - `SessionCandidate { session_id: String, actor: Actor, started_utc_ms: i64, present: bool }`. Sin rutas (SEC-12).
 - `attribution.changed` (declarado en `event.rs` para US-GRP-010) lleva `{repo_id, session_id, actor}`.
@@ -190,7 +191,7 @@ flowchart LR
 1. `pub(super) fn effective(session: &Session, records: &[AttributionRecord]) -> Effective`, con `Effective { agent: Agent, origin: Origin, corrected: bool }`. Recorre `records` en orden de `effective_seq`: `confirm` marca confirmada; `correct` fija la corrección activa (reemplaza a una anterior, D3); `withdraw-correction` la quita; `register` y `withdraw-registration` no cambian el actor.
 2. Con corrección activa: su agente, origen `registered`. Sin ella: el agente inicial, origen `registered` si la sesión nació registrada o está confirmada (P16), `detected` en otro caso (D2).
 3. `session_actor` construye el `Actor` desde `effective` y no cambia de firma: sus cinco consumidores (sesiones, historial, eventos crudos de la Time Machine, timeline, `repos.rs`) ven la corrección sin tocarlos.
-4. `register` (US-GRP-009, D5) compara el agente pedido con el agente **vigente** de cada sesión presente, no con el inicial: registrar "Codex" donde hay una sesión corregida a Codex responde `already-registered` y no crea una segunda sesión.
+4. `register` (US-GRP-009, D5) compara el agente pedido con el agente **vigente** de cada sesión presente, no con el inicial (hoy `same_agent(&s.agent, ..)`), y construye `registered_actor` con ese mismo agente vigente: registrar "Codex" donde hay una sesión corregida a Codex responde `already-registered` y no crea una segunda sesión ni añade un `confirm`.
 
 > **Nota técnica.** `requester_of` (`daemon/tm.rs`) llama a `session_actor` por evento; con muchos eventos son muchas lecturas de `attribution_records`. Memoizar por `session_id` dentro de `raw_events` (un `HashMap` local a la llamada). La memoria nunca sobrevive a la llamada: lo que se lee es siempre lo vigente en ese momento.
 
@@ -202,13 +203,13 @@ flowchart LR
 
 **Objetivo.** `Daemon::correct` y `Daemon::withdraw_correction`: eligen la sesión, validan y añaden un registro en una transacción.
 
-**Ubicación.** `crates/core/src/daemon/attribution.rs` (**MODIFY**) · `crates/core/src/daemon/mod.rs` (**MODIFY**, el brazo del bucle que recibe la petición, como `register`)
+**Ubicación.** `crates/core/src/daemon/attribution.rs` (**MODIFY**) · `crates/core/src/daemon/shutdown.rs` (**MODIFY**, punto compartido: `CorrectRequest` y `WithdrawCorrectionRequest`, dos variantes de `Control` y los métodos `ShutdownHandle::correct` y `withdraw_correction` con `AUDIT_TIMEOUT`, como `Control::Withdraw` y `ShutdownHandle::withdraw`) · `crates/core/src/daemon/mod.rs` (**MODIFY**, los dos brazos del bucle, junto a `Control::Withdraw`)
 
 **Pasos**
-1. Destino: `locate_worktree` de US-GRP-009 (D4 de esa ficha) sobre `worktree` o el cwd del llamante; fuera de todo worktree observado, `repo-not-observed` o `not-a-worktree`.
+1. Destino: `locate_worktree` de US-GRP-009 (D4 de esa ficha) sobre `worktree`; fuera de todo worktree observado, `repo-not-observed` o `not-a-worktree`.
 2. Elegir la sesión (D4). Con `session_id`: una sesión de ese worktree, presente o terminada; si no, `unknown-session`. Sin él: las sesiones **presentes** del worktree con atribución detectada (origen inicial `detected`); una → esa; ninguna → `no-detected-attribution`; varias → `ambiguous-session` con las candidatas.
 3. Validar (D5): una sesión creada por registro (origen inicial `registered`) → `no-detected-attribution` (Q38: se usa el registro). El agente pedido igual al vigente → `same-agent`.
-4. Escribir `WriteOp::AppendAttribution { kind: Correct, agent, author: Developer, recorded_ms: now }` en un `write_batch`. Nada más: ni la sesión ni sus eventos cambian.
+4. Escribir `WriteOp::AppendAttribution { session_id, kind: Correct, agent, author: Developer, recorded_ms: now }` en un `write_batch`. Nada más: ni la sesión ni sus eventos cambian.
 5. Retirar: misma elección de sesión, entre las que tienen corrección activa; sin ella, `not-corrected`. Escribe `WithdrawCorrection` con el agente de la corrección que retira (traza).
 6. Tras escribir: publicar `attribution.changed` y `session.state` de la sesión (como `publish_sessions`), y registrar en el log `attribution_corrected` / `attribution_correction_withdrawn` con repo, clase de agente y autor; nunca el nombre declarado sin sanear ni rutas (NFR-03).
 
@@ -223,8 +224,8 @@ flowchart LR
 **Ubicación.** `crates/core/src/channel/conn.rs` (**MODIFY**, dos brazos junto a `REGISTRATION_WITHDRAW`)
 
 **Reglas**
-- Reservados: el despacho genérico de métodos reservados (`reserved()`, que audita y rechaza con `RESERVED_REFUSED`) se aplica antes del brazo, como en `registration.withdraw`. Un agente recibe `RESERVED_REFUSED` y el rechazo queda en el registro de auditoría (Validación 7 de ADR-GRP-005).
-- Sin `worktree`, el destino es el cwd del llamante (`process_cwd`), como `raptor agent withdraw`.
+- Reservados: no hay despacho genérico; cada manejador llama a `self.reserved(spec, None)?` (audita y rechaza con `RESERVED_REFUSED`) tras validar los parámetros y antes de pedir nada al daemon, como `registration_withdraw`. Un agente recibe `RESERVED_REFUSED` y el rechazo queda en el registro de auditoría (Validación 7 de ADR-GRP-005).
+- `worktree` pasa por `validate::client_path` y `agent` por `declared_agent` antes de `reserved`; después, `self.ctx.control.correct(..)` o `.withdraw_correction(..)` (T003).
 - `ATTRIBUTION_REJECTED` con `AttributionRejectedData`; error de almacén → `INTERNAL` sin detalle.
 
 - **Depende:** T001, T003
@@ -269,7 +270,7 @@ flowchart LR
 **Ubicación.** `docs/requirements/features/motor-local/user-stories/US-GRP-010-corregir-atribucion.md` (**MODIFY**) · `docs/architecture/xplat-pendientes.md` (**MODIFY**)
 
 **Reglas**
-- Las enmiendas propuestas a ADR-GRP-013 y ADR-GRP-016 las aplica el orquestador.
+- Las enmiendas a ADR-GRP-013 y ADR-GRP-016 ya están aplicadas (§ Enmiendas a ADR); si el bloque de errores cambia al rebasar, se corrige también ADR-GRP-016.
 - Los pendientes de Linux y Windows de § 9.5 van a `xplat-pendientes.md`.
 
 - **Depende:** T003, T004, T005, T006
@@ -286,7 +287,8 @@ crates/api/src/attribution.rs                    ← CREATE  (T001, tipos del m�
 crates/core/src/daemon/attribution.rs            ← CREATE  (T002, T003)
 crates/core/src/daemon/sessions.rs               ← MODIFY  (T002, delega y compara con el vigente)
 crates/core/src/daemon/tm.rs                     ← MODIFY  (T002, memo local en raw_events)
-crates/core/src/daemon/mod.rs                    ← MODIFY  (T002 `mod`, T003 brazo)
+crates/core/src/daemon/mod.rs                    ← MODIFY  (T002 `mod`, T003 brazos)
+crates/core/src/daemon/shutdown.rs               ← MODIFY  (T003, peticiones y `Control`)
 crates/core/src/channel/conn.rs                  ← MODIFY  (T004, dos brazos)
 apps/cli/src/commands/agent.rs, src/agent.rs     ← MODIFY  (T005)
 apps/cli/i18n/{en,es}/{registration,contract}.txt← MODIFY  (T001, T005)
@@ -302,8 +304,8 @@ docs/…                                           ← MODIFY  (T007)
 ```rust
 // crates/api/src/attribution.rs (T001) — Serialize + Deserialize + JsonSchema, deny_unknown_fields
 pub struct AttributionCorrectParams { pub agent: DeclaredAgent,
-    #[serde(default)] pub worktree: Option<String>, #[serde(default)] pub session_id: Option<String> }
-pub struct AttributionWithdrawParams { #[serde(default)] pub worktree: Option<String>,
+    pub worktree: String, #[serde(default)] pub session_id: Option<String> }
+pub struct AttributionWithdrawParams { pub worktree: String,
     #[serde(default)] pub session_id: Option<String> }
 pub struct AttributionChangeResult { pub repo_id: String, pub session_id: String,
     pub previous: Actor, pub actor: Actor }          // resultado de los dos métodos
@@ -359,7 +361,7 @@ impl Daemon {
 | Respuesta | Cuándo |
 |---|---|
 | `RESERVED_REFUSED` (lista congelada) | El llamante no pasa los controles de comando reservado: un agente o un proceso que desciende de él. Auditado |
-| `ATTRIBUTION_REJECTED` (−33100) + `reason` | Destino no observado, sin atribución detectada, sesión ambigua o desconocida, mismo agente, sin corrección que retirar |
+| `ATTRIBUTION_REJECTED` (−33160) + `reason` | Destino no observado, sin atribución detectada, sesión ambigua o desconocida, mismo agente, sin corrección que retirar |
 | `INVALID_PARAMS` | Agente o `session_id` con forma inválida |
 
 ### Forma de la configuración
@@ -370,7 +372,7 @@ _No aplica — la entrega no añade configuración._
 
 | Concepto | Valor | Fuente |
 |---|---|---|
-| Código de error | −33100 | Siguiente bloque libre (ADR-GRP-016 § 3) |
+| Código de error | −33160 | Siguiente bloque libre (ADR-GRP-016 § 3): −33100 a −33140 ya los reservan DS-US-MCP-006 y DS-US-CKP-012 |
 | Candidatas en `ambiguous-session` | 10 | Decisión del Arquitecto |
 
 ### i18n
@@ -490,7 +492,8 @@ Corre `/security-review --scope devspec docs/requirements/features/motor-local/d
 | D4 | Sesión a corregir: la única sesión detectada presente en el worktree; con varias, `ambiguous-session` con candidatas; `--session <id>` elige cualquiera del worktree, también una terminada | **Decisión del orquestador (2026-10-27), validada por Arquitecto** |
 | D5 | Una sesión creada por registro no se corrige (`no-detected-attribution`, Q38); corregir al agente vigente es `same-agent` | **Decisión del orquestador (2026-10-27), validada por Arquitecto** |
 | D6 | Registrar compara con el agente **vigente** de las sesiones presentes: registrar el agente corregido no duplica | **Decisión del orquestador (2026-10-27), validada por Arquitecto** |
-| D7 | Código propio del módulo `attribution.rejected` (−33100) en vez de reutilizar `REGISTRATION_REJECTED` | **Decisión del orquestador (2026-10-27), validada por Arquitecto** (ADR-GRP-016: la lista congelada no crece) |
+| D7 | Código propio del módulo `attribution.rejected` (−33160) en vez de reutilizar `REGISTRATION_REJECTED`. La primera versión decía −33100, que ya reserva DS-US-MCP-006 para `registration` (−33120 y −33140 los reserva DS-US-CKP-012) | **Decisión del orquestador (2026-10-27), validada por Arquitecto** (ADR-GRP-016: la lista congelada no crece); número corregido en la revisión del 2026-10-28 |
+| D8 | `worktree` obligatorio en los dos métodos, rellenado por la CLI con el cwd (`command_path`), como `registration.withdraw`; el daemon no lee el cwd del proceso llamante para un comando reservado | **Decisión del orquestador (2026-10-27), validada por Arquitecto** (revisión del 2026-10-28) |
 
 **Validación de P17 desde la arquitectura**: no hay problema serio. El modelo ya era así antes de esta ficha (eventos por `session_id`, registros append-only, proyección única), así que aceptar Q50 no cambia nada del almacén. El único coste es de lectura (plegar los registros en cada consulta), acotado por el número de registros de una sesión y memoizado por llamada. Riesgo a vigilar: un consumidor que copie el actor resuelto a un almacén propio (por ejemplo, una caché del timeline) dejaría de ver la retirada; por eso `attribution.changed` existe y ADR-TMC-003 § 5 pide invalidar cachés.
 
@@ -498,12 +501,12 @@ Corre `/security-review --scope devspec docs/requirements/features/motor-local/d
 
 _Ninguna._
 
-### Enmiendas propuestas a ADR (no aplicadas)
+### Enmiendas a ADR (aplicadas el 2026-10-28)
 
-| ADR | Enmienda propuesta |
-|---|---|
-| ADR-GRP-013 § 2 | Añadir: "La atribución vigente de una sesión pliega sus registros en orden: `correct` fija la corrección activa (reemplaza a otra), `withdraw-correction` la quita y vuelve la detectada (Q50). Nunca se copia a los eventos" (D1–D3) |
-| ADR-GRP-016 | Anotar el bloque −33100 del módulo `attribution` (D7) |
+| ADR | Enmienda | Estado |
+|---|---|---|
+| ADR-GRP-013 § 2 | "La atribución vigente de una sesión pliega sus registros en orden: `correct` fija la corrección activa (reemplaza a otra), `withdraw-correction` la quita y vuelve la detectada (Q50). Nunca se copia a los eventos" (D1–D3) | Aplicada: ADR-GRP-013, Enmienda (2026-10-27, US-GRP-010) |
+| ADR-GRP-016 | Anotar el bloque −33160 del módulo `attribution` (D7) | Aplicada: ADR-GRP-016, Enmienda (2026-10-27, US-GRP-010) |
 
 ## Notas del autor
 
