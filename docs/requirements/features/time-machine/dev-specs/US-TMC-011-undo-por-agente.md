@@ -343,7 +343,7 @@ flowchart LR
 
 **Reglas**
 - `--agent` pasa el texto tal cual; el daemon valida y resuelve.
-- Éxito: cuántas operaciones del agente se deshicieron, el agente, el periodo y el previo (`undo.done-agent`). `nothing-to-undo` con `--agent`: `undo.reason.nothing-of-agent`, con el periodo y "en este worktree" (como D3 de DS-US-TMC-010; D-TMC-33 y D-TMC-36). El periodo `{since}` lo pone la CLI: el texto de `--since`, o `30d` sin él; no hace falta campo nuevo en `UndoResult`.
+- Éxito: cuántas operaciones del agente se deshicieron, el agente, el periodo y el previo (`undo.done-agent`). `nothing-to-undo` con `--agent`: `undo.reason.nothing-of-agent`, con el periodo y "en este worktree" (como D3 de DS-US-TMC-010; D-TMC-33 y D-TMC-36). El periodo `{since}` (desde cuándo contó, D-TMC-33) lo pone la CLI con la hora local de ahora − `--since` (o − 30 días sin él); no hace falta campo nuevo en `UndoResult`.
 - La confirmación reutiliza `apps/cli/src/undo/confirm/` sin cambios.
 
 - **Depende:** T001
@@ -374,7 +374,6 @@ flowchart LR
 
 **Reglas**
 - Las enmiendas a ADR-TMC-002, 003 y 005 ya están aplicadas (§ Enmiendas a ADR); si la implementación cambia algo de ellas, se enmienda el ADR en el mismo PR.
-- La etiqueta `bloqueada-p17` y `blocked_by` los quita el PO.
 
 - **Depende:** T004, T005, T006, T007, T008, T009, T010
 - **Refs:** AGENTS.md
@@ -523,8 +522,8 @@ _No aplica — la entrega no añade configuración._
 
 | Clave | en | es |
 |---|---|---|
-| `undo.done-agent` | undid {count} operations of {agent} from the last {since} in {worktree}; the rest stays as it was; point before the undo: {id} (redo brings them back) | se deshicieron {count} operaciones de {agent} de los últimos {since} en {worktree}; lo demás queda como estaba; punto previo al undo: {id} (redo las recupera) |
-| `undo.reason.nothing-of-agent` | {agent} has nothing to undo in this worktree in the last {since}; nothing changed | {agent} no tiene nada que deshacer en este worktree en los últimos {since}; nada cambió |
+| `undo.done-agent` | undid {count} operations of {agent} since {since} in {worktree}; the rest stays as it was; point before the undo: {id} (redo brings them back) | se deshicieron {count} operaciones de {agent} desde {since} en {worktree}; lo demás queda como estaba; punto previo al undo: {id} (redo las recupera) |
+| `undo.reason.nothing-of-agent` | {agent} has nothing to undo in this worktree since {since}; nothing changed | {agent} no tiene nada que deshacer en este worktree desde {since}; nada cambió |
 | `undo.reason.not-selectable` | an operation of {agent} in that period cannot be undone on its own (it spans other worktrees or lacks its commits); nothing changed | una operación de {agent} en ese periodo no se puede deshacer por separado (abarca otros worktrees o le faltan sus commits); nada cambió |
 | `undo.reason.selective-undo-below` | an undo of an agent's work sits above this operation; run raptor redo or restore a point from raptor timeline; nothing changed | por encima de esta operación hay un undo del trabajo de un agente; usa raptor redo o restaura un punto de raptor timeline; nada cambió |
 | `undo.reason.attribution-unavailable` | the engine's attribution could not be read, so no agent's work can be chosen; nothing changed | no se pudo leer la atribución del motor, así que no se puede elegir el trabajo de ningún agente; nada cambió |
@@ -564,14 +563,14 @@ _Sin esquema ni migración._ El undo usa `Target::Undo(conjunto)` y el subtipo `
 | Escenario | Test |
 |---|---|
 | 1. Deshacer lo de un agente en 20 min | `us_tmc_011.rs::undoes_the_agents_commits_and_edits_only`: claude-1 hace dos commits (uno con su edición de `api.rs`); una edición sin atribuir de `README.md`; solicitante sin atribuir confirma; la rama vuelve a antes del primer commit, `api.rs` al contenido de antes en archivo e índice, `README.md` intacto; `undone_operation_ids` = los dos commits; el previo existe y verifica |
-| 2. Lo de otros agentes no entra | `another_agents_commit_stays`: claude-2 hace un commit en otros archivos antes del primer commit de claude-1, en el mismo worktree; tras el undo, el commit de claude-2 sigue en la rama y sus archivos intactos. Variante `another_agents_commit_after_stops_on_the_branch`: el commit de claude-2 llega entre los de claude-1 → `overlap` en la rama, huella igual (D-TMC-34) |
-| 3. Se usa la atribución vigente | `a_corrected_session_is_not_its_detected_agent`: sesión detectada Claude Code corregida a codex-1 (`attribution.correct`); `--agent claude-code` en el periodo → `nothing-to-undo`, huella igual. Y `--agent codex-1` la elige |
+| 2. Lo de otros agentes no entra (esquema: el commit de otro agente se queda; uno intercalado detiene, D-TMC-34) | `another_agents_commit_stays`: claude-2 hace un commit en otros archivos antes del primer commit de claude-1, en el mismo worktree; tras el undo, el commit de claude-2 sigue en la rama y sus archivos intactos. Variante `another_agents_commit_after_stops_on_the_branch`: el commit de claude-2 llega entre los de claude-1 → `overlap` en la rama, huella igual (D-TMC-34) |
+| 3. Se usa la atribución vigente | `a_corrected_session_is_not_its_detected_agent`: sesión detectada Claude Code corregida a codex-1 (`attribution.correct`); `--agent claude-code` en el periodo → `nothing-to-undo`, huella igual. Y `--agent codex-1` la elige. Fila "corrección retirada antes del undo": `a_withdrawn_correction_brings_the_session_back`: la misma sesión corregida y retirada con `raptor agent uncorrect` antes del undo; `--agent claude-code` la elige y sus commits se deshacen |
 | 4. Lo del hueco nunca entra | `gap_commits_never_enter`: claude-1 registrado, motor parado, commits en el hueco (reconciliación); `--agent` sobre un periodo que lo incluye → los commits del hueco siguen; unitario `a_gap_event_never_enters` con un evento `in_gap` que lleva sesión |
-| 5. Un agente pide lo de otro | `an_agent_undoing_another_agent_is_rejected`: claude-1 (solicitante) pide `--agent <sesión de claude-2>` → `other-actor`, huella igual, rechazo en el oplog sin conjunto |
-| 6. Agente sin operaciones | `an_agent_without_operations_changes_nothing`: claude-9 → `nothing-to-undo`; e2e `undo_agent_with_nothing_says_so_in_en_and_es` |
+| 5. El repo no cambia (esquema), fila `other-actor` | `an_agent_undoing_another_agent_is_rejected`: claude-1 (solicitante) pide `--agent <sesión de claude-2>` → `other-actor`, huella igual, rechazo en el oplog sin conjunto |
+| 5. El repo no cambia (esquema), fila `nothing-to-undo` | `an_agent_without_operations_changes_nothing`: claude-9 → `nothing-to-undo`; e2e `undo_agent_with_nothing_says_so_in_en_and_es` |
 | Equivale al timeline | `undo_takes_what_the_timeline_shows_for_the_agent`: el conjunto es el de `raptor timeline --agent X --since D` (ids de operación y eventos) |
 | Solapes | `an_edit_after_the_agents_last_commit_stops` (fase 1); `an_uncaptured_edit_just_before_stops_in_phase_2` (fase 2, `ready → rejected`) |
-| Barrera | `plain_undo_below_a_selective_undo_is_rejected` (incluye un commit de otro actor posterior al último del agente); `redo_restores_the_set_and_lifts_the_barrier`; `plain_undo_after_redo_takes_the_latest_operation` (tras el redo, el siguiente `raptor undo` deshace la operación más reciente, no un objetivo rehecho) |
+| 6. Un undo sin agente no baja por debajo de un undo por agente (barrera, D-TMC-35) | `plain_undo_below_a_selective_undo_is_rejected` (incluye un commit de otro actor posterior al último del agente); `redo_restores_the_set_and_lifts_the_barrier`; `plain_undo_after_redo_takes_the_latest_operation` (tras el redo, el siguiente `raptor undo` deshace la operación más reciente, no un objetivo rehecho) |
 | Exclusiones | `an_excluded_path_in_the_target_is_not_selectable`: el agente commitea una ruta que el perfil excluye de la captura → `not-selectable` desde `lista`, huella igual |
 | Atribución al planificar | `a_correction_after_the_undo_does_not_change_what_it_undid`: el registro guarda los ids; la corrección posterior no los cambia; el redo rehace los mismos |
 | Sin motor | `without_attribution_the_agent_undo_is_rejected`: `attribution-unavailable` |
@@ -650,18 +649,19 @@ Corre `/security-review --scope devspec docs/requirements/features/time-machine/
 
 | ID | Decisión |
 |---|---|
-| D-TMC-31 | Deshacer el trabajo de un agente devuelve cada ruta, rama y `HEAD` que sus operaciones cambiaron al valor que tenía antes de la primera de ellas que lo cambió, y deja todo lo demás como está. Para un commit, un merge o un rebase, lo que el agente cambió es el contenido que el commit registra: sale del historial, del índice y de los archivos. Las ediciones sin commitear del agente cuentan como "sin agente" en el MVP (ADR-GRP-013, D-TMC-27): no entran; si están en una ruta que el undo cambiaría, lo detienen por solape. `raptor undo` sin flags y `--since` no cambian: siguen volviendo al estado previo de la operación. **Decisión del orquestador (2026-10-27), validada por Arquitecto** (pendiente de PO) |
-| D-TMC-32 | `--agent <id>` acepta un id de sesión (`raptor sessions --json`), que elige esa sesión, o un nombre de agente (el declarado de un "otro agente", o `claude-code`), que elige toda sesión cuya atribución vigente lo lleva, con la misma regla que `raptor timeline --agent`. Fija la sintaxis provisional de D3 de DS-US-TMC-006. `unattributed` no vale para el undo. **Decisión del orquestador (2026-10-27), validada por Arquitecto** (pendiente de PO) |
-| D-TMC-33 | `--since` es opcional con `--agent`; sin él, el periodo es la retención (30 días). Con él, `undo --agent X --since D` es `undo --since D` filtrado por actor: un solo undo, un previo, un redo. **Decisión del orquestador (2026-10-27), validada por Arquitecto** (pendiente de PO) |
-| D-TMC-34 | Si otro actor movió la rama después del primer cambio del agente (un commit intercalado), el undo por agente se detiene por solape en la rama: el MVP no reescribe historial. Lo de otro actor anterior al primer cambio del agente no cuenta. **Decisión del orquestador (2026-10-27), validada por Arquitecto** (pendiente de PO) |
-| D-TMC-35 | Mientras un undo por agente esté activo (no rehecho), `raptor undo` y `--since` no bajan por debajo de él: devolver un punto anterior traería de vuelta lo que el undo por agente quitó. Se rechaza con su motivo y se ofrecen `raptor redo` o restaurar un punto. **Decisión del orquestador (2026-10-27), validada por Arquitecto** (pendiente de PO) |
+| D-TMC-31 | Deshacer el trabajo de un agente devuelve cada ruta, rama y `HEAD` que sus operaciones cambiaron al valor que tenía antes de la primera de ellas que lo cambió, y deja todo lo demás como está. Para un commit, un merge o un rebase, lo que el agente cambió es el contenido que el commit registra: sale del historial, del índice y de los archivos. Las ediciones sin commitear del agente cuentan como "sin agente" en el MVP (ADR-GRP-013, D-TMC-27): no entran; si están en una ruta que el undo cambiaría, lo detienen por solape. `raptor undo` sin flags y `--since` no cambian: siguen volviendo al estado previo de la operación. **Decisión del orquestador (2026-10-27), validada por Arquitecto** |
+| D-TMC-32 | `--agent <id>` acepta un id de sesión (`raptor sessions --json`), que elige esa sesión, o un nombre de agente (el declarado de un "otro agente", o `claude-code`), que elige toda sesión cuya atribución vigente lo lleva, con la misma regla que `raptor timeline --agent`. Fija la sintaxis provisional de D3 de DS-US-TMC-006. `unattributed` no vale para el undo. **Decisión del orquestador (2026-10-27), validada por Arquitecto** |
+| D-TMC-33 | `--since` es opcional con `--agent`; sin él, el periodo es la retención (30 días). Con él, `undo --agent X --since D` es `undo --since D` filtrado por actor: un solo undo, un previo, un redo. El resultado dice desde cuándo contó el periodo. Actúa solo en el worktree desde el que se invoca (D-TMC-36). **Decisión del orquestador (2026-10-27), validada por Arquitecto** |
+| D-TMC-34 | Si otro actor movió la rama después del primer cambio del agente (un commit intercalado), el undo por agente se detiene por solape en la rama: el MVP no reescribe historial. Lo de otro actor anterior al primer cambio del agente no cuenta. **Decisión del orquestador (2026-10-27), validada por Arquitecto** |
+| D-TMC-35 | Mientras un undo por agente esté activo (no rehecho), `raptor undo` y `--since` no bajan por debajo de él: devolver un punto anterior traería de vuelta lo que el undo por agente quitó. Se rechaza con su motivo y se ofrecen `raptor redo` o restaurar un punto. **Decisión del orquestador (2026-10-27), validada por Arquitecto** |
 
 ### Preguntas abiertas nuevas
 
 | ID | Pregunta | Por defecto mientras tanto | Dueño |
 |---|---|---|---|
 | TQ-21 | ¿La barrera de D-TMC-35 es demasiado estricta cuando hay mucho trabajo encima (el redo ya se invalidó)? La alternativa es planificar también ese undo de forma selectiva | Barrera; el timeline y la restauración siguen disponibles | Arquitecto |
-| TQ-22 | Un nombre declarado con espacios ("GitHub Copilot") no pasa `check_agent_id`. ¿Se normaliza (espacio ≡ `-`) o basta el id de sesión? | Id de sesión | PO |
+| TQ-22 | Un nombre declarado con espacios ("GitHub Copilot") no pasa `check_agent_id`. ¿Se normaliza (espacio ≡ `-`) o basta el id de sesión? | **Respondida** (PO, D-TMC-32): en el MVP se elige por id de sesión, sin normalizar; `undo.invalid-agent` lo dice | PO |
+| TQ-23 | `raptor sessions` en texto muestra un id corto de sesión que acepten `--agent` y `--session` (hoy solo `--json` da el id) | Id completo vía `--json`; no bloquea la demo de M2 | Arquitecto + design system |
 
 ### Enmiendas a ADR (aplicadas el 2026-10-28)
 

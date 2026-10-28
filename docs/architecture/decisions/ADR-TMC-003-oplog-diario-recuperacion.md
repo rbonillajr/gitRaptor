@@ -283,7 +283,7 @@ Aplicada desde la [Dev Spec de US-TMC-004](../../requirements/features/time-mach
 
 ## Enmienda (2026-10-28, US-TMC-011)
 
-**Decisión del orquestador (2026-10-27), validada por Arquitecto y PO** (D-TMC-31 a D-TMC-35; D-TMC-36 es propuesta del PO del 2026-10-28, pendiente de confirmar por el orquestador); revisión de segunda opinión del Arquitecto el 2026-10-28 (D6 y D9 de la Dev Spec). Origen: [DS-US-TMC-011](../../requirements/features/time-machine/dev-specs/US-TMC-011-undo-por-agente.md) E1, E4, D1, D2, D6 y D9. No cambia el esquema del oplog, su cadena ni sus estados: el undo por agente es una operación `undo` con subtipo `agent` (columna que ya existe y entra en la cadena) y `Target::Undo` con varios objetivos. El `status` sigue en `accepted`.
+**Decisión del orquestador (2026-10-27), validada por Arquitecto y PO** (D-TMC-31 a D-TMC-35; D-TMC-36, propuesta del PO el 2026-10-28 y aceptada por el orquestador); revisión de segunda opinión del Arquitecto el 2026-10-28 (D6 y D9 de la Dev Spec). Origen: [DS-US-TMC-011](../../requirements/features/time-machine/dev-specs/US-TMC-011-undo-por-agente.md) E1, E4, D1, D2, D6 y D9. No cambia el esquema del oplog, su cadena ni sus estados: el undo por agente es una operación `undo` con subtipo `agent` (columna que ya existe y entra en la cadena) y `Target::Undo` con varios objetivos. El `status` sigue en `accepted`.
 
 | Cambio | Dónde | Fuente |
 |---|---|---|
