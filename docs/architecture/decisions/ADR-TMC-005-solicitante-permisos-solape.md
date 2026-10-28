@@ -5,7 +5,7 @@ type: adr
 status: accepted
 accepted: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-09
+updated: 2026-10-27
 date: 2026-10-03
 domain: GRP
 feature: time-machine
@@ -70,12 +70,15 @@ Se **reutiliza** el mecanismo de los comandos reservados de ADR-GRP-005 § 6, si
 
 Orden de evaluación: validación (BR-TMC-VAL-001), conjunto, regla base (§ 2), confirmación (§ 3), **política de Guardrails**, solape (§ 5), precondiciones de Git (ADR-TMC-002 § 3). La política la evalúa `crates/policy` (ADR-GRP-007) y devuelve `permitir` o `denegar(motivo)`; el resultado final es la **conjunción**: una política que "permite" algo que la regla base rechaza no tiene efecto (US-TMC-021, escenario 2). Toda petición, aceptada o rechazada, queda en el oplog con su solicitante y su motivo (auditoría, SEC-TMC-03).
 
+- **Solape en dos fases** (Enmienda 2026-10-27, US-TMC-012): el solape de este orden es la fase 1; la fase 2 va tras el snapshot previo y las precondiciones, con el repo tomado. Ver la sección final.
+
 ### 5. Solape: por archivo y por ref en el MVP
 
 - **Qué es**: deshacer o restaurar cambiaría una ruta o una ref que **después** del cambio a deshacer modificó otro actor. "Otro actor" = cualquier atribución vigente distinta del actor de lo que se deshace; "sin atribuir" cuenta como distinto de un agente.
 - **Cómo se detecta**: por cada ruta del destino, se recorren los cambios de esa ruta entre capturas posteriores al cambio a deshacer (diferencias de árbol en el almacén) y su actor según los eventos del motor de ese intervalo. Por cada ref, sus movimientos posteriores. Si en un intervalo tocaron la ruta actores distintos o la atribución es mixta, cuenta como otro actor (conservador). Los cambios anteriores no cuentan (US-TMC-012, escenario 4).
 - **Granularidad**: **archivo completo** en el MVP. Si otro actor tocó otra función del mismo archivo, también se detiene. Es más estricto que "fragmento" y nunca sobrescribe; la detección por fragmentos con fusión de tres vías queda para después (TQ-6 → a).
-- **Resultado**: el undo se detiene sin cambiar el repo, se muestran los cambios en conflicto con su actor y su momento y la operación queda `rechazada` por solape. Qué opciones se ofrecen después lo decide el design-flow (US-TMC-012). El redo aplica la misma regla (S5).
+- **Resultado**: el undo se detiene sin cambiar el repo, se muestran los cambios en conflicto con su actor y su momento y la operación queda `rechazada` por solape. Qué opciones se ofrecen después lo decide el design-flow (US-TMC-012) → ver Enmienda (2026-10-27): D-TMC-27. El redo aplica la misma regla (S5).
+- **Precisión** (Enmienda 2026-10-27, US-TMC-012): con quién se compara "otro actor", cómo se cortan los intervalos, `overlap-unverified` y las rutas que se conservan. Ver la sección final.
 
 ## Alternativas consideradas
 
@@ -102,7 +105,7 @@ Orden de evaluación: validación (BR-TMC-VAL-001), conjunto, regla base (§ 2),
 2. **Rechazos**: claude-1 sobre trabajo de claude-2 rechazado por MCP y por CLI; "sin atribuir" por MCP rechazado; repo sin cambios y rechazo en el oplog.
 3. **Confirmación**: los casos de SEC-TMC-03 (cliente JSON-RPC directo, `setsid` sin pty, `tmux new-window` + `send-keys`, reto reutilizado o de otra conexión, plan cambiado) se rechazan; con terminal, fuera del árbol del agente y reto válido, se permite y se registra como "sin atribuir" con confirmación.
 4. **Guardrails**: política que prohíbe, rechazo; política que "permite" lo prohibido, sigue rechazado (US-TMC-021).
-5. **Solape**: los cuatro escenarios de US-TMC-012 con capturas reales; mismo archivo y otra función, también se detiene (granularidad declarada).
+5. **Solape**: los cuatro escenarios de US-TMC-012 con capturas reales; mismo archivo y otra función, también se detiene (granularidad declarada) → ver Enmienda (2026-10-27): cinco escenarios.
 
 ## Referencias
 
@@ -153,7 +156,7 @@ Decisión del orquestador (2026-10-08), validada por Arquitecto y PO. Precisa qu
 - **Límite conocido**: una rama del punto borrada con Git crudo **desde otro worktree** no vuelve. La restauración la nombra como "no devuelta" con el motivo, para que no se lea como un fallo.
 - **Ramas creadas después del punto**: no se borran (NFR-01); la restauración las lista como dejadas en su sitio.
 - **Deshacer una restauración que recreó un worktree** siempre termina: la ref que solo usa ese worktree recreado se deja como está y se avisa, en vez de rechazar con `ref-in-use`. El worktree recreado se queda (quitar un worktree no está en la lista cerrada de ADR-TMC-002 § 2).
-- **Sin cubrir hasta US-TMC-012**: las ediciones sin commitear de otro agente en un worktree del conjunto distinto de W se sobrescriben sin pasar la regla de permisos, porque una edición no es un evento con dueño. Se recuperan con `raptor undo` porque el snapshot previo cubre todas las raíces existentes del conjunto.
+- **Sin cubrir hasta US-TMC-024** (historia del solape de la restauración, TQ-18; texto cambiado por la Enmienda 2026-10-27, que decía "hasta US-TMC-012"): las ediciones sin commitear de otro agente en un worktree del conjunto distinto de W se sobrescriben sin pasar la regla de permisos, porque una edición no es un evento con dueño. Se recuperan con `raptor undo` porque el snapshot previo cubre todas las raíces existentes del conjunto.
 
 ## Nota (2026-10-09, US-TMC-013)
 
@@ -163,3 +166,43 @@ No cambia ninguna decisión. Cómo se aplica el § 3:
 - **Catálogo del Cockpit**: la revisión de seguridad de US-TMC-013 (H-01) encontró que el ejecutor no aplica esa regla y ofrece el reto en Windows, en contra de BR-CKP-AUTH-003 y de la Enmienda (2026-10-04, Cockpit). Se corrige en una rama `fix/` aparte que reutiliza la misma constante. Bloquea v0.1.0.
 - **Reto** (§ 3, SEC-TMC-03): es el mismo `ChallengeBook` del ejecutor, compartido. El hash del plan sale solo del plan del daemon: tipo, worktree, solicitante, canal, destino, lo que se deshace, ámbito y dueños, sin texto de agentes. El token presentado siempre se consume, se compara en tiempo constante y nunca se guarda en el oplog. La primera llamada queda registrada como `rejected` con `confirmation-required`, y la segunda como `confirmed = 1` con el solicitante "sin atribuir".
 
+
+## Enmienda (2026-10-27, US-TMC-012)
+
+**Decisión del orquestador (2026-10-27), validada por Arquitecto y PO**. Origen: [DS-US-TMC-012](../../requirements/features/time-machine/dev-specs/US-TMC-012-solape-otro-actor.md), enmiendas E1, E2 y E4, decisiones D1 a D13 y TQ-18; con [DS-US-TMC-003](../../requirements/features/time-machine/dev-specs/US-TMC-003-redo.md) D5 y [DS-US-TMC-010](../../requirements/features/time-machine/dev-specs/US-TMC-010-undo-since.md) § Solape. Precisa el § 4 y el § 5; no cambia la identificación del solicitante, la regla base, la confirmación ni la granularidad por archivo y por ref. El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| El solape se evalúa en **dos fases**: la de los puntos capturados, en su sitio del orden, y la de la cola, tras el snapshot previo y las precondiciones, desde `lista` | § 4 | E1; D1, D13 |
+| "Otro actor" se compara con quien produjo el estado que se sobrescribe; una ruta cambiada sin evento es "sin atribuir"; los intervalos los cortan solo puntos limpios; sin base para un agente, `overlap-unverified`; las rutas que solo tocó otro actor se conservan | § 5 | E2; D2 a D7 |
+| Tras un solape, la única opción del MVP es no seguir | § 5, Resultado | D11; D-TMC-27 |
+| "Sin cubrir hasta US-TMC-012" pasa a "sin cubrir hasta US-TMC-024 (historia del solape de la restauración, TQ-18)" | Enmienda (2026-10-08, US-TMC-009) | E4; TQ-18 |
+
+**Tres capas, tres momentos (§ 4; D1, D13)**:
+
+| Capa | Cuándo | Qué cubre | Resultado |
+|---|---|---|---|
+| Fase 1 (`overlap::check`) | En el plan, en el sitio del orden del § 4 (confirmación, Guardrails, solape, precondiciones), antes del snapshot previo del undo | Los intervalos entre los puntos ya capturados después de la base | `rechazada` desde `intención`, sin gastar un previo |
+| Fase 2 (`overlap::check_tail`) | Tras el snapshot previo y las precondiciones, antes del aplicador, con el repo tomado | La cola: del último punto capturado al previo del undo, con lo que la captura continua aún no tomó | `lista → rechazada` |
+| Último instante (aplicador, ADR-TMC-002 § 3 paso 6) | Durante el intercambio de archivos | Lo que alguien escribe después del previo | La ruta se conserva y se informa como no restaurada por solape |
+
+- La fase 1 rechaza sin gastar un previo. El trabajo sin commitear que la captura continua aún no tomó solo existe en el previo del undo, así que la fase 2 es la única forma exacta de verlo. La protección del aplicador compara con ese mismo previo: cubre lo posterior, no lo anterior.
+- El orden del § 4 se mantiene para la fase 1. El coste es que un "sin atribuir" puede confirmar el undo de un agente y recibir después `overlap` (G3 de la Dev Spec: se mide en uso; si molesta, se enmienda este orden).
+- `overlap::check` recibe varios cambios deshechos y varios actores de referencia (D12): lo reutilizan el redo, `undo --since` (con el conjunto entero, en las dos fases), el undo por agente y la restauración de US-TMC-024.
+
+**Cómo se detecta (§ 5; E2)**:
+
+- **Intervalos** (D2): van de la base B (el ancla de la operación deshecha o la captura de su evento) a cada punto limpio posterior y al previo del undo. Un punto no disponible, manipulado o ensombrecido por la regla del punto previo (ADR-TMC-003, Enmienda 2026-10-21, `fix/tm-prior-point-binding`) no corta: fusiona sus dos intervalos, que es lo conservador.
+- **Actores de un intervalo** (D3): el actor vigente de cada evento de Git crudo del worktree en el intervalo (un eco cuenta con el solicitante de su operación), más "sin atribuir" si el intervalo cambia una ruta de archivos o del índice. El MVP no atribuye ediciones (ADR-GRP-013), así que una edición sin evento de Git es "sin atribuir" aunque la haga un agente. Ramas: los eventos de cualquier worktree que las nombran y las operaciones que las declaran; un movimiento sin evento es "sin atribuir".
+- **Actor de referencia** (D4): quien produjo el estado que el comando sobrescribe; en el undo, el dueño del cambio deshecho; en el redo, el solicitante del undo, con el ancla del undo como base y su previo como destino (DS-US-TMC-003 D5). Agentes por `session_id`; "sin atribuir" es una sola clase; el solicitante y el canal nunca entran, porque ya pasaron la regla del § 2. Un intervalo con cualquier actor fuera de la referencia cuenta como otro (mixta = otro).
+- **Clasificación de cada ruta de la diferencia entre destino y estado actual** (D5): conflicto (la tocó el cambio deshecho y después otro actor), conservada (no la tocó el cambio deshecho y sí otro actor después) o escrita. Las conservadas el aplicador ni las escribe ni las borra (`PlanWorktree.keep`) y se informan. Las ramas siguen la misma regla; una rama conservada sale del ámbito de refs del undo antes del control de `ref-in-use` (D6).
+- **`overlap-unverified`** (D7): sin base B con un agente como referencia, con el almacén ilegible o con el plazo de las dos fases vencido, el undo se detiene. Falla cerrado (NFR-01): sin B no se separa el cambio deshecho de lo posterior. Con referencia "sin atribuir" las ediciones no cuentan y la base no hace falta.
+- **Resultado** (D8 a D11): dos motivos nuevos, `overlap` y `overlap-unverified`. Cada conflicto lleva el momento del punto que lo mostró por primera vez. La lista de conflictos no se guarda en el oplog; el rechazo sí, con su motivo. Por MCP viajan el motivo y el número de rutas conservadas, sin rutas ni ramas (SEC-12). Tras un solape no se continúa: el repo no cambia y continuar o fusionar por fragmentos queda para después (D-TMC-27).
+
+**Límites declarados**:
+
+- La frase "incluidas las ediciones posteriores del mismo actor" de ADR-TMC-003 § 4 no se cumple en el MVP para un agente: sus ediciones son "sin atribuir", así que solapan (mismo archivo) o se conservan (otro archivo). Se revisa cuando el motor atribuya ediciones (G2 de la Dev Spec).
+- Una edición de otro actor entre un evento y su captura queda en la base y cuenta como parte del cambio deshecho; se recupera con el previo del undo (G4).
+- `raptor restore` sigue sin solape hasta US-TMC-024, que bloquea el cierre de M2 (G5, TQ-18).
+
+**Validación añadida** (definida en DS-US-TMC-012 § 9.4; tests por implementar): los cinco escenarios de US-TMC-012, con el 5 nuevo (una edición sin Git del mismo agente cuenta como de otro actor); un cambio sin capturar justo antes del undo lo detiene la fase 2 (`lista → rechazada`); una escritura durante la aplicación sale como ruta no restaurada por solape, no como rechazo; los tests puros de intervalos, atribución mixta, ecos y falta de base; y por MCP, ni rutas ni ramas en la respuesta ni en el log.

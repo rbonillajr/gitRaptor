@@ -5,7 +5,7 @@ type: adr
 status: accepted
 accepted: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-09
+updated: 2026-10-27
 date: 2026-10-03
 domain: GRP
 feature: time-machine
@@ -56,6 +56,7 @@ La inmutabilidad se impone en el esquema: los triggers rechazan `UPDATE` y `DELE
 - **Orden de escritura**: (1) la intención se confirma en el oplog **antes** de tocar nada; (2) el snapshot previo se completa en el almacén y después en el oplog; (3) cada paso del aplicador se anota antes de ejecutarse; (4) `terminada` se anota al final. Un estado nunca se da por hecho sin la anotación previa.
 - **Validez de un snapshot**: cuenta solo si su ref existe en el almacén **y** su fila tiene la transición `completo`. Si falta cualquiera de las dos, no figura en el timeline ni se ofrece para restaurar (US-TMC-019, escenario 1).
 - **Timeline en vivo** (Enmienda 2026-10-04, Cockpit): las transiciones anotadas se publican en el stream; ver la sección final.
+- **`lista → rechazada` por solape** (Enmienda 2026-10-27, US-TMC-012, US-TMC-003 y US-TMC-010): la fase 2 del solape rechaza desde `lista`; ver la sección final.
 
 ### 4. Undo, redo y "última operación"
 
@@ -64,6 +65,7 @@ La inmutabilidad se impone en el esquema: los triggers rechazan `UPDATE` y `DELE
 - **Operaciones de usuario** (Cockpit, MCP): el oplog registra su intención, su snapshot previo y su resultado; las ejecuta el ejecutor del daemon (ADR-TMC-002 § 5).
 - **`undo`** deshace la operación más reciente del worktree que aún no está deshecha; **`redo`** rehace el último undo si es lo último del ámbito (BR-TMC-WF-001). Undos seguidos retroceden (TQ-9 → a) una operación más cada vez (pila por worktree), y una operación nueva en el ámbito invalida el redo.
 - El undo deja el ámbito como estaba antes de la operación, incluidas las ediciones posteriores del mismo actor; esas ediciones quedan en el snapshot previo del undo y se recuperan con redo. Las de otro actor activan el solape (ADR-TMC-005).
+- **Redo, `undo --since` y ediciones del mismo agente** (Enmienda 2026-10-27, US-TMC-012, US-TMC-003 y US-TMC-010): cuándo hay redo y qué se informa si no, `undo --since` como una sola operación, y el límite del MVP para las ediciones de un agente; ver la sección final.
 
 ### 5. Atribución: congelada frente a vigente
 
@@ -121,7 +123,7 @@ Aplicada desde la [Dev Spec de TS-TMC-002](../../requirements/features/time-mach
 | Cambio | Dónde |
 |---|---|
 | Una operación en `lista` también pasa a `abortada` al recuperar: el repo no se tocó | § 6.2 |
-| `rechazada` puede salir también de `snapshot_previo`: el solape se detecta después del snapshot | § 3 |
+| `rechazada` puede salir también de `snapshot_previo`: el solape se detecta después del snapshot → precisada por la Enmienda (2026-10-27): fase 1 desde `intención`, fase 2 desde `lista` | § 3 |
 | La fila del snapshot `pendiente` se escribe **antes** de crear su ref en el almacén. La recuperación borra solo las refs de snapshots `pendiente` o `descartado`; una ref que el oplog no conoce se informa y se conserva (NFR-01) | § 3, § 6.1 |
 | Sin almacén de snapshots disponible, la recuperación no decide nada que dependa de refs | § 6.1, § 6.6 |
 | La recuperación del oplog no depende del almacén del motor: un repo cuyo almacén del motor no abre recupera igual su oplog (Q26) | § 1, § 6 |
@@ -244,3 +246,35 @@ Aplicada desde la [Dev Spec de US-TMC-004](../../requirements/features/time-mach
 | **Límites declarados**: un `git` largo de solo lectura en el worktree (paginador, editor de `commit`, `gc --auto`) aplaza capturas y operaciones mientras vive. Un `git status` en bucle (IDE, prompt) puede impedir la calma hasta el límite; cada `settle` que agota su límite por un `git` lo registra una vez como `tm_calm_blocked_by_git`, con `pid` y subcomando, nunca el resto de la línea de órdenes. Windows: el `cwd` de otro proceso se lee por el PEB, así que la regla está activa, **sin validar en máquina real** (release-plan, Huecos, fila 12) | § 4 |
 
 **Validación añadida**: `crates/core/tests/tm_calm_refs.rs` (un ref movido sin persistir, un commit cuyo reflog se persistió antes que su rama, un directorio común ilegible, `remove`, `pack-refs` y un ref corrupto), `tm_calm_refs_stack.rs` (el eco tardío de la operación protegida queda bajo el restore en la pila) y `tm_calm_dormant.rs` (un undo en un repo dormido con una rama movida no da `repo-busy`). Para la marca confirmada: `timemachine/capture_mark_tests.rs` (un evento persistido o pendiente entre la marca y la lectura descarta la captura; manual y previo de hook; actividad del hermano acotada y sin fin; ancla fallida), `timemachine/hook_prior_mark_tests.rs` (denegación por plazo) y `executor/prior_mark_tests.rs` (previo garantizado con `git-busy`). Para el `git` en curso: `timemachine/calm_git_alive_tests.rs`, `timemachine/calm_exclusions_tests.rs`, `timemachine/calm_redirect_tests.rs`, `timemachine/hook_prior_live_git_tests.rs` y `crates/core/tests/tm_calm_reset_in_hook.rs` (un `reset --hard` detenido en su hook `reference-transaction` no deja captura y, al terminar, la calma vuelve con una marca posterior al Reset).
+
+## Enmienda (2026-10-27, US-TMC-012, US-TMC-003 y US-TMC-010)
+
+**Decisión del orquestador (2026-10-27), validada por Arquitecto y PO**. Origen: [DS-US-TMC-012](../../requirements/features/time-machine/dev-specs/US-TMC-012-solape-otro-actor.md) E3 y D1; [DS-US-TMC-003](../../requirements/features/time-machine/dev-specs/US-TMC-003-redo.md) E1, D1 a D3, D10 y D-TMC-26; [DS-US-TMC-010](../../requirements/features/time-machine/dev-specs/US-TMC-010-undo-since.md) § Enmiendas propuestas, D1 a D4 y D-TMC-29; nota cruzada de [DS-US-TMC-015](../../requirements/features/time-machine/dev-specs/US-TMC-015-operacion-git-en-curso.md) D4. No cambia el esquema del oplog, su cadena ni sus estados: `OperationKind::Redo`, `Target::Redo` y `Target::Undo` con varios objetivos ya existen (TS-TMC-002), y el campo `invalidated_by` vive en la pila, que se recalcula del oplog. El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| `lista → rechazada` también por el solape de la cola (fase 2 de ADR-TMC-005, Enmienda 2026-10-27). La fase 1 rechaza desde `intención` | § 3 | DS-US-TMC-012 E3, D1 |
+| "`redo` rehace el último undo si es lo último del ámbito" pasa a "si no hubo una operación nueva en el ámbito desde ese undo; redos seguidos rehacen undos seguidos" | § 4 | DS-US-TMC-003 E1, D1; D-TMC-26 |
+| Sin redo, se informa si una operación nueva lo invalidó (`redo-invalidated`) o si nunca lo hubo (`nothing-to-redo`) | § 4 | DS-US-TMC-003 E1, D2 |
+| `undo --since` deshace, como una sola operación, el sufijo de la pila del worktree cuyo momento cae en el periodo; el destino es el previo de la más antigua | § 4 | DS-US-TMC-010 D1, D2 |
+| "Incluidas las ediciones posteriores del mismo actor" no se cumple en el MVP para un agente | § 4 | DS-US-TMC-012 E3, D3 |
+| Un lock ajeno que impide la calma del motor se responde `git-busy`, no `repo-busy` (ver ADR-TMC-002 § 3, Enmienda 2026-10-27). Precisa "sin calma en 2 s, el undo se rechaza con `repo-busy`" de la Enmienda (2026-10-06, US-TMC-004) | § 4 | DS-US-TMC-015 D4 |
+
+**Redo (§ 4; D-TMC-26)**:
+
+- El redo rehace el siguiente undo pendiente de la pila del worktree. "El último evento del ámbito es un undo" se lee como "desde ese undo no hubo ninguna operación nueva": un redo no es una operación nueva, así que redos seguidos rehacen, en orden inverso, los undos seguidos del worktree. Una operación nueva en el worktree invalida todos los redos pendientes; un undo interrumpido cuenta como operación nueva (US-TMC-019).
+- **Por qué no hay redo**: al construir la pila, una operación nueva que vacía una lista de redo no vacía queda anotada como `invalidated_by`; un undo lo borra y un redo no lo toca. Con esa marca el rechazo es `redo-invalidated`; sin ella, `nothing-to-redo`.
+- **Destino y ámbito** (D3): el snapshot previo de ese undo, disponible y verificado, con el ámbito que registró el undo y la misma regla de `ref-in-use`. El redo del undo de una restauración que recreó worktrees no usa la excepción de sus ramas (ADR-TMC-005, Enmienda 2026-10-08): falla cerrado con `ref-in-use`.
+- **Registro** (D10): los rechazos quedan como operaciones `redo` de `intención` a `rechazada`; `nothing-to-redo` lleva `Target::None`, porque sin undo no hay id que poner en `Target::Redo`.
+- Los permisos y el solape del redo están en ADR-TMC-005 (§ 2 y Enmienda 2026-10-27).
+
+**`undo --since` (§ 4; D-TMC-29)**:
+
+- **Una sola operación** (D1): un undo por periodo es **una** operación `undo` con un snapshot previo y `Target::Undo(conjunto)`, no N undos. El redo lo rehace entero.
+- **Conjunto** (D2): el sufijo de la pila del worktree con momento ≥ ahora − duración; se detiene en la primera operación más antigua. Con un reloj desordenado deshace de menos, nunca de más. El momento de un evento crudo es el `observed` del motor; el de una operación, su `recorded_ms` (D6).
+- **Nada en el periodo** (D3) reutiliza `nothing-to-undo`. Una operación del periodo que no se puede deshacer (Git crudo no cubierto, manipulada) rechaza la petición entera (D4): nada se salta en silencio.
+- **Otros actores** (D-TMC-29): cuenta todo lo del worktree en el periodo, de cualquier actor; el trabajo de otro actor pasa por la regla de ADR-TMC-005 § 2 y nunca se excluye en silencio. Excluirlo es `--agent` (US-TMC-011).
+
+**Límite del MVP (§ 4, última viñeta)**: el motor no atribuye ediciones, así que las ediciones posteriores de un agente son "sin atribuir". Al deshacer una operación de ese agente, solapan si están en el mismo archivo y se conservan si están en otro (ADR-TMC-005, Enmienda 2026-10-27). Para un solicitante "sin atribuir", la frase sigue valiendo.
+
+**Validación añadida** (definida en las Dev Specs; tests por implementar): redos seguidos vuelven al estado del final y un commit nuevo tras el undo da `redo-invalidated` con el repo igual (DS-US-TMC-003 § 9.4); `undo --since` equivale a undos seguidos y deja la pila preparada para un redo que lo rehaga entero (DS-US-TMC-010 § 9.4); un cambio sin capturar justo antes del undo lo rechaza desde `lista` (DS-US-TMC-012 § 9.4).
