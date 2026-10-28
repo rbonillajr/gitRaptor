@@ -954,6 +954,11 @@ const MODULE_ERRORS: &[(&str, &str, &str)] = &[
         "that repo is not waiting for a decision",
         "ese repo no está pendiente de decisión",
     ),
+    (
+        "attribution-rejected",
+        "the attribution was not changed",
+        "la atribución no cambió",
+    ),
 ];
 
 fn en_error(code: ErrorCode) -> &'static str {

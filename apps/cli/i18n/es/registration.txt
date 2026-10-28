@@ -15,3 +15,19 @@ registration.worktree-mismatch = rechazado: un agente solo puede registrarse en 
 registration.agent-mismatch = rechazado: un agente solo puede registrarse como el agente que es
 registration.no-working-folder = no se pudo leer la carpeta de trabajo de quien lo pide
 registration.not-registered = {agent} no tiene un registro que retirar en ese worktree; una sesión detectada termina cuando termina su proceso
+
+# Corrección de una atribución detectada: raptor agent correct y uncorrect.
+correction.done = la atribución de esta sesión pasó de {previous} a {actor}, desde su inicio; sus eventos la siguen
+correction.withdrawn = se retiró la corrección: la sesión y sus eventos vuelven a ser de {actor}
+correction.hint-uncorrect = es el agente que detectó el motor: raptor agent uncorrect vuelve a él sin añadir otra corrección
+correction.reserved = solo el desarrollador puede corregir una atribución
+correction.candidate = --session {session}: {agent}, empezó {time} UTC
+correction.candidate-ended = --session {session}: {agent}, empezó {time} UTC, terminada
+correction.reason.repo-not-observed = ese repo no está observado; nada cambió
+correction.reason.not-a-worktree = esa carpeta no es un worktree de un repo observado; nada cambió
+correction.reason.no-detected-attribution = aquí no hay ninguna atribución detectada que corregir; para atribuir trabajo a un agente, regístralo con raptor agent register
+correction.reason.ambiguous-session = hay varias sesiones detectadas presentes aquí; elige una con --session
+correction.reason.unknown-session = este worktree no tiene la sesión {session}
+correction.reason.registered-session = esta sesión se registró; retira el registro con raptor agent withdraw y registra el agente correcto
+correction.reason.same-agent = la sesión ya está atribuida a {actor}; nada cambió
+correction.reason.not-corrected = esta sesión no tiene ninguna corrección que retirar

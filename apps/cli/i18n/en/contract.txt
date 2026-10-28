@@ -63,3 +63,4 @@ error.not-a-candidate = that repo is not waiting for a decision
 error.snapshot-quota-exceeded = too many manual snapshots for now; try again later
 error.snapshot-time-limit = the snapshot took too long; nothing was saved
 error.mcp-unavailable = the repo or the worktree cannot be read right now
+error.attribution-rejected = the attribution was not changed

@@ -15,3 +15,19 @@ registration.worktree-mismatch = refused: an agent can only register in the work
 registration.agent-mismatch = refused: an agent can only register as the agent it is
 registration.no-working-folder = the working folder of the caller could not be read
 registration.not-registered = {agent} has no registration to withdraw in that worktree; a detected session ends when its process ends
+
+# Correction of a detected attribution: raptor agent correct and uncorrect.
+correction.done = the attribution of this session changed from {previous} to {actor}, from its start; its events follow it
+correction.withdrawn = the correction was withdrawn: the session and its events are {actor} again
+correction.hint-uncorrect = this is the agent the engine detected: raptor agent uncorrect returns to it without adding another correction
+correction.reserved = only the developer can correct an attribution
+correction.candidate = --session {session}: {agent}, started {time} UTC
+correction.candidate-ended = --session {session}: {agent}, started {time} UTC, ended
+correction.reason.repo-not-observed = that repo is not observed; nothing changed
+correction.reason.not-a-worktree = that folder is not a worktree of an observed repo; nothing changed
+correction.reason.no-detected-attribution = there is no detected attribution to correct here; to attribute work to an agent, register it with raptor agent register
+correction.reason.ambiguous-session = several detected sessions are present here; choose one with --session
+correction.reason.unknown-session = this worktree has no session {session}
+correction.reason.registered-session = this session was registered; withdraw the registration with raptor agent withdraw and register the right agent
+correction.reason.same-agent = the session is already attributed to {actor}; nothing changed
+correction.reason.not-corrected = this session has no correction to withdraw
