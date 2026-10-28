@@ -1305,77 +1305,6 @@ pub const MAX_LOG_PAGE: u32 = 500;
 /// Days an entry is kept, from its last occurrence (BR-TIME-002).
 pub const LOG_RETENTION_DAYS: i64 = 90;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn codes_travel_in_kebab_case() {
-        let reason = Reason {
-            rule: Rule::MinimumForcePush,
-            level: Level::Minimum,
-            cause: Some(Cause::ShallowHistory),
-            params: vec![Param::new(ParamKind::Branch, "feat-x")],
-        };
-        let json = serde_json::to_string(&reason).unwrap();
-        assert_eq!(
-            json,
-            r#"{"rule":"minimum.force-push","level":"minimum","cause":"shallow-history","params":[{"kind":"branch","value":{"untrusted":"feat-x"}}]}"#
-        );
-        assert_eq!(serde_json::from_str::<Reason>(&json).unwrap(), reason);
-    }
-
-    #[test]
-    fn permission_codes_round_trip_in_kebab_case() {
-        let rules = [
-            (Rule::PermissionCommit, "permission.commit"),
-            (Rule::PermissionPush, "permission.push"),
-            (Rule::PermissionForcePush, "permission.force-push"),
-            (Rule::PermissionResetHard, "permission.reset-hard"),
-            (Rule::PermissionBranchDelete, "permission.branch-delete"),
-            (Rule::PermissionRebase, "permission.rebase"),
-            (Rule::PermissionMerge, "permission.merge"),
-            (Rule::PermissionWorktreeAdd, "permission.worktree-add"),
-            (Rule::PermissionWorktreeRemove, "permission.worktree-remove"),
-        ];
-        for (rule, code) in rules {
-            let json = serde_json::to_string(&rule).unwrap();
-            assert_eq!(json, format!("\"{code}\""));
-            assert_eq!(serde_json::from_str::<Rule>(&json).unwrap(), rule);
-        }
-        let json = serde_json::to_string(&Cause::AskUnavailable).unwrap();
-        assert_eq!(json, "\"ask-unavailable\"");
-        assert_eq!(
-            serde_json::from_str::<Cause>(&json).unwrap(),
-            Cause::AskUnavailable
-        );
-        let json = serde_json::to_string(&NotPreventable::PermissionReach).unwrap();
-        assert_eq!(json, "\"permission-reach\"");
-        assert_eq!(
-            serde_json::from_str::<NotPreventable>(&json).unwrap(),
-            NotPreventable::PermissionReach
-        );
-    }
-
-    #[test]
-    fn effects_are_ordered_by_restriction() {
-        assert!(Effect::Deny > Effect::Ask && Effect::Ask > Effect::Allow);
-    }
-
-    #[test]
-    fn hooks_round_trip_their_git_names() {
-        for h in Hook::ALL {
-            assert_eq!(Hook::from_git_name(h.git_name()), Some(h));
-        }
-        assert_eq!(Hook::from_git_name("post-commit"), None);
-    }
-
-    #[test]
-    fn unknown_fields_are_rejected() {
-        assert!(serde_json::from_str::<GuardRepoParams>(r#"{"path":"/r","x":1}"#).is_err());
-    }
-}
-
 /// Largest argv an exception request may carry.
 pub const MAX_EXCEPTION_ARGV: usize = 64;
 /// Largest single argument, in bytes, of an exception request.
@@ -1539,4 +1468,75 @@ pub struct GuardExceptionEndParams {
 pub struct GuardExceptionEndResult {
     /// Whether a hook presented the token and the exception applied.
     pub consumed: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn codes_travel_in_kebab_case() {
+        let reason = Reason {
+            rule: Rule::MinimumForcePush,
+            level: Level::Minimum,
+            cause: Some(Cause::ShallowHistory),
+            params: vec![Param::new(ParamKind::Branch, "feat-x")],
+        };
+        let json = serde_json::to_string(&reason).unwrap();
+        assert_eq!(
+            json,
+            r#"{"rule":"minimum.force-push","level":"minimum","cause":"shallow-history","params":[{"kind":"branch","value":{"untrusted":"feat-x"}}]}"#
+        );
+        assert_eq!(serde_json::from_str::<Reason>(&json).unwrap(), reason);
+    }
+
+    #[test]
+    fn permission_codes_round_trip_in_kebab_case() {
+        let rules = [
+            (Rule::PermissionCommit, "permission.commit"),
+            (Rule::PermissionPush, "permission.push"),
+            (Rule::PermissionForcePush, "permission.force-push"),
+            (Rule::PermissionResetHard, "permission.reset-hard"),
+            (Rule::PermissionBranchDelete, "permission.branch-delete"),
+            (Rule::PermissionRebase, "permission.rebase"),
+            (Rule::PermissionMerge, "permission.merge"),
+            (Rule::PermissionWorktreeAdd, "permission.worktree-add"),
+            (Rule::PermissionWorktreeRemove, "permission.worktree-remove"),
+        ];
+        for (rule, code) in rules {
+            let json = serde_json::to_string(&rule).unwrap();
+            assert_eq!(json, format!("\"{code}\""));
+            assert_eq!(serde_json::from_str::<Rule>(&json).unwrap(), rule);
+        }
+        let json = serde_json::to_string(&Cause::AskUnavailable).unwrap();
+        assert_eq!(json, "\"ask-unavailable\"");
+        assert_eq!(
+            serde_json::from_str::<Cause>(&json).unwrap(),
+            Cause::AskUnavailable
+        );
+        let json = serde_json::to_string(&NotPreventable::PermissionReach).unwrap();
+        assert_eq!(json, "\"permission-reach\"");
+        assert_eq!(
+            serde_json::from_str::<NotPreventable>(&json).unwrap(),
+            NotPreventable::PermissionReach
+        );
+    }
+
+    #[test]
+    fn effects_are_ordered_by_restriction() {
+        assert!(Effect::Deny > Effect::Ask && Effect::Ask > Effect::Allow);
+    }
+
+    #[test]
+    fn hooks_round_trip_their_git_names() {
+        for h in Hook::ALL {
+            assert_eq!(Hook::from_git_name(h.git_name()), Some(h));
+        }
+        assert_eq!(Hook::from_git_name("post-commit"), None);
+    }
+
+    #[test]
+    fn unknown_fields_are_rejected() {
+        assert!(serde_json::from_str::<GuardRepoParams>(r#"{"path":"/r","x":1}"#).is_err());
+    }
 }

@@ -100,29 +100,15 @@ struct Slot {
 impl Slot {
     fn stale(&self, now_ms: i64) -> bool {
         match self.consumed_ms {
-            None => now_ms > self.issued_ms + TOKEN_TTL.as_millis() as i64,
-            Some(at) => now_ms > at + CONSUMED_MAX.as_millis() as i64,
+            None => now_ms.saturating_sub(self.issued_ms) > TOKEN_TTL.as_millis() as i64,
+            Some(at) => now_ms.saturating_sub(at) > CONSUMED_MAX.as_millis() as i64,
         }
     }
 
     /// Whether `presented` is one of the bound transitions: the same ref movement, or the same
     /// ref rebased onto the same base.
     fn covers(&self, presented: &Transition) -> bool {
-        self.plan
-            .binding
-            .transitions
-            .iter()
-            .any(|bound| match (bound, presented) {
-                (
-                    Transition::Rebase { refname, base },
-                    Transition::Rebase {
-                        refname: other_ref,
-                        base: other_base,
-                    },
-                ) => refname == other_ref && base == other_base,
-                (Transition::Ref { .. }, Transition::Ref { .. }) => bound == presented,
-                _ => false,
-            })
+        self.plan.binding.transitions.contains(presented)
     }
 }
 

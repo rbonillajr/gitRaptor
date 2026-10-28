@@ -7,7 +7,7 @@
 use std::ffi::OsStr;
 
 /// Global options of `git` (before the subcommand) that take the next argument.
-pub(super) const WITH_VALUE: [&str; 7] = [
+const WITH_VALUE: [&str; 7] = [
     "-C",
     "-c",
     "--git-dir",
@@ -18,7 +18,7 @@ pub(super) const WITH_VALUE: [&str; 7] = [
 ];
 
 /// Global options of `git` without a value.
-pub(super) const FLAGS: [&str; 14] = [
+const FLAGS: [&str; 14] = [
     "-p",
     "--paginate",
     "-P",
@@ -36,7 +36,7 @@ pub(super) const FLAGS: [&str; 14] = [
 ];
 
 /// Global options of `git` written `--name=value`.
-pub(super) const WITH_EQUALS: [&str; 7] = [
+const WITH_EQUALS: [&str; 7] = [
     "--git-dir=",
     "--work-tree=",
     "--namespace=",
