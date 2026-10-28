@@ -16,6 +16,10 @@ mod durable;
 mod seed;
 mod verify;
 
+#[cfg(test)]
+#[path = "diff_trees_tests.rs"]
+mod diff_trees_tests;
+
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
@@ -593,6 +597,17 @@ impl StoreHandle {
         }
         out.sort();
         Ok(out)
+    }
+
+    /// Paths (with `/`) of the blobs, links and gitlinks that differ between trees `a` and `b`,
+    /// walking both at once and skipping every subtree with the same id.
+    ///
+    /// # Errors
+    /// [`StoreError::Corrupt`] when an object that must be read is missing or unreadable; never a
+    /// partial list.
+    pub fn diff_trees(&self, a: Oid, b: Oid) -> Result<Vec<String>> {
+        let _ = (a, b);
+        Err(StoreError::Corrupt("diff_trees: not implemented".into()))
     }
 
     /// Content of a blob of the store.

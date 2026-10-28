@@ -12,6 +12,7 @@ pub mod kept;
 pub mod manual;
 pub mod notices;
 pub mod oplog;
+pub mod overlap;
 pub(crate) mod prior_point;
 pub mod protected;
 /// The repo write lock lives in a neutral module shared with the executor

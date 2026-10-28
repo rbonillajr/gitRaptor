@@ -32,6 +32,9 @@ pub mod timemachine;
 #[cfg(test)]
 #[path = "timemachine_inferred_tests.rs"]
 mod timemachine_inferred_tests;
+#[cfg(test)]
+#[path = "timemachine_overlap_tests.rs"]
+mod timemachine_overlap_tests;
 pub mod untrusted;
 
 pub use actor::{Actor, AgentKind, AgentOrigin};

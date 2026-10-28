@@ -16,6 +16,7 @@ use serde_json::json;
 
 pub(crate) mod confirm;
 pub(crate) mod notices;
+mod overlap;
 
 use crate::i18n::t;
 use crate::{engine, error_text, shown};
@@ -197,6 +198,8 @@ fn reason_key(reason: TmRejectReason) -> &'static str {
         TmRejectReason::GitUnavailable => "undo.reason.git-unavailable",
         TmRejectReason::ChallengeInvalid => "undo.reason.challenge-invalid",
         TmRejectReason::ConfirmationUnavailable => "undo.reason.confirmation-unavailable-windows",
+        TmRejectReason::Overlap => "undo.reason.overlap",
+        TmRejectReason::OverlapUnverified => "undo.reason.overlap-unverified",
     }
 }
 
@@ -235,6 +238,8 @@ mod tests {
             TmRejectReason::GitUnavailable,
             TmRejectReason::ChallengeInvalid,
             TmRejectReason::ConfirmationUnavailable,
+            TmRejectReason::Overlap,
+            TmRejectReason::OverlapUnverified,
         ] {
             let key = reason_key(reason);
             assert!(has_key(key), "{key}");

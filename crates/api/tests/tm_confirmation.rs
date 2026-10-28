@@ -34,6 +34,7 @@ fn full() -> TmConfirmData {
         owners: vec![agent()],
         undone_operation_id: Some("op-0".into()),
         undone_subtype: Some(Untrusted::new("reset")),
+        overlap: None,
     }
 }
 

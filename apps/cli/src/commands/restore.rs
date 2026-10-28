@@ -229,6 +229,8 @@ fn reason_key(reason: TmRejectReason) -> &'static str {
         TmRejectReason::ConfirmationRequired => "restore.reason.confirmation-required",
         TmRejectReason::ConfirmationUnavailable => "restore.reason.confirmation-unavailable-windows",
         TmRejectReason::ChallengeInvalid => "restore.reason.challenge-invalid",
+        TmRejectReason::Overlap => "restore.reason.overlap",
+        TmRejectReason::OverlapUnverified => "restore.reason.overlap-unverified",
         TmRejectReason::GitOperationInProgress => "restore.reason.git-operation-in-progress",
         TmRejectReason::GitBusy => "restore.reason.git-busy",
         TmRejectReason::RepoBusy => "restore.reason.repo-busy",
@@ -322,6 +324,8 @@ mod tests {
             TmRejectReason::GitUnavailable,
             TmRejectReason::ChallengeInvalid,
             TmRejectReason::ConfirmationUnavailable,
+            TmRejectReason::Overlap,
+            TmRejectReason::OverlapUnverified,
         ] {
             let key = reason_key(reason);
             assert!(has_key(key), "{key}");

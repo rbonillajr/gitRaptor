@@ -12,7 +12,11 @@
 mod capture;
 mod meta;
 
-use std::collections::{HashMap, HashSet};
+#[cfg(test)]
+#[path = "changed_between_tests.rs"]
+mod changed_between_tests;
+
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -33,6 +37,14 @@ pub use capture::{
     CaptureOutcome, CaptureRequest, ChangeHint, Detection, ValidityGuard, WorktreeScope,
 };
 pub use meta::{ConflictEntry, META_FORMAT, Meta, MetaWorktree, RegisteredWorktree};
+
+/// What differs between two points of the store for one worktree: paths of its files or index,
+/// and branches whose tip moved, appeared or disappeared.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PointChanges {
+    pub paths: BTreeSet<String>,
+    pub refs: BTreeSet<String>,
+}
 
 /// Files larger than this are left out of an observation capture, which is then partial
 /// (ADR-TMC-001 § 2, confirmed by SPIKE-TMC-001 on macOS). A guaranteed prior always includes
@@ -590,6 +602,24 @@ impl SnapshotStore {
     /// Parents of a commit of the store (the user's commits it anchors).
     pub fn commit_parents(&self, commit: Oid) -> Result<Vec<Oid>, CaptureError> {
         Ok(self.store.handle().commit_parents(commit)?)
+    }
+
+    /// Paths of worktree `key` that differ between snapshots `from` and `to` (its files and its
+    /// index), and the branches that differ between their metas. Never reads a file's content.
+    ///
+    /// # Errors
+    /// A missing point or object, or `deadline` passed: an `Err`, never a partial or empty set.
+    pub fn changed_between(
+        &self,
+        from: &str,
+        to: &str,
+        key: &str,
+        deadline: Instant,
+    ) -> Result<PointChanges, CaptureError> {
+        let _ = (from, to, key, deadline);
+        Err(CaptureError::InvalidInput(
+            "changed_between: not implemented".into(),
+        ))
     }
 
     /// Forgets what the previous captures read, as after a daemon restart: the next capture of

@@ -491,6 +491,7 @@ pub fn restore_to(
             key: mw.key.clone(),
             root: worktree.to_path_buf(),
             recreate_id: None,
+            keep: BTreeSet::new(),
         });
     }
     for op in after
@@ -509,6 +510,7 @@ pub fn restore_to(
                     key: mw.key.clone(),
                     root: root.to_path_buf(),
                     recreate_id: None,
+                    keep: BTreeSet::new(),
                 });
             }
         }
@@ -550,6 +552,7 @@ pub fn restore_to(
             key: mw.key.clone(),
             root,
             recreate_id: Some(id),
+            keep: BTreeSet::new(),
         });
     }
     // A worktree Git still registers but whose folder is gone cannot be

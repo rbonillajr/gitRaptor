@@ -148,3 +148,8 @@ tm-notice.interrupted-undo = el undo {id} de este worktree se interrumpió al de
 tm-notice.interrupted-restore = la restauración {id} de este worktree se interrumpió al detenerse GitRaptor; raptor undo vuelve al estado anterior
 tm-notice.interrupted-redo = el redo {id} de este worktree se interrumpió al detenerse GitRaptor; raptor undo vuelve al estado anterior
 tm-notice.interrupted-operation = la operación {id} de este worktree se interrumpió al detenerse GitRaptor; raptor undo vuelve al estado anterior
+# Solape con trabajo posterior de otro actor (US-TMC-012).
+undo.reason.overlap = otro actor cambió después lo que este undo sobrescribiría; nada cambió
+undo.reason.overlap-unverified = no se pudo comprobar que nadie más cambió esos archivos después; nada cambió
+restore.reason.overlap = otro actor cambió lo que esta restauración sobrescribiría; nada cambió
+restore.reason.overlap-unverified = no se pudo comprobar que nadie más cambió esos archivos después; nada cambió

@@ -240,6 +240,12 @@ pub enum TmRejectReason {
     /// Confirming another actor's work is not offered on this platform yet
     /// (BR-TMC-AUTH-001, MVP).
     ConfirmationUnavailable,
+    /// Another actor changed, after the undone change, something the undo would overwrite
+    /// (ADR-TMC-005 § 5). Only with `CAP_TM_OVERLAP` does the detail travel.
+    Overlap,
+    /// Whether another actor changed it afterwards could not be checked (no base point, or the
+    /// store could not be read in time): fail closed.
+    OverlapUnverified,
 }
 
 /// `data` of an `OPERATION_REJECTED` error of a Time Machine command.
@@ -322,6 +328,69 @@ pub struct TmConfirmData {
     pub undone_operation_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub undone_subtype: Option<Untrusted>,
+    /// `overlap` only, and only with `CAP_TM_OVERLAP`: what overlaps.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub overlap: Option<TmOverlap>,
+}
+
+/// Most conflicts an `overlap` rejection lists; `TmOverlap::total` carries the real count.
+pub const MAX_OVERLAP_CONFLICTS: usize = 50;
+/// Most kept paths an `UndoResult` lists.
+pub const MAX_KEPT_PATHS: usize = 200;
+
+/// Detail of an `overlap` rejection (ADR-TMC-005 § 5).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TmOverlap {
+    pub undone: OverlapUndone,
+    /// At most `MAX_OVERLAP_CONFLICTS`.
+    pub conflicts: Vec<OverlapConflict>,
+    /// How many conflicts there are in all.
+    pub total: u32,
+}
+
+/// The change the undo was asked to take back.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct OverlapUndone {
+    /// An operation id or `git-event-<seq>`.
+    pub id: String,
+    #[serde(default)]
+    pub subtype: Option<Untrusted>,
+    pub actor: Actor,
+    #[serde(default)]
+    pub at_utc_ms: Option<i64>,
+}
+
+/// One path or branch that both the undone change and a later actor touched.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct OverlapConflict {
+    pub subject: OverlapSubject,
+    pub actor: Actor,
+    /// The point that first showed the later change.
+    pub seen_utc_ms: i64,
+}
+
+/// What a conflict is about.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum OverlapSubject {
+    Path {
+        worktree: Untrusted,
+        path: Untrusted,
+    },
+    Ref {
+        name: Untrusted,
+    },
+}
+
+/// A path the undo left as it was because another actor changed it afterwards.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct KeptPath {
+    pub worktree: Untrusted,
+    pub path: Untrusted,
 }
 
 impl TmConfirmData {
@@ -335,6 +404,7 @@ impl TmConfirmData {
             owners: Vec::new(),
             undone_operation_id: None,
             undone_subtype: None,
+            overlap: None,
         }
     }
 }
@@ -383,6 +453,10 @@ pub struct UndoResult {
     pub not_restored: Vec<NotRestored>,
     /// Applier warnings as stable codes (e.g. `stash-kept`).
     pub warnings: Vec<String>,
+    /// Paths left as they were because another actor changed them after the undone change; at
+    /// most `MAX_KEPT_PATHS`, only with `CAP_TM_OVERLAP`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub kept: Vec<KeptPath>,
 }
 
 /// `timemachine.undo` result for an MCP connection: no paths (SEC-12).
@@ -395,6 +469,9 @@ pub struct McpUndoResult {
     pub actor: Actor,
     /// How many paths were left as they were.
     pub not_restored: u64,
+    /// How many paths another actor changed afterwards were kept (never which: SEC-12).
+    #[serde(default)]
+    pub kept: u64,
 }
 
 impl UndoResult {
@@ -405,6 +482,7 @@ impl UndoResult {
             undone_operation_id: self.undone_operation_id.clone(),
             actor: cap_actor(&self.requester.actor),
             not_restored: self.not_restored.len() as u64,
+            kept: 0,
         }
     }
 }

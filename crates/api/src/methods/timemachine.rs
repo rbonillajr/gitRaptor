@@ -27,6 +27,9 @@ pub const CAP_TM_CONFIRMATION: Capability = Capability::new("timemachine.confirm
 /// `timemachine.timeline` serves `inferred` on the entries of Git events
 /// without an agent. A connection without it never receives the field.
 pub const CAP_TM_TIMELINE_INFERRED: Capability = Capability::new("timemachine.timeline-inferred");
+/// `timemachine.undo` answers an `overlap` rejection with `TmConfirmData::overlap` and lists
+/// `UndoResult::kept`. A connection without it gets only the code. Never over MCP.
+pub const CAP_TM_OVERLAP: Capability = Capability::new("timemachine.overlap");
 
 /// A Time Machine command: not reserved (an agent may undo its own work,
 /// ADR-TMC-005 § 2), declared with its parameters and validated, and
@@ -63,6 +66,7 @@ pub(super) const GROUP: Group = Group {
         CAP_TM_TIMELINE_MANUAL,
         CAP_TM_CONFIRMATION,
         CAP_TM_TIMELINE_INFERRED,
+        CAP_TM_OVERLAP,
     ],
     ..Group::new("timemachine")
 };

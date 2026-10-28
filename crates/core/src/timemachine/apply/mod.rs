@@ -88,6 +88,9 @@ pub struct PlanWorktree {
     pub root: PathBuf,
     /// Id of a linked worktree under `worktrees/`, to recreate it if its root is gone.
     pub recreate_id: Option<String>,
+    /// Paths (with `/`) another actor changed after the undone change: neither written nor
+    /// removed, and their index entry stays as it is now. Empty keeps today's behaviour.
+    pub keep: BTreeSet<String>,
 }
 
 /// Why the applier did not start. Nothing was changed. Typed codes, rendered by the client
@@ -223,6 +226,8 @@ pub struct ApplyReport {
     pub removed: usize,
     pub paths: Vec<PathReport>,
     pub warnings: Vec<ApplyWarning>,
+    /// `(worktree key, path)` of every path left alone because it was in `PlanWorktree::keep`.
+    pub kept: Vec<(String, String)>,
 }
 
 /// A hook run right before a file exchange, with the worktree root and the path.
