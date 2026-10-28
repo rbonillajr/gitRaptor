@@ -1,0 +1,181 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "devspec",
+    "ref": "docs/requirements/features/time-machine/dev-specs/US-TMC-012-solape-otro-actor.md"
+  },
+  "rigor": "alto",
+  "criteria": [
+    {
+      "id": "TMC012-WIRE",
+      "statement": "T001: TmRejectReason serializa overlap y overlap-unverified al final del enum; TmConfirmData lleva overlap opcional (omitido si es None), TmOverlap/OverlapUndone/OverlapConflict/OverlapSubject (kind path|ref) tienen su forma de cable con Untrusted y Actor; UndoResult omite kept vacío; McpUndoResult.kept por defecto 0; CAP_TM_OVERLAP = timemachine.overlap",
+      "verify": "cargo test -p gitraptor-api --lib timemachine_overlap_tests",
+      "layer": "runtime",
+      "tests": ["crates/api/src/timemachine_overlap_tests.rs"]
+    },
+    {
+      "id": "TMC012-DIFF-TREES",
+      "statement": "T002: StoreHandle::diff_trees recorre los dos árboles a la vez y salta todo subárbol con el mismo id: un objeto ausente dentro de un subárbol igual en los dos lados no da Err, y uno ausente en un subárbol distinto sí",
+      "verify": "cargo test -p gitraptor-git --lib tm_write::store::diff_trees_tests",
+      "layer": "runtime",
+      "tests": ["crates/git/src/tm_write/store/diff_trees_tests.rs"]
+    },
+    {
+      "id": "TMC012-STORE-DIFF",
+      "statement": "T002: changed_between une las rutas de wt/<key>/files y wt/<key>/index (una ruta que solo cambió en el índice cuenta) y las ramas de Meta.branches que difieren; un objeto ausente o el plazo vencido es Err, nunca un conjunto vacío",
+      "verify": "cargo test -p gitraptor-core --lib timemachine::store::changed_between_tests",
+      "layer": "runtime",
+      "tests": ["crates/core/src/timemachine/store/changed_between_tests.rs"]
+    },
+    {
+      "id": "TMC012-CLASSIFY",
+      "statement": "T003 pasos 3 y 5: un tramo con actores mixtos cuenta como otro actor; un eco cuenta con el solicitante de su operación; una ruta que volvió al contenido del destino no se escribe; un cambio solo del índice solapa",
+      "verify": "cargo test -p gitraptor-core --lib timemachine::overlap::tests -- mixed_attribution_counts_as_another_actor an_echo_counts_with_its_operations_requester a_path_back_to_its_target_content_is_not_written an_index_only_change_overlaps",
+      "layer": "runtime",
+      "tests": ["crates/core/src/timemachine/overlap_tests.rs"]
+    },
+    {
+      "id": "TMC012-SEGMENTS",
+      "statement": "T003 paso 2 (D2): un punto no disponible fusiona sus dos tramos y un punto ensombrecido por prior_point no corta",
+      "verify": "cargo test -p gitraptor-core --lib timemachine::overlap::tests -- an_unavailable_point_merges_two_segments a_shadowed_point_does_not_cut",
+      "layer": "runtime",
+      "tests": ["crates/core/src/timemachine/overlap_tests.rs"]
+    },
+    {
+      "id": "TMC012-FAIL-CLOSED",
+      "statement": "Guard ⛔3.1 y D7: sin base B y con un agente como referencia el resultado es unverified y ninguna ruta queda como escrita; el plazo vencido también da unverified",
+      "verify": "cargo test -p gitraptor-core --lib timemachine::overlap::tests -- without_a_base_an_agents_change_is_unverified_never_written the_deadline_gives_unverified",
+      "layer": "runtime",
+      "tests": ["crates/core/src/timemachine/overlap_tests.rs"]
+    },
+    {
+      "id": "TMC012-CAP",
+      "statement": "Una operación de claude-1 sobre 60 archivos que después cambia un actor sin atribuir: la respuesta del daemon (con CAP_TM_OVERLAP) trae MAX_OVERLAP_CONFLICTS (50) conflictos y total = 60",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_012 -- --exact conflicts_are_capped_with_the_real_total",
+      "layer": "runtime",
+      "tests": ["crates/core/tests/us_tmc_012.rs"]
+    },
+    {
+      "id": "TMC012-APPLY-KEEP",
+      "statement": "T004: una ruta en PlanWorktree.keep ni se escribe ni se borra y sale en ApplyReport.kept (no como ApplyWarning::Excluded); conserva su entrada actual del índice; keep vacío no cambia nada",
+      "verify": "cargo test -p gitraptor-core --test tm_apply_keep",
+      "layer": "runtime",
+      "tests": ["crates/core/tests/tm_apply_keep.rs"]
+    },
+    {
+      "id": "TMC012-S1-OVERLAP",
+      "statement": "Escenario 1: operación de claude-1 sobre api.rs y después un cambio sin atribuir de api.rs; el undo responde overlap con el cambio deshecho (claude-1, su momento) y el conflicto (api.rs, unattributed, su momento); huella igual; oplog rejected con overlap",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_012 -- --exact an_overlap_stops_the_undo_and_lists_both_changes",
+      "layer": "runtime",
+      "tests": ["crates/core/tests/us_tmc_012.rs"]
+    },
+    {
+      "id": "TMC012-S2-KEPT",
+      "statement": "Escenario 2: el cambio posterior está en b.rs; el undo deshace lo de claude-1 en api.rs, b.rs queda como lo dejó el otro y sale en kept",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_012 -- --exact a_later_change_in_another_file_is_kept",
+      "layer": "runtime",
+      "tests": ["crates/core/tests/us_tmc_012.rs"]
+    },
+    {
+      "id": "TMC012-S3-NO-CONTINUE",
+      "statement": "Escenario 3: tras un solape la huella del worktree, del índice y de las ramas es la de antes (ningún punto nuevo salvo el previo de la fase 2) y la respuesta no trae reto ni opción de continuar; UndoParams no acepta parámetro para forzarlo",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_012 -- --exact a_stopped_undo_leaves_the_repo_exactly_as_before a_stopped_undo_offers_no_way_to_continue",
+      "layer": "runtime",
+      "tests": ["crates/core/tests/us_tmc_012.rs"]
+    },
+    {
+      "id": "TMC012-S4-EARLIER",
+      "statement": "Escenario 4: un cambio sin atribuir de api.rs capturado antes de la operación de claude-1 no cuenta; el undo procede y api.rs queda como antes de la operación",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_012 -- --exact an_earlier_change_does_not_count",
+      "layer": "runtime",
+      "tests": ["crates/core/tests/us_tmc_012.rs"]
+    },
+    {
+      "id": "TMC012-TAIL",
+      "statement": "Fase 2 (D1): una escritura sin captura justo antes del undo la detecta la cola, ready → rejected con overlap y el repo no cambia",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_012 -- --exact an_uncaptured_change_is_caught_by_the_tail",
+      "layer": "runtime",
+      "tests": ["crates/core/tests/us_tmc_012.rs"]
+    },
+    {
+      "id": "TMC012-APPLIER-LAST-INSTANT",
+      "statement": "Una escritura durante la aplicación (gancho before_exchange) sale en not_restored con overlap, no como rechazo",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_012 -- --exact a_write_during_the_application_is_the_applier_overlap",
+      "layer": "runtime",
+      "tests": ["crates/core/tests/us_tmc_012.rs"]
+    },
+    {
+      "id": "TMC012-BRANCH",
+      "statement": "Una rama movida por otro actor después es overlap; guard ⛔5.1: una rama conservada que está extraída en otro worktree no da ref-in-use",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_012 -- --exact a_branch_moved_by_another_actor_is_an_overlap a_kept_branch_checked_out_elsewhere_is_not_ref_in_use",
+      "layer": "runtime",
+      "tests": ["crates/core/tests/us_tmc_012.rs"]
+    },
+    {
+      "id": "TMC012-CAPABILITY",
+      "statement": "D8: el detalle overlap y kept solo llegan a una conexión con CAP_TM_OVERLAP; sin ella, solo el código",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_012 -- --exact overlap_detail_needs_the_capability",
+      "layer": "runtime",
+      "tests": ["crates/core/tests/us_tmc_012.rs"]
+    },
+    {
+      "id": "TMC012-SEC-MCP",
+      "statement": "SEC-12 (forma de cable MCP): UndoResult::for_mcp convierte kept en un número (McpUndoResult.kept) y su JSON no contiene ninguna ruta ni nombre de rama; el TmRejectedData de un overlap solo lleva el motivo",
+      "verify": "cargo test -p gitraptor-api --lib timemachine_overlap_tests::mcp_gets_the_reason_without_paths -- --exact",
+      "layer": "runtime",
+      "tests": ["crates/api/src/timemachine_overlap_tests.rs"]
+    },
+    {
+      "id": "TMC012-CLI-TEXT",
+      "statement": "T006: el rechazo por overlap muestra motivo y nada cambió, el cambio deshecho y una línea por conflicto (sin agente/no agent para unattributed, hora local), 20 y +K más con el total real; overlap-unverified sin lista; kept con N rutas y lista; en y es; la salida tras un solape (en/es) no sugiere continuar ni forzar el undo",
+      "verify": "cargo test -p gitraptor-cli --bin raptor undo::overlap::tests",
+      "layer": "runtime",
+      "tests": ["apps/cli/src/undo/overlap_tests.rs"]
+    },
+    {
+      "id": "TMC012-SEC-SANITIZE",
+      "statement": "Rutas y ramas con caracteres de control se imprimen saneadas en la CLI",
+      "verify": "cargo test -p gitraptor-cli --bin raptor undo::overlap::tests::paths_with_control_characters_are_printed_sanitized -- --exact",
+      "layer": "runtime",
+      "tests": ["apps/cli/src/undo/overlap_tests.rs"]
+    },
+    {
+      "id": "TMC012-E2E",
+      "statement": "Escenario 5 y e2e (macOS): el agente simulado hace git reset --hard, reescribe api.rs sin Git y pide raptor undo → overlap con api.rs y no agent; tras una edición del desarrollador en otro archivo el undo procede con kept (texto en español); --json imprime el dato del daemon",
+      "verify": "cargo test -p gitraptor-cli --test undo_overlap_process",
+      "layer": "runtime",
+      "tests": ["apps/cli/tests/undo_overlap_process.rs"]
+    }
+  ],
+  "suite": {
+    "command": "node tools/test/nextest-junit.mjs"
+  },
+  "layers": {
+    "runtime": {
+      "commands": [
+        { "id": "suite", "cmd": "node tools/test/nextest-junit.mjs" }
+      ],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "constraints": {
+    "deny_paths": [
+      "docs/ARTIFACTS.md",
+      "docs/architecture/decisions/ADR-GRD-008*"
+    ],
+    "allow_dependency_changes": false
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 600000,
+    "suiteTimeoutMs": 1800000
+  },
+  "hops": {
+    "design": { "agent": "main-loop", "model": "opus" },
+    "critic": { "agent": "nassa-core:plan-critic", "model": "opus" },
+    "tester": { "agent": "nassa-core:criterion-tester", "model": "sonnet" },
+    "build": { "agent": "nassa-dev-rust:rust-expert", "model": "opus" },
+    "review": { "agent": "nassa-dev-rust:rust-code-reviewer", "model": "opus" },
+    "conformance": { "agent": "nassa-dev-rust:rust-code-reviewer", "model": "sonnet" }
+  }
+}
