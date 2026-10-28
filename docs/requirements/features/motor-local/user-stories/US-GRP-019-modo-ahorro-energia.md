@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: medium
 created: 2026-10-05
-updated: 2026-10-05
+updated: 2026-10-27
 feature: motor-local
 source: inline
 related:
@@ -40,7 +40,9 @@ tags:
 
 ## Reglas cubiertas
 
-RES-08 · BR-CONS-005 (el intervalo de recuperación de una pérdida silenciosa pasa a ser el de la reconciliación vigente: 15 min con batería; ⚠️ **ASSUMPTION**) · BR-CKP-CALC-001 (par "sin calcular" con motivo).
+RES-08 · BR-CONS-005, Enmienda 2026-10-27 (un evento perdido sin marca se recupera, como mucho, en el intervalo de reconciliación vigente: 15 min con batería; la cifra de 15 min sigue como ⚠️ **ASSUMPTION**) · BR-CKP-CALC-001 (par "sin calcular" con motivo).
+
+> **BR-CONS-005**: Decisión del orquestador (2026-10-27), validada por PO, sobre la propuesta del Arquitecto (ADR-GRP-015 § 2; DS-TS-GRP-005, G5).
 
 ## Dependencias
 
@@ -56,6 +58,12 @@ Dado `engine.powerSaving` en "auto" y el portátil con batería
 Cuando pasa una hora
 Entonces el motor hace una reconciliación periódica cada 15 minutos en lugar de cada 5
   Y los cambios en vivo siguen llegando dentro de su presupuesto de frescura
+
+**Escenario: Con batería, un cambio perdido sin marca se recupera dentro del intervalo vigente**
+
+Dado `engine.powerSaving` en "auto", el portátil con batería y un cambio en el worktree "feat-login" que el motor no vio ni marcó como hueco
+Cuando pasan 15 minutos
+Entonces el cambio figura en el historial como recuperado por la reconciliación, según la regla de los huecos
 
 **Escenario: Con batería se pausa el predictor**
 
