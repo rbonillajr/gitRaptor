@@ -309,6 +309,9 @@ impl Task {
     /// was missed without a mark, so it is published in a gap of its own.
     /// Not in degraded mode, which already reads the full state.
     fn periodic(&mut self) {
+        // Utility for the whole stretch, its send included, and back to the thread's own class
+        // when it returns: the debounce and the recompute stay where they were (D5).
+        let _class = crate::work_class::scoped(crate::work_class::WorkClass::Utility);
         let period = self.shared.config.periodic;
         self.next_periodic = Instant::now() + period;
         let (now_ms, offset_s) = wall_now();

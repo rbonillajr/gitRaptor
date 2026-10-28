@@ -1680,16 +1680,19 @@ fn start_sweep(shared: &Arc<Shared>) {
     *shared.sweep_stop.lock().unwrap_or_else(|e| e.into_inner()) = Some(tx);
     let weak: Weak<Shared> = Arc::downgrade(shared);
     let every = shared.config.dormant_poll;
-    let _ = std::thread::Builder::new()
-        .name("raptor-dormant-sweep".into())
-        .spawn(move || {
+    let _ = crate::work_class::spawn(
+        crate::work_class::Pool::Reconciliation,
+        crate::work_class::WorkClass::Utility,
+        "raptor-dormant-sweep",
+        move || {
             while let Err(std::sync::mpsc::RecvTimeoutError::Timeout) = rx.recv_timeout(every) {
                 let Some(shared) = weak.upgrade() else {
                     return;
                 };
                 sweep_once(&shared);
             }
-        });
+        },
+    );
 }
 
 /// One cycle of the sweep: the print of every dormant repo against the one

@@ -203,13 +203,15 @@ impl ResourceMonitor {
         let (tx, rx) = channel::<()>();
         let inner = Arc::clone(&self.inner);
         let every = inner.config.sample_every;
-        let spawned = std::thread::Builder::new()
-            .name("raptor-resources".into())
-            .spawn(move || {
+        let spawned = crate::work_class::spawn_unpooled(
+            crate::work_class::WorkClass::Utility,
+            "raptor-resources",
+            move || {
                 while let Err(RecvTimeoutError::Timeout) = rx.recv_timeout(every) {
                     inner.record();
                 }
-            });
+            },
+        );
         if let Ok(handle) = spawned {
             *sampler = Some((tx, handle));
         }

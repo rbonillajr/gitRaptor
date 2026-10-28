@@ -46,9 +46,11 @@ pub(super) fn start(daemon: &Daemon) -> Option<Box<dyn DaemonModule>> {
         home: None,
         watcher: Watcher::new(tx.clone()),
     };
-    let join = std::thread::Builder::new()
-        .name("raptor-discovery".into())
-        .spawn(move || worker.run(&rx));
+    let join = crate::work_class::spawn_unpooled(
+        crate::work_class::WorkClass::Utility,
+        "raptor-discovery",
+        move || worker.run(&rx),
+    );
     let Ok(join) = join else {
         daemon.logger.warn("discovery_unavailable", &[]);
         return None;

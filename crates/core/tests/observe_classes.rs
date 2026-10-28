@@ -62,10 +62,18 @@ fn the_periodic_reconciliation_runs_in_utility_and_returns_to_default() {
     let read = reconcile(&common, &observe::base_branch(None)).unwrap();
     observer.watch_repo("r", &common, &read);
 
+    // Signal that the watch streams are live: a first write must reach the sink as an ordinary
+    // batch before the lost-events phase (a write before the stream is live is lost for good).
+    std::fs::write(wt.join("ready.txt"), "r\n").unwrap();
+    wait_for("the streams to be live", &seen, |s| {
+        s.iter().any(|(p, _)| !*p)
+    });
+    std::thread::sleep(Duration::from_millis(500));
+
     // A change whose event is lost: only the periodic reconciliation finds it, in a gap.
     observer.simulate_lost_events(true);
     std::fs::write(wt.join("login.txt"), "lost\n").unwrap();
-    std::thread::sleep(Duration::from_millis(200));
+    std::thread::sleep(Duration::from_millis(600));
     observer.simulate_lost_events(false);
     wait_for("the periodic reconciliation batch", &seen, |s| {
         s.iter().any(|(p, _)| *p)
@@ -82,7 +90,8 @@ fn the_periodic_reconciliation_runs_in_utility_and_returns_to_default() {
 
     // A normal window after it, on the same thread: back in Default.
     let before = seen.lock().unwrap().len();
-    std::fs::write(wt.join("login.txt"), "after\n").unwrap();
+    // A new file: a second write to the already-modified login.txt changes no status.
+    std::fs::write(wt.join("after.txt"), "after\n").unwrap();
     wait_for("a batch outside the periodic reconciliation", &seen, |s| {
         s[before..].iter().any(|(p, _)| !*p)
     });
