@@ -15,7 +15,7 @@ Recorrido de un revisor que no escribió el código (`rust-code-reviewer`, sonne
 | DS-009 T007, límites por solicitante | T007 | 2 | `crates/core/tests/us_mcp_009_limits.rs`, `crates/core/src/channel/limits_tests.rs`, `crates/core/tests/requester_budget_any_client.rs` |
 | DS-009 T008, permiso en el plan (⛔8.1, ⛔8.2) | T008 | 2 | `crates/core/tests/us_mcp_009_permission.rs`, `crates/policy/src/guard/plan_commit_tests.rs` |
 | DS-009 T009, corpus | T009 | 3 | `apps/cli/tests/mcp_security_corpus.rs` |
-| DS-009 T010 y T011, documentos | T010, T011 | 1 | ADR-MCP-001, ADR-CKP-002, BR v0.5, `api-contract-ipc.md`, XP-45; aceptación = revisión |
+| DS-009 T010 y T011, documentos | T010, T011 | 1 | ADR-MCP-001, ADR-CKP-002, BR v0.5, `api-contract-ipc.md`, XP-47; aceptación = revisión |
 | DS-009 § 9.4 (10 comportamientos) | T003–T008 | 2–3 | e2e para 1 a 5; core para 6 a 10 |
 | US-MCP-009 escenarios 1, 2, 3, 4, 6, 7, 8 y certificación | T003–T008 | 3 | e2e de `mcp_safe_commit.rs` |
 | US-MCP-009 escenario 5 (previo o hook que fallan) | T006 | 2 | solo core: `a_prior_that_cannot_be_taken_…`, `a_hook_that_rejects_is_failed_unchanged` |
@@ -41,5 +41,5 @@ Sin dueño en la historia: solo lo de gobierno (estado, G3 = US-MCP-007, G4 = US
 ## Por debajo del escalón 2
 
 - Documentos (DS-009 T010/T011, DS-010 T008): escalón 1, su aceptación es la revisión.
-- Linux y Windows: sin verificar (XP-45, XP-46).
+- Linux y Windows: sin verificar (XP-47, XP-46).
 - Escenario 5 de US-MCP-009: escalón 2, sin e2e por stdio.

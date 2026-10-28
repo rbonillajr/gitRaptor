@@ -491,12 +491,12 @@ graph LR
 
 **Ubicación.**
 - `docs/architecture/design/api-contract-ipc.md` (**MODIFY**)
-- `docs/architecture/xplat-pendientes.md` (**MODIFY**, fila XP-45)
+- `docs/architecture/xplat-pendientes.md` (**MODIFY**, fila XP-47)
 - `docs/requirements/features/mcp/dev-specs/US-MCP-009-dev-spec.md` (**MODIFY**, "Estado de la implementación")
 
 **Reglas**
 - `api-contract-ipc.md`: `CAP_OPERATION_COMMIT`, los tres motivos nuevos, `CommitDone`, `OperationFailedData.failure` y `LIMIT_REACHED` con `requester-connections`. No editar `docs/ARTIFACTS.md`.
-- XP-45: lo de § 9.5 que no se verifica en macOS.
+- XP-47: lo de § 9.5 que no se verifica en macOS.
 - El `status` de la historia lo cambia el PR (`partially-implemented` mientras G2 a G4 sigan abiertos), no esta tarea.
 
 - **Depende:** T004, T005, T006, T007, T008, T009, T010
@@ -907,8 +907,8 @@ Las pruebas de `crates/core/tests/us_mcp_009.rs`: las guardas de T003, `a_staged
 | Plataforma | Cómo se verifica | Pendiente |
 |---|---|---|
 | macOS | e2e de T001, `us_mcp_009*.rs` y unitarias en local | — |
-| Linux | `us_mcp_009*.rs`, unitarias y corpus `server` en CI `ubuntu-latest`; e2e no (cwd del par, DEP-MCP-9) | Pendiente: etapa de validación multiplataforma (XP-45 a): primera ejecución verde del e2e en Linux; SIGINT al grupo del `git` interrumpido |
-| Windows | Compila (`clippy --target x86_64-pc-windows-msvc`); `commit` se rechaza en el plan con `git-unavailable` hasta XP-19; sin canal hoy (XP-01) | Pendiente: etapa de validación multiplataforma (XP-45 b): el rechazo `git-unavailable` desde el binario real; los límites por solicitante con named pipe |
+| Linux | `us_mcp_009*.rs`, unitarias y corpus `server` en CI `ubuntu-latest`; e2e no (cwd del par, DEP-MCP-9) | Pendiente: etapa de validación multiplataforma (XP-47 a): primera ejecución verde del e2e en Linux; SIGINT al grupo del `git` interrumpido |
+| Windows | Compila (`clippy --target x86_64-pc-windows-msvc`); `commit` se rechaza en el plan con `git-unavailable` hasta XP-19; sin canal hoy (XP-01) | Pendiente: etapa de validación multiplataforma (XP-47 b): el rechazo `git-unavailable` desde el binario real; los límites por solicitante con named pipe |
 
 ---
 
@@ -1017,4 +1017,4 @@ Cada decisión es **Decisión del orquestador (2026-10-21)**, validada por quien
 
 - **Hecho** (PR #289, preparación [`us-mcp-009-010-safe-commit`](../../../../dev-briefs/us-mcp-009-010-safe-commit.md)): T001 a T011. Contrato de `commit` en `crates/api` (capacidad `operation.commit`, `CommitDone`, `OperationFailedData.failure`, motivos nuevos), brazo de producción y paso protegido con fallos tipados, S-11 y plazo de cola, límites por solicitante (S-03), permiso de `commit` en el plan, herramienta `safe_commit` y casos del corpus. Enmiendas aplicadas: ADR-MCP-001 y ADR-CKP-002 (2026-10-21, US-MCP-009), BR-MCP v0.5, plan de releases, guía de extensión y contrato del canal.
 - **Abierto, bloquea liberación**: G3 (US-MCP-007 en `main`) y G4 (US-MCP-011): US-MCP-009 se libera junto con US-MCP-010 y US-MCP-011. G2 se cierra con DS-US-MCP-010 en el mismo PR.
-- **Sin verificar**: Linux y Windows, en la etapa de validación multiplataforma (XP-45).
+- **Sin verificar**: Linux y Windows, en la etapa de validación multiplataforma (XP-47).
