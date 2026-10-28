@@ -73,6 +73,13 @@ pub const CAP_GUARD_AUTHORSHIP_SECOND_LINE: Capability =
 /// hook, evaluates as before.
 pub const CAP_GUARD_POLICIES: Capability = Capability::new("guard.policies");
 
+/// Diff size and commit format (US-GRD-009, D10): the daemon applies `policies.diffSize` and
+/// `policies.commitFormat` and sends `policy.diff-size`, `policy.commit-format`, their causes and
+/// parameters, and `NotPreventable::CommitPolicyReach`, only to a connection that asked for it;
+/// without it a daemon evaluates as before. A client that finds the daemon without it applies the
+/// floor's rules for everyone itself.
+pub const CAP_GUARD_COMMIT_POLICIES: Capability = Capability::new("guard.commit-policies");
+
 /// The configuration protection: `policy.config-protected` in decisions and
 /// `config.relax-ignored` notices in `guard.log`.
 pub const CAP_GUARD_CONFIG_PROTECTION: Capability = Capability::new("guard.config-protection");
@@ -150,6 +157,7 @@ pub(super) const GROUP: Group = Group {
         CAP_GUARD_AUTHORSHIP,
         CAP_GUARD_AUTHORSHIP_SECOND_LINE,
         CAP_GUARD_POLICIES,
+        CAP_GUARD_COMMIT_POLICIES,
         CAP_GUARD_CONFIG_PROTECTION,
         CAP_GUARD_PRIOR_HOOKS,
         CAP_GUARD_PENDING_ACTION,
