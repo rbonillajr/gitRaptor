@@ -798,19 +798,23 @@ impl Connection<'_> {
         }
         // An agent in a loop hits its connection's read limit before any
         // check of its scope (US-MCP-005), then its requester's, shared by all
-        // its connections (S-03). A write spends the requester's write budget
-        // here; the connection's own is spent when the write is prepared.
-        if self.is_mcp() && !reserved_like {
+        // its connections whatever the client (S-03): its CLI spends the same
+        // buckets as its MCP server. A write spends the requester's write
+        // budget here; an MCP connection's own is spent when it is prepared.
+        // The developer and the hook client hold no slot, so spend none.
+        if !reserved_like {
             let write = write_route(spec.name).is_some();
+            let catalog = write || spec.mcp;
             let limits = &self.ctx.requester_limits;
-            let allowed = (write || self.mcp_read_bucket.take())
-                && self.slot.as_ref().is_none_or(|slot| {
-                    if write {
-                        limits.take_write(slot.key())
-                    } else {
-                        limits.take_read(slot.key())
-                    }
-                });
+            let allowed = (!self.is_mcp() || write || self.mcp_read_bucket.take())
+                && (!catalog
+                    || self.slot.as_ref().is_none_or(|slot| {
+                        if write {
+                            limits.take_write(slot.key())
+                        } else {
+                            limits.take_read(slot.key())
+                        }
+                    }));
             if !allowed {
                 self.reply::<()>(
                     &request.id,
@@ -2928,18 +2932,26 @@ struct RejectedPathData {
 
 /// The executor's refusal of a commit plan, with the path it refused when it named one.
 fn commit_rejected(e: ExecError, path: Option<String>) -> ErrorObject {
+    use catalog::RejectReason as R;
     match (e, path) {
-        (ExecError::Rejected(reason), Some(path)) => {
-            ErrorObject::new(code::OPERATION_REJECTED, "operation rejected").with_data(
-                RejectedPathData {
-                    rejected: RejectedData {
-                        reason,
-                        guardrails: None,
-                    },
-                    path,
+        // Only a refusal about a path names one: any other reason drops a stale path.
+        (
+            ExecError::Rejected(
+                reason @ (R::PathNotFound
+                | R::PathInvalid
+                | R::PathOutsideWorktree
+                | R::PathIgnored),
+            ),
+            Some(path),
+        ) => ErrorObject::new(code::OPERATION_REJECTED, "operation rejected").with_data(
+            RejectedPathData {
+                rejected: RejectedData {
+                    reason,
+                    guardrails: None,
                 },
-            )
-        }
+                path,
+            },
+        ),
         (e, _) => exec_error(e),
     }
 }
@@ -3659,7 +3671,11 @@ impl Connection<'_> {
                 },
                 &env,
             )
-            .map_err(|e| self.exec_refusal(e))?;
+            .map_err(|e| {
+                // A re-plan may have set it; a run never reports it, so it must not outlive it.
+                crate::executor::ops::take_refused_path();
+                self.exec_refusal(e)
+            })?;
         let done = match done {
             crate::executor::RunDone::Protected(done) => done,
             crate::executor::RunDone::Captured(c) => {
