@@ -35,8 +35,15 @@ fn a_bad_path_never_reaches_the_engine() {
     // No paths, or good ones, pass the check.
     assert!(check(None).is_ok());
     assert!(check(Some(&paths(&["src/a.rs", "docs/b.md"]))).is_ok());
-    // `:(glob)**` and `:!x` are literal names for the lexical check (⛔2.1).
-    assert!(check(Some(&paths(&[":(glob)**", ":!x"]))).is_ok());
+    // `:(glob)**` and `:!x` are literal names for the lexical check (⛔2.1); Windows refuses
+    // `:` in any name (DS-US-MCP-010 T002 step 2.5), so there the same names are invalid.
+    if !cfg!(windows) {
+        assert!(check(Some(&paths(&[":(glob)**", ":!x"]))).is_ok());
+    } else {
+        for name in [":(glob)**", ":!x"] {
+            assert_eq!(refused(&[name]).code, McpToolError::InvalidPath, "{name:?}");
+        }
+    }
 
     for (bad, code) in [
         ("/etc/passwd", McpToolError::InvalidPath),
