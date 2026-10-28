@@ -39,6 +39,7 @@
     -   **Implementación (2026-10-21)**: US-GRD-007 implementada (PR #268, PR-A; PR #278, PR-B): permisos por operación (`allow`, `ask`, `deny`) con Git directo; `ask` solo deniega a los agentes (Q-GRD-46). PR-B verifica los escenarios 4 y 5 con `raptor guard confirm`.
     -   **Implementación (2026-10-21)**: US-GRD-014 implementada (PR #277): `raptor guard confirm` confirma la rama base y el suelo del equipo con plan, huella y ventana; Guardrails protege `guarded_base_branches()` también en modo degradado. Linux y Windows pendientes de la etapa de validación multiplataforma.
     -   **Implementación (2026-10-17)**: US-GRD-017 en parte (PR #260): sin punto previo, el rebase y el borrado de rama permitidos se deniegan (también en modo degradado); falta el escenario de la excepción (US-GRD-006).
+    -   **Implementación (2026-10-28)**: US-GRD-006 en parte (PR #295, PR-A): contrato, normalización pura del argv y almacén de tokens de un solo uso, sin comportamiento observable; falta PR-B (daemon, plantilla 4, `raptor guard exec` y suites e2e).
     -   **Deuda técnica (2026-10-08)**: [TD-GRD-001](features/guardrails/technical-stories/TD-GRD-001-dispatcher-plantilla-3-pre-push-toda-ref.md) (`implemented`, PR #249, prioridad alta): dispatcher plantilla 3 para evaluar el `pre-push` de toda ref empujada (tags, notes y demás refs no gobernadas). Residuo declarado `policy-reach` de DS-US-GRD-008; nota B1 del Arquitecto resuelta por el coordinador.
     -   **Status**: In Progress
 

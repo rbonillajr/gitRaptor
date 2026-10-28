@@ -165,7 +165,8 @@ Estados: **I** = implemented, **P** = partially-implemented, **Pend** = draft, r
 | US-GRD-019 | Quién ejecutó y a nombre de quién | Should | I | — |
 | US-GRD-005 | Registro de bloqueos (KPI) | Must | P | El spool en modo degradado (TS sin crear) y las entradas `request` y `exception` |
 | US-GRD-018 | Política de autoría | Should | P | Agente registrado; nivel local (US-GRP-013) |
-| US-GRD-002, US-GRD-003, US-GRD-006, US-GRD-007, US-GRD-008, US-GRD-010, US-GRD-011, US-GRD-012 | Hooks previos; retirar sin rastro; excepción consciente; políticas; ramas y rutas; endurecer; fail-safe; un agente no relaja | Must | Pend | — |
+| US-GRD-002, US-GRD-003, US-GRD-007, US-GRD-008, US-GRD-010, US-GRD-011, US-GRD-012 | Hooks previos; retirar sin rastro; políticas; ramas y rutas; endurecer; fail-safe; un agente no relaja | Must | Pend | — |
+| US-GRD-006 | Excepción consciente | Must | P (PR #295, PR-A) | PR-B: daemon, plantilla 4, `raptor guard exec` y suites e2e (INF-GRD-001) |
 | US-GRD-016 | La misma decisión por MCP y por hooks | Must | Pend | Las escrituras del MCP |
 | US-GRD-017 | Destructiva permitida con punto previo | Must | P (PR #260) | Escenario de la excepción (US-GRD-006); TD-TMC-001 |
 | US-GRD-004 | Aviso de protección caída | Should | P | Escenario 3 (repo retirado de la observación, con US-GRP-006); vigilante de `config` para el ≤ 5 s de los repos observados; H2 por worktree (`config.worktree`) |

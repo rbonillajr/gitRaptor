@@ -2,10 +2,10 @@
 id: US-GRD-006
 title: "El desarrollador hace a conciencia una operación prohibida y queda constancia"
 type: us
-status: draft
+status: partially-implemented
 priority: high
 created: 2026-10-04
-updated: 2026-10-21
+updated: 2026-10-28
 feature: guardrails
 related:
   context:
@@ -106,3 +106,11 @@ Entonces la excepción se rechaza sin anunciarse y nada se ejecuta
 
 - **Diseño:** no aplica. Esta historia es de CLI y daemon (`raptor guard exec`); la excepción y el anuncio en la TUI son del Cockpit (US-CKP-019).
 - **Dev Spec:** [DS-US-GRD-006](../dev-specs/US-GRD-006-excepcion-consciente.md) (2026-10-21, status `draft`; decisiones del orquestador validadas por el Arquitecto). Dos PR: PR-A (contrato y piezas puras) y PR-B (daemon, plantilla 4 del dispatcher, `raptor guard exec` y suites e2e, con la suite de token de INF-GRD-001). Cierra también el escenario de la excepción de US-GRD-017. Q-GRD-47 (alcance: push, borrar una rama local y rebase) y Q-GRD-50 (salta también las políticas `everyone`) quedan decididas: decisión del orquestador (2026-10-21), validada por Arquitecto y PO.
+
+## Estado de la implementación (2026-10-28)
+
+Implementado en: PR #295 (PR-A). Dev Spec: [DS-US-GRD-006](../dev-specs/US-GRD-006-excepcion-consciente.md).
+
+Parcial. PR-A deja el contrato (`crates/api`: métodos `guard.exception*` declarados por adelantado, `ExceptionToken` redactado, `EvaluateParams.exception_token`), la normalización pura del argv (`crates/policy/src/guard/exception.rs`) y el almacén de tokens (`crates/core/src/guardrails/exception.rs`: 128 bits del CSPRNG, solo el Sha256, comparación en tiempo constante, TTL hasta la primera presentación, consumo atómico de un solo uso). Lo cubren `crates/api/tests/us_grd_006_contract.rs`, `crates/policy/tests/us_grd_006_exception.rs` y `crates/core/tests/us_grd_006.rs`. No hay comportamiento observable: nadie emite tokens todavía.
+
+Falta PR-B: daemon, plantilla 4 del dispatcher, cliente del hook, `raptor guard exec`, mensajes y las suites e2e (escenarios 1 a 6 y la suite de token de INF-GRD-001, que bloquea el merge). Verificado en macOS; Linux lo cubre el CI de ubuntu y Windows es **Pendiente: etapa de validación multiplataforma**.

@@ -4,7 +4,7 @@ title: "Dev Spec — US-GRD-006: excepción consciente con constancia (raptor gu
 type: dev-spec
 status: draft
 created: 2026-10-21
-updated: 2026-10-27
+updated: 2026-10-28
 story: US-GRD-006
 feature: guardrails
 domain: GRP
@@ -510,4 +510,8 @@ Ningún hueco bloquea la implementación. No hay constitución en la cascada, as
 
 ## 10. Estado de la implementación
 
-Sin empezar (2026-10-21).
+PR-A (T001 a T004) implementado en: PR #295 (2026-10-28). Los 36 criterios del contrato `docs/dev-briefs/us-grd-006-pra-exception-core.contract.json` pasan. Desviaciones registradas: S1 a S14 de la nota de preparación; los métodos llevan `.since(CAPABILITIES_PROTOCOL)` como el resto del grupo (enmienda de la prueba de GRD006-METHODS, aprobada por el coordinador el 2026-10-28), y la tabla de opciones globales de `git_command` no se reutiliza porque la lista cerrada solo admite `-C`.
+
+Pendientes para PR-B, de las revisiones de PR-A (sin Critical ni High): `push.default = simple` con un remoto de push distinto del upstream (push triangular) se rechaza y Git lo acepta (Medium); `ExceptionToken` deriva `PartialEq` (no es de tiempo constante; el almacén no lo usa); `GuardExceptionParams` deriva `Debug` con el argv; el TTL usa el reloj de pared (PR-B debe pasar un reloj monótono o guardar `Instant`); un `exception_token` mal formado no debe tumbar `guard.evaluate`; un destino corto de push o una rama de rebase que no es un nombre corto de rama deben rechazarse o normalizarse como en `full_ref`; el brazo por defecto del canal no debe auditar `guard.exception-end` como reservado; el entorno del `git` hijo sin `GIT_*` (D10) y la validación de `-C` (`Request.dirs`).
+
+PR-B (T005 a T011): sin empezar.
