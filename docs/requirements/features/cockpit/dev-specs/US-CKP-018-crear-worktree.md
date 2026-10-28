@@ -135,7 +135,7 @@ sequenceDiagram
     participant G as git (hijo directo)
     T->>F: w sobre el repo: create_eligibility (T003)
     F-->>T: formulario Rama / Ruta (T004)
-    T->>T: OperationArgs::parse local (C4); inválido → texto, nada enviado
+    T->>T: OperationArgs::parse local (C4), si es inválido muestra el texto y no envía nada
     T->>D: operation.prepare create-worktree {branch, path?} (worktree = principal, C12)
     D->>D: capa cockpit si hay path (C3, T002)
     D->>A: plan_op: base, rama libre, ruta (explícita o plantilla), check_new_worktree_path

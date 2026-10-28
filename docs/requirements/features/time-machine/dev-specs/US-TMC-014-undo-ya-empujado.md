@@ -123,7 +123,7 @@ classDiagram
     UndoPlan --> OnRemote : check(refs, meta)
     RestorePlan --> OnRemote : check(refs, meta)
     OnRemote --> RemoteKnown : known_on_remote (solo lectura)
-    UndoPlan --> Oplog : warnings on-remote:*
+    UndoPlan --> Oplog : warnings on-remote
     UndoPlan ..> UndoResult : on_remote (con la capacidad)
     UndoResult ..> Cli : tm.on-remote
     classDef nuevo fill:#dcfce7,stroke:#16a34a,color:#14532d
