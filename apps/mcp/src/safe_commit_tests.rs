@@ -10,8 +10,8 @@ use gitraptor_api::catalog::{
 };
 use gitraptor_api::guard::{Effect, Level, Reason, Rule};
 use gitraptor_api::mcp_view::{
-    MAX_MCP_PART_BYTES, MCP_COMMIT_TOKENS, MCP_REFUSAL_TOKENS, McpToolError, check_token_budget,
-    estimated_tokens,
+    MAX_MCP_PART_BYTES, MCP_COMMIT_TOKENS, MCP_POLICY_REFUSAL_TOKENS, MCP_REFUSAL_TOKENS,
+    McpToolError, check_token_budget, estimated_tokens,
 };
 use gitraptor_api::rpc::{ErrorObject, code};
 use gitraptor_api::timemachine::McpOperationRunResult;
@@ -342,7 +342,12 @@ fn every_refusal_fits_its_budget_in_en_and_es() {
         for lang in [Lang::En, Lang::Es] {
             let body = refusal(&r, lang).to_string();
             let what = format!("{} {:?} ({lang:?})", r.code.as_str(), r.params);
-            check_token_budget("RES-MCP-03", &what, &body, MCP_REFUSAL_TOKENS).unwrap();
+            let budget = if r.code == McpToolError::PolicyDenied {
+                MCP_POLICY_REFUSAL_TOKENS
+            } else {
+                MCP_REFUSAL_TOKENS
+            };
+            check_token_budget("RES-MCP-03", &what, &body, budget).unwrap();
         }
     }
 }
