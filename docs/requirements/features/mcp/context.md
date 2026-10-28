@@ -147,7 +147,7 @@ Impacto de no resolverlo:
 | Demostrar el valor | Demo del BRD § 13 reproducible: una herramienta MCP denegada por política y el force-push por Git crudo parado por el hook con la misma decisión (Q-MCP-18) | Alta |
 | Acciones peligrosas bloqueadas | Se mide por capa (`mcp` y `hooks`), como pide el BRD § 9 | Media |
 | Red de seguridad usada | Los undos por MCP cuentan en "undos por usuario activo y mes" (BRD § 9) | Media |
-| Adopción | % de operaciones del agente hechas vía MCP: métrica sin meta | Baja |
+| Adopción | % de operaciones del agente hechas vía MCP: métrica sin meta. Fórmula: operaciones del MCP con equivalente en Git / (esas + eventos de Git del agente fuera de las operaciones del ejecutor) (DS-US-MCP-015 D11) | Baja |
 
 ---
 
