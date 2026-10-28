@@ -210,7 +210,10 @@ pub fn skippable_ref_transaction(input: &[u8], common: &Path, max_line: usize) -
             // `ref:` values move `HEAD` itself, never a branch.
             return old == Value::Symbolic || new == Value::Symbolic;
         }
-        !is_governed(name) || is_prune(old, new, name, common)
+        // A remote-tracking ref that is written (not deleted) is looked at too: an agent can
+        // park a commit there with `update-ref` and land it on a branch later (US-GRD-009).
+        let parks = name.starts_with("refs/remotes/") && new != Value::Zero;
+        !parks && (!is_governed(name) || is_prune(old, new, name, common))
     })
 }
 

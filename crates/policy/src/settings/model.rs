@@ -171,6 +171,14 @@ pub struct Policies {
     /// Paths a commit cannot touch (US-GRD-008, BR-VAL-003). Only adds protection.
     #[schemars(extend("x-gitraptor-levels" = ["profile", "team", "local"]))]
     pub forbidden_paths: Option<PatternPolicy>,
+    /// Limit of changed lines per commit (US-GRD-009, BR-VAL-003). Every level that declares it
+    /// brings its own rule; the commit must meet all of them.
+    #[schemars(extend("x-gitraptor-levels" = ["profile", "team", "local"]))]
+    pub diff_size: Option<DiffSize>,
+    /// Format of the commit message (US-GRD-009, BR-VAL-003). One format rules: the first level
+    /// that declares it, from the floor down to the personal levels.
+    #[schemars(extend("x-gitraptor-levels" = ["profile", "team", "local"]))]
+    pub commit_format: Option<CommitFormat>,
 }
 
 /// `policies.protectedBranches` and `policies.forbiddenPaths`: a list of patterns and who they
@@ -192,7 +200,64 @@ pub struct PatternPolicy {
     pub applies_to: Option<AppliesTo>,
 }
 
-/// Who a `protectedBranches` or `forbiddenPaths` rule applies to.
+/// `policies.diffSize`: the most lines (added plus deleted) one commit may change. A binary file
+/// counts 0, a submodule 1 per side, a mode change 0, an exact rename 0 and a rename with edits
+/// its edited lines; line endings and whitespace count. `exclude` removes paths from the count
+/// of this rule only: a personal level or the worktree cannot exempt the team's rule. With
+/// `appliesTo: everyone` the person cannot make a large direct commit either, and there is no
+/// conscious exception for a direct commit.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DiffSize {
+    /// Required, from 1 to 100 000. Without it the rule does not exist.
+    #[serde(default)]
+    #[schemars(range(min = 1, max = 100000))]
+    pub max_lines: u32,
+    /// At most 64 path patterns of at most 256 bytes, as `forbiddenPaths`. An invalid one is
+    /// dropped alone.
+    #[schemars(extend("x-gitraptor-patterns" = true))]
+    pub exclude: Option<Vec<String>>,
+    /// `agents` (default): only detected or registered agents; `everyone`: also the person.
+    pub applies_to: Option<AppliesTo>,
+    /// `deny` (default) or `ask`.
+    pub effect: Option<PolicyEffect>,
+}
+
+/// `policies.commitFormat`: the first line of the message follows Conventional Commits 1.0.0
+/// (`type(scope)!: description`, a blank line before any body). The messages Git writes
+/// (merge commits, `Revert "…"`, `fixup!`/`squash!`/`amend!`) do not break it; `{}` already asks
+/// for the format.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitFormat {
+    /// Only `conventional` (default).
+    pub style: Option<FormatStyle>,
+    /// From 1 to 32 types of `[a-z][a-z0-9-]{0,31}`; an invalid one is dropped alone, and if all
+    /// are dropped no type is accepted. Without it, the eleven of `config-conventional`.
+    #[schemars(extend("x-gitraptor-types" = true))]
+    pub types: Option<Vec<String>>,
+    /// `agents` (default): only detected or registered agents; `everyone`: also the person.
+    pub applies_to: Option<AppliesTo>,
+    /// `deny` (default) or `ask`.
+    pub effect: Option<PolicyEffect>,
+}
+
+/// `policies.commitFormat.style`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum FormatStyle {
+    Conventional,
+}
+
+/// What a broken `diffSize` or `commitFormat` rule does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum PolicyEffect {
+    Deny,
+    Ask,
+}
+
+/// Who a policy rule applies to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum AppliesTo {

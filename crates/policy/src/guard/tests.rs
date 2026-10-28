@@ -17,6 +17,7 @@ fn ctx() -> Context {
         actor: None,
         authorship: authorship::Effective::default(),
         policies: policies::Policies::default(),
+        commit_policies: Default::default(),
         layer: gitraptor_api::guard::LogLayer::Hooks,
         minimum: true,
         permissions: None,
@@ -581,7 +582,7 @@ mod fast_path {
         let none = Path::new("/nonexistent-common");
         for ok in [
             vec![
-                format!("{Z} {O} refs/remotes/origin/main"),
+                format!("{O} {Z} refs/remotes/origin/main"),
                 format!("{Z} {O} refs/tags/v1"),
             ],
             vec![format!("{Z} ref:refs/heads/feat HEAD")],
@@ -596,6 +597,8 @@ mod fast_path {
             vec![format!("{O} {Z} refs/heads/main")],
             vec![format!("{O} {O} HEAD")],
             vec![format!("{O} {Z} HEAD")],
+            // A written remote-tracking ref is looked at: a commit can be parked there.
+            vec![format!("{Z} {O} refs/remotes/origin/main")],
             vec![format!("{Z} {O} refs/new/x")],
             vec![format!("{Z} {O} refs/tags/a b")],
             vec![format!("{Z} {O}")],

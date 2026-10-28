@@ -29,6 +29,7 @@ pub const SUPPORTED_KEYWORDS: &[&str] = &[
     "format",
     "x-gitraptor-levels",
     "x-gitraptor-patterns",
+    "x-gitraptor-types",
 ];
 
 /// The schema generated from the types now.
@@ -42,8 +43,12 @@ pub fn generate() -> Value {
 
 /// An absent key and a `null` are not the same in a strict document: `Option` fields admit
 /// only their type, so `null` fails validation like any other wrong type.
+///
+/// A `serde(default)` field that the validator checks by hand (`diffSize.maxLines` is required
+/// but must not emit `required`, a keyword the validator does not read) loses its `default`.
 fn strip_null(node: &mut Value) {
     if let Value::Object(map) = node {
+        map.remove("default");
         if let Some(Value::Array(types)) = map.get_mut("type") {
             types.retain(|t| t != "null");
             if types.len() == 1 {
