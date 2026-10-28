@@ -131,7 +131,7 @@ Para eso, cuatro piezas: los permisos de las operaciones que el plan sabe que ha
 
 | ID | Qué falta | Severidad | Alcance | Acción | Owner |
 |----|-----------|-----------|---------|--------|-------|
-| G2 | La detección del agente por ascendencia y los hooks en Linux y Windows no se verifican desde este Mac; las suites de extremo a extremo son `cfg(any(target_os = "macos", target_os = "linux"))` como `crates/core/tests/us_mcp_009_permission.rs:6` | Bloquea liberación | — | Pendiente: etapa de validación multiplataforma (fila nueva en `xplat-pendientes.md`, T011) | Orquestador |
+| G2 | La detección del agente por ascendencia y los hooks en Linux y Windows no se verifican desde este Mac; la suite de paridad es `cfg(any(target_os = "macos", target_os = "linux"))` como `crates/core/tests/us_mcp_009_permission.rs:6`, y la de extremo a extremo (`apps/cli/tests/guard_us_grd_016.rs`) es solo macOS con `debug_assertions`, como `mcp_safe_commit.rs`: sus criterios no corren en el CI de ubuntu | Bloquea liberación | — | Pendiente: etapa de validación multiplataforma (fila nueva en `xplat-pendientes.md`, T011) | Orquestador |
 
 Todas las tareas se construyen hoy. G1 (lectura de los escenarios 1 a 3 sin herramienta MCP para seis operaciones) se cerró: el PO aceptó Q-GRD-52 y Q-GRD-53, y reescribió el escenario 3. Q-GRD-54 también está aceptada, con la condición que recoge D5.
 
@@ -264,11 +264,12 @@ graph LR
 
 **Reglas**
 - Sigue el patrón de `crates/core/tests/us_mcp_009_permission.rs`: perfil temporal (`TempProfile`), repo temporal, `GuardRegistry` real y `GuardrailsEngine` real (NFR-01).
-- Escribe una tabla con una fila por operación, `const CASES: &[Case]`, con: la clave de `permissions.deny` del equipo, la regla esperada (`Rule::Permission*`) y la forma de comprobarla (D6): `Plan(PlanShape)` para las que el ejecutor tiene forma (merge, rebase, crear worktree, borrar worktree, commit) y `Direct(Operation)` para las que no (push, force-push, reset --hard, borrar rama).
-- Para `Plan`, compara la decisión del plan con capa `Layer::Mcp` (`GuardrailsEngine::evaluate_detailed`) contra `decide()` con `LogLayer::Hooks` de cada operación normalizada que los hooks evaluarían. La comparación es sobre `effect`, `applied_effect` y la lista de `(rule, level, cause)`; nunca sobre `decision_id`.
+- Escribe una tabla con una fila por operación, `const CASES: &[Case]`, con: la clave de `permissions.deny` del equipo, la regla esperada (`Rule::Permission*`) y la forma de comprobarla (D6): `Plan(PlanShape)` para las que el ejecutor tiene forma (merge, rebase, crear worktree, commit; borrar worktree va aparte, ver abajo) y `Direct(Operation)` para las que no (push, force-push, reset --hard, borrar rama).
+- Para `Plan`, compara la decisión del plan con capa `Layer::Mcp` (`GuardrailsEngine::evaluate_detailed`) contra `serve_audited` (capa `hooks`) con un `Caller` con `permissions: true` y la cadena real del hook de esa operación (`Chain::new` con `git merge`, `git rebase`, `git worktree add` o `git commit`); `decide()` no sirve de referencia: su `Chain::default()` es `uncertain` y daría `unverifiable` (plan-critic PC-1). La comparación es sobre `effect`, `applied_effect` y la lista de `(rule, level, cause)`; nunca sobre `decision_id`.
 - Para `Direct`, compara `decide()` con `LogLayer::Mcp` contra `decide()` con `LogLayer::Hooks` para la misma `Operation`, y comprueba además que ninguna herramienta la ejecuta (la tabla de T004).
 - Añade el mínimo seguro sin configuración: force-push y borrar la rama base dan `minimum.*` por las dos capas.
 - Añade la fila de US-GRD-009 como comentario `// US-GRD-009: policy.diff-size y policy.commit-format, cuando existan` (D10); no la inventes.
+- Borrar worktree: con `branch-delete` en `deny`, el plan se deniega por la capa `mcp` con `permission.branch-delete` y la misma lista que los hooks para el borrado de esa rama; con `worktree-remove` en `deny`, se deniega con `permission.worktree-remove`. Los hooks no ven nunca `worktree-remove` (`classify` solo da `BranchDelete`): en esa operación **la capa MCP es más estricta que la de hooks** (NFR-02, límite `PermissionReach`; plan-critic PC-2).
 - `#![cfg(any(target_os = "macos", target_os = "linux"))]`, como la suite modelo.
 
 > **Nota técnica.** `RuleSet::all()` deja hoy `permissions: false` en el ejecutor (`evaluate.rs:408`), así que las filas `Plan` de merge, rebase, crear worktree y borrar worktree fallan en rojo con `effect: allow`. La fila `commit` ya pasa por el caso especial de `evaluate.rs:488`.
@@ -290,12 +291,12 @@ graph LR
 **Pasos**
 1. Añade `PlanShape::catalog_operations(&self) -> &'static [settings::model::Operation]` en `plan.rs`: `Merge` → `[Merge]`, `Rebase` → `[Rebase]`, `CreateWorktree` → `[WorktreeAdd]`, `DeleteWorktree` → `[WorktreeRemove, BranchDelete]`, `Commit` → `[Commit]`.
    1.1 ⛔1.1 `DeleteWorktree` borra también la rama (`catalog.rs:94`, «Remove a worktree and delete its branch»). Si solo lleva `WorktreeRemove`, un equipo con `branch-delete` en `deny` pierde la rama por el Cockpit sin denegación.
-2. Añade a `DecideInput` el campo `known_ops: &'a [Operation]` (el `Operation` de `gitraptor_policy::settings::model`); los hooks pasan `&[]` en `serve_audited` y `decide`.
+2. Añade a `decide_all` el parámetro `known_ops: &[gitraptor_policy::settings::model::Operation]` (ruta completa: `evaluate.rs` ya usa el `Operation` de la API). Solo `decide_all` lo lee y tiene un único llamador (`plan_gate.rs`), así que `DecideInput`, `serve_audited`, `decide`, `link.rs` y `channel/conn/exception.rs` no cambian. Decisión del orquestador (2026-10-28), validada por el Arquitecto: sustituye al campo de `DecideInput` que proponía esta spec.
 3. En `decide_all`, después del bucle, si `known_ops` no está vacío: carga los permisos efectivos una vez, con el mismo cargador que `evaluate_op` (`super::layers::load(...).permissions()`, o `super::permissions::team_only` si la carga falla), y llama a `gitraptor_policy::guard::permissions::apply(&mut total, op, false, &effective, &[])` por cada operación. El resultado se combina como el máximo (BR-CALC-001), como el resto del bucle.
    3.1 ⛔3.1 No actives `RuleSet.permissions` para el ejecutor: activa la clasificación de `classified()` con `Chain::default()`, que es `uncertain` (`crates/core/src/guardrails/permissions.rs:177`) y deniega como `unverifiable` lo que es un merge legítimo.
 4. Borra el caso especial de `commit` de `decide_all` (`evaluate.rs:488` a `506`, `commit_permission` y `staged`): `Commit` entra ya por `known_ops`. Ajusta el comentario de `RuleSet::all()` (`evaluate.rs:406`).
    4.1 ⛔4.1 `Evaluation::add` deja una copia de cada motivo; aun así, si quedan los dos caminos, `permission.commit` sale dos veces en la entrada del registro cuando el nivel difiere. La guarda 8.2 de `us_mcp_009_permission.rs` (`a_human_author_denial_carries_its_rule_once`) tiene que seguir en verde.
-5. En `GuardrailsEngine::decide` (`plan_gate.rs:253`) pasa `known_ops: shape.catalog_operations()`. En `link.rs:233` (transición de un hijo no registrada) pasa `&[]`: ahí no hay plan conocido.
+5. En `GuardrailsEngine::decide` (`plan_gate.rs:254`) pasa `shape.catalog_operations()` a `decide_all`. `link.rs` (transición de un hijo no registrada) usa `decide` y no cambia: ahí no hay plan conocido.
 6. El efecto `ask` sigue la regla del actor que ya existe (`AskedBy::of`, `evaluate.rs:194`): un agente recibe `GateDecision::Ask` (`confirmation-required` por MCP, US-MCP-013); la persona por el Cockpit pasa con aviso (Q-GRD-46).
 
 > **Nota técnica.** `permissions::apply` añade un motivo por cada nivel que produce el máximo, con `Level::Floor` para el equipo commiteado en la rama principal y `Level::Worktree` para el del worktree (`crates/policy/src/guard/permissions.rs:197`). El nivel «equipo» de la historia es cualquiera de los dos.
@@ -475,7 +476,7 @@ graph LR
 - Escenario 4: las cuatro filas con `raptor mcp enable` / `disable` y `raptor guard install`; cada cambio deja una entrada `protection-state` (T007) y `raptor guard status --json` da el estado esperado.
 - Escenario 5: la lista de herramientas de `tools/list` no tiene ninguna que edite la configuración ni decida en la cola (la misma comprobación de T004, ahora contra el binario).
 - `reinstall_on_a_full_repo_is_idempotent` (guarda ⛔2.1 de T006).
-- `#![cfg(any(target_os = "macos", target_os = "linux"))]`.
+- `#![cfg(target_os = "macos")]` y `#![cfg(debug_assertions)]`, como `mcp_safe_commit.rs` (usa `script` y `proc_pidinfo`). Linux y Windows: pendiente de la etapa de validación multiplataforma (G2).
 
 - **Depende:** T002, T003, T006, T007, T008
 - **Refs:** US-GRD-016, D6, D7
@@ -608,10 +609,13 @@ impl PlanShape {
     pub fn catalog_operations(&self) -> &'static [crate::settings::model::Operation];
 }
 
-// crates/core/src/guardrails/evaluate.rs (T002), campo nuevo de DecideInput<'a>
-/// Operations the executor knows the plan performs: their permission is applied directly,
-/// with no chain. Empty for a hook.
-pub known_ops: &'a [gitraptor_policy::settings::model::Operation],
+// crates/core/src/guardrails/evaluate.rs (T002), parámetro nuevo de decide_all
+/// `known_ops`: operations the executor knows the plan performs; their permission is applied
+/// directly, with no chain.
+pub fn decide_all(
+    registry: &GuardRegistry, input: &DecideInput<'_>, ops: &[Operation], preset: &[Preset],
+    known_ops: &[gitraptor_policy::settings::model::Operation],
+) -> Served;
 
 // crates/policy/src/guard/permissions.rs:214 (existente, sin cambios; la llama T002)
 pub fn apply(
@@ -718,7 +722,7 @@ Sin umbral numérico en el repo (`AGENTS.md`: tests obligatorios para todo cambi
 | rebase | `safe_rebase` (US-MCP-018, sin construir) | Paridad del plan `PlanShape::Rebase` con capa `mcp`; el extremo a extremo lo añade US-MCP-018 | T001 |
 | crear worktree | `create_worktree` (US-MCP-019, sin construir) | Paridad del plan `PlanShape::CreateWorktree`; extremo a extremo con US-MCP-019 | T001 |
 | merge | Ninguna (`mcp: false`, `catalog.rs`) | Paridad del plan `PlanShape::Merge` (la capa `cockpit` usa el mismo plan) y ninguna herramienta lo ejecuta | T001, T004 |
-| borrar worktree | Ninguna (`mcp: false`) | Paridad del plan `PlanShape::DeleteWorktree` (worktree y rama) y ninguna herramienta | T001, T004 |
+| borrar worktree | Ninguna (`mcp: false`) | Plan `PlanShape::DeleteWorktree`: paridad de `branch-delete` con los hooks; `worktree-remove` lo deniega solo la capa MCP (más estricta: los hooks no lo ven) y ninguna herramienta | T001, T004 |
 | push | Ninguna; fuera del catálogo | Paridad de `decide()` por capa y ninguna herramienta | T001, T004 |
 | force-push | Ninguna; fuera del catálogo | Ídem, con el mínimo seguro | T001, T004, T010 |
 | reset --hard | Ninguna; fuera del catálogo | Ídem. Con Git directo no es impedible (Q-GRD-42): ninguna capa lo ejecuta por MCP | T001, T004 |

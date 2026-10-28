@@ -1,0 +1,196 @@
+{
+  "source": {
+    "kind": "devspec",
+    "ref": "docs/requirements/features/guardrails/dev-specs/US-GRD-016-misma-decision-por-mcp.md"
+  },
+  "suite": {
+    "command": "node tools/test/nextest-junit.mjs"
+  },
+  "layers": {
+    "runtime": {
+      "commands": [
+        {
+          "id": "suite",
+          "cmd": "node tools/test/nextest-junit.mjs"
+        }
+      ],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "criteria": [
+    {
+      "id": "GRD016-PARITY-PLAN",
+      "statement": "Escenario 2 (D6): para merge, rebase, crear worktree y commit con su operación en deny por el equipo, la decisión del plan con capa mcp tiene el mismo effect, applied_effect y lista (rule, level, cause) que serve_audited con capa hooks, Caller con guard.permissions y la cadena real del hook de esa operación (git merge, git rebase, git worktree add, git commit)",
+      "verify": "cargo test -p gitraptor-core --test us_grd_016_parity -- --list 2>/dev/null | grep -q '^every_plan_operation_gets_the_hooks_decision: test' && cargo test -p gitraptor-core --test us_grd_016_parity every_plan_operation_gets_the_hooks_decision -- --exact",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "crates/core/tests/us_grd_016_parity.rs"
+      ]
+    },
+    {
+      "id": "GRD016-DELWT-BRANCH",
+      "statement": "T002 guarda 1.1 y NFR-02: el plan de borrar un worktree (que borra su rama) se deniega por la capa mcp con permission.branch-delete (nivel floor, misma lista que serve_audited con capa hooks para el borrado de esa rama) cuando branch-delete está en deny, y con permission.worktree-remove (nivel floor) cuando worktree-remove está en deny; en ese caso la capa MCP es más estricta que la de hooks, que no ve worktree-remove (PermissionReach)",
+      "verify": "cargo test -p gitraptor-core --test us_grd_016_parity -- --list 2>/dev/null | grep -q '^deleting_a_worktree_applies_the_branch_delete_permission: test' && cargo test -p gitraptor-core --test us_grd_016_parity deleting_a_worktree_applies_the_branch_delete_permission -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grd_016_parity.rs"
+      ]
+    },
+    {
+      "id": "GRD016-PLAN-ASK",
+      "statement": "T002 paso 6 y condición S1 del Arquitecto: con rebase en ask por el equipo, el plan de rebase de un agente por la capa mcp devuelve GateDecision::Ask con permission.rebase, y el plan de commit con commit en deny se sigue denegando con permission.commit una sola vez por nivel",
+      "verify": "cargo test -p gitraptor-core --test us_grd_016_parity -- --list 2>/dev/null | grep -q '^an_agent_plan_in_ask_is_asked: test' && cargo test -p gitraptor-core --test us_grd_016_parity an_agent_plan_in_ask_is_asked -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grd_016_parity.rs"
+      ]
+    },
+    {
+      "id": "GRD016-API-STATES",
+      "statement": "T005: ProtectionState admite y serializa los cuatro valores unprotected, hooks-only, mcp-only y full",
+      "verify": "cargo test -p gitraptor-api --test us_grd_016_contract -- --list 2>/dev/null | grep -q '^the_four_protection_states_round_trip: test' && cargo test -p gitraptor-api --test us_grd_016_contract the_four_protection_states_round_trip -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/api/tests/us_grd_016_contract.rs"
+      ]
+    },
+    {
+      "id": "GRD016-API-CAP",
+      "statement": "T005: la capacidad guard.protection-layers está declarada en el grupo de capacidades de guard",
+      "verify": "cargo test -p gitraptor-api --test us_grd_016_contract -- --list 2>/dev/null | grep -q '^protection_layers_capability_is_declared: test' && cargo test -p gitraptor-api --test us_grd_016_contract protection_layers_capability_is_declared -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/api/tests/us_grd_016_contract.rs"
+      ]
+    },
+    {
+      "id": "GRD016-API-LOG",
+      "statement": "T007 y T009: GuardLogParams acepta y conserva layer (hooks, mcp, cockpit) y LoggedOperation admite la entrada mcp-allowlist con from y to",
+      "verify": "cargo test -p gitraptor-api --test us_grd_016_contract -- --list 2>/dev/null | grep -q '^the_log_takes_a_layer_and_an_allowlist_entry: test' && cargo test -p gitraptor-api --test us_grd_016_contract the_log_takes_a_layer_and_an_allowlist_entry -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/api/tests/us_grd_016_contract.rs"
+      ]
+    },
+    {
+      "id": "GRD016-CHANNEL-DOWNGRADE",
+      "statement": "T006 y T007: en un repo con hooks instalados y en la allowlist, guard.status da full a una conexión con guard.protection-layers y hooks-only a una sin ella, que tampoco recibe entradas mcp-allowlist en guard.log",
+      "verify": "cargo test -p gitraptor-core --test us_grd_016_channel -- --list 2>/dev/null | grep -q '^guard_status_without_the_capability_keeps_two_states: test' && cargo test -p gitraptor-core --test us_grd_016_channel guard_status_without_the_capability_keeps_two_states -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grd_016_channel.rs"
+      ]
+    },
+    {
+      "id": "GRD016-LOG-LAYER",
+      "statement": "T009: guard.log con layer devuelve solo las entradas de esa capa; un filtro mcp o cockpit a una conexión sin guard.log-layers devuelve la lista vacía, nunca entradas hooks",
+      "verify": "cargo test -p gitraptor-core --test us_grd_016_channel -- --list 2>/dev/null | grep -q '^guard_log_filters_by_layer: test' && cargo test -p gitraptor-core --test us_grd_016_channel guard_log_filters_by_layer -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grd_016_channel.rs"
+      ]
+    },
+    {
+      "id": "GRD016-E2E-REASONS",
+      "statement": "Escenario 2, fila commit: con permissions.deny [commit] en la configuración del equipo, safe_commit por raptor-mcp responde policy-denied con rules [permission.commit], reasons [{rule: permission.commit, level: floor}] y el nivel en el texto, y la rama no se mueve",
+      "verify": "cargo test -p gitraptor-cli --test guard_us_grd_016 -- --list 2>/dev/null | grep -q '^safe_commit_denial_names_the_rule_and_its_level: test' && cargo test -p gitraptor-cli --test guard_us_grd_016 safe_commit_denial_names_the_rule_and_its_level -- --exact",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_016.rs"
+      ]
+    },
+    {
+      "id": "GRD016-E2E-SAME-COMMIT",
+      "statement": "Escenario 3 (D7): con el repo en Completa y release/1.0 protegida por el equipo, un commit del agente en release/1.0 por safe_commit y después con git commit se deniegan con policy.protected-branch y el mismo nivel, y raptor guard log --layer mcp y --layer hooks muestran una entrada cada uno",
+      "verify": "cargo test -p gitraptor-cli --test guard_us_grd_016 -- --list 2>/dev/null | grep -q '^the_same_commit_is_denied_alike_by_both_layers: test' && cargo test -p gitraptor-cli --test guard_us_grd_016 the_same_commit_is_denied_alike_by_both_layers -- --exact",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_016.rs"
+      ]
+    },
+    {
+      "id": "GRD016-E2E-STATES",
+      "statement": "Escenario 4: con raptor mcp enable/disable y raptor guard install, raptor guard status --json da unprotected, mcp-only, hooks-only y full según las capas, y cada entrada o salida de la allowlist deja una sola entrada protection-state con layer mcp, from y to",
+      "verify": "cargo test -p gitraptor-cli --test guard_us_grd_016 -- --list 2>/dev/null | grep -q '^protection_state_follows_the_allowlist: test' && cargo test -p gitraptor-cli --test guard_us_grd_016 protection_state_follows_the_allowlist -- --exact",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_016.rs"
+      ]
+    },
+    {
+      "id": "GRD016-E2E-FULL-INACTIVE",
+      "statement": "Condición del PO a Q-GRD-54 (D5): un repo en Completa con un dispatcher reemplazado sigue en full con hooks.status inactive en raptor guard status --json, el texto muestra el estado y el diagnóstico juntos, y la vista MCP de status da protection full con protection_lost",
+      "verify": "cargo test -p gitraptor-cli --test guard_us_grd_016 -- --list 2>/dev/null | grep -q '^a_full_repo_with_replaced_hooks_stays_full_and_shows_the_diagnostic: test' && cargo test -p gitraptor-cli --test guard_us_grd_016 a_full_repo_with_replaced_hooks_stays_full_and_shows_the_diagnostic -- --exact",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_016.rs"
+      ]
+    },
+    {
+      "id": "GRD016-E2E-REINSTALL",
+      "statement": "T006 guarda 2.1: en un repo en Completa, raptor guard install otra vez es idempotente (no reinstala, sigue en full)",
+      "verify": "cargo test -p gitraptor-cli --test guard_us_grd_016 -- --list 2>/dev/null | grep -q '^reinstall_on_a_full_repo_is_idempotent: test' && cargo test -p gitraptor-cli --test guard_us_grd_016 reinstall_on_a_full_repo_is_idempotent -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_016.rs"
+      ]
+    }
+  ],
+  "constraints": {
+    "deny_paths": [
+      "docs/ARTIFACTS.md",
+      "docs/architecture/decisions/ADR-GRD-008*",
+      "Cargo.lock",
+      "**/Cargo.toml",
+      "crates/core/tests/us_mcp_009_permission.rs",
+      "crates/core/src/channel/conn/exception.rs",
+      "crates/core/src/guardrails/link.rs"
+    ],
+    "allow_dependency_changes": false
+  },
+  "scope": {
+    "projects": [
+      "gitraptor-api",
+      "gitraptor-policy",
+      "gitraptor-core",
+      "gitraptor-cli",
+      "gitraptor-mcp"
+    ]
+  },
+  "hops": {
+    "design": {
+      "agent": "main-loop",
+      "model": "opus"
+    },
+    "critic": {
+      "agent": "nassa-core:plan-critic",
+      "model": "opus"
+    },
+    "tester": {
+      "agent": "nassa-core:criterion-tester",
+      "model": "sonnet"
+    },
+    "build": {
+      "agent": "nassa-dev-rust:rust-expert",
+      "model": "opus"
+    },
+    "review": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "opus"
+    },
+    "conformance": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "sonnet"
+    }
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 900000,
+    "suiteTimeoutMs": 2400000
+  }
+}
