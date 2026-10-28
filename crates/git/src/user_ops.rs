@@ -618,6 +618,8 @@ impl UserGitCommand {
 
 #[cfg(test)]
 #[path = "user_ops_add_tests.rs"]
+// Its git-backed test is unix-only; on Windows the shared imports go unused.
+#[cfg_attr(windows, allow(unused_imports))]
 mod add_tests;
 
 #[cfg(test)]
