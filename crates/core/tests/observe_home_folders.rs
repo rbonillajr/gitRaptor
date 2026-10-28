@@ -111,3 +111,36 @@ fn an_ancestor_of_the_repo_written_another_way_is_refused() {
     let common_other_form = std::fs::canonicalize(&common).unwrap();
     assert!(!linked_is_trusted_in(&common_other_form, "wt1", &base, &[]));
 }
+
+/// The same with a form that differs on Unix too: a link to the home folder, and a link to an
+/// ancestor of the repo, are refused like the folders they point at.
+#[cfg(unix)]
+#[test]
+fn a_link_to_the_home_or_to_an_ancestor_is_refused() {
+    let tmp = tempfile::tempdir().unwrap();
+    let base = canonical(tmp.path());
+    let home = base.join("home");
+    let common = linked(&base, &home);
+    let to_home = base.join("to-home");
+    std::os::unix::fs::symlink(&home, &to_home).unwrap();
+    assert!(linked_is_trusted_in(&common, "wt1", &to_home, &[]));
+    assert!(!linked_is_trusted_in(
+        &common,
+        "wt1",
+        &to_home,
+        std::slice::from_ref(&home)
+    ));
+
+    std::fs::write(
+        base.join(".git"),
+        format!(
+            "gitdir: {}\n",
+            common.join("worktrees").join("wt1").display()
+        ),
+    )
+    .unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    let to_base = canonical(outside.path()).join("to-base");
+    std::os::unix::fs::symlink(&base, &to_base).unwrap();
+    assert!(!linked_is_trusted_in(&common, "wt1", &to_base, &[]));
+}

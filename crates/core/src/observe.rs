@@ -548,14 +548,19 @@ pub fn linked_is_trusted_in(common_dir: &Path, id: &str, root: &Path, homes: &[P
 }
 
 /// A root the engine may be pointed at: not `/`, a drive root, a home folder or an ancestor
-/// of the repo. Both sides of each comparison are in the same canonical form, so a root
-/// written another way (`\\?\C:\…` against `C:\…`) is not let through.
+/// of the repo. Each check is made on the paths as written and again in the canonical form of
+/// both sides, so a root written another way (`\\?\C:\…` against `C:\…`, or a link) is
+/// refused if either form is.
 fn root_is_bounded(common_dir: &Path, root: &Path, homes: &[PathBuf]) -> bool {
-    let root = canonical(root);
-    if root.parent().is_none() || canonical(common_dir).starts_with(&root) {
+    let canonical_root = canonical(root);
+    if root.parent().is_none()
+        || canonical_root.parent().is_none()
+        || common_dir.starts_with(root)
+        || canonical(common_dir).starts_with(&canonical_root)
+    {
         return false;
     }
-    !homes.iter().any(|home| canonical(home) == root)
+    !homes.iter().any(|home| canonical(home) == canonical_root)
 }
 
 /// Where the `.git` link file of `root` points, resolved against `root`; `None` if `.git` is
