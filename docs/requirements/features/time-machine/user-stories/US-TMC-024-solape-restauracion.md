@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: high
 created: 2026-10-27
-updated: 2026-10-27
+updated: 2026-10-28
 domain: GRP
 epic: E-001
 feature: time-machine
@@ -67,7 +67,7 @@ Entonces antes de cambiar nada recibe las ediciones de "api.rs" en "feat-login-v
 **Escenario: Un cambio que no estaba en lo confirmado detiene la restauración**
 
 Dado que un solicitante sin atribuir confirmó restaurar "feat-login" al punto de las 10:00 con el commit de "claude-1" como único trabajo de otro actor
-  Y antes de que la restauración se aplique "claude-1" cambia "api.rs" en "feat-login"
+  Y antes de que la restauración se aplique "claude-1" hace un commit que cambia "api.rs" en "feat-login"
 Cuando la restauración se va a aplicar
 Entonces la restauración se detiene sin cambiar el repo
   Y el solicitante recibe el cambio nuevo con su actor y el momento en que se vio
@@ -76,7 +76,7 @@ Entonces la restauración se detiene sin cambiar el repo
 **Escenario: Si no se puede comprobar que no apareció trabajo nuevo, la restauración se detiene**
 
 Dado que un solicitante sin atribuir confirmó restaurar "feat-login" al punto de las 10:00
-  Y entre la confirmación y la aplicación hubo un hueco de observación en "feat-login"
+  Y entre la confirmación y la aplicación el observador perdió eventos de "feat-login" (por ejemplo, por un desbordamiento de la vigilancia de archivos) sin que el motor se reiniciara
 Cuando la restauración se va a aplicar
 Entonces la restauración se detiene con el motivo de que no se pudo comprobar el trabajo posterior
   Y el repo no cambia
@@ -94,6 +94,9 @@ Ejemplos:
 |--------|-------------------|
 | claude-2 | un commit de "claude-1" en "feat-login" |
 | claude-1 | ediciones sin commitear en "api.rs" del worktree "feat-login-v2", alcanzado por la restauración |
+| claude-1 | ediciones sin commitear en "api.rs" de "feat-login", aunque las haya hecho el propio "claude-1" |
+
+Un agente nunca puede restaurar un worktree con ediciones sin commitear, ni siquiera las suyas: en el MVP cuentan como "sin agente" (D-TMC-27, D-TMC-30). Si el motor se reinicia entre la confirmación y la aplicación, la confirmación caduca: el repo tampoco cambia, pero el motivo es la confirmación caducada, no el hueco.
 
 ## Requisitos Técnicos
 
