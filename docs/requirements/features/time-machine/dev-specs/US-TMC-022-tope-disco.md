@@ -474,8 +474,8 @@ Migración 5 del oplog (T004): reconstruye `journal` para admitir `capture-pause
 | Plataforma | Cómo se verifica | Pendiente |
 |---|---|---|
 | macOS | `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`, tamaños simulados | — |
-| Linux | `us_tmc_022.rs` con `cfg(any(macos, linux))` | **Pendiente: etapa de validación multiplataforma** (tamaño real en disco, `statvfs`) (XP-50) |
-| Windows | Compila; `below_floor` sin implementar en Windows (cuenta como "suficiente") | **Pendiente: etapa de validación multiplataforma** (tamaño en disco y exclusión de copias de seguridad, ADR-TMC-007) (XP-50) |
+| Linux | `us_tmc_022.rs` con `cfg(any(macos, linux))` | **Pendiente: etapa de validación multiplataforma** (tamaño real en disco, `statvfs`) (XP-51) |
+| Windows | Compila; `below_floor` sin implementar en Windows (cuenta como "suficiente") | **Pendiente: etapa de validación multiplataforma** (tamaño en disco y exclusión de copias de seguridad, ADR-TMC-007) (XP-51) |
 
 ---
 

@@ -235,8 +235,8 @@ flowchart LR
 **Ubicación.** `docs/` (**MODIFY**)
 
 **Reglas**
-- US-TMC-018: `status: implemented`, enlace a esta ficha en § Diseño y Dev Spec, la marca "Pendiente: etapa de validación multiplataforma" (XP-48) en § Dependencias / Transversal, y el estado del backlog o del hito que corresponda. Cerrar con Windows parcial está aceptado por el PO (M2 = MVP completo en macOS).
-- § Estado de esta ficha con PR, tests y plataformas verificadas. `xplat-pendientes.md`: XP-48 ya existe (T006 en Linux y Windows, T007 en Windows real); se actualiza su estado con lo verificado.
+- US-TMC-018: `status: implemented`, enlace a esta ficha en § Diseño y Dev Spec, la marca "Pendiente: etapa de validación multiplataforma" (XP-49) en § Dependencias / Transversal, y el estado del backlog o del hito que corresponda. Cerrar con Windows parcial está aceptado por el PO (M2 = MVP completo en macOS).
+- § Estado de esta ficha con PR, tests y plataformas verificadas. `xplat-pendientes.md`: XP-49 ya existe (T006 en Linux y Windows, T007 en Windows real); se actualiza su estado con lo verificado.
 
 - **Depende:** T002, T003, T004, T005, T006, T007
 - **Refs:** AGENTS.md § Pull requests
@@ -322,8 +322,8 @@ _Sin esquema ni migración._
 | Plataforma | Cómo se verifica | Pendiente |
 |---|---|---|
 | macOS | `cargo clippy --workspace --all-targets -- -D warnings` y `cargo test --workspace` | — |
-| Linux | `us_tmc_018` y `us_tmc_018_intact` en el CI (ubuntu); los `tm_store_*` ya pasan en contenedor (XP-11) | **Pendiente: etapa de validación multiplataforma** (reflink real, XP-11) (XP-48) |
-| Windows | `us_tmc_018` compila y corre como `tm_store_safety` tras XP-12; T007 es el que importa aquí. `us_tmc_018_intact` no corre (el daemon con Git no corre todavía en el CI de Windows, como `tm_chaos`) | **Pendiente: etapa de validación multiplataforma** (T007 y T006 en máquina real) (XP-48) |
+| Linux | `us_tmc_018` y `us_tmc_018_intact` en el CI (ubuntu); los `tm_store_*` ya pasan en contenedor (XP-11) | **Pendiente: etapa de validación multiplataforma** (reflink real, XP-11) (XP-49) |
+| Windows | `us_tmc_018` compila y corre como `tm_store_safety` tras XP-12; T007 es el que importa aquí. `us_tmc_018_intact` no corre (el daemon con Git no corre todavía en el CI de Windows, como `tm_chaos`) | **Pendiente: etapa de validación multiplataforma** (T007 y T006 en máquina real) (XP-49) |
 
 ---
 

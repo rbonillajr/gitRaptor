@@ -559,8 +559,8 @@ _Sin migración._ Ya existen la tabla `notices` (`kind = 'purge'`), los estados 
 | Plataforma | Cómo se verifica | Pendiente |
 |---|---|---|
 | macOS | `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` | — |
-| Linux | `us_tmc_016.rs` con `cfg(any(macos, linux))` | **Pendiente: etapa de validación multiplataforma** (e2e; XP-49) |
-| Windows | Compila; la pasada y la purga no dependen del SO salvo el `repack` del Git del sistema | **Pendiente: etapa de validación multiplataforma** (XP-49: `repack --cruft` con packs abiertos por el lector, e2e del aviso) |
+| Linux | `us_tmc_016.rs` con `cfg(any(macos, linux))` | **Pendiente: etapa de validación multiplataforma** (e2e; XP-50) |
+| Windows | Compila; la pasada y la purga no dependen del SO salvo el `repack` del Git del sistema | **Pendiente: etapa de validación multiplataforma** (XP-50: `repack --cruft` con packs abiertos por el lector, e2e del aviso) |
 
 ---
 
