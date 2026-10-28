@@ -65,13 +65,15 @@ La inmutabilidad se impone en el esquema: los triggers rechazan `UPDATE` y `DELE
 - **Operaciones de usuario** (Cockpit, MCP): el oplog registra su intención, su snapshot previo y su resultado; las ejecuta el ejecutor del daemon (ADR-TMC-002 § 5).
 - **`undo`** deshace la operación más reciente del worktree que aún no está deshecha; **`redo`** rehace el último undo si es lo último del ámbito (BR-TMC-WF-001). Undos seguidos retroceden (TQ-9 → a) una operación más cada vez (pila por worktree), y una operación nueva en el ámbito invalida el redo.
 - El undo deja el ámbito como estaba antes de la operación, incluidas las ediciones posteriores del mismo actor; esas ediciones quedan en el snapshot previo del undo y se recuperan con redo. Las de otro actor activan el solape (ADR-TMC-005).
-- **Redo, `undo --since` y ediciones del mismo agente** (Enmienda 2026-10-27, US-TMC-012, US-TMC-003 y US-TMC-010): cuándo hay redo y qué se informa si no, `undo --since` como una sola operación, y el límite del MVP para las ediciones de un agente; ver la sección final.
+- **Redo, `undo --since` y ediciones del mismo agente** (Enmienda 2026-10-27, US-TMC-012, US-TMC-003 y US-TMC-010): cuándo hay redo y qué se informa si no, `undo --since` como una sola operación, y el límite del MVP para las ediciones de un agente; ver esa sección.
+- **`undo --agent`** (Enmienda 2026-10-28, US-TMC-011): deshace, como una sola operación selectiva, las operaciones del worktree con atribución vigente al agente en el periodo; el destino es por ruta y por rama (D-TMC-31). Un undo selectivo activo es una barrera para `undo` y `--since` (D-TMC-35).
 
 ### 5. Atribución: congelada frente a vigente
 
 - El **solicitante** de una operación se congela al registrarla (D-TMC-18).
 - El **actor** de los eventos y de los cambios entre capturas se resuelve **en cada consulta** con la atribución vigente del motor (ADR-GRP-013 § 2). Cuando el motor publica que la atribución de una sesión cambió, la Time Machine invalida sus cachés; no reescribe nada (Q37).
-- La dependencia de P17 (retirar una corrección) afecta solo a la resolución vigente, no a este modelo; por eso el undo por agente sigue bloqueado (D-TMC-22) → resuelta el 2026-10-27 (Q50, decisión del orquestador validada por PO y Arquitecto): sí; US-TMC-011 desbloqueada y D-TMC-22 cumplida.
+- La dependencia de P17 (retirar una corrección) afecta solo a la resolución vigente, no a este modelo. P17 se resolvió el 2026-10-27 (Q50, decisión del orquestador validada por PO y Arquitecto): retirar una corrección devuelve sus eventos a la atribución detectada; D-TMC-22 cumplida y US-TMC-011 desbloqueada (Enmienda 2026-10-28, US-TMC-011).
+- El undo por agente lee la atribución vigente una vez, al planificar, y guarda lo que deshace por ids (`Target::Undo`); una corrección posterior no cambia lo que deshizo y el redo rehace los mismos ids.
 
 ### 6. Recuperación al arrancar el daemon
 
@@ -278,3 +280,30 @@ Aplicada desde la [Dev Spec de US-TMC-004](../../requirements/features/time-mach
 **Límite del MVP (§ 4, última viñeta)**: el motor no atribuye ediciones, así que las ediciones posteriores de un agente son "sin atribuir". Al deshacer una operación de ese agente, solapan si están en el mismo archivo y se conservan si están en otro (ADR-TMC-005, Enmienda 2026-10-27). Para un solicitante "sin atribuir", la frase sigue valiendo.
 
 **Validación añadida** (definida en las Dev Specs; tests por implementar): redos seguidos vuelven al estado del final y un commit nuevo tras el undo da `redo-invalidated` con el repo igual (DS-US-TMC-003 § 9.4); `undo --since` equivale a undos seguidos y deja la pila preparada para un redo que lo rehaga entero (DS-US-TMC-010 § 9.4); un cambio sin capturar justo antes del undo lo rechaza desde `lista` (DS-US-TMC-012 § 9.4).
+
+## Enmienda (2026-10-28, US-TMC-011)
+
+**Decisión del orquestador (2026-10-27), validada por Arquitecto y PO** (D-TMC-31 a D-TMC-35; D-TMC-36 es propuesta del PO del 2026-10-28, pendiente de confirmar por el orquestador); revisión de segunda opinión del Arquitecto el 2026-10-28 (D6 y D9 de la Dev Spec). Origen: [DS-US-TMC-011](../../requirements/features/time-machine/dev-specs/US-TMC-011-undo-por-agente.md) E1, E4, D1, D2, D6 y D9. No cambia el esquema del oplog, su cadena ni sus estados: el undo por agente es una operación `undo` con subtipo `agent` (columna que ya existe y entra en la cadena) y `Target::Undo` con varios objetivos. El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| `undo --agent` deshace, como una sola operación selectiva, las operaciones del worktree con atribución vigente al agente en el periodo; el destino es por ruta y por rama | § 4 | E1; D-TMC-31 a D-TMC-33, D-TMC-36 |
+| Un undo selectivo activo es una barrera para `undo` y `--since`; tras el redo de un undo selectivo, la pila vuelve al orden de historia | § 4 | E1; D-TMC-35; D6 |
+| Se quita "por eso el undo por agente sigue bloqueado (D-TMC-22)": P17 cerrada (Q50) | § 5 | E4 |
+| La atribución vigente del undo por agente se lee una vez, al planificar, y lo deshecho queda por ids | § 5 | D1, D9 |
+
+**`undo --agent` (§ 4)**:
+
+- **Conjunto**: las operaciones aún no deshechas del worktree donde se pide, con momento en el periodo (sin `--since`, la retención), cuyo dueño vigente elige el selector (id de sesión o nombre, con la regla de `raptor timeline --agent`). Nunca entra lo "sin atribuir", lo de otro agente ni un evento de un hueco. El dueño de una operación protegida es el vigente; el de una de la Time Machine, el congelado (§ 5): lo que el timeline muestra para el agente es lo que el undo deshace.
+- **Una sola operación**: un previo, `Target::Undo(conjunto)` y un redo que lo rehace entero, como `undo --since`.
+- **Destino**: cada ruta, rama y `HEAD` que cambió el conjunto vuelve a su valor antes del primer cambio del conjunto; lo demás queda como está (aplicador en modo selectivo, ADR-TMC-002, Enmienda 2026-10-28). Para un commit, merge o rebase, lo cambiado es lo que el commit registra.
+- **Lo que no se puede deshacer por separado** (una operación que abarca otros worktrees, un commit sin sus dos lados, un evento con worktree inferido, una ruta no escribible) rechaza la petición entera: nada se salta en silencio.
+
+**Barrera (§ 4; D-TMC-35, D6)**:
+
+- Mientras un undo selectivo esté activo (no rehecho), `raptor undo` y `--since` no deshacen ninguna operación que ya estaba hecha cuando corrió: volver a un previo anterior traería de vuelta lo que quitó, también si la operación es de otro actor y posterior al último cambio del agente. Se rechaza con `selective-undo-below`; se ofrecen `raptor redo` o restaurar un punto. Las operaciones nuevas quedan por encima y se deshacen como siempre.
+- La pila numera cada operación en orden de historia y guarda la barrera como ese número, no como una posición: los undos posteriores no la desplazan. El redo de un undo selectivo quita su barrera y devuelve sus objetivos a su sitio en la historia; sin eso, el siguiente `raptor undo` tomaría un objetivo rehecho que quedó encima y quitaría lo posterior.
+- `undo --agent` no mira la barrera: su solape por sujeto lo protege (ADR-TMC-005, Enmienda 2026-10-28), y un undo selectivo anterior que movió una rama cuenta como cambio de otro.
+- Si la barrera resulta demasiado estricta, queda abierta en TQ-21.
+
+**Validación añadida** (definida en DS-US-TMC-011 § 9.4; tests por implementar): el undo por agente deshace solo los commits del agente y deja lo de otros; usa la atribución vigente al planificar y una corrección posterior no cambia lo deshecho; un evento de un hueco nunca entra; un `raptor undo` por debajo de un undo selectivo se rechaza con el repo igual; tras el redo, el siguiente undo toma la operación más reciente.

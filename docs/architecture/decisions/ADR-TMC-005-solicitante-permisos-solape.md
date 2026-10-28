@@ -78,7 +78,8 @@ Orden de evaluación: validación (BR-TMC-VAL-001), conjunto, regla base (§ 2),
 - **Cómo se detecta**: por cada ruta del destino, se recorren los cambios de esa ruta entre capturas posteriores al cambio a deshacer (diferencias de árbol en el almacén) y su actor según los eventos del motor de ese intervalo. Por cada ref, sus movimientos posteriores. Si en un intervalo tocaron la ruta actores distintos o la atribución es mixta, cuenta como otro actor (conservador). Los cambios anteriores no cuentan (US-TMC-012, escenario 4).
 - **Granularidad**: **archivo completo** en el MVP. Si otro actor tocó otra función del mismo archivo, también se detiene. Es más estricto que "fragmento" y nunca sobrescribe; la detección por fragmentos con fusión de tres vías queda para después (TQ-6 → a).
 - **Resultado**: el undo se detiene sin cambiar el repo, se muestran los cambios en conflicto con su actor y su momento y la operación queda `rechazada` por solape. Qué opciones se ofrecen después lo decide el design-flow (US-TMC-012) → ver Enmienda (2026-10-27): D-TMC-27. El redo aplica la misma regla (S5).
-- **Precisión** (Enmienda 2026-10-27, US-TMC-012): con quién se compara "otro actor", cómo se cortan los intervalos, `overlap-unverified` y las rutas que se conservan. Ver la sección final.
+- **Precisión** (Enmienda 2026-10-27, US-TMC-012): con quién se compara "otro actor", cómo se cortan los intervalos, `overlap-unverified` y las rutas que se conservan. Ver esa sección.
+- **Undo por agente** (Enmienda 2026-10-28, US-TMC-011): el solape es por sujeto (ruta, rama, `HEAD`) y compara el valor actual con el valor final del agente; las rutas que el agente no tocó no se escriben, así que no hay conservadas.
 
 ## Alternativas consideradas
 
@@ -206,3 +207,21 @@ No cambia ninguna decisión. Cómo se aplica el § 3:
 - `raptor restore` sigue sin solape hasta US-TMC-024, que bloquea el cierre de M2 (G5, TQ-18).
 
 **Validación añadida** (definida en DS-US-TMC-012 § 9.4; tests por implementar): los cinco escenarios de US-TMC-012, con el 5 nuevo (una edición sin Git del mismo agente cuenta como de otro actor); un cambio sin capturar justo antes del undo lo detiene la fase 2 (`lista → rechazada`); una escritura durante la aplicación sale como ruta no restaurada por solape, no como rechazo; los tests puros de intervalos, atribución mixta, ecos y falta de base; y por MCP, ni rutas ni ramas en la respuesta ni en el log.
+
+## Enmienda (2026-10-28, US-TMC-011)
+
+**Decisión del orquestador (2026-10-27), validada por Arquitecto y PO** (D-TMC-34); revisión de segunda opinión del Arquitecto el 2026-10-28 (D8 de la Dev Spec). Origen: [DS-US-TMC-011](../../requirements/features/time-machine/dev-specs/US-TMC-011-undo-por-agente.md) E3, D4, D8 y § Diseño, pasos 4, 9 y 10. Precisa el § 5 y la Enmienda (2026-10-27, US-TMC-012) para el undo por agente; no cambia la regla base, la confirmación, las dos fases ni el resultado. El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| Para el undo por agente, un sujeto (ruta en archivo e índice, rama, `HEAD`) está en conflicto si su valor actual difiere del valor final del agente, o, para una rama, si entre la base del primer cambio del agente y ahora la movió un evento u operación fuera del conjunto | § 5 | E3; D4; D-TMC-34 |
+| Las rutas que el agente no tocó no se escriben: no hay rutas conservadas que informar ni `keep` | § 5 | E3 |
+| La fase 1 compara solo los sujetos cuyo último cambio del agente es anterior al último punto limpio; los demás los compara la fase 2 contra el previo | § 4, Enmienda 2026-10-27 | D8 |
+| Un agente que pide `--agent` de otro recibe `other-actor` antes de calcular el conjunto | § 2 | DS-US-TMC-011 § Diseño, paso 4 |
+
+- **Por qué el valor final y no los intervalos** (D4): con la regla de intervalos (D3 de DS-US-TMC-012), los commits del agente sobre un mismo archivo se solaparían consigo mismos, porque sus ediciones previas a cada commit son "sin atribuir" en el MVP. El coste aceptado: una edición "sin atribuir" que un commit posterior del agente recoge se deshace con él y se recupera con el previo del undo (NFR-01).
+- **Lo anterior no cuenta**: un cambio de otro actor anterior al primer cambio del agente se conserva (D-TMC-34). Un commit intercalado de otro actor en la misma rama detiene el undo: el MVP no reescribe historial.
+- **Confirmación** (§ 3): un "sin atribuir" que deshace trabajo de un agente confirma con un reto ligado al plan, que incluye los ids del conjunto y los sujetos con su destino.
+- **Resultado**: los motivos `overlap` y `overlap-unverified` de la Enmienda 2026-10-27, con actor y momento; por MCP, solo el motivo y recuentos (SEC-12).
+
+**Validación añadida** (definida en DS-US-TMC-011 T006 y § 9.4; tests por implementar): una edición posterior al último cambio del agente detiene el undo; los commits del propio agente sobre un archivo no se solapan entre sí; un commit de otro actor en la rama después del primer cambio del agente lo detiene; uno anterior no; un punto anterior al último cambio del agente no da conflicto en la fase 1.
