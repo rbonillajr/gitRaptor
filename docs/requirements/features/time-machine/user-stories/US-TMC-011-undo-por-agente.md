@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: high
 created: 2026-10-03
-updated: 2026-10-27
+updated: 2026-10-28
 domain: GRP
 epic: E-001
 feature: time-machine
@@ -16,7 +16,7 @@ related:
     - BR-TMC-001
   stories: [US-TMC-002, US-TMC-007, US-TMC-012, US-TMC-013, US-GRP-007, US-GRP-009, US-GRP-010]
   specs: [DS-US-TMC-011]
-covers: [BR-TMC-WF-002, BR-TMC-VAL-001, BR-TMC-EDGE-002, BR-TMC-AUTH-001, D-TMC-2, D-TMC-22, D-TMC-23]
+covers: [BR-TMC-WF-002, BR-TMC-VAL-001, BR-TMC-EDGE-002, BR-TMC-AUTH-001, D-TMC-2, D-TMC-22, D-TMC-23, D-TMC-31, D-TMC-32, D-TMC-33, D-TMC-34, D-TMC-35, D-TMC-36]
 blocked_by: []
 tags: [time-machine, undo, undo-por-agente]
 ---
@@ -33,32 +33,43 @@ tags: [time-machine, undo, undo-por-agente]
 
 ## Reglas cubiertas
 
-BR-TMC-WF-002 (undo por agente con atribución vigente) · BR-TMC-VAL-001 · BR-TMC-EDGE-002 (nada de huecos) · BR-TMC-AUTH-001 (solicitante, D-TMC-23) · D-TMC-2, D-TMC-22 (P17 cerrada el 2026-10-27, Q50 de motor-local) — ver [business-rules.md](../business-rules.md)
+BR-TMC-WF-002 (undo por agente con atribución vigente; destino por archivo y rama, D-TMC-31; selector, D-TMC-32; periodo, D-TMC-33; commit intercalado, D-TMC-34; barrera, D-TMC-35; worktree, D-TMC-36) · BR-TMC-VAL-001 · BR-TMC-EDGE-002 (nada de huecos) · BR-TMC-AUTH-001 (solicitante, D-TMC-23) · D-TMC-2, D-TMC-22 (P17 cerrada el 2026-10-27, Q50 de motor-local) — ver [business-rules.md](../business-rules.md)
 
 ## Criterios de Aceptación
 
+"claude-1", "claude-2" y "claude-9" son sesiones de Claude Code en el mismo worktree, y el undo las nombra por su sesión; "codex-1" es otro agente registrado. Todas las peticiones se hacen desde ese worktree.
+
 **Escenario: Deshacer lo de un agente en los últimos 20 minutos**
 
-Dado que en los últimos 20 minutos "claude-1" hizo dos commits y editó "api.rs"
+Dado que en los últimos 20 minutos "claude-1" hizo dos commits, uno con su edición de "api.rs"
   Y un cambio "sin atribuir" modificó "README.md"
   Y el solicitante del undo queda sin atribuir
 Cuando pide deshacer lo de "claude-1" en los últimos 20 minutos
   Y lo confirma de forma interactiva
-Entonces se revierten los dos commits y la edición de "claude-1"
+Entonces se revierten los dos commits de "claude-1", también su edición de "api.rs"
   Y el cambio en "README.md" sigue intacto
 
-**Escenario: Lo de otros agentes no entra**
+**Esquema del escenario: Lo de otro agente en la misma rama**
 
-Dado que "claude-2" hizo un commit en el mismo periodo en otros archivos
+Dado que en los últimos 20 minutos "claude-1" hizo dos commits
+  Y "claude-2" hizo un commit en otros archivos de la misma rama <cuándo>
   Y un solicitante sin atribuir pide deshacer lo de "claude-1" en ese periodo
 Cuando lo confirma de forma interactiva
-Entonces el commit de "claude-2" sigue aplicado
+Entonces <resultado>
+
+Ejemplos:
+
+| cuándo | resultado |
+|--------|-----------|
+| antes del primer commit de "claude-1" | se revierten los commits de "claude-1" y el de "claude-2" sigue aplicado |
+| entre los dos commits de "claude-1" | el undo se detiene por solape en la rama, muestra el commit de "claude-2" y el repo no cambia |
 
 **Esquema del escenario: Se usa la atribución vigente en el momento del undo**
 
-Dado una sesión detectada como "claude-1" que el desarrollador corrigió a "codex-1"
+Dado una sesión detectada como "Claude Code" que el desarrollador corrigió a "codex-1"
+  Y ninguna otra sesión de "Claude Code" en ese periodo
   Y la corrección <estado de la corrección>
-Cuando un solicitante sin atribuir pide deshacer lo de "claude-1" en el periodo de esa sesión
+Cuando un solicitante sin atribuir pide deshacer lo de "Claude Code" en el periodo de esa sesión
   Y confirma de forma interactiva lo que se le muestre
 Entonces <resultado>
 
@@ -67,7 +78,7 @@ Ejemplos:
 | estado de la corrección | resultado |
 |-------------------------|-----------|
 | sigue vigente | ninguna operación de esa sesión se deshace |
-| se retiró antes del undo | las operaciones de esa sesión se deshacen, porque vuelven a figurar como de "claude-1" |
+| se retiró antes del undo | las operaciones de esa sesión se deshacen, porque vuelven a figurar como de "Claude Code" |
 
 **Escenario: Lo ocurrido en un hueco nunca entra**
 
@@ -75,19 +86,28 @@ Dado que "claude-1" estaba registrado antes de un hueco de observación y en el 
 Cuando un solicitante sin atribuir pide deshacer lo de "claude-1" en un periodo que incluye el hueco
 Entonces los commits del hueco siguen aplicados
 
-**Escenario: Un agente pide deshacer lo de otro agente**
+**Esquema del escenario: Una petición por agente que no procede no cambia nada**
 
-Dado commits de "claude-2" en los últimos 20 minutos
-Cuando "claude-1" pide deshacer lo de "claude-2" en ese periodo
-Entonces la petición se rechaza con el motivo
-  Y el repo no cambia
-
-**Escenario: Agente sin operaciones en el periodo**
-
-Dado que "claude-9" no tiene operaciones en los últimos 20 minutos
-Cuando se pide deshacer lo de "claude-9" en ese periodo
+Dado <situación>
+Cuando <solicitante> pide deshacer lo de <agente> en los últimos 20 minutos
 Entonces el repo no cambia
-  Y el solicitante recibe el motivo
+  Y el solicitante recibe el motivo: <motivo>
+
+Ejemplos:
+
+| situación | solicitante | agente | motivo |
+|-----------|-------------|--------|--------|
+| commits de "claude-2" en los últimos 20 minutos | "claude-1" | "claude-2" | un agente no puede deshacer lo de otro |
+| "claude-9" sin operaciones en los últimos 20 minutos | un solicitante sin atribuir | "claude-9" | ese agente no tiene nada que deshacer en este worktree en ese periodo |
+
+**Escenario: Un undo sin agente no baja por debajo de un undo por agente**
+
+Dado un commit "sin atribuir" anterior a los commits de "claude-1"
+  Y que se deshizo lo de "claude-1" y ese undo no se ha rehecho
+Cuando un solicitante sin atribuir pide un undo sin agente que alcanzaría el commit "sin atribuir"
+Entonces la petición se rechaza con el motivo
+  Y se le ofrece rehacer el undo por agente o restaurar un punto del timeline
+  Y el repo no cambia
 
 ## Requisitos Técnicos
 

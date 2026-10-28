@@ -4,7 +4,7 @@ title: "Reglas de Negocio — Time Machine"
 type: business-rules
 status: draft
 created: 2026-10-03
-updated: 2026-10-27
+updated: 2026-10-28
 domain: GRP
 epic: E-001
 feature: time-machine
@@ -137,19 +137,37 @@ THEN aplica BR-TMC-CONS-005 (solape): se detiene                  (S5, aceptado 
 
 ### BR-TMC-WF-002: Undo por agente y por periodo
 
-**Descripción**: `raptor undo --agent <id> [--since <duración>]` deshace solo las operaciones con atribución vigente al agente `<id>` en el periodo. Lo "sin atribuir" y lo de otros agentes nunca entra.
+**Descripción**: `raptor undo --agent <id> [--since <duración>]` deshace, como un solo undo, solo las operaciones del worktree desde el que se invoca con atribución vigente al agente `<id>` en el periodo. Lo "sin atribuir" y lo de otros agentes nunca entra.
+
+**Atribución vigente** (Q50 de motor-local, que cerró P17 el 2026-10-27; D-TMC-22 cumplida): cuenta la atribución en el momento de planificar el undo. Una corrección vigente lleva la sesión al agente corregido; retirarla devuelve la sesión y sus eventos a la atribución detectada. Lo que el undo deshizo queda registrado y una corrección posterior no lo cambia (D-TMC-18).
+
+**Qué elige y qué deshace** (D-TMC-31 a D-TMC-35, 2026-10-27; D-TMC-36, propuesta del PO pendiente de confirmar):
+- `<id>` es un id de sesión (`raptor sessions --json`), que elige esa sesión, o un nombre de agente (`claude-code`, o el nombre declarado de un "otro agente"), que elige toda sesión del worktree cuya atribución vigente lo lleva, igual que `raptor timeline --agent`. `unattributed` no vale (D-TMC-32).
+- Sin `--since`, el periodo es la retención (30 días); el resultado dice desde cuándo contó (D-TMC-33).
+- Cada archivo, rama y `HEAD` que las operaciones del agente cambiaron vuelve al valor que tenía antes de la primera de ellas que lo cambió; todo lo demás queda como está. Lo que el agente cambió con un commit, un merge o un rebase es el contenido que el commit registra: sale del historial, del índice y de los archivos (D-TMC-31).
+- Las ediciones sin commitear del agente cuentan como "sin agente" en el MVP (D-TMC-27): no se deshacen, y si están en un archivo que el undo cambiaría, lo detienen por solape (D-TMC-31).
+- Si otro actor movió la rama después del primer cambio del agente (un commit intercalado), el undo se detiene por solape: el MVP no reescribe historial. Lo de otro actor anterior al primer cambio del agente se conserva (D-TMC-34).
+- Mientras un undo por agente esté activo (no rehecho), `raptor undo` y `--since` no bajan por debajo de él: se rechazan con su motivo y se ofrecen `raptor redo` o restaurar un punto (D-TMC-35).
+- Si el agente no tiene nada que deshacer en el worktree desde el que se invoca, nada cambia y el motivo lo dice; el undo por agente nunca actúa sobre otro worktree (D-TMC-36).
 
 **Criticidad**: Alta
 
 **Regla formal**:
 ```
-conjunto = operaciones con atribución vigente = <id> AND momento ≥ ahora − duración
-EXCLUDE "sin atribuir", otros agentes, eventos en huecos
-IF deshacer el conjunto toca cambios posteriores de otro actor → BR-TMC-CONS-005
-ELSE snapshot previo → deshacer el conjunto → registrar el undo
+ámbito = worktree desde el que se invoca                                              (D-TMC-36)
+duración = --since, o la retención (30 días) si falta                                   (D-TMC-33)
+conjunto = operaciones del ámbito con atribución vigente al planificar = <id> AND momento ≥ ahora − duración   (Q50, D-TMC-32)
+EXCLUDE "sin atribuir", otros agentes, eventos en huecos, ediciones sin commitear         (D-TMC-31)
+IF conjunto vacío THEN "nada que deshacer en este worktree"; el repo no cambia            (D-TMC-36)
+destino(archivo | rama | HEAD) = valor antes del primer cambio del conjunto que lo tocó   (D-TMC-31)
+IF otro actor cambió después un sujeto del destino, o movió la rama tras el primer cambio del agente
+   → BR-TMC-CONS-005: detener; el repo no cambia                                         (D-TMC-34)
+ELSE snapshot previo → deshacer el conjunto → registrar el undo (barrera para undo y --since hasta el redo)   (D-TMC-35)
 ```
 
-**Ejemplo**: `raptor undo --agent claude-1 --since 20m` revierte dos commits y una edición de claude-1; un cambio "sin atribuir" en otro archivo queda intacto.
+**Ejemplo**: en `feat-login`, la sesión claude-1 de Claude Code hizo dos commits en los últimos 20 minutos, uno con su edición de `api.rs` → `raptor undo --agent <sesión de claude-1> --since 20m` (o `--agent claude-code` si es la única sesión de Claude Code allí) revierte los dos commits y la edición de `api.rs`; un cambio "sin atribuir" en `README.md` queda intacto.
+
+**Ejemplo (D-TMC-34, D-TMC-35)**: si claude-2 hizo un commit en `feat-login` entre los dos de claude-1, el undo se detiene por solape en la rama y nada cambia. Tras un undo por agente que nadie rehízo, un `raptor undo` que alcanzaría una operación anterior se rechaza y ofrece `raptor redo` o restaurar un punto.
 
 **Undo por periodo sin `--agent`** (US-TMC-010, D-TMC-29): `raptor undo --since <duración>` deshace, como un solo undo, todas las operaciones del worktree desde el que se invoca ocurridas en el periodo, de cualquier actor. Lo de otro actor nunca se excluye en silencio: aplica BR-TMC-AUTH-001 a cada operación del conjunto. Un solicitante "sin atribuir" necesita la confirmación interactiva si el conjunto incluye trabajo de un agente (en Windows y por MCP, rechazo); un solicitante agente recibe un rechazo si el conjunto incluye trabajo de otro actor. Si una operación del periodo no se puede deshacer, se rechaza la petición entera. Para deshacer solo lo de un agente está `--agent`.
 
@@ -315,7 +333,7 @@ IF no se puede separar lo deshecho de lo posterior THEN detener (motivo propio);
 registro de undo = inmutable; atribución mostrada = vigente
 ```
 
-**Ejemplo**: claude-1 editó `api.rs` a las 10:00 y un cambio "sin atribuir" tocó la misma función a las 10:05 → `undo --agent claude-1` se detiene y muestra ambos cambios.
+**Ejemplo**: claude-1 commiteó una edición de `api.rs` a las 10:00 y un cambio "sin atribuir" tocó la misma función a las 10:05 → el undo por agente de claude-1 se detiene y muestra ambos cambios.
 
 ---
 
@@ -387,7 +405,7 @@ restauración: una operación en curso en el worktree principal la detiene siemp
 
 ## Decisiones de negocio
 
-D-TMC-1 a D-TMC-25 están en [context.md § Decisiones tomadas](./context.md#decisiones-tomadas). D-TMC-26 a D-TMC-29 salen de las Dev Specs de US-TMC-003, US-TMC-010, US-TMC-012 y US-TMC-015; D-TMC-30, de la historia del solape de la restauración (TQ-18, US-TMC-024).
+D-TMC-1 a D-TMC-25 están en [context.md § Decisiones tomadas](./context.md#decisiones-tomadas). D-TMC-26 a D-TMC-29 salen de las Dev Specs de US-TMC-003, US-TMC-010, US-TMC-012 y US-TMC-015; D-TMC-30, de la historia del solape de la restauración (TQ-18, US-TMC-024); D-TMC-31 a D-TMC-35, de la Dev Spec de US-TMC-011, y D-TMC-36, de su validación por el PO.
 
 | # | Decisión | Fuente | Fecha | Decidido por | Reglas afectadas |
 |---|----------|--------|-------|--------------|------------------|
@@ -396,6 +414,12 @@ D-TMC-1 a D-TMC-25 están en [context.md § Decisiones tomadas](./context.md#dec
 | D-TMC-28 | Una operación de Git en curso en un worktree que el undo no toca no bloquea ese undo, salvo que la operación use una rama que el undo movería: entonces se detiene por rama en uso. La restauración se sigue deteniendo con una operación en curso en el worktree principal. El aviso nombra la operación y el worktree. | DS-US-TMC-015 D1, D2, D3 | 2026-10-27 | Orquestador, validada por Arquitecto y PO; abierta a veto de Rene | BR-TMC-EDGE-004 |
 | D-TMC-29 | `raptor undo --since` cuenta todas las operaciones del worktree en el periodo, de cualquier actor, como un solo undo. Lo de otro actor nunca se excluye en silencio: un solicitante "sin atribuir" necesita la confirmación interactiva para el trabajo de un agente (rechazo en Windows y por MCP) y un solicitante agente recibe un rechazo. Para excluir lo de otros está `--agent` (US-TMC-011). | DS-US-TMC-010 D1, D4 | 2026-10-27 | Orquestador, validada por Arquitecto y PO; abierta a veto de Rene | BR-TMC-WF-002, BR-TMC-AUTH-001 |
 | D-TMC-30 | (TQ-18, D-TMC-13) La restauración retira, con la confirmación interactiva de BR-TMC-AUTH-001, el trabajo de otro actor que lista su plan: antes de cambiar nada, el solicitante ve qué trabajo de otro actor se perderá, con su actor y su momento, y lo confirma; el snapshot previo lo deja recuperable (NFR-01). Se detiene ante lo que no está en el plan: un cambio posterior aparecido entre el plan y la aplicación, o la imposibilidad de comprobar que no apareció ninguno, detiene la restauración sin cambiar el repo y sin opción de continuar (D-TMC-27). Una edición sin commitear en un worktree del conjunto distinto de aquel donde se pide cuenta como trabajo de otro actor ("sin agente"). Un solicitante agente nunca confirma: si el plan incluye trabajo de otro actor, recibe un rechazo; en Windows y por MCP también se rechaza (D-TMC-23). | US-TMC-024; DS-US-TMC-012 TQ-18, G1, G5 | 2026-10-27 | Orquestador, validada por PO y Arquitecto; abierta a veto de Rene | BR-TMC-WF-003, BR-TMC-CONS-005, BR-TMC-AUTH-001 |
+| D-TMC-31 | Deshacer el trabajo de un agente devuelve cada archivo, rama y `HEAD` que sus operaciones cambiaron al valor que tenía antes de la primera de ellas que lo cambió, y deja todo lo demás como está. Lo que el agente cambió con un commit, un merge o un rebase es el contenido que el commit registra: sale del historial, del índice y de los archivos, aunque el commit haya recogido una edición previa de otro (se recupera con el previo del undo, NFR-01). Las ediciones sin commitear del agente cuentan como "sin agente" en el MVP (D-TMC-27): no entran y, si están en un archivo que el undo cambiaría, lo detienen por solape. `raptor undo` sin flags y `--since` no cambian: siguen volviendo al estado previo de la operación. | DS-US-TMC-011 § Decisiones, G1, G2 | 2026-10-27 | Decisión del orquestador (2026-10-27), validada por Arquitecto y PO; abierta a veto de Rene | BR-TMC-WF-002, BR-TMC-CONS-005 |
+| D-TMC-32 | `--agent <id>` acepta un id de sesión (`raptor sessions --json`), que elige esa sesión, o un nombre de agente (`claude-code`, o el nombre declarado de un "otro agente"), que elige toda sesión del worktree cuya atribución vigente lo lleva, con la misma regla que `raptor timeline --agent`: lo que el timeline muestra para un agente y un periodo es lo que el undo deshace. Fija la sintaxis provisional de D3 de DS-US-TMC-006. `unattributed` no vale para el undo. Un nombre declarado que no se puede escribir en `--agent` (con espacios) se elige por su id de sesión en el MVP (TQ-22). | DS-US-TMC-011 § Decisiones, TQ-22 | 2026-10-27 | Decisión del orquestador (2026-10-27), validada por Arquitecto y PO; abierta a veto de Rene | BR-TMC-WF-002 |
+| D-TMC-33 | `--since` es opcional con `--agent`; sin él, el periodo es la retención (30 días). Con él, `undo --agent X --since D` es `undo --since D` filtrado por actor: un solo undo, un previo, un redo. El resultado dice desde cuándo contó el periodo. | DS-US-TMC-011 § Decisiones; el PO añade que el resultado diga el periodo | 2026-10-27 | Decisión del orquestador (2026-10-27), validada por Arquitecto y PO (ajustada); abierta a veto de Rene | BR-TMC-WF-002 |
+| D-TMC-34 | Si otro actor movió la rama después del primer cambio del agente (un commit intercalado), el undo por agente se detiene por solape en la rama, sin cambiar el repo: el MVP no reescribe historial (D-TMC-27). Lo de otro actor anterior al primer cambio del agente no cuenta y se conserva. | DS-US-TMC-011 § Decisiones, D4 | 2026-10-27 | Decisión del orquestador (2026-10-27), validada por Arquitecto y PO; abierta a veto de Rene | BR-TMC-WF-002, BR-TMC-CONS-005 |
+| D-TMC-35 | Mientras un undo por agente esté activo (no rehecho), `raptor undo` y `--since` no bajan por debajo de él, porque devolver un punto anterior traería de vuelta lo que el undo por agente quitó. Se rechazan con su motivo, sin cambiar nada, y se ofrecen `raptor redo` o restaurar un punto (BR-TMC-WF-003). Si la barrera resulta demasiado estricta queda abierta en TQ-21. | DS-US-TMC-011 § Decisiones, TQ-21 | 2026-10-27 | Decisión del orquestador (2026-10-27), validada por Arquitecto y PO; abierta a veto de Rene | BR-TMC-WF-002, BR-TMC-WF-001 |
+| D-TMC-36 | El undo por agente actúa en el worktree desde el que se invoca, como `raptor undo` y `--since` (D-TMC-19, D-TMC-23): nunca toca otro worktree. Si el agente no tiene nada que deshacer allí en el periodo, nada cambia y el motivo dice que es en este worktree. | Validación del PO de DS-US-TMC-011 (§ Diseño, `undo.reason.nothing-of-agent`) | 2026-10-28 | Propuesta del PO (2026-10-28); recoge lo que DS-US-TMC-011 ya diseña (§ Contexto rápido), pendiente de confirmar por el orquestador; abierta a veto de Rene | BR-TMC-WF-002, BR-TMC-WF-001 |
 
 ---
 
@@ -434,3 +458,4 @@ Cada regla tendrá al menos un escenario Gherkin, incluido uno negativo, en su h
 | 0.6 | 2026-10-09 | Orquestador, validada por Arquitecto/PO | US-TMC-005: CONS-003 añade el previo vía hooks de Guardrails (rebase y borrado de rama local), R2 abierto para `checkout -f`/`restore`/`reset --hard`, y los cupos de `previo_hook` como ⚠️ ASSUMPTION (los globales solo cuentan agentes, Q-GRD-37). |
 | 0.7 | 2026-10-27 | Orquestador, validada por Arquitecto y PO | Dev Specs de US-TMC-003, US-TMC-010, US-TMC-012 y US-TMC-015: nueva sección "Decisiones de negocio" con D-TMC-26 a D-TMC-29. WF-001: redos seguidos y motivo de la invalidación (D-TMC-26). WF-002: undo por periodo sin `--agent`, de cualquier actor y sin exclusiones silenciosas (D-TMC-29). CONS-005: alcance del MVP del solape, sin continuar, por archivo y por rama, ediciones sin Git como "sin agente" (D-TMC-27). EDGE-004: el aviso nombra la operación y el worktree, una operación en curso en otro worktree no bloquea salvo rama en uso, y el undo tras un abort (D-TMC-28). |
 | 0.8 | 2026-10-27 | Orquestador, validada por PO y Arquitecto | Solape de la restauración (TQ-18): nueva US-TMC-024 y D-TMC-30. WF-003: la restauración lista el trabajo de otro actor que retirará y lo retira solo con confirmación (rechazo para un agente, en Windows y por MCP); las ediciones sin commitear de otro worktree del conjunto cuentan como de otro actor; un cambio fuera del plan, o no poder comprobarlo, la detiene sin continuar. CONS-005: remite a WF-003 para la restauración. |
+| 0.9 | 2026-10-28 | Orquestador, validada por Arquitecto y PO | Undo por agente (DS-US-TMC-011): D-TMC-31 a D-TMC-35 (D-TMC-33 ajustada por el PO) y D-TMC-36, propuesta del PO pendiente de confirmar. WF-002: ámbito del worktree desde el que se invoca, atribución vigente al planificar con referencia a Q50 de motor-local (P17 cerrada), selector por sesión o por nombre, periodo por defecto de 30 días y el resultado dice desde cuándo, destino por archivo, rama y `HEAD`, ediciones sin commitear como "sin agente", commit intercalado de otro actor como solape sin reescribir historial, y barrera para `undo` y `--since` mientras el undo por agente no se rehaga; ejemplos con sesiones. CONS-005: el ejemplo pasa a una edición commiteada. |

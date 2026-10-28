@@ -4,7 +4,7 @@ title: "Reglas de Negocio — Motor local"
 type: business-rules
 status: draft
 created: 2026-10-01
-updated: 2026-10-27
+updated: 2026-10-28
 domain: GRP
 epic: E-001
 feature: motor-local
@@ -616,9 +616,13 @@ corregir(worktree, agente correcto):
   número de sesiones del worktree: no cambia (no se marca compartido por la corrección)
   mientras la corrección esté vigente: la detección de esa sesión no la reemplaza
   la corrección persiste aunque el motor deje de ejecutarse y vuelva a arrancar (BR-CONS-005)
+  IF el agente pedido = el agente vigente de la sesión THEN rechazo ("ya está atribuida"); nada cambia   (Q51)
+  IF la sesión nació por registro THEN rechazo: no hay atribución detectada (Q38); se retira el registro y se registra el correcto   (Q51)
+  una segunda corrección reemplaza a la primera                                                  (Q51)
 retirar corrección:
   IF la sesión sigue presente THEN vuelve la atribución detectada
   los eventos que la corrección reatribuyó vuelven a su atribución detectada, origen = detectado   (Q50)
+  retirar vuelve siempre a la detectada, nunca a una corrección anterior; si la sesión estaba confirmada por registro (P16), su origen vuelve a "registrado"   (Q51)
 Constraint: corregir ≠ registrar otro agente (BR-CONS-004)
 ```
 
@@ -631,11 +635,13 @@ Constraint: corregir ≠ registrar otro agente (BR-CONS-004)
 - **Un agente intenta corregir**: Claude Code pide corregir la atribución de `feat-login` → rechazo: solo el desarrollador corrige (BR-AUTH-001).
 
 > **Decisión del orquestador (2026-10-27), validada por PO y Arquitecto (Q50, cierra P17)**: al retirar una corrección, los eventos que esta había reatribuido vuelven también a la atribución detectada. Antes era un supuesto `[POR VERIFICAR]`; US-GRP-010 lo exige en su escenario de retirar la corrección.
+>
+> **Decisión del orquestador (2026-10-27), validada por Arquitecto y PO (Q51, precisa Q50; DS-US-GRP-010 D2, D3 y D5)**: una segunda corrección reemplaza a la primera, y retirar vuelve a la atribución detectada, nunca a una corrección anterior; una sesión confirmada por registro (P16) vuelve con origen "registrado". Corregir al agente que la sesión ya tiene se rechaza sin cambiar nada. Una sesión que nació por registro no se corrige (Q38): si el registro estaba mal, se retira y se registra el agente correcto.
 
 **Referencias**:
 - User Story: US-GRP-010
 - BRD: BR-02
-- Contexto: decisiones Q33, Q37 (cierra P14), Q38 (cierra P15) y Q50 (cierra P17)
+- Contexto: decisiones Q33, Q37 (cierra P14), Q38 (cierra P15), Q50 (cierra P17) y Q51
 - Relacionada: BR-CONS-004, BR-VAL-002
 
 ---
@@ -1096,3 +1102,4 @@ Cada regla debe estar reflejada en al menos un **escenario Gherkin** (criterio d
 | 1.16 | 2026-10-07 | PO (AADD) para Rene Bonilla | **Decisión de Rene (2026-10-07)**: la carpeta personal puede ser una raíz (cierra el pendiente del PR #142). BR-AUTH-003, condición 2: raíz amplia con aviso y confirmación (> 512 entradas, carpeta personal u otro volumen), exclusiones fijas por SO; siguen rechazados `/`, la unidad del sistema y los ancestros de las carpetas personales. Decisión del orquestador (2026-10-07), validada por el Arquitecto |
 | 1.17 | 2026-10-27 | PO (AADD) para Rene Bonilla | Decisión del orquestador (2026-10-27), validada por PO, sobre la propuesta del Arquitecto (ADR-GRP-015 § 2; DS-TS-GRP-005, G5). BR-CONS-005: enmienda "un evento perdido sin marca se recupera, como mucho, en el intervalo de reconciliación vigente" (5 min con corriente, 15 min en ahorro de energía; la cifra de 15 min sigue como supuesto). Se refleja en US-GRP-019. |
 | 1.18 | 2026-10-27 | PO (AADD) para Rene Bonilla | Decisión del orquestador (2026-10-27), validada por PO y Arquitecto; Q50 del contexto, que cierra P17. BR-CONS-002: al retirar una corrección, los eventos que reatribuyó vuelven a la atribución detectada; se quita la marca de supuesto `[POR VERIFICAR]` y se añaden la línea de la regla formal y el ejemplo de `c1` y `c2`. |
+| 1.19 | 2026-10-28 | PO (AADD) para Rene Bonilla | Decisión del orquestador (2026-10-27), validada por Arquitecto y PO; Q51 del contexto, de DS-US-GRP-010 (D2, D3, D5). BR-CONS-002: una segunda corrección reemplaza a la primera; retirar vuelve a la detectada y nunca a una corrección anterior, con origen "registrado" si la sesión estaba confirmada (P16); corregir al agente vigente se rechaza; una sesión nacida por registro no se corrige, se retira el registro. Sin reglas nuevas: conteos y matriz sin cambios. |
