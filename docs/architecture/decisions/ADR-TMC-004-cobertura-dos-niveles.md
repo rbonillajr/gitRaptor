@@ -5,7 +5,7 @@ type: adr
 status: accepted
 accepted: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-09
+updated: 2026-10-28
 date: 2026-10-03
 domain: GRP
 feature: time-machine
@@ -40,6 +40,7 @@ D-TMC-10 y BR-TMC-CONS-003 fijan dos niveles. (a) **Garantizado**: snapshot prev
 - Undo, redo y restauración son operaciones protegidas de la propia Time Machine.
 - **Reutilización**: si desde la última captura válida del ámbito no cambió nada, el snapshot previo reutiliza su árbol y solo añade una fila con nivel `previo_garantizado`. Es el camino rápido de ADR-TMC-006 (4 ms en macOS). Para saber que no cambió nada usa las rutas que el motor publicó desde la marca de esa captura y una caché de stat; sin continuidad, hace detección completa (ADR-TMC-006 § 5, escalón 2; Enmienda 2026-10-04).
 - **Fallo**: disco lleno, almacén no disponible, tiempo máximo agotado o daemon caído, entonces la operación se aborta con el motivo y el repo no cambia (US-TMC-001, escenario 4). El snapshot previo tiene una reserva de disco propia que la captura por observación no puede consumir (SEC-TMC-12). Un repo mayor que el de referencia **no** se salta el snapshot: tarda más (US-TMC-020, escenario 3).
+  - **Nota (2026-10-28)**: el "tiempo máximo" del previo pasa a ser por avance (10 s sin avanzar, tope fijo de 100 s desde que se aceptó la petición) por D-TMC-42. Hasta que DS-US-TMC-020 T011 lo integre como Enmienda de este ADR y de ADR-TMC-006, `DEFAULT_PRIOR_DEADLINE` en § Enmienda (2026-10-05, MCP) sigue siendo el tope de 10 s de la captura manual, no el plazo sin avance del previo.
 
 ### 2. Nivel (b): captura por observación
 
