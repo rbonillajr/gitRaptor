@@ -4,7 +4,7 @@ title: "Reglas de Negocio — Time Machine"
 type: business-rules
 status: draft
 created: 2026-10-03
-updated: 2026-10-09
+updated: 2026-10-27
 domain: GRP
 epic: E-001
 feature: time-machine
@@ -50,7 +50,7 @@ tags:
 
 **Feature**: Time Machine (F-001-03)
 **Enlace a contexto**: [context.md](./context.md) (CTX-TMC-001)
-**Última actualización**: 2026-10-03
+**Última actualización**: 2026-10-27
 
 ---
 
@@ -109,6 +109,8 @@ No aplica.
 
 **Undos seguidos** (TQ-9, D-TMC-25): cada worktree tiene su pila. Un segundo `undo` deshace la operación anterior aún no deshecha, y así sucesivamente. `redo` rehace el último undo; una operación nueva en el worktree invalida el redo pendiente.
 
+**Redos seguidos** (D-TMC-26): el redo está disponible si desde el último undo pendiente no hubo ninguna operación nueva en el worktree. Un redo no cuenta como operación nueva, así que redos seguidos rehacen, en orden inverso, los undos seguidos. Una operación nueva invalida todos los redos pendientes, y el solicitante recibe ese motivo, distinto de "no hay nada que rehacer". Un undo interrumpido cuenta como operación nueva.
+
 **Criticidad**: Alta
 
 **Regla formal**:
@@ -117,16 +119,20 @@ No aplica.
 IF actor de la última operación ≠ solicitante → BR-TMC-AUTH-001 + BR-TMC-CONS-005
 undo:  snapshot previo → restaurar estado anterior a la última operación del ámbito aún no deshecha → registrar el undo
        (undos seguidos = pila por worktree, TQ-9)
-redo:  disponible si el último evento del ámbito es un undo
+redo:  disponible si desde el último undo pendiente no hubo una operación nueva en el ámbito   (D-TMC-26)
        → snapshot previo → restaurar el estado anterior a ese undo
-IF hubo una operación nueva en el ámbito después del undo THEN redo no disponible + se informa   (TQ-9)
-IF desde el undo hubo cambios de otro actor en los mismos archivos
-THEN aplica BR-TMC-CONS-005 (solape): se detiene                  (S5, aceptado 2026-10-03)
+       redos seguidos = rehacen los undos seguidos en orden inverso; un redo no es operación nueva
+IF hubo una operación nueva en el ámbito después del undo THEN ningún redo disponible + se informa ese motivo   (TQ-9, D-TMC-26)
+IF nunca hubo un undo pendiente THEN "nada que rehacer"
+IF desde el undo hubo cambios de otro actor en los mismos archivos o ramas
+THEN aplica BR-TMC-CONS-005 (solape): se detiene                  (S5, aceptado 2026-10-03; D-TMC-27)
 ```
 
 **Ejemplo**: un agente hace `reset --hard` y borra 3 archivos sin commitear → `raptor undo` los recupera → `raptor redo` vuelve al estado tras el reset; el contenido de los 3 archivos sigue recuperable en el timeline.
 
 **Ejemplo (pila, TQ-9)**: en `feat-pagos` hubo un commit A y luego un checkout B → `raptor undo` deshace B → otro `raptor undo` deshace A. Si después se hace un commit C, `raptor redo` ya no está disponible.
+
+**Ejemplo (redos seguidos, D-TMC-26)**: tras deshacer B y A, `raptor redo` rehace A y otro `raptor redo` rehace B; `feat-pagos` queda como estaba antes del primer undo. Un tercer `raptor redo` responde que no hay nada que rehacer.
 
 ### BR-TMC-WF-002: Undo por agente y por periodo
 
@@ -143,6 +149,17 @@ ELSE snapshot previo → deshacer el conjunto → registrar el undo
 ```
 
 **Ejemplo**: `raptor undo --agent claude-1 --since 20m` revierte dos commits y una edición de claude-1; un cambio "sin atribuir" en otro archivo queda intacto.
+
+**Undo por periodo sin `--agent`** (US-TMC-010, D-TMC-29): `raptor undo --since <duración>` deshace, como un solo undo, todas las operaciones del worktree desde el que se invoca ocurridas en el periodo, de cualquier actor. Lo de otro actor nunca se excluye en silencio: aplica BR-TMC-AUTH-001 a cada operación del conjunto. Un solicitante "sin atribuir" necesita la confirmación interactiva si el conjunto incluye trabajo de un agente (en Windows y por MCP, rechazo); un solicitante agente recibe un rechazo si el conjunto incluye trabajo de otro actor. Si una operación del periodo no se puede deshacer, se rechaza la petición entera. Para deshacer solo lo de un agente está `--agent`.
+
+```
+conjunto (--since sin --agent) = operaciones del worktree con momento ≥ ahora − duración, de cualquier actor   (D-TMC-29)
+FOR EACH operación del conjunto → BR-TMC-AUTH-001 (confirmación o rechazo; nunca exclusión silenciosa)
+IF alguna operación del conjunto no se puede deshacer THEN rechazo entero, el repo no cambia
+un solo undo → un solo snapshot previo → un redo lo rehace entero
+```
+
+**Ejemplo (D-TMC-29)**: en `feat-login` hubo una operación "sin atribuir" y un commit de claude-1 en los últimos 20 minutos → `raptor undo --since 20m` pide confirmar que se deshará el trabajo de claude-1; sin confirmación, nada cambia.
 
 ### BR-TMC-WF-003: Restaurar a un punto del timeline
 
@@ -267,12 +284,23 @@ Constraint: push / gc / trabajo de un agente no exponen ni alteran snapshots
 
 **Descripción**: el timeline y el undo por agente usan la atribución vigente (Q37). "Sin atribuir" es la categoría del modelo y el valor del cable; al usuario se le presenta como "sin agente" ("cambios tuyos o de otra herramienta") y nunca como "humano" (Q34, D-TMC-12; enmienda 2026-10-08 validada por PO, alineada con el design system). Si deshacer lo de un actor tocaría cambios posteriores de otro actor en los mismos archivos o fragmentos, la Time Machine no sobrescribe: se detiene, muestra el solape y deja decidir al desarrollador (D-TMC-13). El registro de un undo (el solicitante, atribuido según BR-TMC-AUTH-001, y sobre qué actuó) no se reescribe si después cambia la atribución (D-TMC-18).
 
+**Alcance en el MVP** (D-TMC-27, 2026-10-27):
+- Tras un solape, la única decisión disponible es no seguir: el undo o el redo no se ejecuta y el repo no cambia. Continuar a pesar del solape o fusionar por fragmentos queda para después del MVP.
+- El solape se mide por archivo y por rama: un cambio posterior de otro actor en cualquier parte del mismo archivo, o un movimiento posterior de la misma rama, detiene el undo. La comparación por fragmento llega más adelante (TQ-6).
+- Solo cuentan los cambios posteriores al cambio que se deshace. Un archivo o una rama que el cambio deshecho no tocó y que otro actor cambió después se deja como está y se informa.
+- Las ediciones de archivos sin evento de Git no tienen actor en el MVP y cuentan como "sin agente", aunque las haya hecho un agente. Por eso, si un agente edita sin Git el mismo archivo después de su propia operación, deshacer esa operación también se detiene por solape.
+- Si no se puede separar el cambio deshecho de lo posterior, el undo se detiene igual, con ese motivo: nunca se escribe a ciegas (NFR-01).
+
 **Criticidad**: Alta
 
 **Regla formal**:
 ```
 actor mostrado ∈ {"agente X (detectado|registrado)", "sin agente"}
 IF solape con otro actor THEN detener + mostrar solape; el repo no cambia
+MVP: tras el solape no se continúa                                     (D-TMC-27)
+MVP: granularidad = archivo y rama; edición sin evento de Git = "sin agente"
+archivo o rama que solo cambió otro actor después → se conserva y se informa
+IF no se puede separar lo deshecho de lo posterior THEN detener (motivo propio); el repo no cambia
 registro de undo = inmutable; atribución mostrada = vigente
 ```
 
@@ -326,9 +354,36 @@ tamaño ≥ 100 % del tope antes de la gracia → se detiene la captura por obse
 
 ### BR-TMC-EDGE-004: Operación de Git en curso
 
-**Descripción**: (S6, aceptado por Rene Bonilla el 2026-10-03). Con un rebase o un merge a medias, el undo y la restauración se detienen y piden terminar o abortar esa operación antes; el repo no cambia.
+**Descripción**: (S6, aceptado por Rene Bonilla el 2026-10-03). Con un rebase o un merge a medias, el undo y la restauración se detienen y piden terminar o abortar esa operación antes; el repo no cambia. El aviso nombra la operación en curso y el worktree donde está. Lo mismo vale para un cherry-pick, un revert, un bisect o una secuencia a medias.
+
+**Otros worktrees** (D-TMC-28, 2026-10-27): una operación de Git en curso en un worktree que el undo no toca no bloquea el undo, salvo que esa operación use una rama que el undo movería; entonces el undo se detiene porque la rama está en uso y la rama no se mueve. La restauración, que puede mover todas las ramas, se sigue deteniendo con una operación en curso en el worktree principal.
+
+**Tras abortar**: el abort es una operación más del worktree si la Time Machine la vio. El undo que se pide después corre y dice qué deshizo; con undos seguidos se vuelve al estado anterior a la operación abortada sin pérdida.
+
+**Regla formal**:
+```
+IF operación en curso en un worktree que el undo o la restauración toca THEN detener + aviso (operación, worktree); el repo no cambia
+IF operación en curso en otro worktree AND usa una rama que el undo movería THEN detener (rama en uso); el repo no cambia   (D-TMC-28)
+IF operación en curso en otro worktree AND no usa ninguna rama del undo THEN el undo procede                             (D-TMC-28)
+restauración: una operación en curso en el worktree principal la detiene siempre
+```
+
+**Ejemplo (D-TMC-28)**: Rene tiene un merge a medias en `main` y claude-1 pide deshacer su último commit en `feat-x` → el undo procede, porque no toca `main`. Si claude-2 está rebasando la rama que el undo movería, el undo se detiene y la rama no se mueve.
 
 **Criticidad**: Media
+
+---
+
+## Decisiones de negocio
+
+D-TMC-1 a D-TMC-25 están en [context.md § Decisiones tomadas](./context.md#decisiones-tomadas). Las siguientes salen de las Dev Specs de US-TMC-003, US-TMC-010, US-TMC-012 y US-TMC-015.
+
+| # | Decisión | Fuente | Fecha | Decidido por | Reglas afectadas |
+|---|----------|--------|-------|--------------|------------------|
+| D-TMC-26 | (TQ-9) El redo está disponible si desde el último undo pendiente no hubo ninguna operación nueva en el worktree; un redo no es una operación nueva. Redos seguidos rehacen, en orden inverso, los undos seguidos. Una operación nueva invalida todos los redos pendientes y el solicitante recibe ese motivo, distinto de "nada que rehacer". Un undo interrumpido cuenta como operación nueva. | DS-US-TMC-003 D1, D2 | 2026-10-27 | Orquestador, validada por Arquitecto y PO; abierta a veto de Rene | BR-TMC-WF-001 |
+| D-TMC-27 | (D-TMC-13, TQ-6) En el MVP, un undo o un redo detenido por solape no se continúa: la única decisión es no seguir y el repo no cambia. El solape se mide por archivo y por rama, y las ediciones sin evento de Git cuentan como "sin agente", aunque las haya hecho un agente. Continuar a pesar del solape o fusionar por fragmentos queda para después del MVP. | DS-US-TMC-012 D3, D11 | 2026-10-27 | Orquestador, validada por Arquitecto y PO; abierta a veto de Rene | BR-TMC-CONS-005, BR-TMC-WF-001 |
+| D-TMC-28 | Una operación de Git en curso en un worktree que el undo no toca no bloquea ese undo, salvo que la operación use una rama que el undo movería: entonces se detiene por rama en uso. La restauración se sigue deteniendo con una operación en curso en el worktree principal. El aviso nombra la operación y el worktree. | DS-US-TMC-015 D1, D2, D3 | 2026-10-27 | Orquestador, validada por Arquitecto y PO; abierta a veto de Rene | BR-TMC-EDGE-004 |
+| D-TMC-29 | `raptor undo --since` cuenta todas las operaciones del worktree en el periodo, de cualquier actor, como un solo undo. Lo de otro actor nunca se excluye en silencio: un solicitante "sin atribuir" necesita la confirmación interactiva para el trabajo de un agente (rechazo en Windows y por MCP) y un solicitante agente recibe un rechazo. Para excluir lo de otros está `--agent` (US-TMC-011). | DS-US-TMC-010 D1, D4 | 2026-10-27 | Orquestador, validada por Arquitecto y PO; abierta a veto de Rene | BR-TMC-WF-002, BR-TMC-AUTH-001 |
 
 ---
 
@@ -365,3 +420,4 @@ Cada regla tendrá al menos un escenario Gherkin, incluido uno negativo, en su h
 | 0.4 | 2026-10-03 | PO (AADD) | Rene Bonilla acepta S5 y S6: sin marcas de supuesto en WF-001 (redo) y EDGE-004. |
 | 0.5 | 2026-10-03 | PO (AADD) | Rene Bonilla acepta TQ-1 a TQ-17 del Arquitecto. CONS-002: lista cerrada de credenciales excluida por defecto, con opción en el perfil, y repos anidados excluidos; ambos declarados y no tocados al restaurar (TQ-16, TQ-15; D-TMC-16 actualizada). AUTH-001: en Windows, rechazo sin confirmación en el MVP (TQ-14; D-TMC-23 actualizada) y rechazo siempre por MCP (TQ-7). WF-001: pila de undo por worktree (TQ-9). CONS-003 y EDGE-002: tope por archivo, cuotas y hueco "sin espacio" (TQ-5). CONS-004: excepción de liberar el bloqueo propio al arrancar. TIME-001: aviso visto + 24 h (TQ-11); `forget` fuera del MVP (TQ-17, D-TMC-24). EDGE-003: fallo a mitad sin rollback automático (TQ-10). |
 | 0.6 | 2026-10-09 | Orquestador, validada por Arquitecto/PO | US-TMC-005: CONS-003 añade el previo vía hooks de Guardrails (rebase y borrado de rama local), R2 abierto para `checkout -f`/`restore`/`reset --hard`, y los cupos de `previo_hook` como ⚠️ ASSUMPTION (los globales solo cuentan agentes, Q-GRD-37). |
+| 0.7 | 2026-10-27 | Orquestador, validada por Arquitecto y PO | Dev Specs de US-TMC-003, US-TMC-010, US-TMC-012 y US-TMC-015: nueva sección "Decisiones de negocio" con D-TMC-26 a D-TMC-29. WF-001: redos seguidos y motivo de la invalidación (D-TMC-26). WF-002: undo por periodo sin `--agent`, de cualquier actor y sin exclusiones silenciosas (D-TMC-29). CONS-005: alcance del MVP del solape, sin continuar, por archivo y por rama, ediciones sin Git como "sin agente" (D-TMC-27). EDGE-004: el aviso nombra la operación y el worktree, una operación en curso en otro worktree no bloquea salvo rama en uso, y el undo tras un abort (D-TMC-28). |
