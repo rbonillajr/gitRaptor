@@ -11,8 +11,8 @@ Todo lo que viene del plan, del contrato o del crítico va dentro de bloques de 
 
 - Tipo: `plan`
 - Excepción del crítico: no
-- Generada: `2026-10-28T03:24:57.660Z`
-- Sha de aprobación: `2cec8cfdeb99fd93148a449f27d35a600d57d789ad1db7317c86b95e06c86a92:c8c84863c72088c18b584625e2a8a0868838e52b5481f97ce4f81df320bdff16:1849e32a86c1e5850d2169f50d0abd4b37ece2ea7248eda12a62d3e756a47e34`
+- Generada: `2026-10-28T12:17:07.663Z`
+- Sha de aprobación: `64db795b969d2888ac29a05b0def66a0ac04da4021e89f34f9808e4661851e9a:d0ab5da8b162ac1dd8ba1fd88bb9344731488fe3c49b9d688342a4d03d0032ec:948a59a1521ad750499a7eea454654315203b9ba01e36d9f33881ca504ca8c3f`
 
 ## Plan (contexto, no se firma)
 
@@ -24,11 +24,11 @@ docs/requirements/features/guardrails/dev-specs/US-GRD-006-excepcion-consciente.
 ```
 <<<FIN-DATOS-NO-CONFIABLES 21898c50f7b4>>>
 
-planSha: `2cec8cfdeb99fd93148a449f27d35a600d57d789ad1db7317c86b95e06c86a92` (base de la cadena de re-planes)
+planSha: `64db795b969d2888ac29a05b0def66a0ac04da4021e89f34f9808e4661851e9a` (base de la cadena de re-planes)
 
 Contenido:
 
-<<<DATOS-NO-CONFIABLES 303aac78b0fc>>>
+<<<DATOS-NO-CONFIABLES 53e058b4238c>>>
 ````text
 ---
 id: DS-US-GRD-006
@@ -36,7 +36,7 @@ title: "Dev Spec — US-GRD-006: excepción consciente con constancia (raptor gu
 type: dev-spec
 status: draft
 created: 2026-10-21
-updated: 2026-10-27
+updated: 2026-10-28
 story: US-GRD-006
 feature: guardrails
 domain: GRP
@@ -542,265 +542,209 @@ Ningún hueco bloquea la implementación. No hay constitución en la cascada, as
 
 ## 10. Estado de la implementación
 
-Sin empezar (2026-10-21).
+PR-A (T001 a T004) implementado en: PR #295 (2026-10-28). Los 36 criterios del contrato `docs/dev-briefs/us-grd-006-pra-exception-core.contract.json` pasan. Desviaciones registradas: S1 a S14 de la nota de preparación; los métodos llevan `.since(CAPABILITIES_PROTOCOL)` como el resto del grupo (enmienda de la prueba de GRD006-METHODS, aprobada por el coordinador el 2026-10-28), y la tabla de opciones globales de `git_command` no se reutiliza porque la lista cerrada solo admite `-C`.
+
+Pendientes para PR-B, de las revisiones de PR-A (sin Critical ni High): `push.default = simple` con un remoto de push distinto del upstream (push triangular) se rechaza y Git lo acepta (Medium); `ExceptionToken` deriva `PartialEq` (no es de tiempo constante; el almacén no lo usa); `GuardExceptionParams` deriva `Debug` con el argv; el TTL usa el reloj de pared (PR-B debe pasar un reloj monótono o guardar `Instant`); un `exception_token` mal formado no debe tumbar `guard.evaluate`; un destino corto de push o una rama de rebase que no es un nombre corto de rama deben rechazarse o normalizarse como en `full_ref`; el brazo por defecto del canal no debe auditar `guard.exception-end` como reservado; el entorno del `git` hijo sin `GIT_*` (D10) y la validación de `-C` (`Request.dirs`).
+
+PR-B (T005 a T011): sin empezar.
 ````
-<<<FIN-DATOS-NO-CONFIABLES 303aac78b0fc>>>
+<<<FIN-DATOS-NO-CONFIABLES 53e058b4238c>>>
 
 ## Contrato
 
 Fichero:
 
-<<<DATOS-NO-CONFIABLES d4f225fafd60>>>
+<<<DATOS-NO-CONFIABLES 8f38452da711>>>
 ```text
-docs/dev-briefs/us-grd-006-pra-exception-core.contract.json
+docs/dev-briefs/us-grd-006-prb-exception-flow.contract.json
 ```
-<<<FIN-DATOS-NO-CONFIABLES d4f225fafd60>>>
+<<<FIN-DATOS-NO-CONFIABLES 8f38452da711>>>
 
-contractSha: `c8c84863c72088c18b584625e2a8a0868838e52b5481f97ce4f81df320bdff16`
+contractSha: `d0ab5da8b162ac1dd8ba1fd88bb9344731488fe3c49b9d688342a4d03d0032ec`
 
 Criterios (id, statement, verify, tests):
 
-<<<DATOS-NO-CONFIABLES c195f04fbabe>>>
+<<<DATOS-NO-CONFIABLES b6fbc375bd93>>>
 ```text
-[1] id: GRD006-PARSE-ADMITTED
-statement: D1/D2: parse acepta push con refspecs explícitos (src, src:dst, +src:dst, :dst) y -f/--force/--force-with-lease[=…]/--force-if-includes/--delete/-d, push [<remote>] sin refspec, branch -d/-D/--delete [--force] <nombre>… y rebase [--onto <base>] [<upstream> [<rama>]], y devuelve el Request con remoto, refspecs, nombres y bases tal como vienen
-verify: cargo test -p gitraptor-policy --test us_grd_006_exception -- --list 2>/dev/null | grep -q '^parse_accepts_the_admitted_push_branch_and_rebase_forms: test' && cargo test -p gitraptor-policy --test us_grd_006_exception parse_accepts_the_admitted_push_branch_and_rebase_forms -- --exact
+[1] id: GRD006-ANNOUNCE-RUN
+statement: Escenario 2: exec de un force-push denegado se anuncia (reserved.audit aceptado de guard.exception visible a otro cliente) y guard.status/raptor guard status muestran el pendiente; al cerrarse la ventana se ejecuta, el remoto tiene el commit nuevo y el registro tiene una sola entrada exception con la operación, minimum.force-push y el momento; exec sale con el código de git
+verify: cargo test -p gitraptor-cli --test guard_us_grd_006 -- --list 2>/dev/null | grep -q '^exception_is_announced_waits_and_runs_once: test' && cargo test -p gitraptor-cli --test guard_us_grd_006 exception_is_announced_waits_and_runs_once -- --exact
 tests:
-  - crates/policy/tests/us_grd_006_exception.rs
+  - apps/cli/tests/guard_us_grd_006.rs
 
-[2] id: GRD006-PARSE-GLOBAL-OPTIONS
-statement: D1: -C <dir> (repetible) es la única opción global admitida y queda en Request.dirs; -c, --git-dir, --work-tree, --namespace, --exec-path=, --config-env, -p/--no-pager y cualquier opción global desconocida se rechazan con Unsupported::Form
-verify: cargo test -p gitraptor-policy --test us_grd_006_exception -- --list 2>/dev/null | grep -q '^parse_accepts_only_dash_c_dir_as_global_option: test' && cargo test -p gitraptor-policy --test us_grd_006_exception parse_accepts_only_dash_c_dir_as_global_option -- --exact
+[2] id: GRD006-CANCEL
+statement: Escenario 3: cancelada con raptor guard cancel desde otra terminal, git no se lanza, el remoto no cambia, queda exception-cancelled con el actor que canceló en el registro y cancelled en la auditoría
+verify: cargo test -p gitraptor-cli --test guard_us_grd_006 -- --list 2>/dev/null | grep -q '^a_cancelled_exception_does_not_run: test' && cargo test -p gitraptor-cli --test guard_us_grd_006 a_cancelled_exception_does_not_run -- --exact
 tests:
-  - crates/policy/tests/us_grd_006_exception.rs
+  - apps/cli/tests/guard_us_grd_006.rs
 
-[3] id: GRD006-PARSE-REFUSED-FORMS
-statement: D2: push --all, --mirror, --tags, --no-verify, un refspec con comodín, un remoto dado como URL (https://, scp x:, ruta), rebase -i/--interactive/--exec/-x/--root y pull se rechazan con Unsupported::Form, y Form se traduce a ExceptionRefusal::UnsupportedForm
-verify: cargo test -p gitraptor-policy --test us_grd_006_exception -- --list 2>/dev/null | grep -q '^parse_refuses_the_forms_outside_the_list_as_unsupported_form: test' && cargo test -p gitraptor-policy --test us_grd_006_exception parse_refuses_the_forms_outside_the_list_as_unsupported_form -- --exact
+[3] id: GRD006-CTRL-C
+statement: Escenario 3 / D8: un Ctrl-C en exec durante la ventana cancela: git no se lanza, el remoto no cambia y quedan exception-cancelled y cancelled
+verify: cargo test -p gitraptor-cli --test guard_us_grd_006 -- --list 2>/dev/null | grep -q '^ctrl_c_in_the_window_cancels: test' && cargo test -p gitraptor-cli --test guard_us_grd_006 ctrl_c_in_the_window_cancels -- --exact
 tests:
-  - crates/policy/tests/us_grd_006_exception.rs
+  - apps/cli/tests/guard_us_grd_006.rs
 
-[4] id: GRD006-PARSE-REFUSED-OPS
-statement: D2/Q-GRD-47: commit, merge, reset, update-ref, worktree add, switch, branch sin -d/-D/--delete y un alias de usuario se rechazan con Unsupported::Operation, que se traduce a ExceptionRefusal::UnsupportedOperation
-verify: cargo test -p gitraptor-policy --test us_grd_006_exception -- --list 2>/dev/null | grep -q '^parse_refuses_other_subcommands_as_unsupported_operation: test' && cargo test -p gitraptor-policy --test us_grd_006_exception parse_refuses_other_subcommands_as_unsupported_operation -- --exact
+[4] id: GRD006-UNSUPPORTED
+statement: Escenario 6 / Q-GRD-47: exec de git commit (con permission.commit = deny) y de git pull se rechaza con unsupported-operation/unsupported-form antes de anunciar: nada se ejecuta, no hay reserved.audit aceptado y el texto dice qué admite la excepción (pull: git fetch + rebase)
+verify: cargo test -p gitraptor-cli --test guard_us_grd_006 -- --list 2>/dev/null | grep -q '^an_unsupported_operation_is_refused_before_the_announcement: test' && cargo test -p gitraptor-cli --test guard_us_grd_006 an_unsupported_operation_is_refused_before_the_announcement -- --exact
 tests:
-  - crates/policy/tests/us_grd_006_exception.rs
+  - apps/cli/tests/guard_us_grd_006.rs
 
-[5] id: GRD006-PARSE-NOT-GIT
-statement: D1: un argv vacío, uno cuyo primer elemento no es literalmente git (/usr/bin/git, git.exe, sh) se rechaza con Unsupported::Form
-verify: cargo test -p gitraptor-policy --test us_grd_006_exception -- --list 2>/dev/null | grep -q '^parse_requires_literal_git_first: test' && cargo test -p gitraptor-policy --test us_grd_006_exception parse_requires_literal_git_first -- --exact
+[5] id: GRD006-EVERYONE-POLICY
+statement: Q-GRD-50: un push a una rama protegida con appliesTo everyone se deniega a la persona sin exec; con exec se ejecuta y la entrada exception nombra policy.protected-branch
+verify: cargo test -p gitraptor-cli --test guard_us_grd_006 -- --list 2>/dev/null | grep -q '^the_exception_skips_an_everyone_policy: test' && cargo test -p gitraptor-cli --test guard_us_grd_006 the_exception_skips_an_everyone_policy -- --exact
 tests:
-  - crates/policy/tests/us_grd_006_exception.rs
+  - apps/cli/tests/guard_us_grd_006.rs
 
-[6] id: GRD006-PARSE-BOUNDS
-statement: §5/§7.3: un argv de más de 64 elementos o con un elemento de más de 4096 bytes se rechaza con Unsupported::Form; uno de exactamente 64 elementos de 4096 bytes no se rechaza por tamaño
-verify: cargo test -p gitraptor-policy --test us_grd_006_exception -- --list 2>/dev/null | grep -q '^parse_refuses_an_argv_over_its_bounds: test' && cargo test -p gitraptor-policy --test us_grd_006_exception parse_refuses_an_argv_over_its_bounds -- --exact
+[6] id: GRD006-ONE-OPERATION
+statement: Escenario 4: tras usar la excepción, un segundo force-push de otro proceso se deniega como antes y no aparece otra entrada exception
+verify: cargo test -p gitraptor-cli --test guard_us_grd_006 -- --list 2>/dev/null | grep -q '^the_exception_covers_one_operation: test' && cargo test -p gitraptor-cli --test guard_us_grd_006 the_exception_covers_one_operation -- --exact
 tests:
-  - crates/policy/tests/us_grd_006_exception.rs
+  - apps/cli/tests/guard_us_grd_006.rs
 
-[7] id: GRD006-RESOLVE-REFSPECS
-statement: D9: con RepoFacts dados, push <remote> <refspec>… se resuelve a Transition::Ref por refspec con refname refs/heads/<dst>, old = oid de la copia de seguimiento (None si no hay) y new = oid local de src; src HEAD va a la rama actual; un remoto fuera de facts.remotes o una rev desconocida es Unsupported::Form
-verify: cargo test -p gitraptor-policy --test us_grd_006_exception -- --list 2>/dev/null | grep -q '^resolve_binds_explicit_refspecs_to_tracking_old_and_local_new: test' && cargo test -p gitraptor-policy --test us_grd_006_exception resolve_binds_explicit_refspecs_to_tracking_old_and_local_new -- --exact
+[7] id: GRD006-AGENT
+statement: Escenario 5: exec lanzado por raptor-fake-agent, y bajo una pty (script) del agente, recibe RESERVED_REFUSED, git no se lanza y quedan exception-rejected en el registro y rejected en la auditoría
+verify: cargo test -p gitraptor-cli --test guard_us_grd_006 -- --list 2>/dev/null | grep -q '^an_agent_cannot_use_the_exception: test' && cargo test -p gitraptor-cli --test guard_us_grd_006 an_agent_cannot_use_the_exception -- --exact
 tests:
-  - crates/policy/tests/us_grd_006_exception.rs
+  - apps/cli/tests/guard_us_grd_006.rs
 
-[8] id: GRD006-RESOLVE-PUSH-DEFAULT
-statement: D2(b): push [<remote>] sin refspec con push.default simple (o sin fijar), current o upstream se resuelve a la rama actual y su destino; matching, nothing, HEAD separado o simple/upstream sin upstream son Unsupported::Form
-verify: cargo test -p gitraptor-policy --test us_grd_006_exception -- --list 2>/dev/null | grep -q '^resolve_push_without_refspec_follows_push_default: test' && cargo test -p gitraptor-policy --test us_grd_006_exception resolve_push_without_refspec_follows_push_default -- --exact
+[8] id: GRD006-MCP
+statement: Escenario 5: guard.exception desde una conexión MCP recibe not-available-to-mcp, queda auditado y con exception-rejected de capa mcp; el catálogo de herramientas de raptor-mcp no ofrece la excepción
+verify: cargo test -p gitraptor-cli --test guard_us_grd_006 -- --list 2>/dev/null | grep -q '^the_mcp_never_reaches_the_exception: test' && cargo test -p gitraptor-cli --test guard_us_grd_006 the_mcp_never_reaches_the_exception -- --exact
 tests:
-  - crates/policy/tests/us_grd_006_exception.rs
+  - apps/cli/tests/guard_us_grd_006.rs
 
-[9] id: GRD006-RESOLVE-DELETE
-statement: D2: push --delete x, push <remote> :x y branch -d/-D x se resuelven a Transition::Ref con new None y old = oid conocido (copia de seguimiento o rama local), y RefChange::Delete en la operación normalizada; una rama local inexistente es Unsupported::Form
-verify: cargo test -p gitraptor-policy --test us_grd_006_exception -- --list 2>/dev/null | grep -q '^resolve_binds_deletions_with_no_new_value: test' && cargo test -p gitraptor-policy --test us_grd_006_exception resolve_binds_deletions_with_no_new_value -- --exact
+[9] id: GRD006-NO-PRIOR
+statement: US-GRD-017 escenario de la excepción: un rebase y un borrado de rama local con el previo forzado a fallar (GITRAPTOR_TEST_TM_HOOK_PRIOR_DEADLINE_MS=0) se ejecutan con exec; la entrada exception lleva system.snapshot-failed con su causa y raptor guard log dice que se ejecutó sin punto de recuperación
+verify: cargo test -p gitraptor-cli --test guard_us_grd_006 -- --list 2>/dev/null | grep -q '^exception_runs_without_a_recovery_point: test' && cargo test -p gitraptor-cli --test guard_us_grd_006 exception_runs_without_a_recovery_point -- --exact
 tests:
-  - crates/policy/tests/us_grd_006_exception.rs
+  - apps/cli/tests/guard_us_grd_006.rs
 
-[10] id: GRD006-RESOLVE-REBASE
-statement: D9: rebase se resuelve a Transition::Rebase { refname de la rama (dada o la actual), base = oid de --onto o del upstream (dado o el configurado de la rama) }; sin upstream configurado ni dado, o con HEAD separado sin rama, es Unsupported::Form
-verify: cargo test -p gitraptor-policy --test us_grd_006_exception -- --list 2>/dev/null | grep -q '^resolve_binds_the_rebase_to_its_ref_and_base: test' && cargo test -p gitraptor-policy --test us_grd_006_exception resolve_binds_the_rebase_to_its_ref_and_base -- --exact
+[10] id: GRD006-RULE-NOT-ANNOUNCED
+statement: D5: una regla que deniega y no estaba en el anuncio (se commitea otra configuración entre el anuncio y la presentación) impide la excepción: la operación se deniega y queda exception-rejected
+verify: cargo test -p gitraptor-cli --test guard_us_grd_006 -- --list 2>/dev/null | grep -q '^a_rule_not_announced_is_not_skipped: test' && cargo test -p gitraptor-cli --test guard_us_grd_006 a_rule_not_announced_is_not_skipped -- --exact
 tests:
-  - crates/policy/tests/us_grd_006_exception.rs
+  - apps/cli/tests/guard_us_grd_006.rs
 
-[11] id: GRD006-RESOLVE-NORMALIZED-OP
-statement: D3/ADR-GRP-013 §1: Binding.operation es la LoggedOperation (push con remoto y refs cortas y su RefChange, rebase con upstream y rama) y su JSON no contiene ningún elemento del argv que no sea un nombre (ni opciones, ni -C <dir>) ni ningún oid
-verify: cargo test -p gitraptor-policy --test us_grd_006_exception -- --list 2>/dev/null | grep -q '^resolve_logs_only_the_normalized_operation: test' && cargo test -p gitraptor-policy --test us_grd_006_exception resolve_logs_only_the_normalized_operation -- --exact
+[11] id: GRD006-NOT-DENIED
+statement: D5: una operación que no incumple ninguna regla y no pide previo responde not-denied y no ejecuta nada
+verify: cargo test -p gitraptor-cli --test guard_us_grd_006 -- --list 2>/dev/null | grep -q '^an_allowed_operation_needs_no_exception: test' && cargo test -p gitraptor-cli --test guard_us_grd_006 an_allowed_operation_needs_no_exception -- --exact
 tests:
-  - crates/policy/tests/us_grd_006_exception.rs
+  - apps/cli/tests/guard_us_grd_006.rs
 
-[12] id: GRD006-EXCEPTABLE
-statement: D5: exceptable es true exactamente para minimum.force-push, minimum.base-branch-delete, todos los permission.*, policy.protected-branch, policy.forbidden-path y system.snapshot-failed, y false para system.degraded, channel-not-authentic, repo-mismatch, input-rejected, internal-error, authorship.*, policy.config-protected y config.relax-ignored
-verify: cargo test -p gitraptor-policy --test us_grd_006_exception -- --list 2>/dev/null | grep -q '^exceptable_lists_exactly_the_skippable_rules: test' && cargo test -p gitraptor-policy --test us_grd_006_exception exceptable_lists_exactly_the_skippable_rules -- --exact
+[12] id: GRD006-OLD-TEMPLATE
+statement: D12: con una instalación de plantilla 3, exec responde outdated-install antes de anunciar; tras raptor guard install (plantilla 4) exec funciona
+verify: cargo test -p gitraptor-cli --test guard_us_grd_006 -- --list 2>/dev/null | grep -q '^an_old_template_refuses_before_the_announcement: test' && cargo test -p gitraptor-cli --test guard_us_grd_006 an_old_template_refuses_before_the_announcement -- --exact
 tests:
-  - crates/policy/tests/us_grd_006_exception.rs
+  - apps/cli/tests/guard_us_grd_006.rs
 
-[13] id: GRD006-ANNOUNCE
-statement: D5: announce lista las reglas de las razones sin duplicados en orden de aparición, añade system.snapshot-failed al final cuando la operación pide previo, responde NotDenied sin razones y sin previo, y NotExceptable si alguna razón no es saltable
-verify: cargo test -p gitraptor-policy --test us_grd_006_exception -- --list 2>/dev/null | grep -q '^exceptable_announcement_adds_the_snapshot_rule_and_refuses_otherwise: test' && cargo test -p gitraptor-policy --test us_grd_006_exception exceptable_announcement_adds_the_snapshot_rule_and_refuses_otherwise -- --exact
+[13] id: GRD006-NO-ENGINE
+statement: Degradado: sin daemon, exec dice que arranques GitRaptor, no ejecuta nada, y un git push -f normal sigue denegado
+verify: cargo test -p gitraptor-cli --test guard_us_grd_006 -- --list 2>/dev/null | grep -q '^no_exception_without_the_engine: test' && cargo test -p gitraptor-cli --test guard_us_grd_006 no_exception_without_the_engine -- --exact
 tests:
-  - crates/policy/tests/us_grd_006_exception.rs
+  - apps/cli/tests/guard_us_grd_006.rs
 
-[14] id: GRD006-COVERS
-statement: D5/D11: covers es true solo si cada razón presentada es saltable y estaba en el anuncio; una regla saltable no anunciada o una no saltable anunciada por error da false
-verify: cargo test -p gitraptor-policy --test us_grd_006_exception -- --list 2>/dev/null | grep -q '^exceptable_covers_only_announced_skippable_reasons: test' && cargo test -p gitraptor-policy --test us_grd_006_exception exceptable_covers_only_announced_skippable_reasons -- --exact
+[14] id: GRD006-TOKEN-COPIED
+statement: INF-GRD-001 / Validación 7: el token copiado a un git que no es hijo directo del solicitante (un nieto, y otro git con la variable puesta a mano) se rechaza y la operación se deniega
+verify: cargo test -p gitraptor-cli --test guard_exception_token -- --list 2>/dev/null | grep -q '^a_copied_token_is_rejected: test' && cargo test -p gitraptor-cli --test guard_exception_token a_copied_token_is_rejected -- --exact
 tests:
-  - crates/policy/tests/us_grd_006_exception.rs
+  - apps/cli/tests/guard_exception_token.rs
 
-[15] id: GRD006-TOKENS-FORMAT
-statement: D9: Tokens::issue devuelve un ExceptionToken de 32 caracteres hex en minúscula (128 bits) y dos emisiones dan tokens distintos
-verify: cargo test -p gitraptor-core --test us_grd_006 -- --list 2>/dev/null | grep -q '^tokens_issue_128_bit_hex_tokens_that_differ: test' && cargo test -p gitraptor-core --test us_grd_006 tokens_issue_128_bit_hex_tokens_that_differ -- --exact
+[15] id: GRD006-TOKEN-EXPIRED
+statement: Validación 7: un token cuyo TTL de pruebas vence antes de la primera presentación se rechaza
+verify: cargo test -p gitraptor-cli --test guard_exception_token -- --list 2>/dev/null | grep -q '^an_expired_token_is_rejected: test' && cargo test -p gitraptor-cli --test guard_exception_token an_expired_token_is_rejected -- --exact
 tests:
-  - crates/core/tests/us_grd_006.rs
+  - apps/cli/tests/guard_exception_token.rs
 
-[16] id: GRD006-TOKENS-HASH-ONLY
-statement: D9/D18: digest_of(action_id) es igual a Sha256 del token emitido (digest(token.expose())) y el Debug de Tokens no contiene el texto del token
-verify: cargo test -p gitraptor-core --test us_grd_006 -- --list 2>/dev/null | grep -q '^tokens_keep_only_the_sha256_of_the_token: test' && cargo test -p gitraptor-core --test us_grd_006 tokens_keep_only_the_sha256_of_the_token -- --exact
+[16] id: GRD006-TOKEN-OTHER-TRANSITION
+statement: Validación 7: otra transición del mismo git (otra ref u otro valor nuevo) no queda cubierta y se deniega
+verify: cargo test -p gitraptor-cli --test guard_exception_token -- --list 2>/dev/null | grep -q '^another_transition_is_not_covered: test' && cargo test -p gitraptor-cli --test guard_exception_token another_transition_is_not_covered -- --exact
 tests:
-  - crates/core/tests/us_grd_006.rs
+  - apps/cli/tests/guard_exception_token.rs
 
-[17] id: GRD006-TOKENS-CT-EQ
-statement: D11: ct_eq es true solo con los 32 bytes iguales (falla con un byte distinto en la primera o la última posición), y una presentación con un token que difiere solo en el primer o el último carácter es Rejected(Unknown)
-verify: cargo test -p gitraptor-core --test us_grd_006 -- --list 2>/dev/null | grep -q '^tokens_compare_digests_with_ct_eq: test' && cargo test -p gitraptor-core --test us_grd_006 tokens_compare_digests_with_ct_eq -- --exact
+[17] id: GRD006-TOKEN-ARGV
+statement: Validación 8: refspecs explícitos, push.default simple/current/upstream (también push triangular) y -C <dir> se normalizan; matching, --all, --mirror, comodines, URL, -c, pull y rebase -i se rechazan antes del anuncio y sin token
+verify: cargo test -p gitraptor-cli --test guard_exception_token -- --list 2>/dev/null | grep -q '^argv_is_normalized_or_refused_before_the_token: test' && cargo test -p gitraptor-cli --test guard_exception_token argv_is_normalized_or_refused_before_the_token -- --exact
 tests:
-  - crates/core/tests/us_grd_006.rs
+  - apps/cli/tests/guard_exception_token.rs
 
-[18] id: GRD006-TOKENS-TTL
-statement: D9/D11: un token presentado por primera vez después de TOKEN_TTL (60 s) desde la emisión es Rejected(Expired); uno presentado dentro del TTL sigue valiendo para el mismo git después del TTL
-verify: cargo test -p gitraptor-core --test us_grd_006 -- --list 2>/dev/null | grep -q '^tokens_expire_only_before_the_first_presentation: test' && cargo test -p gitraptor-core --test us_grd_006 tokens_expire_only_before_the_first_presentation -- --exact
+[18] id: GRD006-TOKEN-NEUTRALIZED
+statement: Validación 9: con core.pager, core.fsmonitor, sequence.editor y un textconv apuntando a un canario, y con GIT_PAGER/GIT_EDITOR/GIT_DIR en el entorno, el canario no corre bajo exec
+verify: cargo test -p gitraptor-cli --test guard_exception_token -- --list 2>/dev/null | grep -q '^configured_executables_are_neutralized: test' && cargo test -p gitraptor-cli --test guard_exception_token configured_executables_are_neutralized -- --exact
 tests:
-  - crates/core/tests/us_grd_006.rs
+  - apps/cli/tests/guard_exception_token.rs
 
-[19] id: GRD006-TOKENS-ATOMIC
-statement: D11(d): varias presentaciones concurrentes válidas del mismo token desde el hijo ligado (hilos que salen a la vez de una Barrier) devuelven Applied y exactamente una lleva first = true
-verify: cargo test -p gitraptor-core --test us_grd_006 -- --list 2>/dev/null | grep -q '^tokens_concurrent_presentations_consume_exactly_once: test' && cargo test -p gitraptor-core --test us_grd_006 tokens_concurrent_presentations_consume_exactly_once -- --exact
+[19] id: GRD006-TOKEN-NEVER-LEAKS
+statement: Validación 10: el hook previo encadenado no ve GITRAPTOR_EXCEPTION_TOKEN y el token no aparece en el log del daemon, en el perfil (registro y auditoría) ni en la salida de exec
+verify: cargo test -p gitraptor-cli --test guard_exception_token -- --list 2>/dev/null | grep -q '^the_token_never_leaks: test' && cargo test -p gitraptor-cli --test guard_exception_token the_token_never_leaks -- --exact
 tests:
-  - crates/core/tests/us_grd_006.rs
+  - apps/cli/tests/guard_exception_token.rs
 
-[20] id: GRD006-TOKENS-REUSE
-statement: D11(e): tras consumirse, el mismo git reutiliza el token para las transiciones ligadas (first = false), también el rebase con la misma ref y base; otra ref, otro valor nuevo u otra base es Rejected(OtherTransition), y otro git es Rejected(NotTheChild)
-verify: cargo test -p gitraptor-core --test us_grd_006 -- --list 2>/dev/null | grep -q '^tokens_reuse_covers_only_bound_transitions_from_the_same_git: test' && cargo test -p gitraptor-core --test us_grd_006 tokens_reuse_covers_only_bound_transitions_from_the_same_git -- --exact
+[20] id: GRD006-CAPABILITY
+statement: D19: sin la capacidad guard.exception no se acepta el token, el pendiente de una excepción no aparece en guard.status y guard.log quita las entradas exception* con contadores en cero; con ella, sí
+verify: cargo test -p gitraptor-core --test us_grd_006_channel -- --list 2>/dev/null | grep -q '^exception_capability_both_ways: test' && cargo test -p gitraptor-core --test us_grd_006_channel exception_capability_both_ways -- --exact
 tests:
-  - crates/core/tests/us_grd_006.rs
+  - crates/core/tests/us_grd_006_channel.rs
 
-[21] id: GRD006-TOKENS-SCOPE
-statement: D9: el token solo vale en su repo y su worktree: presentado en otro repo es Rejected(Unknown) y en otro worktree del mismo repo es Rejected(OtherWorktree)
-verify: cargo test -p gitraptor-core --test us_grd_006 -- --list 2>/dev/null | grep -q '^tokens_reject_another_repo_or_worktree: test' && cargo test -p gitraptor-core --test us_grd_006 tokens_reject_another_repo_or_worktree -- --exact
+[21] id: GRD006-APPLY-ORDER
+statement: D11/D13: apply corre antes de hook_prior, enforce mantiene allow con exception applied, la auditoría used se escribe una vez y hay una sola entrada exception por token aunque el mismo git evalúe dos veces la transición ligada
+verify: cargo test -p gitraptor-core --test us_grd_006_channel -- --list 2>/dev/null | grep -q '^apply_orders_before_the_prior_and_logs_once: test' && cargo test -p gitraptor-core --test us_grd_006_channel apply_orders_before_the_prior_and_logs_once -- --exact
 tests:
-  - crates/core/tests/us_grd_006.rs
+  - crates/core/tests/us_grd_006_channel.rs
 
-[22] id: GRD006-TOKENS-RULES
-statement: D5/D11(c): una presentación con una razón que no estaba en el anuncio, o no saltable, es Rejected(RuleNotAnnounced) y no consume el token
-verify: cargo test -p gitraptor-core --test us_grd_006 -- --list 2>/dev/null | grep -q '^tokens_refuse_a_rule_not_announced: test' && cargo test -p gitraptor-core --test us_grd_006 tokens_refuse_a_rule_not_announced -- --exact
+[22] id: GRD006-MALFORMED-TOKEN
+statement: Revisión de PR-A: un exception_token mal formado en guard.evaluate no tumba la llamada: la decisión es la de siempre (sin excepción)
+verify: cargo test -p gitraptor-core --test us_grd_006_channel -- --list 2>/dev/null | grep -q '^a_malformed_exception_token_does_not_break_evaluate: test' && cargo test -p gitraptor-core --test us_grd_006_channel a_malformed_exception_token_does_not_break_evaluate -- --exact
 tests:
-  - crates/core/tests/us_grd_006.rs
+  - crates/core/tests/us_grd_006_channel.rs
 
-[23] id: GRD006-TOKENS-CHILD
-statement: D6(3): bind_child liga el hijo solo para el solicitante de la acción (otro proceso: NotTheRequester; acción desconocida: NoPending; segundo bind: ChildNotOurs), y un git cuyo padre no es el solicitante es Rejected(NotTheChild)
-verify: cargo test -p gitraptor-core --test us_grd_006 -- --list 2>/dev/null | grep -q '^tokens_bind_child_only_for_the_requester_once: test' && cargo test -p gitraptor-core --test us_grd_006 tokens_bind_child_only_for_the_requester_once -- --exact
+[23] id: GRD006-USED-AUDIT-FAILS
+statement: D11 d / S-B12: si la escritura de la auditoría used falla (inyección de fallo de pruebas GITRAPTOR_TEST_GUARD_FAIL_USED_AUDIT=1), la presentación de un token válido se deniega con exception = rejected y no queda ninguna entrada exception
+verify: cargo test -p gitraptor-core --test us_grd_006_channel -- --list 2>/dev/null | grep -q '^no_exception_without_the_used_audit: test' && cargo test -p gitraptor-core --test us_grd_006_channel no_exception_without_the_used_audit -- --exact
 tests:
-  - crates/core/tests/us_grd_006.rs
+  - crates/core/tests/us_grd_006_channel.rs
 
-[24] id: GRD006-TOKENS-CHILD-WAIT
-statement: D11(c): CHILD_WAIT es 2 s y Tokens::default() lo usa; sin hijo ligado, present espera como mucho el tope configurado y devuelve Rejected(ChildNotBound) sin pasar de él más un margen
-verify: cargo test -p gitraptor-core --test us_grd_006 -- --list 2>/dev/null | grep -q '^tokens_wait_for_the_child_at_most_child_wait: test' && cargo test -p gitraptor-core --test us_grd_006 tokens_wait_for_the_child_at_most_child_wait -- --exact
+[24] id: GRD006-API-KINDS
+statement: S1: PendingKind::Exception (exception) y LogKind::{Exception, ExceptionRejected, ExceptionCancelled} (exception, exception-rejected, exception-cancelled) hacen ida y vuelta en kebab-case
+verify: cargo test -p gitraptor-api --test us_grd_006_prb_contract -- --list 2>/dev/null | grep -q '^exception_pending_and_log_kinds_round_trip: test' && cargo test -p gitraptor-api --test us_grd_006_prb_contract exception_pending_and_log_kinds_round_trip -- --exact
 tests:
-  - crates/core/tests/us_grd_006.rs
+  - crates/api/tests/us_grd_006_prb_contract.rs
 
-[25] id: GRD006-TOKENS-CHILD-LATE
-statement: D11(c): una presentación que llega antes que exception-child queda esperando en el Condvar y se aplica en cuanto otro hilo liga el hijo, sin esperar al tope
-verify: cargo test -p gitraptor-core --test us_grd_006 -- --list 2>/dev/null | grep -q '^tokens_presentation_waits_for_a_child_bound_meanwhile: test' && cargo test -p gitraptor-core --test us_grd_006 tokens_presentation_waits_for_a_child_bound_meanwhile -- --exact
+[25] id: GRD006-API-REGISTERED
+statement: S3 / S4: los tres métodos guard.exception* ya no están declarados por adelantado (sin implemented_by) y GUARD_EXCEPTION_REFUSED está en GROUP.errors
+verify: cargo test -p gitraptor-api --test us_grd_006_prb_contract -- --list 2>/dev/null | grep -q '^exception_methods_are_implemented_and_their_error_registered: test' && cargo test -p gitraptor-api --test us_grd_006_prb_contract exception_methods_are_implemented_and_their_error_registered -- --exact
 tests:
-  - crates/core/tests/us_grd_006.rs
+  - crates/api/tests/us_grd_006_prb_contract.rs
 
-[26] id: GRD006-TOKENS-END
-statement: D6(4): end del solicitante devuelve si el token llegó a consumirse y lo olvida (una presentación posterior es Rejected(Unknown)); end de otro proceso es NotTheRequester y de una acción desconocida NoPending
-verify: cargo test -p gitraptor-core --test us_grd_006 -- --list 2>/dev/null | grep -q '^tokens_end_reports_consumption_and_forgets_the_token: test' && cargo test -p gitraptor-core --test us_grd_006 tokens_end_reports_consumption_and_forgets_the_token -- --exact
+[26] id: GRD006-API-ARGV-REDACTED
+statement: D3/D18 y revisión de PR-A: el Debug de GuardExceptionParams no muestra el argv
+verify: cargo test -p gitraptor-api --test us_grd_006_prb_contract -- --list 2>/dev/null | grep -q '^exception_params_debug_redacts_argv: test' && cargo test -p gitraptor-api --test us_grd_006_prb_contract exception_params_debug_redacts_argv -- --exact
 tests:
-  - crates/core/tests/us_grd_006.rs
-
-[27] id: GRD006-TOKENS-SWEEP
-statement: D9: sweep quita y devuelve los tokens no presentados con TTL vencido y los consumidos hace más de CONSUMED_MAX, y conserva los vigentes
-verify: cargo test -p gitraptor-core --test us_grd_006 -- --list 2>/dev/null | grep -q '^tokens_sweep_drops_expired_and_stale_tokens: test' && cargo test -p gitraptor-core --test us_grd_006 tokens_sweep_drops_expired_and_stale_tokens -- --exact
-tests:
-  - crates/core/tests/us_grd_006.rs
-
-[28] id: GRD006-TOKENS-DEBUG
-statement: D18: el texto del token no aparece en el Debug de ExceptionToken, de IssuedException, de Tokens, de Presentation ni de Presented
-verify: cargo test -p gitraptor-core --test us_grd_006 -- --list 2>/dev/null | grep -q '^tokens_never_show_the_token_in_debug: test' && cargo test -p gitraptor-core --test us_grd_006 tokens_never_show_the_token_in_debug -- --exact
-tests:
-  - crates/core/tests/us_grd_006.rs
-
-[29] id: GRD006-PENDING-PLAN
-statement: D6(1)/§5: PendingActions::note_exception guarda el ExceptionPlan en Entry.exception de la acción anunciada (otra acción o repo no cambia), y ExceptionPlan::view da el ExceptionPlanView con la operación normalizada y las reglas del plan
-verify: cargo test -p gitraptor-core --test us_grd_006 -- --list 2>/dev/null | grep -q '^tokens_pending_announcement_carries_the_plan: test' && cargo test -p gitraptor-core --test us_grd_006 tokens_pending_announcement_carries_the_plan -- --exact
-tests:
-  - crates/core/tests/us_grd_006.rs
-
-[30] id: GRD006-REGISTRY
-statement: §6.2: GuardRegistry expone exceptions() con un único almacén de tokens compartido entre hilos: un token emitido por una referencia se presenta con éxito por otra del mismo registro
-verify: cargo test -p gitraptor-core --test us_grd_006 -- --list 2>/dev/null | grep -q '^tokens_live_in_the_guard_registry: test' && cargo test -p gitraptor-core --test us_grd_006 tokens_live_in_the_guard_registry -- --exact
-tests:
-  - crates/core/tests/us_grd_006.rs
-
-[31] id: GRD006-WIRE-REFUSAL
-statement: D20: las once variantes de ExceptionRefusal van y vuelven en kebab-case (not-installed … child-not-ours) y GuardExceptionRefusedData es {reason, remainingMs} con remainingMs omitido si es None
-verify: cargo test -p gitraptor-api --test us_grd_006_contract -- --list 2>/dev/null | grep -q '^exception_refusal_codes_are_kebab_case_both_ways: test' && cargo test -p gitraptor-api --test us_grd_006_contract exception_refusal_codes_are_kebab_case_both_ways -- --exact
-tests:
-  - crates/api/tests/us_grd_006_contract.rs
-
-[32] id: GRD006-WIRE-NEW-TYPES
-statement: §5: GuardExceptionParams {path, argv, confirm?}, GuardExceptionResult {pending?, plan, issued?}, ExceptionPlanView {operation, rules}, IssuedException {token, git, config, ttlMs}, GuardExceptionChildParams {path, actionId, pid} y GuardExceptionEnd{Params {path, actionId}, Result {consumed}} van y vuelven con esos nombres, omiten los opcionales en None y rechazan un campo desconocido
-verify: cargo test -p gitraptor-api --test us_grd_006_contract -- --list 2>/dev/null | grep -q '^exception_params_and_results_have_the_documented_shape: test' && cargo test -p gitraptor-api --test us_grd_006_contract exception_params_and_results_have_the_documented_shape -- --exact
-tests:
-  - crates/api/tests/us_grd_006_contract.rs
-
-[33] id: GRD006-WIRE-EXISTING
-statement: §5/D19: EvaluateParams acepta y devuelve exception_token y lo omite si es None; PendingAction acepta y devuelve exception; GuardLogSummary acepta y devuelve exceptions y exceptionsRejected y los omite en cero; el JSON de hoy de los tres no cambia
-verify: cargo test -p gitraptor-api --test us_grd_006_contract -- --list 2>/dev/null | grep -q '^existing_types_gain_the_exception_fields_without_changing_shape: test' && cargo test -p gitraptor-api --test us_grd_006_contract existing_types_gain_the_exception_fields_without_changing_shape -- --exact
-tests:
-  - crates/api/tests/us_grd_006_contract.rs
-
-[34] id: GRD006-TOKEN-REDACTED
-statement: D18: el Debug de ExceptionToken, de IssuedException y de un EvaluateParams con exception_token no contiene el token; from_secret y la lectura JSON (también de EvaluateParams.exception_token) solo aceptan 32 hex en minúscula; IssuedException.token y EvaluateParams.exception_token serializan el token en claro solo en su propio campo
-verify: cargo test -p gitraptor-api --test us_grd_006_contract -- --list 2>/dev/null | grep -q '^exception_token_is_redacted_in_debug_and_validated_on_read: test' && cargo test -p gitraptor-api --test us_grd_006_contract exception_token_is_redacted_in_debug_and_validated_on_read -- --exact
-tests:
-  - crates/api/tests/us_grd_006_contract.rs
-
-[35] id: GRD006-METHODS
-statement: D4/D15/D19: guard.exception y guard.exception-child son reservados, guard.exception-end no; ninguno se ofrece a raptor-mcp, ninguno escribe el repo, los tres tienen since = MIN_COMPATIBLE_PROTOCOL (sin .since) y están declarados por adelantado con implemented_by = Some("US-GRD-006") (PR-B lo quita)
-verify: cargo test -p gitraptor-api --test us_grd_006_contract -- --list 2>/dev/null | grep -q '^exception_methods_are_reserved_outside_mcp_and_without_since: test' && cargo test -p gitraptor-api --test us_grd_006_contract exception_methods_are_reserved_outside_mcp_and_without_since -- --exact
-tests:
-  - crates/api/tests/us_grd_006_contract.rs
-
-[36] id: GRD006-ARCH
-statement: ADR-GRP-016/D19/D20: los tres métodos y la capacidad guard.exception se declaran solo en el grupo guard; GUARD_EXCEPTION_REFUSED es guard-exception-refused con el código BLOCK - 2 (GUARD_UNINSTALL_REFUSED - 2); y crates/api/tests/architecture.rs sigue verde
-verify: cargo test -p gitraptor-api --test us_grd_006_contract -- --list 2>/dev/null | grep -q '^the_exception_contract_is_declared_in_the_guard_group: test' && cargo test -p gitraptor-api --test us_grd_006_contract the_exception_contract_is_declared_in_the_guard_group -- --exact && cargo test -p gitraptor-api --test architecture
-tests:
-  - crates/api/tests/us_grd_006_contract.rs
-  - crates/api/tests/architecture.rs
+  - crates/api/tests/us_grd_006_prb_contract.rs
 ```
-<<<FIN-DATOS-NO-CONFIABLES c195f04fbabe>>>
+<<<FIN-DATOS-NO-CONFIABLES b6fbc375bd93>>>
 
 ## Tests de criterio
 
-testsSha: `1849e32a86c1e5850d2169f50d0abd4b37ece2ea7248eda12a62d3e756a47e34`
+testsSha: `948a59a1521ad750499a7eea454654315203b9ba01e36d9f33881ca504ca8c3f`
 
 Cada prueba declarada con el sha256 de su contenido (`ausente` si el fichero no existe):
 
-<<<DATOS-NO-CONFIABLES 7ef02d282099>>>
+<<<DATOS-NO-CONFIABLES 3c6c0622ad9a>>>
 ```text
-3dcef9a378c08b44d3b606197b81691e52a17ff6c9812944824ab360e9915bbb  crates/api/tests/architecture.rs
-24c6a9b6291a5cd4822b7a2ef3de76fc943b95c7aa6ab386f94df075653290fb  crates/api/tests/us_grd_006_contract.rs
-86f9ebaee1a05fc7b6509cc12d44834f13d0b6e795258dab3108274dd59d5627  crates/core/tests/us_grd_006.rs
-b6487a7a1e2bf41cc48f38504aed121f90d7a6ae062a5ce4bb925a730b8c5260  crates/policy/tests/us_grd_006_exception.rs
+7257be896af7ec38c17b26edbf75001a42e75a192b8bd3eb9926f6381f5ec382  apps/cli/tests/guard_exception_token.rs
+ae2d13a5ad1b8df167b85813db8691a1684573dc50eb6be8bdda602819334130  apps/cli/tests/guard_us_grd_006.rs
+17401afcafe6f3e607ac2728f64f915bfd6ef38c08420cd2402146fa33dd863f  crates/api/tests/us_grd_006_prb_contract.rs
+056b53f26f7ec75044bfb3c38fe01d8060a0bac278c0ab3ff6d191becf28dc4a  crates/core/tests/us_grd_006_channel.rs
 ```
-<<<FIN-DATOS-NO-CONFIABLES 7ef02d282099>>>
+<<<FIN-DATOS-NO-CONFIABLES 3c6c0622ad9a>>>
 
 ## Crítico
 
-- Rondas (plan): 2
-  - ronda 1: AJUSTES · 4 bloqueante(s) · siguiente: otra-ronda
+- Rondas (plan): 3
+  - ronda 1: AJUSTES · 1 bloqueante(s) · siguiente: otra-ronda
   - ronda 2: APROBABLE · 0 bloqueante(s) · siguiente: aprobar
+  - ronda 3: APROBABLE · 0 bloqueante(s) · siguiente: aprobar
 - Último veredicto: APROBABLE
 - Excepción: no
 
@@ -810,9 +754,9 @@ Ninguno: el crítico dio el plan por aprobable.
 
 ## Firmas
 
-- planSha (contexto, no firmado): `2cec8cfdeb99fd93148a449f27d35a600d57d789ad1db7317c86b95e06c86a92`
-- contractSha: `c8c84863c72088c18b584625e2a8a0868838e52b5481f97ce4f81df320bdff16`
-- testsSha: `1849e32a86c1e5850d2169f50d0abd4b37ece2ea7248eda12a62d3e756a47e34`
-- approvalSha: `2cec8cfdeb99fd93148a449f27d35a600d57d789ad1db7317c86b95e06c86a92:c8c84863c72088c18b584625e2a8a0868838e52b5481f97ce4f81df320bdff16:1849e32a86c1e5850d2169f50d0abd4b37ece2ea7248eda12a62d3e756a47e34`
+- planSha (contexto, no firmado): `64db795b969d2888ac29a05b0def66a0ac04da4021e89f34f9808e4661851e9a`
+- contractSha: `d0ab5da8b162ac1dd8ba1fd88bb9344731488fe3c49b9d688342a4d03d0032ec`
+- testsSha: `948a59a1521ad750499a7eea454654315203b9ba01e36d9f33881ca504ca8c3f`
+- approvalSha: `64db795b969d2888ac29a05b0def66a0ac04da4021e89f34f9808e4661851e9a:d0ab5da8b162ac1dd8ba1fd88bb9344731488fe3c49b9d688342a4d03d0032ec:948a59a1521ad750499a7eea454654315203b9ba01e36d9f33881ca504ca8c3f`
 
 Para aprobar en la fábrica: `factory-control approve --run <id> --package <pkg> --sha <approvalSha>`; para devolverlo, `adjust` con `--notes`. Atendido, lo aprueba la persona con sus palabras.
