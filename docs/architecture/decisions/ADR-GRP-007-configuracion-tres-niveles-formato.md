@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-04
+updated: 2026-10-28
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
@@ -300,3 +300,15 @@ Aplicada desde DEP-CKP-13 de [CTX-CKP-001](../../requirements/features/cockpit/c
 - **Valor que no sirve** (metacaracteres, marcador desconocido, clase fuera de la lista): no invalida el nivel. La clave se descarta con diagnóstico y se usa el valor por defecto. La ruta que produce la plantilla la valida el daemon al preparar `create-worktree`: absoluta, sin UNC y fuera de cualquier worktree (SEC-02).
 - **No son claves de configuración**: las preferencias de la TUI (repo, panel, filtros y layout), que guarda el daemon en el perfil (ADR-GRP-006, Enmienda (2026-10-04, Cockpit)), ni los flags de la línea de comandos (`--theme`, `--lang`, `--ascii`, `--plain`).
 - **Validación añadida**: `cockpit.editor` en la configuración del equipo, ignorada con diagnóstico; un valor con metacaracteres en el perfil, rechazado con diagnóstico y sin ejecutar nada (ADR-CKP-002, Validación 14); el schema generado incluye la sección `cockpit` con sus niveles.
+
+## Enmienda (2026-10-28, US-GRP-013: relectura de los niveles personales)
+
+**Decisión del orquestador (2026-10-28), validada por Arquitecto.** Origen: [DS-US-GRP-013](../../requirements/features/motor-local/dev-specs/US-GRP-013-dev-spec.md) Gap 1 y D4. El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| Los niveles personales (perfil y local) **se vuelven a leer al usarlos**, con un **sondeo acotado** donde el uso es continuo, en vez de vigilarlos con el observador de ADR-GRP-010. La carpeta de configuración del perfil no es una raíz observada, y vigilarla añadiría un stream de FSEvents o una vigilancia de inotify por máquina para dos archivos. Guardrails ya los lee en cada evaluación (`guardrails/layers.rs::load`). El umbral de inactividad (US-GRP-013) los relee como mucho cada 2 s por repo y solo para los repos con sesiones presentes, fuera del lock del detector, comparando el valor y no la fecha | Lectura y recarga | DS-US-GRP-013 D4 |
+| El nivel de equipo se sigue releyendo cuando cambia una ref de la copia de la rama principal o un `HEAD`. Desde US-GRP-016, también cuando un `git fetch` solo mueve `refs/remotes/*` | Lectura y recarga | DS-US-GRP-016 D5 |
+| Un cambio del umbral se aplica desde la siguiente comprobación del motor; subirlo no reactiva una sesión Inactiva (BR-TIME-001). Validado también por PO | Lectura y recarga | Q56 |
+
+La regla de solo lectura (Validación 9) no cambia: el sondeo abre los archivos para leer y nunca los crea.

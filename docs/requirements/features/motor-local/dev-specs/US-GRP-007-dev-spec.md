@@ -6,7 +6,7 @@ status: implemented
 feature: motor-local
 domain: GRP
 created: 2026-10-05
-updated: 2026-10-08
+updated: 2026-10-28
 related:
   stories: [US-GRP-007, US-GRP-002, US-GRP-008, US-GRP-009, US-GRP-010, US-GRP-013]
   enablers: [SPIKE-GRP-001, INF-GRP-001, TS-GRP-001, TS-GRP-004]
@@ -168,6 +168,10 @@ Cierra el pendiente de Windows de D3. **Decisión del orquestador (2026-10-08), 
 6. Con la protección instalada (`raptor guard install`), un `git push --force` desde la sesión de Claude Code queda denegado y `raptor guard log` lo muestra con el repo en forma de unidad.
 
 **Pendiente**: medir el coste del escaneo por segundo en Windows (RES-01 en la etapa de validación); S3 (atribución de commits por ascendencia) sigue la misma regla que en macOS pero no tiene su e2e en Windows; Windows 11.
+
+## Enmienda 2026-10-28 (Q52) a D2: el adaptador de transcripts no es de US-GRP-008
+
+**Decisión del orquestador (2026-10-28), validada por Arquitecto y PO (Q52).** D2 decía que el adaptador de transcripts (S2a, S2b) pasaba a US-GRP-008, "su única dueña". Desde Q52 sale del MVP: lo tendrá un enabler posterior, que se decide con los datos de SPIKE-GRP-001. [DS-US-GRP-008](./US-GRP-008-dev-spec.md) no lo implementa; publica el actor de los cambios sin commitear, siempre "sin atribuir" en el MVP, y exige que el `git` de la sesión escriba para que S3 sea evidencia (D4 de esa ficha). Lo mismo vale para § 4 ("Interfaces preparadas": `ObserverHooks` sigue disponible para la atribución por archivo, sin dueña en el MVP) y § 5 (S2a y S2b ya no "siguen abiertas hasta US-GRP-008": no aplican al MVP, Enmienda 2026-10-28 de SPIKE-GRP-001).
 
 ## Estado de la implementación (2026-10-08)
 

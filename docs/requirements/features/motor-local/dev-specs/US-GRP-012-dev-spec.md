@@ -6,7 +6,7 @@ status: implemented
 feature: motor-local
 domain: GRP
 created: 2026-10-05
-updated: 2026-10-08
+updated: 2026-10-28
 related:
   stories: [US-GRP-012, US-GRP-001, US-GRP-002, US-GRP-016]
   enablers: [TS-GRP-002, TS-GRD-001, INF-GRP-001]
@@ -37,6 +37,16 @@ Todas son **Decisión del orquestador (2026-10-05), validada por el Arquitecto**
 | D7 | **Persistencia**: ninguna nueva. El ahead/behind es derivado y se recalcula. `KnownState.refs` ya guarda las puntas de las ramas locales, y US-GRP-002 las compara para saber que la base avanzó | — |
 | D8 | **CLI**: en texto, debajo del repo, `base branch: main (unconfirmed)` / `rama base: main (no confirmada)`. En cada worktree, `3 ahead and 1 behind main` / `3 por delante y 1 por detrás de main` ("at least N" / "al menos N" si no es exacto), o `no ahead/behind: base branch "main" does not exist in the repo` / `sin ahead/behind: la rama base "main" no existe en el repo`, y lo mismo para `no-commits`, `no-base` y `unreadable`. El nombre de la rama se sanea y se sustituye el último, así un nombre como `{ahead}` no rellena otro marcador. En JSON: `base_branch` y `base_confirmed` en el repo, y `ahead_behind {state, ahead?, behind?, exact?}` en cada worktree legible. Catálogos `en`/`es` de US-GRP-001 (D11) con claves nuevas | PO: redacción de los textos. El texto de `base-missing` no nombra ninguna otra rama, para que no se lea como una sugerencia |
 | D9 | **MCP**: sin cambios. `raptor-mcp` no recibe el estado de los worktrees (allowlist de US-GRP-001, D9) hasta F-001-05 | — |
+
+### Enmienda 2026-10-28 (Q58) a D2
+
+**Decisión del orquestador (2026-10-28), validada por PO y Arquitecto (Q58).** D2 queda como estaba para la historia que se implementó (PR #55). Desde US-GRP-016 la regla es esta:
+
+- La rama base es `refs/heads/<base>` si existe. Si no existe y el repo tiene **el remoto del que se lee la configuración del equipo** (`gitraptor_policy::team::resolve_main_branch`: el único remoto, u `origin` si hay varios; ninguno si hay varios sin `origin`), es `refs/remotes/<remoto>/<base>` si existe y no es simbólica. Sin `fetch` (Q12): se cuenta contra la copia que el repo ya tiene.
+- `base-missing` solo cuando no existe de ninguna de las dos formas. Una etiqueta con el nombre de la base y una `refs/remotes/<otro>/<base>` de un remoto que no es ese siguen sin contar (Q42).
+- La local manda en cada recuento: si el desarrollador la crea después, el siguiente recuento ya usa la local, y si la borra, vuelve a la copia del remoto.
+
+**Tests que cambian**: `repo_intact_a_missing_base_branch_is_not_replaced_by_another` (`crates/core/tests/base_branch.rs`) y `a_missing_base_branch_is_reported_and_no_other_is_used` (`apps/cli/tests/base_branch.rs`) siguen dando `base-missing`, porque sus repos no tienen ningún remoto configurado. Cambian su comentario ("una `refs/remotes/origin/main` sin remoto configurado y una etiqueta `main` no son la base") y ganan un caso con `origin` configurado que cuenta contra `origin/main`. La implementación y esos tests van en [DS-US-GRP-016](./US-GRP-016-dev-spec.md) (D8, T009); esta ficha no se reabre.
 
 ## 2. Estructura
 
