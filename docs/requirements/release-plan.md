@@ -22,7 +22,7 @@ related: [BRD-GRP-001, INF-GRP-003, INF-GRP-004, ADR-GRP-005, ADR-GRP-014]
 | Hito | Criterio de salida (resumen) | % completado | Fecha estimada (días naturales) | Depende de |
 |---|---|---|---|---|
 | **M1** Dogfooding | 6 criterios del [backlog](backlog.md#hito-m1--dogfooding): 10 días de uso real, detección ≥ 90 %, un `undo` real, force-push bloqueado, recursos y frescura | Construido 100 %; criterios 50 % (2 cumplidos, 2 en parte, 1 en curso, 1 sin cumplir) | 2026-10-22 a 2026-11-06 | Rene: racha de 10 días con registro diario |
-| **M2** MVP completo en macOS | Las 110 fichas Must y Should del MVP que no son de M1, implementadas; gates del MVP obligatorios en CI, rendimiento medido en la máquina de referencia y la demo del BRD § 13 en macOS | 18,2 % (17 implementadas y 6 en parte de 110) | 2026-10-26 a 2026-11-12 | La flota y las ventanas de revisión; cierre de M1; la cola de confirmación |
+| **M2** MVP completo en macOS | Las 111 fichas Must y Should del MVP que no son de M1, implementadas; gates del MVP obligatorios en CI, rendimiento medido en la máquina de referencia y la demo del BRD § 13 en macOS | 18,0 % (17 implementadas y 6 en parte de 111) | 2026-10-26 a 2026-11-12 | La flota y las ventanas de revisión; cierre de M1; la cola de confirmación |
 | **M3** Beta multiplataforma | Sobre un tag `v0.1.0-beta.N`: los XP Must de `xplat-pendientes.md` cerrados, `cargo test` y "repo intacto" en verde en Linux y Windows reales, humo de punta a punta instalado | 37,5 % (8 hechos y 8 en parte de 32) | 2026-11-02 a 2026-12-01 | Cierre de M2; rondas manuales de Rene; una máquina con Windows 11 |
 | **M4** v0.1.0: primera release instalable (piloto interno) | Release firmada en macOS y Windows, instalación y actualización verificadas en los tres SO, primera experiencia en una máquina nueva | 14,3 % (2 en parte de 7) | 2026-11-09 a 2026-12-15 | Cierre de M3; cuentas de firma (externos); decisión D1 |
 
@@ -121,7 +121,7 @@ Lo primero que necesita M1 es el **registro diario de dogfooding**: fecha, sesio
 
 ### Criterio de salida
 
-1. Las 110 fichas de M2 están en `implemented` (frontmatter e índice), cada una con su PR. Un Should bloqueado está implementado o Rene lo sacó del MVP, con la decisión anotada en el backlog.
+1. Las 111 fichas de M2 están en `implemented` (frontmatter e índice), cada una con su PR. Un Should bloqueado está implementado o Rene lo sacó del MVP, con la decisión anotada en el backlog.
 2. La demo del BRD § 13 se ejecuta en macOS y queda anotada en el registro de dogfooding: 4 sesiones de Claude Code, un conflicto previsto antes del merge (US-CKP-006), un force-push bloqueado y `raptor undo --agent <id> --since` restaurando (US-TMC-011).
 3. Estos gates están en verde y son obligatorios en CI:
    - "repo intacto", con la auditoría dinámica de `exec` en macOS (INF-GRP-001);
@@ -174,13 +174,13 @@ Estados: **I** = implemented, **P** = partially-implemented, **Pend** = draft, r
 | TS-GRD-001 | Configuración commiteada | Must | I | — |
 | SPIKE-GRD-002 | Factor de autenticación del SO (la parte de macOS) | Must | Pend | Plan validado (2026-10-09); falta ejecutar el prototipo y la matriz en el Mac |
 
-**Time Machine** (17 US y 5 enablers; MoSCoW supuesto)
+**Time Machine** (18 US y 5 enablers; MoSCoW supuesto)
 
 | Ids | Qué | MoSCoW | Estado | Bloqueo |
 |---|---|---|---|---|
 | US-TMC-006 | Timeline: qué cambió, cuándo y quién | Must | I | — |
-| US-TMC-009, US-TMC-012, US-TMC-013, US-TMC-018, US-TMC-019 | Restaurar a un punto; no pisar a otro; un agente no deshace lo ajeno; los snapshots no se publican; recuperable si el proceso muere | Must | US-TMC-009 (PR #212 y #219), US-TMC-013 (PR #219) y US-TMC-019 (PR #247) implementadas; el resto Pend | — |
-| US-TMC-011 | Undo por agente y periodo | Must | Pend (blocked) | P17 (producto) |
+| US-TMC-009, US-TMC-012, US-TMC-024, US-TMC-013, US-TMC-018, US-TMC-019 | Restaurar a un punto; no pisar a otro (undo y, desde el 2026-10-27, restauración: TQ-18, D-TMC-30); un agente no deshace lo ajeno; los snapshots no se publican; recuperable si el proceso muere | Must | US-TMC-009 (PR #212 y #219), US-TMC-013 (PR #219) y US-TMC-019 (PR #247) implementadas; el resto Pend | — |
+| US-TMC-011 | Undo por agente y periodo | Must | Pend | — (P17 cerrada el 2026-10-27, Q50 de motor-local) |
 | US-TMC-003, US-TMC-005, US-TMC-007, US-TMC-008, US-TMC-010, US-TMC-014, US-TMC-015, US-TMC-016, US-TMC-022 | Redo; previo por hooks; filtros; correcciones; últimos N minutos; aviso del remoto; rebase a medias; disco; tope | Should | US-TMC-005 implementada (PR #248; deuda TD-TMC-001); el resto Pend | — |
 | US-TMC-020 | Overhead < 200 ms | Should | Pend | — (SPIKE-TMC-001 ya está hecho) |
 | TS-TMC-001, TS-TMC-002, TS-TMC-003, SPIKE-TMC-001 | Almacén, oplog, aplicador; spike | Must | I | — |
@@ -217,9 +217,9 @@ Estados: **I** = implemented, **P** = partially-implemented, **Pend** = draft, r
 
 ### Avance
 
-M2 son **todos los Must y Should del MVP que no son de M1**: 110 fichas (86 US y 24 enablers), con 17 implementadas (5 US y 12 enablers) y 6 en parte (3 y 3). Las fichas de M1 cuentan en M1 aunque también sean del MVP.
+M2 son **todos los Must y Should del MVP que no son de M1**: 111 fichas (87 US y 24 enablers; US-TMC-024 se añadió el 2026-10-27), con 17 implementadas (5 US y 12 enablers) y 6 en parte (3 y 3). Las fichas de M1 cuentan en M1 aunque también sean del MVP.
 
-- Hito completo: (17 + 0,5 × 6) / 110 = **18,2 %**.
+- Hito completo: (17 + 0,5 × 6) / 111 = **18,0 %**.
 - Solo historias: (5 + 0,5 × 3) / 86 = **7,6 %**. Refleja mejor el valor que falta por entregar.
 - Con M1 incluido (el MVP en macOS completo): (35 + 0,5 × 7) / 129 = **29,8 %**.
 
@@ -367,7 +367,7 @@ Ninguna se ha tomado en su nombre. Hasta que decida, el plan aplica la recomenda
 | 2 | **Pregunta abierta 3 del BRD: fecha objetivo del MVP** | Fijarla tras ver la primera semana de velocidad de M2 | Sin ella el plan dice cuándo terminaría, no si es viable ni qué recortar |
 | 3 | **Pregunta abierta 1: qué pesa más.** Si gana "proteger y deshacer", partir M2 en **M2a** (Time Machine, Guardrails y escrituras del MCP) y **M2b** (predictor y acciones del Cockpit) | Partir M2 si confirma la propuesta v0.7 | Adelanta lo diferencial de seguridad |
 | 4 | **BR-13, la cola de confirmación** (US-GRD-015, US-CKP-023, US-MCP-014; Should) | Sacarla de M2: S-GRD-9 trata "pedir confirmación" como "denegar", así que es seguro | Si se queda, suma de 3 a 6 días al optimista de M2 |
-| 5 | **P17** (US-TMC-011, BR-09 Must, parte de la demo) | Aceptar el supuesto: al retirar una corrección, los eventos vuelven a su atribución detectada | Desbloquea US-TMC-011 y el criterio 2 de M2 |
+| 5 | ~~**P17** (US-TMC-011, BR-09 Must, parte de la demo)~~ **Cerrada el 2026-10-27** (Q50 de motor-local; decisión del orquestador, validada por PO y Arquitecto, abierta a veto de Rene) | Aceptar el supuesto: al retirar una corrección, los eventos vuelven a su atribución detectada. **Aplicada** | US-TMC-011 desbloqueada; el criterio 2 de M2 ya no espera a P17 |
 | 6 | **Los Could** (US-GRP-018, US-GRP-019, US-GRP-021 y US-TMC-017) | Fuera de M2; US-GRP-018 podría entrar en v0.1.0 | — |
 | 7 | **MoSCoW de Time Machine**, sobre todo US-TMC-016 (disco) y US-TMC-020 (overhead), hoy Should por supuesto | Confirmar o subir a Must | Cambia el total de M2 |
 | 8 | **Cifras de RES-01 y RES-02** (CPU < 1 %, RSS < 150 MB con 10 worktrees), abiertas desde M1 | Confirmarlas | Cierra el criterio 5 de M1 |
@@ -426,4 +426,4 @@ Ninguna se ha tomado en su nombre. Hasta que decida, el plan aplica la recomenda
 | Porcentaje de M1 por criterios de salida (2 cumplidos, 2 en parte, 1 en curso y 1 sin cumplir = 50 %), no por fichas: todo lo construible ya está en `main` | Decisión del orquestador (2026-10-08). El SM estimaba la evidencia en torno al 5 %: los dos números miden cosas distintas |
 | Este documento no lleva id canónico: el esquema de AADD no tiene un tipo "plan" y sigue el patrón de `xplat-pendientes.md` | Decisión del orquestador (2026-10-08) |
 | La v0.1.0 es el hito **M4**: el generador de estado (#184) solo reconoce hitos `M<n>`. El tag sigue siendo `v0.1.0` | Decisión del orquestador (2026-10-08), por el contrato del generador |
-| M2 son los Must y Should del MVP **que no son de M1** (110 fichas). Las fichas de M1 cuentan en M1; INF-GRP-001, INF-GRP-002 y TS-GRP-004, con la parte de M1 hecha, se siguen en M2. US-GRP-018, US-GRP-019, US-GRP-021, US-TMC-017 (Could) y US-TMC-021 (Fase 2) quedan sin hito | Decisión del orquestador (2026-10-08). El PO contaba M2 con las de M1 (128 fichas, 29,7 %); con el contrato del generador cada ficha va a un solo hito |
+| M2 son los Must y Should del MVP **que no son de M1** (111 fichas). Las fichas de M1 cuentan en M1; INF-GRP-001, INF-GRP-002 y TS-GRP-004, con la parte de M1 hecha, se siguen en M2. US-GRP-018, US-GRP-019, US-GRP-021, US-TMC-017 (Could) y US-TMC-021 (Fase 2) quedan sin hito | Decisión del orquestador (2026-10-08). El PO contaba M2 con las de M1 (128 fichas, 29,7 %); con el contrato del generador cada ficha va a un solo hito |

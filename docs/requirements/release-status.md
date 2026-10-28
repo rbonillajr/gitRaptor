@@ -14,9 +14,9 @@
 | Hecho (`done`) | 3 |
 | Implementado en parte (`partially-implemented`) | 25 |
 | Listo (`ready`) | 4 |
-| Borrador (`draft`) | 64 |
+| Borrador (`draft`) | 65 |
 | Bloqueado (`blocked`) | 1 |
-| **Total** | **149** |
+| **Total** | **150** |
 
 ## Por feature
 
@@ -26,7 +26,7 @@
 | [guardrails](#guardrails) | 11 | 0 | 7 | 1 | 6 | 0 | 25 |
 | [mcp](#mcp) | 6 | 0 | 2 | 0 | 12 | 0 | 20 |
 | [motor-local](#motor-local) | 14 | 2 | 9 | 3 | 13 | 0 | 41 |
-| [time-machine](#time-machine) | 13 | 1 | 1 | 0 | 15 | 0 | 30 |
+| [time-machine](#time-machine) | 13 | 1 | 1 | 0 | 16 | 0 | 31 |
 
 ### cockpit
 
@@ -177,7 +177,7 @@
 
 ### time-machine
 
-30 fichas: 13 implementado, 1 hecho, 1 implementado en parte, 15 borrador.
+31 fichas: 13 implementado, 1 hecho, 1 implementado en parte, 16 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -211,6 +211,7 @@
 | [US-TMC-020](features/time-machine/user-stories/US-TMC-020-overhead-snapshot.md) | El desarrollador y sus agentes no notan el coste de los snapshots | Borrador (`draft`) | — | — |
 | [US-TMC-021](features/time-machine/user-stories/US-TMC-021-politica-guardrails-undo.md) | Las políticas del repo pueden restringir quién deshace, nunca ampliarlo | Borrador (`draft`) | — | — |
 | [US-TMC-022](features/time-machine/user-stories/US-TMC-022-tope-disco.md) | La Time Machine nunca pasa del tope de disco que fijé | Borrador (`draft`) | — | — |
+| [US-TMC-024](features/time-machine/user-stories/US-TMC-024-solape-restauracion.md) | Una restauración nunca retira trabajo de otro actor sin que el desarrollador lo vea y lo confirme | Borrador (`draft`) | — | — |
 
 ## Por hito
 
@@ -244,7 +245,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### M2
 
-111 fichas: 29 implementado, 3 hecho, 19 implementado en parte, 4 listo, 55 borrador, 1 bloqueado.
+112 fichas: 29 implementado, 3 hecho, 19 implementado en parte, 4 listo, 56 borrador, 1 bloqueado.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -358,6 +359,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-TMC-018](features/time-machine/user-stories/US-TMC-018-garantias-snapshots.md) | Los snapshots no se publican, no se pierden con el mantenimiento de Git y ningún agente los altera | Borrador (`draft`) | — | — |
 | [US-TMC-020](features/time-machine/user-stories/US-TMC-020-overhead-snapshot.md) | El desarrollador y sus agentes no notan el coste de los snapshots | Borrador (`draft`) | — | — |
 | [US-TMC-022](features/time-machine/user-stories/US-TMC-022-tope-disco.md) | La Time Machine nunca pasa del tope de disco que fijé | Borrador (`draft`) | — | — |
+| [US-TMC-024](features/time-machine/user-stories/US-TMC-024-solape-restauracion.md) | Una restauración nunca retira trabajo de otro actor sin que el desarrollador lo vea y lo confirme | Borrador (`draft`) | — | — |
 | [US-CKP-023](features/cockpit/user-stories/US-CKP-023-cola-confirmacion.md) | El desarrollador aprueba o rechaza desde la TUI las acciones que un agente deja en espera | Bloqueado (`blocked`) | — | — |
 
 ### M3

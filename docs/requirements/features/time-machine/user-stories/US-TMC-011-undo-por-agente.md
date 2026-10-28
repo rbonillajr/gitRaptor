@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: high
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-27
 domain: GRP
 epic: E-001
 feature: time-machine
@@ -15,9 +15,10 @@ related:
   rules:
     - BR-TMC-001
   stories: [US-TMC-002, US-TMC-007, US-TMC-012, US-TMC-013, US-GRP-007, US-GRP-009, US-GRP-010]
+  specs: [DS-US-TMC-011]
 covers: [BR-TMC-WF-002, BR-TMC-VAL-001, BR-TMC-EDGE-002, BR-TMC-AUTH-001, D-TMC-2, D-TMC-22, D-TMC-23]
-blocked_by: ["P17 de motor-local (D-TMC-22)"]
-tags: [time-machine, undo, undo-por-agente, bloqueada-p17]
+blocked_by: []
+tags: [time-machine, undo, undo-por-agente]
 ---
 
 # US-TMC-011: El desarrollador deshace solo lo que hizo un agente en un periodo
@@ -32,7 +33,7 @@ tags: [time-machine, undo, undo-por-agente, bloqueada-p17]
 
 ## Reglas cubiertas
 
-BR-TMC-WF-002 (undo por agente con atribución vigente) · BR-TMC-VAL-001 · BR-TMC-EDGE-002 (nada de huecos) · BR-TMC-AUTH-001 (solicitante, D-TMC-23) · D-TMC-2, D-TMC-22 — ver [business-rules.md](../business-rules.md)
+BR-TMC-WF-002 (undo por agente con atribución vigente) · BR-TMC-VAL-001 · BR-TMC-EDGE-002 (nada de huecos) · BR-TMC-AUTH-001 (solicitante, D-TMC-23) · D-TMC-2, D-TMC-22 (P17 cerrada el 2026-10-27, Q50 de motor-local) — ver [business-rules.md](../business-rules.md)
 
 ## Criterios de Aceptación
 
@@ -53,11 +54,20 @@ Dado que "claude-2" hizo un commit en el mismo periodo en otros archivos
 Cuando lo confirma de forma interactiva
 Entonces el commit de "claude-2" sigue aplicado
 
-**Escenario: Se usa la atribución vigente**
+**Esquema del escenario: Se usa la atribución vigente en el momento del undo**
 
 Dado una sesión detectada como "claude-1" que el desarrollador corrigió a "codex-1"
+  Y la corrección <estado de la corrección>
 Cuando un solicitante sin atribuir pide deshacer lo de "claude-1" en el periodo de esa sesión
-Entonces ninguna operación de esa sesión se deshace
+  Y confirma de forma interactiva lo que se le muestre
+Entonces <resultado>
+
+Ejemplos:
+
+| estado de la corrección | resultado |
+|-------------------------|-----------|
+| sigue vigente | ninguna operación de esa sesión se deshace |
+| se retiró antes del undo | las operaciones de esa sesión se deshacen, porque vuelven a figurar como de "claude-1" |
 
 **Escenario: Lo ocurrido en un hueco nunca entra**
 
@@ -83,15 +93,15 @@ Entonces el repo no cambia
 
 - Conjunto = operaciones con atribución vigente al agente en el periodo; excluye "sin atribuir", otros agentes y huecos (BR-TMC-WF-002).
 - Destino por ruta y por ref: estado anterior al primer cambio del agente, sin tocar cambios de otros actores; el solape detiene (ADR-TMC-005 § 5).
-- Bloqueada hasta que se cierre P17 de motor-local (D-TMC-22).
+- P17 de motor-local cerrada el 2026-10-27 (Q50): al retirar una corrección, sus eventos vuelven a la atribución detectada; cuenta la atribución vigente en el momento del undo (D-TMC-22 deja de bloquear).
 
 ## Diseño y Dev Spec
 
 - **Diseño (flujo/UX):** Pendiente de diseño.
-- **Dev Spec:** pendiente (lo genera el Arquitecto).
+- **Dev Spec:** [DS-US-TMC-011](../dev-specs/US-TMC-011-undo-por-agente.md)
 
 ## Dependencias
 
 - **Historias**: US-TMC-002, US-TMC-007, US-TMC-012, US-TMC-013; US-GRP-007, US-GRP-009 y US-GRP-010 de motor-local.
-- **Externas**: **bloqueada por P17 de motor-local** (D-TMC-22): si al retirar una corrección los eventos vuelven a la atribución detectada, cambia qué entra en este undo.
+- **Externas**: ninguna. Estuvo bloqueada por P17 de motor-local (D-TMC-22) hasta el 2026-10-27, cuando Q50 la cerró: al retirar una corrección, los eventos vuelven a la atribución detectada, y el undo usa la atribución vigente en su momento.
 - **Transversal**: transversal (lo define el Arquitecto): verificación en repos temporales, nunca en un repo real; mismo comportamiento en Windows, macOS y Linux; mensajes en inglés y español.

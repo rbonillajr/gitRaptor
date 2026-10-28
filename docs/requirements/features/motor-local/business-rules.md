@@ -618,23 +618,24 @@ corregir(worktree, agente correcto):
   la corrección persiste aunque el motor deje de ejecutarse y vuelva a arrancar (BR-CONS-005)
 retirar corrección:
   IF la sesión sigue presente THEN vuelve la atribución detectada
+  los eventos que la corrección reatribuyó vuelven a su atribución detectada, origen = detectado   (Q50)
 Constraint: corregir ≠ registrar otro agente (BR-CONS-004)
 ```
 
 **Ejemplo**:
 - **Corregir**: el motor detecta "Claude Code" en `feat-login`, pero quien trabaja allí es Codex; el desarrollador corrige la atribución a "Codex" → `feat-login` tiene una sola sesión, "otro agente: Codex", con origen "registrado"; no es compartido. *(Q32: antes, el ejemplo partía de una detección de Cursor.)*
 - **Registrar otro agente (no es corregir)**: el motor detecta "Claude Code" en `feat-login` y el desarrollador registra además "Codex" → dos sesiones y worktree compartido (BR-CONS-004).
-- **Retirar la corrección**: con la corrección a "Codex" vigente y la sesión aún presente, el desarrollador la retira → `feat-login` vuelve a "Claude Code" con origen "detectado".
+- **Retirar la corrección**: con la corrección a "Codex" vigente y la sesión aún presente, el desarrollador la retira → `feat-login` vuelve a "Claude Code" con origen "detectado", y `c1` y `c2`, que la corrección había pasado a "Codex", vuelven también a "Claude Code" (detectado) (Q50).
 - **Alcance hacia atrás** (Q37): la sesión detectada como "Claude Code" en `feat-login` ya tenía atribuidos los commits `c1` y `c2`; antes hubo `c0`, de otra sesión de Claude Code ya terminada. Al corregir a "Codex" → `c1` y `c2` pasan a "otro agente: Codex" (registrado); `c0` sigue como "Claude Code" (detectado).
 - **Sin detección** (Q38): `feat-pagos` no tiene ninguna atribución detectada; el desarrollador intenta corregirla a "Codex" → rechazo: no hay nada que corregir; para atribuir trabajo a Codex, regístralo.
 - **Un agente intenta corregir**: Claude Code pide corregir la atribución de `feat-login` → rechazo: solo el desarrollador corrige (BR-AUTH-001).
 
-> ⚠️ **ASSUMPTION** `[POR VERIFICAR]` (P17): al retirar una corrección, los eventos que esta había reatribuido vuelven también a la atribución detectada. Las historias solo exigen que vuelva la atribución de la sesión.
+> **Decisión del orquestador (2026-10-27), validada por PO y Arquitecto (Q50, cierra P17)**: al retirar una corrección, los eventos que esta había reatribuido vuelven también a la atribución detectada. Antes era un supuesto `[POR VERIFICAR]`; US-GRP-010 lo exige en su escenario de retirar la corrección.
 
 **Referencias**:
 - User Story: US-GRP-010
 - BRD: BR-02
-- Contexto: decisiones Q33, Q37 (cierra P14) y Q38 (cierra P15); pregunta P17
+- Contexto: decisiones Q33, Q37 (cierra P14), Q38 (cierra P15) y Q50 (cierra P17)
 - Relacionada: BR-CONS-004, BR-VAL-002
 
 ---
@@ -1094,3 +1095,4 @@ Cada regla debe estar reflejada en al menos un **escenario Gherkin** (criterio d
 | 1.15 | 2026-10-07 | PO (AADD) para Rene Bonilla | Ajustes tras el Arquitecto (TS-GRP-006, SEC-15, RES-11/12). BR-CONS-005: enmienda "un repo en reposo sigue observado" (despierta en ≤ 2 s p95; un repo sin vigilancia en vivo no duerme). BR-EDGE-005: causa de hueco `dormant` (solo lo que encuentra la comprobación de respaldo sin aviso de la vigilancia) con ejemplo. BR-AUTH-003: las raíces no son configuración; viven en el perfil y se gestionan con comandos reservados (`raptor repo roots`, `roots add`, `roots remove`, `repo dismiss`, `repo add`); raíces inválidas alineadas con SEC-15 (ancestros de la carpeta personal, perfil, rutas de red, tope de 16). Se quita de BR-CONS-007 la fila de las raíces añadida en la 1.14 |
 | 1.16 | 2026-10-07 | PO (AADD) para Rene Bonilla | **Decisión de Rene (2026-10-07)**: la carpeta personal puede ser una raíz (cierra el pendiente del PR #142). BR-AUTH-003, condición 2: raíz amplia con aviso y confirmación (> 512 entradas, carpeta personal u otro volumen), exclusiones fijas por SO; siguen rechazados `/`, la unidad del sistema y los ancestros de las carpetas personales. Decisión del orquestador (2026-10-07), validada por el Arquitecto |
 | 1.17 | 2026-10-27 | PO (AADD) para Rene Bonilla | Decisión del orquestador (2026-10-27), validada por PO, sobre la propuesta del Arquitecto (ADR-GRP-015 § 2; DS-TS-GRP-005, G5). BR-CONS-005: enmienda "un evento perdido sin marca se recupera, como mucho, en el intervalo de reconciliación vigente" (5 min con corriente, 15 min en ahorro de energía; la cifra de 15 min sigue como supuesto). Se refleja en US-GRP-019. |
+| 1.18 | 2026-10-27 | PO (AADD) para Rene Bonilla | Decisión del orquestador (2026-10-27), validada por PO y Arquitecto; Q50 del contexto, que cierra P17. BR-CONS-002: al retirar una corrección, los eventos que reatribuyó vuelven a la atribución detectada; se quita la marca de supuesto `[POR VERIFICAR]` y se añaden la línea de la regla formal y el ejemplo de `c1` y `c2`. |

@@ -4,7 +4,7 @@ title: "Contexto — Time Machine"
 type: context
 status: draft
 created: 2026-10-03
-updated: 2026-10-08
+updated: 2026-10-27
 domain: GRP
 epic: E-001
 feature: time-machine
@@ -42,6 +42,8 @@ tags:
 > **Revisión 2026-10-04 (formato de configuración)**: Referencia al formato de configuración: ADR-GRP-007, aceptado por Rene Bonilla; cierra P8 de motor-local. El requerimiento no cambia.
 >
 > **Revisión 2026-10-04 (dueño del formato de configuración)**: decisión de Rene Bonilla de corregir una atribución desactualizada. En la relación con F-001-04 Guardrails, el formato de la configuración ya no se atribuye a Guardrails: lo define motor-local (ADR-GRP-007), y Guardrails es dueño de las políticas (`policies`, ADR-GRD-004) y del comando de edición (Q27). El requerimiento no cambia.
+>
+> **Revisión 2026-10-27 (P17 y solape de la restauración)**: decisiones del orquestador, validadas por PO y Arquitecto. Q50 de motor-local cierra P17 (al retirar una corrección, los eventos reatribuidos vuelven a la atribución detectada): D-TMC-22 queda cumplida, P13 y el Known Risk 5 se resuelven y US-TMC-011 se desbloquea. El solape de la restauración (TQ-18) se decide en D-TMC-30 ([business-rules.md](./business-rules.md#decisiones-de-negocio)) y lo cubre US-TMC-024. "Undo por agente" pasa a ✅ en el Quality Review.
 
 ---
 
@@ -107,7 +109,7 @@ Impacto de no resolverlo: una sola pérdida de trabajo rompe la confianza en el 
 
 | Feature | Relación | Dirección |
 |---------|----------|-----------|
-| F-001-01 Motor local | Aporta los eventos de Git con momento y actor ("agente X" con origen, o "sin atribuir"; nunca "humano", Q34), la atribución vigente tras una corrección (Q37), la observación sin huecos (Q1) y los huecos marcados (BR-EDGE-005). P17 de motor-local (qué pasa al retirar una corrección) sigue abierta y afecta al undo por agente. | Time Machine depende del motor |
+| F-001-01 Motor local | Aporta los eventos de Git con momento y actor ("agente X" con origen, o "sin atribuir"; nunca "humano", Q34), la atribución vigente tras una corrección (Q37), la observación sin huecos (Q1) y los huecos marcados (BR-EDGE-005). P17 de motor-local (qué pasa al retirar una corrección) se cerró el 2026-10-27 (Q50 de motor-local): los eventos reatribuidos vuelven a la atribución detectada. | Time Machine depende del motor |
 | F-001-02 Cockpit | Sus acciones destructivas (descartar worktree y rama, merge, rebase; BR-07) deben quedar cubiertas por un snapshot previo. Presenta el timeline dentro de la TUI. | Cockpit depende de la Time Machine |
 | F-001-04 Guardrails | Sus hooks de Git, cuando existan, permiten un snapshot previo a operaciones de Git crudo; la Time Machine no depende de ellos (D-TMC-10). Sus políticas pueden restringir quién deshace qué (BR-TMC-AUTH-001). Es dueño de las políticas de la configuración (`policies`, ADR-GRD-004) y del comando para editarla (Q27); el formato de la configuración lo define motor-local (ADR-GRP-007, aceptado el 2026-10-04; cierra P8 de motor-local). | Bidireccional |
 | F-001-05 Servidor MCP | Expone `snapshot` y `undo` a los agentes (BR-14) y sus operaciones seguras quedan cubiertas por un snapshot previo. | MCP depende de la Time Machine |
@@ -291,7 +293,7 @@ Impacto de no resolverlo: una sola pérdida de trabajo rompe la confianza en el 
 | D-TMC-19 | (P10) Timeline por repo, con filtros por worktree, agente y tiempo. | P10 | 2026-10-03 | Rene Bonilla | BR-TMC-CONS-005, BR-TMC-EDGE-002, BR-TMC-WF-001 |
 | D-TMC-20 | (P11) Una restauración alcanza el worktree donde se pide y las ramas y worktrees que cambiaron después del punto; nada más. **Precisión (2026-10-08, US-TMC-009; decisión del orquestador validada por Arquitecto y PO, abierta a veto de Rene)**: "cambiaron después del punto" se lee como lo que tocó el trabajo hecho en ese worktree desde el punto; el trabajo independiente de otro agente en otro worktree no entra. Caso límite: una rama borrada con Git crudo desde otro worktree no vuelve y la restauración la nombra como no devuelta. Ver ADR-TMC-005, Enmienda (2026-10-08). | P11 | 2026-10-03 | Rene Bonilla | BR-TMC-WF-003, BR-TMC-WF-001 |
 | D-TMC-21 | (P12; **cerrada por SPIKE-TMC-001 el 2026-10-04**) El "repo mediano" de referencia de NFR-04 es el **perfil `M`** del generador reproducible del spike: 10.000 archivos con seguimiento, ~300 MB de working tree, 50.000 commits, 3 % de binarios y 3.000 archivos ignorados. El perfil `L` (40.000 archivos, 1 GB, 150.000 commits) queda fuera de referencia (US-TMC-020, escenario 3). Ver [resultados](./research/SPIKE-TMC-001-resultados.md). | P12, SPIKE-TMC-001 | 2026-10-04 | Rene Bonilla | — (NFR-04) |
-| D-TMC-22 | (P13) Las historias de undo por agente quedan bloqueadas hasta que se cierre P17 de motor-local. | P13 | 2026-10-03 | Rene Bonilla | BR-TMC-WF-002 |
+| D-TMC-22 | (P13) Las historias de undo por agente quedan bloqueadas hasta que se cierre P17 de motor-local. **Cumplida (2026-10-27)**: Q50 de motor-local cierra P17 (decisión del orquestador, validada por PO y Arquitecto): al retirar una corrección, los eventos reatribuidos vuelven a la atribución detectada. US-TMC-011 deja de estar bloqueada; el undo por agente usa la atribución vigente en el momento del undo. | P13 | 2026-10-03 | Rene Bonilla | BR-TMC-WF-002 |
 | D-TMC-23 | (P14) El solicitante de un undo, redo o restauración se atribuye como un evento ("agente X" o "sin atribuir", nunca "humano"). Atribuido a un agente, solo deshace lo suyo. "Sin atribuir": deshacer trabajo de otro actor exige una confirmación interactiva del desarrollador en ese momento, que un agente no puede dar. **Actualizada por TQ-14**: en el MVP esa confirmación solo se ofrece en macOS y Linux; en Windows, hasta que exista una forma fiable de probar que no la da un agente, la petición "sin atribuir" que toca trabajo de otro actor se rechaza con su motivo. En la Fase 2 se planea la presencia verificada por el SO (Touch ID, Windows Hello, polkit). Por MCP una petición "sin atribuir" se rechaza siempre (TQ-7). El mecanismo de identificación lo decide el Arquitecto. | P14, TQ-14, TQ-7 | 2026-10-03 | Rene Bonilla | BR-TMC-AUTH-001, BR-TMC-WF-001 |
 | D-TMC-24 | (TQ-17) Borrar contenido ya capturado en snapshots (`raptor tm forget`) queda fuera del MVP y se aplaza a una US futura, que tendrá que conciliarse con D-TMC-15, BR-TMC-TIME-001 y BR-TMC-CONS-004. D-TMC-15 y BR-TMC-TIME-001 no cambian. | TQ-17 | 2026-10-03 | Rene Bonilla | — (pendiente futuro) |
 | D-TMC-25 | Precisiones observables de las TQ aceptadas: (TQ-5) en la captura por observación se omiten los archivos que superan un tope de tamaño (captura parcial con la lista) y, al alcanzar la cuota del repo o el espacio libre mínimo, la captura se detiene con un hueco "sin espacio" declarado; el snapshot previo garantizado no tiene tope y la cuota no adelanta la purga; (TQ-9) undos seguidos forman una pila por worktree y una operación nueva invalida el redo; (TQ-10) un fallo detectado a mitad de un undo o restauración no hace rollback automático: queda "interrumpida" y se ofrece undo; (TQ-11) solo se purga si el aviso se mostró en la CLI o la TUI y pasaron 24 h desde que se mostró por primera vez; (TQ-15) los repos anidados sin seguimiento se excluyen, se declaran y nunca se escriben ni se borran al restaurar; al arrancar, la Time Machine libera su propio lock de Git sin tocar contenido. Cifras de TQ-5 según el spike. | TQ-5, TQ-9, TQ-10, TQ-11, TQ-15, ADR-TMC-003 | 2026-10-03 | Rene Bonilla | BR-TMC-WF-001, BR-TMC-CONS-002, BR-TMC-CONS-003, BR-TMC-CONS-004, BR-TMC-TIME-001, BR-TMC-EDGE-002, BR-TMC-EDGE-003 |
@@ -314,7 +316,7 @@ Impacto de no resolverlo: una sola pérdida de trabajo rompe la confianza en el 
 | P10 | ~~Granularidad del timeline.~~ **Resuelta** el 2026-10-03 (D-TMC-19): por repo, con filtros por worktree, agente y tiempo. | — |
 | P11 | ~~¿Qué alcanza una restauración a un punto?~~ **Resuelta** el 2026-10-03 (D-TMC-20): worktree donde se pide más lo cambiado después del punto. | — |
 | P12 | ~~¿Qué es un "repo mediano" para NFR-04?~~ **Resuelta** el 2026-10-03 (D-TMC-21): se fija en el spike (a). Sigue siendo una dependencia del Arquitecto. | Arquitecto (spike a) |
-| P13 | ~~Dependencia de P17 de motor-local.~~ **Resuelta** el 2026-10-03 (D-TMC-22): las historias de undo por agente quedan bloqueadas hasta que se cierre P17 de motor-local. | Rene Bonilla (P17 de motor-local) |
+| P13 | ~~Dependencia de P17 de motor-local.~~ **Resuelta** el 2026-10-03 (D-TMC-22): las historias de undo por agente quedan bloqueadas hasta que se cierre P17 de motor-local. **Nota 2026-10-27**: P17 cerrada (Q50 de motor-local); el bloqueo desaparece. | — |
 | P14 | ~~¿Cómo se identifica a quien pide un undo y qué pasa si no se puede saber?~~ **Resuelta** el 2026-10-03 (D-TMC-23): se atribuye como un evento; "sin atribuir" exige confirmación interactiva para tocar trabajo ajeno; mecanismo para el Arquitecto. | Arquitecto (mecanismo) |
 
 ---
@@ -341,7 +343,7 @@ Impacto de no resolverlo: una sola pérdida de trabajo rompe la confianza en el 
 | Integraciones | ✅ | Los hooks de Guardrails son opcionales; la cobertura no depende de ellos (D-TMC-10). |
 | Glosario | ✅ | Términos clave definidos, incluidos cobertura, hueco, solape y solicitante. |
 | Cobertura de snapshots | ✅ | Dos niveles decididos y declarados (D-TMC-9, D-TMC-10); el riesgo residual R2 sigue en Riesgos. |
-| Undo por agente | ⚠️ | Solape y ámbito decididos (D-TMC-13, S8), pero sus historias quedan bloqueadas por P17 de motor-local (D-TMC-22). |
+| Undo por agente | ✅ | Solape y ámbito decididos (D-TMC-13, S8). ~~Sus historias quedan bloqueadas por P17 de motor-local (D-TMC-22).~~ **2026-10-27**: P17 cerrada (Q50 de motor-local); US-TMC-011 desbloqueada. |
 | Permisos del undo | ✅ | Solicitante atribuido y confirmación interactiva decididos (D-TMC-17, D-TMC-23); mecanismo para el Arquitecto. |
 | Restauración a un punto | ✅ | Alcance decidido (D-TMC-20). |
 | Retención | ✅ | Niveles, valor por defecto y protecciones decididos (D-TMC-15). |
@@ -354,7 +356,7 @@ Impacto de no resolverlo: una sola pérdida de trabajo rompe la confianza en el 
 | 2 | Restricciones | ~~Ubicación de los snapshots sin decidir (P2).~~ | **Resuelto** el 2026-10-03 (D-TMC-11): tres garantías de negocio; el mecanismo lo decide el Arquitecto. | — |
 | 3 | RNFs | ~~"Repo mediano" sin definir; se fija en el spike (a) (D-TMC-21).~~ | **Resuelto** el 2026-10-04 (D-TMC-21): perfil `M` de SPIKE-TMC-001. | — |
 | 4 | Integraciones / Cobertura | ~~El Git crudo depende de hooks de Guardrails aún inexistentes (P1).~~ | **Resuelto** el 2026-10-03 (D-TMC-10). El riesgo de producto R2 (lo editado entre la última captura y una operación destructiva de Git crudo) sigue en Riesgos. | — |
-| 5 | Undo por agente | Las historias de undo por agente dependen de P17 de motor-local (D-TMC-22). Solape y ámbito por defecto ya decididos (D-TMC-13, S8). | Esas historias no se pueden generar ni cerrar hasta que se resuelva P17; riesgo R3. | Rene Bonilla (2026-10-03) |
+| 5 | Undo por agente | ~~Las historias de undo por agente dependen de P17 de motor-local (D-TMC-22). Solape y ámbito por defecto ya decididos (D-TMC-13, S8).~~ | **Resuelto** el 2026-10-27: Q50 de motor-local cierra P17 (decisión del orquestador, validada por PO y Arquitecto) y US-TMC-011 se desbloquea. | Rene Bonilla (2026-10-03) |
 | 6 | Restauración a un punto | ~~Alcance supuesto (P11).~~ | **Resuelto** el 2026-10-03 (D-TMC-20). | — |
 | 7 | Retención | ~~Valor por defecto y niveles supuestos (P6).~~ | **Resuelto** el 2026-10-03 (D-TMC-15). | — |
 | 8 | Permisos del undo | ~~Identificación del solicitante y confirmación interactiva sin decidir (P8, P14).~~ | **Resuelto** el 2026-10-03 (D-TMC-17, D-TMC-23); el mecanismo de identificación lo decide el Arquitecto. | — |
