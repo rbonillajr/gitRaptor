@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: medium
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-27
 domain: GRP
 epic: E-001
 feature: mcp
@@ -24,7 +24,7 @@ ado:
   id: null
   url: null
 covers: [BR-MCP-WF-004]
-blocked_by: [US-GRD-015]
+blocked_by: [US-GRD-015, SPIKE-GRD-002, US-MCP-009]
 tags: [mcp, pedir-confirmacion, cola, bloqueada]
 ---
 
@@ -44,7 +44,7 @@ BR-MCP-WF-004 (variante "pendiente" con id, sin bloquear; nunca elicitation) —
 
 - **Historias**: US-MCP-013 (variante "denegar", que sigue rigiendo cuando la cola no está disponible).
 - **Relación**: US-CKP-023, la cola en el Cockpit (propuesta, rama docs/stories-cockpit), donde el desarrollador decide sobre la petición pendiente.
-- **Externas**: **Bloqueada**: la cola de confirmación US-GRD-015 (Guardrails), que a su vez está bloqueada por el Cockpit F-001-02 y por el factor de autenticación fuera de banda del SO (Q-GRD-19, D5; su ADR aún no existe). DEP-MCP-7 (DEP-CKP-8). ADR-MCP-001 (DEP-MCP-1, no existe): bloqueo de arquitectura.
+- **Externas**: **Bloqueada**: la cola de confirmación US-GRD-015 (Guardrails), que ya no depende del Cockpit F-001-02 y espera al factor de autenticación fuera de banda del SO (ADR-GRD-008, aceptado el 2026-10-04; SPIKE-GRD-002 sin ejecutar). DEP-MCP-7 (DEP-CKP-8). `safe_commit` (US-MCP-009, PR #289) aún no está en `main`. Lo que la cola debe ofrecer al MCP (R1–R10) y el fallo cerrado están en DS-US-MCP-014.
 
 ## Criterios de Aceptación
 
@@ -77,4 +77,4 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 ## Diseño y Dev Spec
 
 - **Diseño:** no aplica en el MCP; la cola la presenta el Cockpit (F-001-02).
-- **Dev Spec:** pendiente (Arquitecto, tras US-GRD-015 y ADR-MCP-001).
+- **Dev Spec:** [DS-US-MCP-014](../dev-specs/US-MCP-014-dev-spec.md) (2026-10-27).
