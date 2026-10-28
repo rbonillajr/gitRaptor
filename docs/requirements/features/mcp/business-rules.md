@@ -129,7 +129,7 @@ IF herramienta = register_agent AND (nombre reservado OR nombre de otro agente c
 
 ### BR-MCP-VAL-005: Parámetros cerrados, sin repo y `expect_worktree`
 
-**Descripción**: cada herramienta acepta solo sus parámetros declarados; uno desconocido, de tipo incorrecto o fuera de rango se rechaza. Ninguna herramienta acepta un parámetro de repo. Las escrituras aceptan `expect_worktree` opcional: si se indica y no coincide con el worktree del llamante, se rechaza sin hacer nada. Nunca amplía el ámbito.
+**Descripción**: cada herramienta acepta solo sus parámetros declarados; uno desconocido, de tipo incorrecto o fuera de rango se rechaza. Ninguna herramienta acepta un parámetro de repo. Las escrituras aceptan `expect_worktree` opcional: si se indica y no coincide con el worktree del llamante, se rechaza sin hacer nada. `expect_worktree` es el nombre de carpeta o la ruta absoluta del worktree; un nombre compartido por dos worktrees o inexistente cuenta como "no coincide". Nunca amplía el ámbito (DS-US-MCP-011 D2; decisión del orquestador, 2026-10-27, validada por PO).
 
 **Criticidad**: Alta
 
@@ -235,19 +235,19 @@ FOR EACH par: {lados, nivel, rutas, rangos de líneas, antigüedad, estado, lím
 
 ### BR-MCP-CALC-005: Contenido de `explain_history`
 
-**Descripción**: `explain_history` devuelve eventos del motor y del timeline de la Time Machine del repo del llamante: operación, actor, rama o worktree, oids, rutas tocadas (con tope), cuándo y nivel de cobertura del snapshot. Por defecto, los últimos 50 eventos; filtro por worktree o rama; paginación con tope. Sin mensajes de commit ni contenido.
+**Descripción**: `explain_history` devuelve eventos del motor y del timeline de la Time Machine del repo del llamante: operación, actor, rama o worktree, oids, cuántas rutas tocó (la lista no se devuelve), cuándo y nivel de cobertura del snapshot. Por defecto, los últimos 50 eventos; filtro por worktree o rama; paginación con tope. Sin mensajes de commit ni contenido.
 
 **Criticidad**: Media
 
 **Regla formal**:
 ```
 eventos = timeline(repo del llamante) filtrado por worktree/rama, más recientes primero
-página = min(solicitado, tope), por defecto 50
+página = min(solicitado, tope), por defecto 50, tope 200; un tamaño mayor se recorta
 ```
 
 **Ejemplo**: "hace 5 min, claude-2 hizo commit a1b2c3d en feat-b (3 rutas); cobertura completa".
 
-**Fuentes**: Q-MCP-9; S-MCP-2; DEP-MCP-6.
+**Fuentes**: Q-MCP-9; S-MCP-2; DEP-MCP-6; DS-US-MCP-017 D8 y D10 (decisión del orquestador, 2026-10-27, validada por PO).
 
 ---
 
@@ -435,7 +435,7 @@ siguientes escrituras en el worktree → rechazo por precondición (BR-MCP-ELIG-
 
 ### BR-MCP-WF-004: "Pedir confirmación" sin cola
 
-**Descripción**: si Guardrails responde "pedir confirmación", mientras no exista la cola se trata como denegar con el motivo "requiere confirmación del desarrollador" y la acción (avisar al desarrollador; cuando exista la cola, decidir desde el Cockpit). Cuando exista la cola, la herramienta devuelve "pendiente" con un id de petición y no bloquea esperando. Nunca se usa la elicitation de MCP como confirmación: la responde el cliente del agente.
+**Descripción**: si Guardrails responde "pedir confirmación", mientras no exista la cola se trata como denegar con el motivo "requiere confirmación del desarrollador" y la acción (avisar al desarrollador; cuando exista la cola, decidir desde el Cockpit). Cuando exista la cola, la herramienta devuelve "pendiente" con un id de petición y no bloquea esperando. Sin el factor de autenticación del SO, o con la cola fallando, se deniega con la acción y sin crear petición (DS-US-MCP-014; decisión del orquestador, 2026-10-27, validada por PO). Nunca se usa la elicitation de MCP como confirmación: la responde el cliente del agente.
 
 **Criticidad**: Media
 
@@ -682,7 +682,7 @@ llamada mal formada → error de protocolo
 
 ### BR-MCP-CONS-006: Registro y medición
 
-**Descripción**: cada decisión de Guardrails tomada para el MCP se registra una sola vez con capa `mcp`. Las operaciones del MCP quedan en el timeline con su actor y canal. Los KPIs del MCP miden solo sus herramientas; lo que el agente hace con Git crudo lo cubren hooks y observación.
+**Descripción**: cada decisión de Guardrails tomada para el MCP se registra una sola vez con capa `mcp`. Las operaciones del MCP quedan en el timeline con su actor y canal. Los KPIs del MCP miden solo sus herramientas; lo que el agente hace con Git crudo lo cubren hooks y observación. Los indicadores de respuestas fuera de la allowlist y de reservados desde descendientes cuentan los fallos de la primera línea que detecta y detiene una segunda línea independiente. Adopción = operaciones del MCP con equivalente en Git / (esas + eventos de Git del agente fuera de las operaciones del ejecutor), sin meta. Los rechazos del canal (rate limit, cupos, validación, allowlist) no son bloqueos de Guardrails. Decisión del orquestador (2026-10-27), validada por PO (DS-US-MCP-015, Q-MCP-49 a Q-MCP-51).
 
 **Criticidad**: Media
 
@@ -840,7 +840,7 @@ evaluado en cada llamada
 
 ### BR-MCP-EDGE-008: Operación en curso o HEAD separado
 
-**Descripción**: con un merge o rebase a medias en el worktree, las escrituras se rechazan por precondición hasta que se resuelva. Con HEAD separado, `safe_commit` y `safe_rebase` se rechazan con la acción "crea una rama o cámbiate a una". `snapshot` y `undo` siguen permitidos. Las comprobaciones son precondiciones del ejecutor del daemon, dentro del catálogo compartido. El ejecutor las vuelve a comprobar justo antes de ejecutar. Primero se comprueba la operación en curso, porque un rebase a medias también deja HEAD separado.
+**Descripción**: con un merge o rebase a medias en el worktree, las escrituras se rechazan por precondición hasta que se resuelva; el rechazo nombra la operación ("hay un rebase en curso en este worktree") con la acción "resuélvelo o pide al desarrollador que lo resuelva" (DS-US-MCP-011 D7; decisión del orquestador, 2026-10-27, validada por PO). Con HEAD separado, `safe_commit` y `safe_rebase` se rechazan con la acción "crea una rama o cámbiate a una". `snapshot` y `undo` siguen permitidos. Las comprobaciones son precondiciones del ejecutor del daemon, dentro del catálogo compartido. El ejecutor las vuelve a comprobar justo antes de ejecutar. Primero se comprueba la operación en curso, porque un rebase a medias también deja HEAD separado.
 
 **Criticidad**: Alta
 
