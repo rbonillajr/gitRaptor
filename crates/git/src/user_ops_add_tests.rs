@@ -152,7 +152,7 @@ fn add_beyond_a_symbolic_link_is_refused_by_git() {
     .expect("AddPaths builds");
     let (mut child, collector) = cmd.spawn().expect("git spawns");
     let status = child.wait().unwrap();
-    let _ = collector.collect();
+    let _ = collector.collect(std::time::Duration::from_secs(10));
     assert!(
         !status.success(),
         "git must refuse an add beyond a symbolic link (A22)"
