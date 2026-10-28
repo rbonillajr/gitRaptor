@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: medium
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-28
 feature: cockpit
 related:
   context:
@@ -15,6 +15,8 @@ related:
   stories:
     - US-GRP-016
     - US-CKP-014
+  specs:
+    - DS-US-CKP-018
 tags:
   - cockpit
   - acciones-por-agente
@@ -87,4 +89,4 @@ _Pendiente — lo completa el Arquitecto (Dev Spec)._
 ## Diseño y Dev Spec
 
 - **Diseño:** DSYS-GRP-001.
-- **Dev Spec:** pendiente. Rutas UNC: Pendiente: etapa de validación multiplataforma (Windows).
+- **Dev Spec:** [DS-US-CKP-018](../dev-specs/US-CKP-018-crear-worktree.md) (approved). Rutas UNC: Pendiente: etapa de validación multiplataforma (Windows).
