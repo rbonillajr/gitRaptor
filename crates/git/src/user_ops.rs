@@ -18,7 +18,9 @@ use std::ffi::OsString;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::JoinHandle;
+use std::time::{Duration, Instant};
 
 use crate::{Oid, RefName, SystemGit};
 
@@ -452,30 +454,73 @@ impl std::fmt::Debug for UserGitCommand {
 
 /// Collects the capped output of a launched operation.
 pub struct OutputCollector {
-    stdout: JoinHandle<Vec<u8>>,
-    stderr: JoinHandle<Vec<u8>>,
+    stdout: Drain,
+    stderr: Drain,
 }
 
 impl OutputCollector {
-    /// Waits for both streams to close. Untrusted text, capped per stream.
-    pub fn collect(self) -> (Vec<u8>, Vec<u8>) {
-        (
-            self.stdout.join().unwrap_or_default(),
-            self.stderr.join().unwrap_or_default(),
-        )
+    /// Waits up to `within` for both streams to close and returns what they wrote. Untrusted
+    /// text, capped per stream. A descendant of `git` (a hook's background job, or one that
+    /// left the process group) can keep a pipe open after `git` ends: past `within` the
+    /// collector stops waiting and returns what was captured, and the drain threads end when the
+    /// pipe finally closes. Waiting for that EOF without a limit would hang the caller.
+    pub fn collect(self, within: Duration) -> (Vec<u8>, Vec<u8>) {
+        let deadline = Instant::now() + within;
+        (self.stdout.take_by(deadline), self.stderr.take_by(deadline))
+    }
+
+    /// Whether both streams are already closed.
+    pub fn is_closed(&self) -> bool {
+        self.stdout.done.is_finished() && self.stderr.done.is_finished()
     }
 }
 
-fn drain(pipe: Option<impl Read + Send + 'static>) -> JoinHandle<Vec<u8>> {
-    std::thread::spawn(move || {
-        let mut buf = Vec::new();
-        if let Some(mut pipe) = pipe {
-            let _ = (&mut pipe).take(MAX_CAPTURED_BYTES).read_to_end(&mut buf);
-            // Keep draining so the child never blocks on a full pipe.
-            let _ = std::io::copy(&mut pipe, &mut std::io::sink());
+/// One stream being drained: what it wrote so far (capped) and the thread reading it.
+struct Drain {
+    /// `None` once taken: a thread still draining past the deadline keeps nothing more.
+    captured: Arc<Mutex<Option<Vec<u8>>>>,
+    done: JoinHandle<()>,
+}
+
+impl Drain {
+    fn take_by(self, deadline: Instant) -> Vec<u8> {
+        while !self.done.is_finished() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(5));
         }
-        buf
-    })
+        if self.done.is_finished() {
+            let _ = self.done.join();
+        }
+        self.captured
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take()
+            .unwrap_or_default()
+    }
+}
+
+fn drain(pipe: Option<impl Read + Send + 'static>) -> Drain {
+    let captured = Arc::new(Mutex::new(Some(Vec::new())));
+    let sink = Arc::clone(&captured);
+    let done = std::thread::spawn(move || {
+        let Some(mut pipe) = pipe else { return };
+        let mut chunk = [0u8; 8192];
+        loop {
+            match pipe.read(&mut chunk) {
+                Ok(0) => break,
+                Ok(n) => {
+                    // Past the cap it keeps draining so the child never blocks on a full pipe.
+                    if let Some(buf) = sink.lock().unwrap_or_else(PoisonError::into_inner).as_mut()
+                    {
+                        let room = (MAX_CAPTURED_BYTES as usize).saturating_sub(buf.len());
+                        buf.extend_from_slice(&chunk[..n.min(room)]);
+                    }
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+                Err(_) => break,
+            }
+        }
+    });
+    Drain { captured, done }
 }
 
 impl UserGitCommand {

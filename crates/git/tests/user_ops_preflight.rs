@@ -137,7 +137,7 @@ fn a_ref_update_with_a_stale_old_value_fails_whole() {
     .unwrap();
     let (mut child, out) = cmd.spawn().unwrap();
     let status = child.wait().unwrap();
-    let (_, stderr) = out.collect();
+    let (_, stderr) = out.collect(std::time::Duration::from_secs(10));
     assert!(!status.success(), "{}", String::from_utf8_lossy(&stderr));
     let now = f.git(&["rev-parse", "refs/heads/base"]);
     assert_eq!(now.trim(), second);
@@ -178,7 +178,7 @@ fn hooks_run_without_a_terminal_and_with_only_fds_0_to_2() {
     .unwrap();
     let (mut child, out) = cmd.spawn().unwrap();
     let status = child.wait().unwrap();
-    let _ = out.collect();
+    let _ = out.collect(std::time::Duration::from_secs(10));
     assert!(!status.success(), "the hook rejects the commit");
     let text = std::fs::read_to_string(&report).unwrap();
     assert!(text.contains("no-tty"), "{text}");

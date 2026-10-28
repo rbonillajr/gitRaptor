@@ -42,7 +42,7 @@ fn command(f: &Fixture, op: &UserOp, message: Option<&str>) -> UserGitCommand {
 fn run(cmd: UserGitCommand) -> (bool, String) {
     let (mut child, out) = cmd.spawn().unwrap();
     let status = child.wait().unwrap();
-    let (_, stderr) = out.collect();
+    let (_, stderr) = out.collect(std::time::Duration::from_secs(10));
     (
         status.success(),
         String::from_utf8_lossy(&stderr).into_owned(),
