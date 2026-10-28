@@ -438,7 +438,7 @@ graph LR
 
 **Reglas**
 - PR-A: fila de `events.gaps` en § Métodos de `api-contract-ipc.md`, forma de `GapView`, y en § Pendiente que `gap.recorded` y `attention.gaps` siguen sin emisor.
-- PR-B: la siguiente fila libre de `xplat-pendientes.md` (hoy XP-46) con lo de § 9.5; la historia y el índice pasan a implementada con los dos PR. Si algo falla o no se pudo verificar, dilo en el PR (AGENTS.md).
+- PR-B: la siguiente fila libre de `xplat-pendientes.md` (hoy XP-48) con lo de § 9.5; la historia y el índice pasan a implementada con los dos PR. Si algo falla o no se pudo verificar, dilo en el PR (AGENTS.md).
 
 - **Depende:** T006, T007
 - **Refs:** AGENTS.md § Reglas de calidad; ADR-GRP-016
