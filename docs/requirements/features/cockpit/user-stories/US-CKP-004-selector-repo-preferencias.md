@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: low
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-28
 feature: cockpit
 related:
   context:
@@ -26,13 +26,13 @@ tags:
 
 ## Descripción
 
-**Como** desarrollador orquestador con varios repos observados, **quiero** que la TUI abra el repo en el que estoy, me deje cambiar a otro y recuerde filtros y panel, **para** no reconfigurar la vista cada vez que la abro.
+**Como** desarrollador orquestador con varios repos observados, **quiero** que la TUI abra el repo en el que estoy, me deje cambiar a otro y recuerde los filtros, **para** no reconfigurar la vista cada vez que la abro.
 
 **Valor**: comodidad de uso diario (P2). No bloquea BR-04: sin esta historia la TUI abre en el repo del directorio actual.
 
 ## Reglas cubiertas
 
-BR-CKP-CONS-006 — ver [business-rules.md](../business-rules.md)
+BR-CKP-CONS-006 — ver [business-rules.md](../business-rules.md). Panel y layout quedan diferidos hasta la historia que cree esa elección (Q-CKP-61). **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO.**
 
 ## Dependencias
 
@@ -81,9 +81,9 @@ Entonces la cabecera sigue contando ese ⚡
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto (Dev Spec)._
+En la [Dev Spec](../dev-specs/US-CKP-004-selector-repo-preferencias.md): contrato N9 (`prefs.get` y `prefs.set`, con los controles 1 a 3 en el daemon), documento v1 en el índice global y selector con `R`.
 
 ## Diseño y Dev Spec
 
 - **Diseño:** DSYS-GRP-001.
-- **Dev Spec:** pendiente.
+- **Dev Spec:** [DS-US-CKP-004](../dev-specs/US-CKP-004-selector-repo-preferencias.md) (approved; Q-CKP-61 a Q-CKP-64 resueltas). Pendiente: etapa de validación multiplataforma.
