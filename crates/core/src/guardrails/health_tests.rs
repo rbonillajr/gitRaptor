@@ -243,6 +243,12 @@ fn the_fingerprint_moves_with_what_the_check_reads() {
     let i = install();
     let before = fingerprint(&i.common, &i.journal);
     assert_eq!(before, fingerprint(&i.common, &i.journal));
+    // The rewrite keeps the size, so only the times can move the fingerprint. Windows advances
+    // file times with its clock tick (~15.6 ms): a rewrite within the same tick as the install
+    // keeps them, and only the periodic full check sees it (`fingerprint`). Wait over two ticks.
+    if cfg!(windows) {
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
     std::fs::write(i.path("hooks/pre-push"), b"#!/bin/sh\nexit 1\n").unwrap();
     assert_ne!(before, fingerprint(&i.common, &i.journal));
 }
