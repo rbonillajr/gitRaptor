@@ -4,7 +4,7 @@ title: "Contexto — Cockpit"
 type: context
 status: draft
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-28
 domain: GRP
 epic: E-001
 feature: cockpit
@@ -385,7 +385,7 @@ Estas dependencias se anotan; **no se aplican** en este documento. Las resuelve 
 
 ## Decisiones tomadas
 
-**Decisión del orquestador (2026-10-04), validada por Arquitecto/PO.** Rene Bonilla delegó en el orquestador, el 2026-10-04, la autonomía para decidir las preguntas de esta feature y validarlas con los agentes PO y Arquitecto. Cada Q-CKP-n sale de P-CKP-n con el mismo número. Ninguna cambia una decisión de otra feature ni sale del MVP.
+**Decisión del orquestador (2026-10-04), validada por Arquitecto/PO.** Rene Bonilla delegó en el orquestador, el 2026-10-04, la autonomía para decidir las preguntas de esta feature y validarlas con los agentes PO y Arquitecto. Cada Q-CKP-n sale de P-CKP-n con el mismo número. Ninguna cambia una decisión de otra feature ni sale del MVP. Q-CKP-52 y Q-CKP-53 salen de la revisión de la Dev Spec DS-US-CKP-019 (2026-10-28): decisiones del orquestador validadas por el PO y el Arquitecto; Q-CKP-52 aplica Q-GRD-46 de Guardrails.
 
 | # | Pregunta de origen | Decisión | Fecha | Decidido por | Validación | Reglas afectadas |
 |---|--------------------|----------|-------|--------------|------------|------------------|
@@ -419,6 +419,8 @@ Estas dependencias se anotan; **no se aplican** en este documento. Las resuelve 
 | Q-CKP-28 | P-CKP-28 | Orden: principal arriba; luego lo que pide atención (⚡, ⛔, hueco), Activo, Inactivo, Terminado, sin agente. | 2026-10-04 | Orquestador (decisión del orquestador, 2026-10-04) | PO | WF-001 |
 | Q-CKP-29 | P-CKP-29 | Ahead/behind "según la copia local del remoto" con su antigüedad. | 2026-10-04 | Orquestador (decisión del orquestador, 2026-10-04) | PO | CALC-001 |
 | Q-CKP-30 | P-CKP-30 | Línea base del −30 %: tiempo entre el último commit de la rama y su merge, desde la historia previa de repos internos; si no se obtiene, riesgo aceptado. | 2026-10-04 | Orquestador (decisión del orquestador, 2026-10-04) | PO | — (KPI, § 3) |
+| Q-CKP-52 | Revisión de la Dev Spec DS-US-CKP-019 (E12, G3): el escenario 5 de US-CKP-019 denegaba "pedir confirmación" sin cola también al desarrollador, contra Q-GRD-46 (Rene Bonilla, 2026-10-17) | Sin cola, "pedir confirmación" deniega solo cuando pide un agente, también por una TUI lanzada desde su terminal: denegada con la regla y sin petición pendiente. La persona pasa por el flujo normal con el aviso de que la regla pide confirmación humana y se ejecuta porque la hace ella. Si no se puede demostrar quién pide, se deniega a todos. El escenario 5 pasa a esquema por solicitante. | 2026-10-28 | Orquestador (decisión del orquestador, 2026-10-28) | PO y Arquitecto | AUTH-001 |
+| Q-CKP-53 | Revisión de la Dev Spec DS-US-CKP-019 (E11): ¿la fila con ⛔ sube solo en la TUI que pidió la acción, o en todos los clientes? | Solo en la TUI que pidió la acción y mientras la acción siga pendiente (⚠️ 60 s, o 60 s tras la ventana de la excepción; supuesto a revisar con el uso). Los demás clientes ven el recuento ⛔ de la cabecera y el anuncio de la excepción; la denegación queda en el registro de Guardrails. | 2026-10-28 | Orquestador (decisión del orquestador, 2026-10-28) | PO y Arquitecto | WF-001 |
 
 ## Preguntas abiertas
 
