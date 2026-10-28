@@ -4,7 +4,7 @@ title: "Reglas de Negocio — Motor local"
 type: business-rules
 status: draft
 created: 2026-10-01
-updated: 2026-10-07
+updated: 2026-10-27
 domain: GRP
 epic: E-001
 feature: motor-local
@@ -733,6 +733,19 @@ Un repo observado puede pasar a **dormido** cuando lleva un tiempo configurable 
 
 **Ejemplo**: `docs-site` lleva 8 horas sin actividad y duerme. Claude Code empieza una sesión en él → el repo despierta y la sesión y sus commits se atribuyen como en un repo activo.
 
+#### Enmienda (2026-10-27): un evento perdido sin marca se recupera, como mucho, en el intervalo de reconciliación vigente
+
+> **Origen**: Decisión del orquestador (2026-10-27), validada por PO, sobre la propuesta del Arquitecto (ADR-GRP-015 § 2; DS-TS-GRP-005, G5). Parte de la decisión de Rene Bonilla (2026-10-05) de espaciar las reconciliaciones con batería.
+
+La observación sigue siendo continua. Lo que cambia es el plazo máximo para recuperar un evento que el motor perdió **sin dejar marca de hueco** (una pérdida silenciosa): lo recupera, como mucho, en el **intervalo de reconciliación periódica vigente**. Con corriente, 5 minutos; en modo de ahorro de energía, 15 minutos (⚠️ **ASSUMPTION**: la cifra de 15 minutos es del Arquitecto, ADR-GRP-015 § 2, y se confirma con el dogfooding). Lo recuperado así sigue la regla de los huecos (BR-EDGE-005). El ahorro de energía no afecta a lo que el motor sí ve: la captura, la atribución y la persistencia no cambian.
+
+```
+Constraint: evento perdido sin marca → recuperado en ≤ intervalo de reconciliación
+            periódica vigente (con corriente: 5 min; en ahorro: 15 min)
+```
+
+**Ejemplo**: con el portátil a batería, el motor pierde sin marca un cambio en `feat-login` a las 10:01. La siguiente reconciliación, como tarde a las 10:16, lo recupera. Con corriente, como tarde a las 10:06.
+
 ---
 
 ### BR-CONS-006: La rama base de cada repo la define solo la configuración del repo del equipo; por defecto `main`
@@ -1080,3 +1093,4 @@ Cada regla debe estar reflejada en al menos un **escenario Gherkin** (criterio d
 | 1.14 | 2026-10-07 | PO (AADD) para Rene Bonilla | Decisión del orquestador (2026-10-07), validada por el PO, sobre las propuestas A1 a A3 aceptadas por Rene Bonilla (2026-10-06); decisiones Q43 a Q48 del contexto. Enmienda de BR-AUTH-001: el motor solo descubre dentro de las carpetas de código declaradas y descubrir nunca es observar (frase anterior marcada); nuevas filas de permisos. Nueva BR-AUTH-003 (raíces solo en el perfil, raíces válidas, primer nivel, avisos, confirmación humana con "no" por defecto, descarte persistente, el agente no decide; dos supuestos para Rene). BR-CONS-007 añade el valor "carpetas de código" (solo perfil). BR-WF-002: un repo descubierto no cuenta como observado. Conteos (23 / 14), matriz y trazabilidad actualizados |
 | 1.15 | 2026-10-07 | PO (AADD) para Rene Bonilla | Ajustes tras el Arquitecto (TS-GRP-006, SEC-15, RES-11/12). BR-CONS-005: enmienda "un repo en reposo sigue observado" (despierta en ≤ 2 s p95; un repo sin vigilancia en vivo no duerme). BR-EDGE-005: causa de hueco `dormant` (solo lo que encuentra la comprobación de respaldo sin aviso de la vigilancia) con ejemplo. BR-AUTH-003: las raíces no son configuración; viven en el perfil y se gestionan con comandos reservados (`raptor repo roots`, `roots add`, `roots remove`, `repo dismiss`, `repo add`); raíces inválidas alineadas con SEC-15 (ancestros de la carpeta personal, perfil, rutas de red, tope de 16). Se quita de BR-CONS-007 la fila de las raíces añadida en la 1.14 |
 | 1.16 | 2026-10-07 | PO (AADD) para Rene Bonilla | **Decisión de Rene (2026-10-07)**: la carpeta personal puede ser una raíz (cierra el pendiente del PR #142). BR-AUTH-003, condición 2: raíz amplia con aviso y confirmación (> 512 entradas, carpeta personal u otro volumen), exclusiones fijas por SO; siguen rechazados `/`, la unidad del sistema y los ancestros de las carpetas personales. Decisión del orquestador (2026-10-07), validada por el Arquitecto |
+| 1.17 | 2026-10-27 | PO (AADD) para Rene Bonilla | Decisión del orquestador (2026-10-27), validada por PO, sobre la propuesta del Arquitecto (ADR-GRP-015 § 2; DS-TS-GRP-005, G5). BR-CONS-005: enmienda "un evento perdido sin marca se recupera, como mucho, en el intervalo de reconciliación vigente" (5 min con corriente, 15 min en ahorro de energía; la cifra de 15 min sigue como supuesto). Se refleja en US-GRP-019. |
