@@ -684,19 +684,24 @@ retención 90 días, en el perfil, por repo; consulta local (NFR-03)
 
 ### BR-CKP-CONS-006: Preferencias de la TUI en el perfil, vía daemon
 
-**Descripción**: repo seleccionado, panel, filtros y layout se guardan por usuario en el perfil, a través del daemon, que es el único escritor del perfil. Nunca en el repo.
+**Descripción**: el último repo usado, los filtros y la aprobación del editor se guardan por usuario en el perfil, a través del daemon, que es el único escritor del perfil. Nunca en el repo. Panel y layout quedan diferidos hasta la historia que cree esa elección.
 
 **Criticidad**: Baja
 
 **Regla formal**:
 ```
 preferencias → daemon → perfil (por usuario)                             (DEP-CKP-11)
-arranque → repo del directorio actual ?? último usado
+arranque → repo del cwd observado
+         → (cwd no observado: pregunta US-CKP-025; con No)
+         → último usado si sigue observado
+         → flujo actual (único observado, selector o guía de primer repo)
 ```
 
 **Ejemplo**: el desarrollador cierra la TUI con el filtro "ver terminadas" activo; al volver, sigue activo.
 
-**Fuentes**: Q-CKP-1, Q-CKP-17.
+> **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO** (Q-CKP-61, Q-CKP-62; DS-US-CKP-004 P4 y P6): panel y layout fuera del MVP hasta que exista una elección que recordar; en un repo no observado, la pregunta de US-CKP-025 va antes que el último usado.
+
+**Fuentes**: Q-CKP-1, Q-CKP-17, Q-CKP-61, Q-CKP-62.
 
 ### BR-CKP-CONS-007: CLI de solo lectura
 
@@ -934,3 +939,4 @@ Cada regla tendrá al menos un escenario Gherkin, incluido uno negativo, en su h
 | 0.1 | 2026-10-04 | PO (AADD) | Versión inicial: 45 reglas a partir de Q-CKP-1 a Q-CKP-30 (decisión del orquestador, validada por PO y Arquitecto) y de las decisiones heredadas de motor-local, Time Machine y Guardrails. |
 | 0.2 | 2026-10-28 | PO (AADD); decisiones del orquestador (2026-10-28), validadas por el PO y el Arquitecto | Revisión de la Dev Spec DS-US-CKP-019. Q-CKP-52: sin cola, "pedir confirmación" deniega solo cuando pide un agente; la persona pasa con aviso (aplica Q-GRD-46 en BR-CKP-AUTH-001, regla formal y nota). Q-CKP-53: la fila con ⛔ sube solo en la TUI que pidió la acción y mientras la acción siga pendiente (BR-CKP-WF-001). Escenario 5 de US-CKP-019 reescrito como esquema por solicitante. Sin reglas nuevas. |
 | 0.3 | 2026-10-28 | PO (AADD); decisiones del orquestador (2026-10-28), validadas por Arquitecto y PO | Revisiones de las Dev Specs DS-US-CKP-013, DS-US-CKP-018 y DS-US-CKP-021. VAL-003: gramática del valor del editor, valor rechazado cede al nivel siguiente con confirmación (Q-CKP-55) y en Windows solo `.exe`/`.com` (Q-CKP-56). ELIG-006: abrir en el editor desactivado fuera de la capa `cockpit` (Q-CKP-54). EDGE-007: el ejemplo nombra `cockpit.editor`. ELIG-005: Deshacer de una creación = descarte del worktree creado (Q-CKP-57, Q-CKP-58). VAL-001: ruta sin orden de lanzamiento si no se puede copiar con seguridad. Q-CKP-59: Deshacer desde el historial solo sobre operaciones del oplog, con `operation_id` (BR-CKP-WF-002). BR-CKP-TIME-004: la entrega de DS-US-TMC-016 T010 es el "visto"; texto compacto con fecha relativa. Sin reglas nuevas. |
+| 0.4 | 2026-10-28 | PO (AADD); decisiones del orquestador (2026-10-28), validadas por Arquitecto y PO | Revisión de la Dev Spec DS-US-CKP-004. CONS-006: panel y layout diferidos hasta la historia que cree esa elección (Q-CKP-61) y fórmula de arranque con la pregunta de US-CKP-025 antes del último usado (Q-CKP-62). Sin reglas nuevas. |
