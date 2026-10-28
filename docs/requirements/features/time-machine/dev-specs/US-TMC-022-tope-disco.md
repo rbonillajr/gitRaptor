@@ -552,7 +552,7 @@ Corre `/security-review --scope devspec docs/requirements/features/time-machine/
 | # | ADR | Enmienda | Estado |
 |---|---|---|---|
 | E3 | ADR-TMC-007, Enmienda 2026-10-05 | El tope y la cuota se miden sobre `<data>/tm/` (almacenes y oplogs); entre medidas se suma `unique_bytes` de cada captura. La cuota se lee de `storeQuotaGiB`. El snapshot manual pasa por la puerta del tope como una observación | Aplicada (2026-10-28) |
-| E5 | ADR-TMC-007, Enmienda 2026-10-05 y Enmienda 2026-10-28 (US-TMC-022) | La cuota por repo purga por tamaño con la misma regla que el tope (80 % → 70 %, 7 días, aviso y gracia), con aviso por repo; el aviso del tope total es uno solo, visible desde cualquier repo; los repos que ya no se observan no se purgan solos (TQ-24 → a, TQ-25) | Propuesta: la aplica el orquestador (esta ronda no toca ADR) |
+| E5 | ADR-TMC-007, Enmienda 2026-10-05 y Enmienda 2026-10-28 (US-TMC-022) | La cuota por repo purga por tamaño con la misma regla que el tope (80 % → 70 %, 7 días, aviso y gracia), con aviso por repo; el aviso del tope total es uno solo, visible desde cualquier repo; los repos que ya no se observan no se purgan solos (TQ-24 → a, TQ-25) | Aplicada (2026-10-28), en la Enmienda (2026-10-28, US-TMC-022) de ADR-TMC-007; TQ-24 (a) abierta a veto de Rene |
 | E4 | ADR-TMC-003 § 2 (Diario) | Migración del diario: entradas `capture-paused` y `capture-resumed` (hueco "sin espacio") | Aplicada (2026-10-28) |
 
 ## Notas del autor
