@@ -434,14 +434,15 @@ mod tests {
     /// RES-MCP-03: every refusal, in English and in Spanish, fits its budget.
     #[test]
     fn every_refusal_fits_its_token_budget() {
-        use gitraptor_api::mcp_view::{MCP_REFUSAL_TOKENS, check_token_budget};
+        use gitraptor_api::mcp_view::check_token_budget;
         for code in McpToolError::ALL {
             for lang in [Lang::En, Lang::Es] {
                 let wire = serde_json::to_value(respond(Err(code.into()), lang)).unwrap();
                 let text = wire["content"][0]["text"].as_str().unwrap();
                 let what = format!("{} ({lang:?})", code.as_str());
                 eprintln!("RES-MCP-03: {what}: {} B", text.len());
-                check_token_budget("RES-MCP-03", &what, text, MCP_REFUSAL_TOKENS).unwrap();
+                check_token_budget("RES-MCP-03", &what, text, messages::refusal_budget(code))
+                    .unwrap();
             }
         }
     }

@@ -3,10 +3,7 @@
 //! descriptions stay in English.
 
 use gitraptor_api::catalog::{MAX_COMMIT_MESSAGE_BYTES, MAX_COMMIT_PATHS};
-use gitraptor_api::mcp_view::{
-    MAX_MCP_PATH_BYTES, MCP_REFUSAL_TOKENS, MCP_RETRY_AFTER_S, McpToolError, estimated_tokens,
-    for_mcp,
-};
+use gitraptor_api::mcp_view::{MAX_MCP_PATH_BYTES, MCP_RETRY_AFTER_S, McpToolError, for_mcp};
 use serde_json::{Value, json};
 
 /// The language of the messages, from `raptor-mcp`'s environment.
@@ -63,30 +60,18 @@ pub fn refusal(r: impl Into<ToolRefusal>, lang: Lang) -> Value {
     if let Some(params) = tool_params(code, params.as_ref()) {
         body["params"] = params;
     }
-    if code == McpToolError::PolicyDenied {
-        fit_denial(&mut body);
-    }
     body
 }
 
-/// A denial within RES-MCP-03: the message already names the first rule, so the decision's id
-/// goes first, then the last rules, until the body fits.
-fn fit_denial(body: &mut Value) {
-    let over = |body: &Value| estimated_tokens(&body.to_string()) > MCP_REFUSAL_TOKENS;
-    if over(body)
-        && let Some(params) = body.get_mut("params").and_then(Value::as_object_mut)
-    {
-        params.remove("decision_id");
-    }
-    while over(body) {
-        let Some(rules) = body
-            .pointer_mut("/params/rules")
-            .and_then(Value::as_array_mut)
-            .filter(|rules| rules.len() > 1)
-        else {
-            return;
-        };
-        rules.pop();
+/// The budget of a refusal's body (RES-MCP-03): `policy-denied` never cuts its rules or its
+/// decision id (RES-MCP-04), so it has its own.
+#[cfg(test)]
+pub fn refusal_budget(code: McpToolError) -> usize {
+    use gitraptor_api::mcp_view::{MCP_POLICY_REFUSAL_TOKENS, MCP_REFUSAL_TOKENS};
+    if code == McpToolError::PolicyDenied {
+        MCP_POLICY_REFUSAL_TOKENS
+    } else {
+        MCP_REFUSAL_TOKENS
     }
 }
 
@@ -726,6 +711,50 @@ mod tests {
                 let what = format!("{} {params} ({lang:?})", code.as_str());
                 check_token_budget("RES-MCP-03", &what, &text, MCP_REFUSAL_TOKENS).unwrap();
             }
+        }
+    }
+
+    /// RES-MCP-03 and RES-MCP-04: the worst `policy-denied` (4 rules at the longest codes, a
+    /// 32-hex decision id) keeps every rule and the id, within its own budget; every other code
+    /// keeps the common one.
+    #[test]
+    fn the_worst_denial_keeps_its_rules_and_id_within_its_budget() {
+        use gitraptor_api::mcp_view::{
+            MCP_POLICY_REFUSAL_TOKENS, MCP_REFUSAL_TOKENS, check_token_budget,
+        };
+        let rules = json!([
+            "system.channel-not-authentic",
+            "authorship.trailer-required",
+            "permission.worktree-remove",
+            "minimum.base-branch-delete"
+        ]);
+        let decision = "f".repeat(32);
+        for lang in [Lang::En, Lang::Es] {
+            let body = refusal(
+                ToolRefusal {
+                    code: McpToolError::PolicyDenied,
+                    params: Some(json!({"rules": rules, "decision_id": decision})),
+                },
+                lang,
+            );
+            assert_eq!(body["params"]["rules"], rules, "{body}");
+            assert_eq!(body["params"]["decision_id"], decision.as_str(), "{body}");
+            let text = body.to_string();
+            check_token_budget(
+                "RES-MCP-03",
+                "policy-denied",
+                &text,
+                MCP_POLICY_REFUSAL_TOKENS,
+            )
+            .unwrap();
+        }
+        for code in McpToolError::ALL {
+            let expected = if code == McpToolError::PolicyDenied {
+                MCP_POLICY_REFUSAL_TOKENS
+            } else {
+                MCP_REFUSAL_TOKENS
+            };
+            assert_eq!(refusal_budget(code), expected, "{code:?}");
         }
     }
 

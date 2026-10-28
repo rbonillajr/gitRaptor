@@ -811,7 +811,7 @@ _No aplica — no se añade configuración: las cifras son constantes del contra
 | Rutas por llamada | ≤ 256 (`MAX_COMMIT_PATHS`), cada una ≤ 4.096 bytes | `crates/api/src/catalog.rs:38`; ADR-MCP-001 § 6 da 500 y solo puede endurecerse (N2) |
 | Rutas en la respuesta | ≤ 200, con `paths_total` y `truncated` | ADR-MCP-001 § 6 |
 | Presupuesto de la respuesta | ≤ 800 tokens por parte; ≤ 24 KiB tras el escape | ⚠️ **ASSUMPTION** (D4), RES-MCP-02 como referencia; ADR-MCP-001 § 6 |
-| Rechazo | ≤ 80 tokens en en y en es | RES-MCP-03 |
+| Rechazo | ≤ 80 tokens en en y en es; `policy-denied` ≤ 125 (`MCP_POLICY_REFUSAL_TOKENS`), sin recortar `rules` ni `decision_id` | RES-MCP-03, excepción de `policy-denied` (2026-10-27) |
 | Descripción y esquema de la herramienta | ≤ 250 tokens (`MCP_WRITE_TOOL_TOKENS`) | RES-MCP-01, excepción de escritura (2026-10-27) |
 | Espera en la cola del cerrojo, capa `mcp` | ≤ 60 s (`MCP_QUEUE_WAIT`), después `queue-full` | ⚠️ **ASSUMPTION** (D2 a) |
 | Plazo del snapshot previo | 10 s (`DEFAULT_PRIOR_DEADLINE`) | `crates/core/src/timemachine/protected/mod.rs:47` |
