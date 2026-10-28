@@ -16,6 +16,8 @@ related:
     - US-CKP-014
     - US-CKP-015
     - US-TMC-015
+  specs:
+    - DS-US-CKP-016
 tags:
   - cockpit
   - acciones-por-agente
@@ -102,4 +104,4 @@ _Pendiente — lo completa el Arquitecto (Dev Spec). Cancelar: ADR-CKP-002 § 6.
 ## Diseño y Dev Spec
 
 - **Diseño:** DSYS-GRP-001.
-- **Dev Spec:** pendiente.
+- **Dev Spec:** [DS-US-CKP-016](../dev-specs/US-CKP-016-operacion-detenida.md) (draft).
