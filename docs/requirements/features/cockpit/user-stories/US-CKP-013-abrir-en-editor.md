@@ -5,9 +5,10 @@ type: us
 status: draft
 priority: low
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-28
 feature: cockpit
 related:
+  specs: [DS-US-CKP-013]
   context:
     - CTX-CKP-001
   rules:
@@ -84,4 +85,4 @@ _Pendiente — lo completa el Arquitecto (Dev Spec)._
 ## Diseño y Dev Spec
 
 - **Diseño:** DSYS-GRP-001.
-- **Dev Spec:** pendiente. Pendiente: etapa de validación multiplataforma (editores en Linux y Windows).
+- **Dev Spec:** [DS-US-CKP-013](../dev-specs/US-CKP-013-abrir-en-editor.md) (approved). Pendiente: etapa de validación multiplataforma (editores en Linux y Windows).
