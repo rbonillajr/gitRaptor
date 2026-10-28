@@ -111,7 +111,7 @@ Todo lo que el criterio de salida necesita construir está en `main`. Lo que fal
 | Gates | INF-GRP-001 | Must | En parte; la parte de M1 (gate "repo intacto") está hecha (#30 y siguientes) | Repo intacto: se usa sobre un repo real y propio |
 | Gates | INF-GRP-002 | Must | En parte; la parte de M1 (RES-01, RES-02 y frescura) está hecha (#76, #98, #133) | Frescura y huella (RES-01, RES-02) como gate |
 | Recursos | US-GRP-017 | Must | Implementada (#93, #173) | Mide el criterio 5 cada día |
-| Recursos | TS-GRP-005 | Should | Sin empezar (Dev Spec lista: DS-TS-GRP-005, en dos PR) | Prioridad de segundo plano del SO (RES-06, RES-07) |
+| Recursos | TS-GRP-005 | Should | En parte: PR-A (T001-T006) en PR #298; falta el PR-B (fuente real, publicación, RES-07) | Prioridad de segundo plano del SO (RES-06, RES-07) |
 | Deshacer | US-TMC-005 | Should | Implementada (PR #248) | Previo por los hooks que M1 ya instala; poco coste extra. Deuda: TD-TMC-001 |
 | MCP mínimo | US-MCP-001, US-MCP-002, US-MCP-003 | Should | Implementadas (#70, #140, #159) | No bloquea la salida: la detección funciona por observación y US-MCP-002 arrastra US-GRP-006 y US-GRD-004. Si no entra, es lo primero de M2 |
 | Ver | TS-GRP-004: N8 a N11 | Should | Pendiente; pasan a M2 | Solo si una historia de M1 los usa |

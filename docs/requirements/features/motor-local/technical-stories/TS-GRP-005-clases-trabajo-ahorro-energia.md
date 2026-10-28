@@ -2,13 +2,13 @@
 id: TS-GRP-005
 title: "Clases de trabajo del daemon y mecanismo de ahorro de energía"
 type: ts
-status: ready
+status: partially-implemented
 feature: motor-local
 domain: GRP
 priority: high
 complexity: high
 created: 2026-10-05
-updated: 2026-10-27
+updated: 2026-10-28
 related:
   adrs: [ADR-GRP-015, ADR-GRP-005, ADR-GRP-010, ADR-CKP-001, ADR-TMC-004, ADR-TMC-006]
   stories: [US-GRP-017, US-GRP-019, US-TMC-004, TS-GRP-003, INF-GRP-002, TS-TMC-001, TS-CKP-001]
@@ -66,3 +66,26 @@ tags: [motor-local, recursos, prioridad, qos, nice, ionice, ecoqos, bateria, dae
 
 - macOS: desenchufar el portátil y comprobar el modo en `raptor status --resources` (cuando exista US-GRP-017).
 - Linux y Windows: **Pendiente: etapa de validación multiplataforma**.
+
+## Estado de la implementación (2026-10-28)
+
+Implementado en: PR #298 (en parte, PR-A: T001 a T006 de DS-TS-GRP-005).
+
+- **Hecho (macOS):**
+  - `macsys::qos` fija y lee la QoS del hilo y baja un hijo antes de `exec` (nice y política de E/S del proceso). Es la cuarta superficie `unsafe` de `macsys`, registrada en ADR-GRP-002.
+  - `work_class` lanza hilos con clase, baja por un tramo sin subir nunca y lleva el registro de pools.
+  - `power` resuelve el modo a partir de `engine.powerSaving` (solo en el nivel de perfil) y de la fuente. La fuente es `UnknownPowerSource`, así que `auto` no ahorra todavía.
+  - El daemon resuelve el modo antes de arrancar los módulos, lo mantiene con el hilo `raptor-power` (en `Utility`) y lo da a los consumidores con `Daemon::power()`.
+  - `raptor-discovery`, `raptor-guard-health`, `raptor-resources` y `raptor-dormant-sweep` corren en `Utility`, y la reconciliación periódica baja a `Utility` solo durante su tramo.
+  - Cierra G5 de DS-TS-CKP-001.
+- **Decisión nueva:** D17. Los hilos reciben solo la QoS, porque en macOS 26 una política de E/S de hilo saca al hilo de la QoS.
+- **Falta (PR-B, T007 a T014):**
+  - la fuente de energía real de macOS;
+  - publicar `pools` y `power_saving` en `engine.resources`;
+  - la reconciliación espaciada;
+  - las clases en el camino del snapshot previo;
+  - la clase de los `git` hijos;
+  - el test de la unidad de autoarranque;
+  - el gate RES-07.
+- **Linux y Windows:** degradación fail-closed. `macsys` y `policy` compilan con clippy para Windows; `core` no se pudo compilar para Linux ni Windows desde el Mac (`libsqlite3-sys`). Se comprueba en el CI. Pendiente en la etapa de validación multiplataforma (XP-45).
+
