@@ -267,6 +267,7 @@ fn start_with(fx: Fixture, tm_no_space: bool, capture: CaptureConfig) -> Running
         tiers: Default::default(),
         discovery: Default::default(),
         power: Default::default(),
+        predict: Default::default(),
         tm_capture: TmCapture {
             config: capture,
             ..Default::default()

@@ -182,6 +182,7 @@ fn machine() -> Machine {
         tiers: Default::default(),
         discovery: Default::default(),
         power: Default::default(),
+        predict: Default::default(),
         tm_capture: Default::default(),
     })
     .unwrap();

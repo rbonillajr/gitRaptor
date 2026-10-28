@@ -89,6 +89,7 @@ fn start(settings: Option<&str>, fake: &FakePowerSource, poll: Duration) -> Runn
             source: Arc::new(fake.clone()),
             poll,
         },
+        predict: Default::default(),
         tm_capture: TmCapture::default(),
     };
     let daemon = Daemon::start(config).unwrap();

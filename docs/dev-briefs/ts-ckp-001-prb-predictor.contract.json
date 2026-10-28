@@ -1,0 +1,287 @@
+{
+  "source": {
+    "kind": "devspec",
+    "ref": "docs/requirements/features/cockpit/dev-specs/TS-CKP-001-predictor-conflictos.md"
+  },
+  "suite": {
+    "command": "node tools/test/nextest-junit.mjs"
+  },
+  "layers": {
+    "runtime": {
+      "commands": [
+        {
+          "id": "suite",
+          "cmd": "node tools/test/nextest-junit.mjs"
+        }
+      ],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "criteria": [
+    {
+      "id": "CKPB-POOL-POWER",
+      "statement": "T007 guard 7.1: con el modo de ahorro activo el pool no entrega ningún trabajo al DryMerger y paused() es true; al volver a corriente el trabajo retenido se ejecuta, sin sleep fijo",
+      "verify": "cargo test -p gitraptor-core --lib -- --list 2>/dev/null | grep -q '^predict::pool::tests::power_saving_computes_no_pair: test' && cargo test -p gitraptor-core --lib predict::pool::tests::power_saving_computes_no_pair -- --exact 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "crates/core/src/predict/pool/tests.rs"
+      ]
+    },
+    {
+      "id": "CKPB-POOL",
+      "statement": "T007: el pool ejecuta un trabajo a la vez (PREDICT_CONCURRENCY=1) en un hilo Pool::Predictor de clase Utility visible en work_class::pools(); un submit del mismo par sustituye al trabajo en cola; saca por prioridad; forget_repo descarta los del repo; stop termina el hilo",
+      "verify": "cargo test -p gitraptor-core --lib predict::pool::tests 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "crates/core/src/predict/pool/tests.rs"
+      ]
+    },
+    {
+      "id": "CKPB-FRAME",
+      "statement": "T006 protocolo: read_frame/write_frame van y vuelven; una trama de más de MAX_WORKER_FRAME o truncada es error; EOF limpio antes de una trama es None; validate_outcome rechaza más archivos o rangos que DryMergeLimits; WorkerLimits::default() vale lo de § Valores numéricos",
+      "verify": "cargo test -p gitraptor-core --lib predict::worker::tests 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "crates/core/src/predict/worker/tests.rs"
+      ]
+    },
+    {
+      "id": "CKPB-WORKER-DEADLINE",
+      "statement": "T006 guard 6.1: un trabajo que pasa del plazo mata al trabajador (merge devuelve LimitExceeded) y el siguiente trabajo corre en un trabajador relanzado (otro pid, launches sube)",
+      "verify": "cargo test -p gitraptor-core --test predict_worker -- --list 2>/dev/null | grep -q '^a_pair_over_the_deadline_kills_and_relaunches_the_worker: test' && cargo test -p gitraptor-core --test predict_worker a_pair_over_the_deadline_kills_and_relaunches_the_worker -- --exact 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "crates/core/tests/predict_worker.rs"
+      ]
+    },
+    {
+      "id": "CKPB-WORKER-MEMORY",
+      "statement": "T006 guard 6.2: un trabajador por encima de la cota de memoria (RSS leída desde el daemon) muere y el par da LimitExceeded",
+      "verify": "cargo test -p gitraptor-core --test predict_worker -- --list 2>/dev/null | grep -q '^a_worker_over_the_memory_cap_is_killed: test' && cargo test -p gitraptor-core --test predict_worker a_worker_over_the_memory_cap_is_killed -- --exact 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "crates/core/tests/predict_worker.rs"
+      ]
+    },
+    {
+      "id": "CKPB-WORKER-ESCALATION",
+      "statement": "T006 guard 6.3: un par con conflicto de modificado/borrado o renombrado lanza un segundo trabajo con REWRITES_LIMIT_ESCALATED; si ese segundo lo corta un límite se devuelve el resultado del primero (Ok, rewrites_escalated=false), y si termina el suyo con rewrites_escalated=true",
+      "verify": "cargo test -p gitraptor-core --test predict_worker -- --list 2>/dev/null | grep -q '^a_cut_escalation_publishes_the_first_result: test' && cargo test -p gitraptor-core --test predict_worker a_cut_escalation_publishes_the_first_result -- --exact 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "crates/core/tests/predict_worker.rs"
+      ]
+    },
+    {
+      "id": "CKPB-WORKER-LIFECYCLE",
+      "statement": "T006: el trabajador se lanza con el primer trabajo y no antes, da el mismo resultado que InProcessMerger, cierra tras idle_exit sin trabajo (close_if_idle) y con close(), y un merge posterior lo relanza",
+      "verify": "cargo test -p gitraptor-core --test predict_worker lifecycle:: 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "crates/core/tests/predict_worker.rs"
+      ]
+    },
+    {
+      "id": "CKPB-WORKER-CLI",
+      "statement": "T006: `raptor predict-worker` es un subcomando oculto (no sale en --help), sale con 0 en EOF de stdin y no crea nada en el perfil (GITRAPTOR_PROFILE_DIR temporal queda vacío)",
+      "verify": "cargo test -p gitraptor-cli --test predict_worker_cli  2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "apps/cli/tests/predict_worker_cli.rs"
+      ]
+    },
+    {
+      "id": "CKPB-API-SHAPE",
+      "statement": "T009: level se omite fuera de current y recalculating; estados, motivos, LimitCode y kind son kebab-case (none para Clean y Absent); pair_id es determinista, de 16 hex y distinto por par; un RepoView sin prediction serializa igual que antes (capacidad apagada)",
+      "verify": "cargo test -p gitraptor-api --lib prediction::tests::shape:: 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "crates/api/src/prediction/tests.rs"
+      ]
+    },
+    {
+      "id": "CKPB-API-FIT",
+      "statement": "T009: con 55 pares y raíces Untrusted de 4 KiB que se escapan en JSON el RepoView cabe en MAX_MESSAGE_BYTES con pairs_truncated=true; una página de prediction.list no pasa de 50 pares ni de 512 KiB y da next_cursor si quedan",
+      "verify": "cargo test -p gitraptor-api --lib prediction::tests::fit:: 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "crates/api/src/prediction/tests.rs"
+      ]
+    },
+    {
+      "id": "CKPB-API-LIST",
+      "statement": "T009: validate_list rechaza un pair_id mal formado, más de 50 pair_ids y un cursor ajeno",
+      "verify": "cargo test -p gitraptor-api --lib prediction::tests::list:: 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "crates/api/src/prediction/tests.rs"
+      ]
+    },
+    {
+      "id": "CKPB-PUB-REV",
+      "statement": "T009: la instantánea (RepoView.prediction) y prediction.changed llevan el mismo par con el mismo rev (= scope_seq del evento) y la misma hora; prediction.list devuelve el detalle con ese rev; pair_id sobrevive a un reinicio del daemon",
+      "verify": "cargo test -p gitraptor-core --test predict_publish rev:: 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "crates/core/tests/predict_publish.rs"
+      ]
+    },
+    {
+      "id": "CKPB-PUB-BASE",
+      "statement": "T009: mover la base pasa el par contra la base a calculating sin level ni resultado; mover la punta de un worktree deja recalculating con el último level; volver la base a la triple anterior reutiliza la caché sin recalcular",
+      "verify": "cargo test -p gitraptor-core --test predict_publish base:: 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "crates/core/tests/predict_publish.rs"
+      ]
+    },
+    {
+      "id": "CKPB-PUB-ATTENTION",
+      "statement": "T009: attention.conflicts es counted n con los pares level conflict en current o recalculating, counted 0 solo sin pares calculating, unavailable(not-published) si n=0 y hay calculating; repo.attention se emite solo cuando cambia",
+      "verify": "cargo test -p gitraptor-core --test predict_publish attention:: 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "crates/core/tests/predict_publish.rs"
+      ]
+    },
+    {
+      "id": "CKPB-PUB-NOCONTENT",
+      "statement": "T009 (NFR-03): ninguna publicación (instantánea, evento, prediction.list) lleva contenido de archivos: un marcador escrito en los blobs nunca aparece",
+      "verify": "cargo test -p gitraptor-core --test predict_publish content:: 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "crates/core/tests/predict_publish.rs"
+      ]
+    },
+    {
+      "id": "CKPB-PUB-CAPOFF",
+      "statement": "T009: una conexión sin prediction.pairs no recibe prediction.changed ni RepoView.prediction; prediction.list se descubre en hello.methods y responde",
+      "verify": "cargo test -p gitraptor-core --test predict_publish capability:: 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "crates/core/tests/predict_publish.rs"
+      ]
+    },
+    {
+      "id": "CKPB-PUB-POWER",
+      "statement": "T007/D5: en ahorro de energía los pares se publican pending(power-saving) con su último resultado y hora y no corre ningún merge; al volver a corriente se recalculan solo los pares cuya triple cambió",
+      "verify": "cargo test -p gitraptor-core --test predict_publish power:: 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "crates/core/tests/predict_publish.rs"
+      ]
+    },
+    {
+      "id": "CKPB-INTACT",
+      "statement": "T010 (NFR-01, SEC-09, M-02, M-06): con 10 worktrees y 55 pares, recálculos por commit y por base movida y gc concurrente la huella del repo (mtime de packs, objetos sueltos y directorios de objects/) no cambia; el canario ampliado no se dispara; el único proceso hijo es el trabajador; partial clone da missing-object sin red; los tres hostiles dan no calculable sin tumbar el daemon",
+      "verify": "cargo test -p gitraptor-core --test predict_repo_intact repo_intact:: 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "crates/core/tests/predict_repo_intact.rs",
+        "crates/testkit/src/canary.rs"
+      ]
+    },
+    {
+      "id": "CKPB-BOUNDARY",
+      "statement": "T010: predict no importa tm_write, guard_write, user_ops, invoke ni profile; el único Command::new bajo predict/ está en predict/worker/mod.rs con el programa resuelto por current_exe; apps/cli/src/commands/predict_worker.rs no tiene Command::new",
+      "verify": "cargo test -p gitraptor-core --test predict_boundary  2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "crates/core/tests/predict_boundary.rs"
+      ]
+    },
+    {
+      "id": "CKPB-STATIC-GIT",
+      "statement": "T010: crates/git/src/dry_merge no contiene merge_trees, merge_commits, merge_resource_cache, tree_merge_options ni Repository::attributes*, como prueba repo_intact de static_check",
+      "verify": "cargo test -p gitraptor-git --test static_check repo_intact::dry_merge_ 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "crates/git/tests/static_check.rs"
+      ]
+    },
+    {
+      "id": "CKPB-BENCH",
+      "statement": "T012: el banco engine tiene el escenario prediction (commit hasta predicción publicada, con 10 worktrees) y el binario del banco atiende predict-worker (WORKER_SUBCOMMAND); compila con clippy --all-targets; la medición en reposo se informa aparte (S12)",
+      "verify": "grep -q '\"prediction\"' apps/cli/benches/engine.rs && grep -q 'WORKER_SUBCOMMAND' apps/cli/benches/engine.rs",
+      "layer": "static",
+      "origin": "story"
+    },
+    {
+      "id": "CKPB-STATUS",
+      "statement": "T013: TS-CKP-001 y DS-TS-CKP-001 quedan status implemented y su fila de release-status.md dice implemented",
+      "verify": "grep -q '^status: implemented' docs/requirements/features/cockpit/technical-stories/TS-CKP-001-predictor-conflictos.md && grep -q '^status: implemented' docs/requirements/features/cockpit/dev-specs/TS-CKP-001-predictor-conflictos.md && grep -E 'TS-CKP-001' docs/requirements/release-status.md | grep -q 'implemented' && ! grep -E 'TS-CKP-001' docs/requirements/release-status.md | grep -q 'partially-implemented'",
+      "layer": "static",
+      "origin": "story"
+    }
+  ],
+  "constraints": {
+    "deny_paths": [
+      "docs/ARTIFACTS.md",
+      "docs/architecture/decisions/ADR-GRD-008*",
+      "Cargo.lock",
+      "**/Cargo.toml"
+    ],
+    "allow_dependency_changes": false
+  },
+  "scope": {
+    "projects": [
+      "gitraptor-api",
+      "gitraptor-git",
+      "gitraptor-core",
+      "gitraptor-testkit",
+      "gitraptor-cli",
+      "gitraptor-mcp"
+    ]
+  },
+  "hops": {
+    "design": {
+      "agent": "main-loop",
+      "model": "opus"
+    },
+    "critic": {
+      "agent": "nassa-core:plan-critic",
+      "model": "opus"
+    },
+    "tester": {
+      "agent": "nassa-core:criterion-tester",
+      "model": "sonnet"
+    },
+    "build": {
+      "agent": "nassa-dev-rust:rust-expert",
+      "model": "opus"
+    },
+    "review": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "opus"
+    },
+    "conformance": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "sonnet"
+    }
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 900000,
+    "suiteTimeoutMs": 2400000
+  }
+}

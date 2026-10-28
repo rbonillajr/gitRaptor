@@ -45,6 +45,7 @@ fn config(dirs: ProfileDirs, heartbeat: Duration) -> DaemonConfig {
         tiers: Default::default(),
         discovery: Default::default(),
         power: Default::default(),
+        predict: Default::default(),
         tm_capture: Default::default(),
     }
 }

@@ -651,6 +651,7 @@ mod tests {
                     tier: None,
                     checked_utc_ms: None,
                     kept_temps: None,
+                    prediction: None,
                 },
             },
         ))))

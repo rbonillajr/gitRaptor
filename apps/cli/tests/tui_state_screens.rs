@@ -116,6 +116,7 @@ fn repo_msg(base: &str, worktrees: Vec<WorktreeView>) -> Msg {
                 tier: None,
                 checked_utc_ms: None,
                 kept_temps: None,
+                prediction: None,
             },
         },
     ))))

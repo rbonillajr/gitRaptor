@@ -197,6 +197,8 @@ pub struct DaemonConfig {
     pub discovery: DiscoveryConfig,
     /// The power source and how often it is read (TS-GRP-005).
     pub power: PowerConfig,
+    /// How the conflict predictor runs its dry merges (TS-CKP-001); off by default.
+    pub predict: crate::predict::PredictConfig,
 }
 
 /// A layer over the snapshotter of the Time Machine's own commands (tests).
@@ -233,6 +235,7 @@ impl DaemonConfig {
             protected: None,
             operations: Some(OperationsWiring::production()),
             tm_prior_layer: None,
+            predict: Default::default(),
             tm_capture: TmCapture {
                 no_free_space_floor: env::tm_no_free_space_floor(),
                 ..TmCapture::default()
@@ -642,6 +645,7 @@ impl Daemon {
                     .then_some(gitraptor_api::messages::RepoTier::Active),
                 checked_utc_ms: None,
                 kept_temps: None,
+                prediction: None,
             });
         }
         let bus = Arc::new(EventBus::new(

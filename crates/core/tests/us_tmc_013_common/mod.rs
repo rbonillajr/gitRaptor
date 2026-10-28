@@ -187,6 +187,7 @@ pub fn start(
         discovery: Default::default(),
         power: Default::default(),
         // A capture of its own would add points the repo-intact checks do not expect.
+        predict: Default::default(),
         tm_capture: TmCapture {
             config: CaptureConfig {
                 enabled: false,

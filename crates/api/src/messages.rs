@@ -170,6 +170,10 @@ pub struct RepoView {
     /// `timemachine.kept-temps`; absent when there are none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kept_temps: Option<crate::timemachine::KeptTempsView>,
+    /// The conflict predictor's pairs (TS-CKP-001). Only for a connection with
+    /// `prediction.pairs`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prediction: Option<crate::prediction::PredictionSummary>,
 }
 
 /// How an observed repo is observed (TS-GRP-006, ADR-GRP-010, Enmienda

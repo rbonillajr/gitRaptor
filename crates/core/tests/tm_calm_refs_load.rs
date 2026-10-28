@@ -108,6 +108,7 @@ fn start(fx: &Fixture) -> Running {
         tiers: TierConfig::default(),
         discovery: Default::default(),
         power: Default::default(),
+        predict: Default::default(),
         tm_capture: TmCapture {
             config: CaptureConfig {
                 enabled: true,

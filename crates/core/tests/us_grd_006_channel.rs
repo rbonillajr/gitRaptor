@@ -100,6 +100,7 @@ fn daemon_entry() {
         tiers: Default::default(),
         discovery: Default::default(),
         power: Default::default(),
+        predict: Default::default(),
         tm_capture: Default::default(),
     };
     let daemon = Daemon::start(config).unwrap();
@@ -750,6 +751,7 @@ fn a_malformed_exception_token_does_not_break_evaluate() {
         tiers: Default::default(),
         discovery: Default::default(),
         power: Default::default(),
+        predict: Default::default(),
         tm_capture: Default::default(),
     };
     let daemon = Daemon::start(config).unwrap();

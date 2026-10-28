@@ -186,6 +186,7 @@ fn repo_intact_the_snapshot_follows_the_base_branch_but_keeps_the_heads() {
         tier: None,
         checked_utc_ms: None,
         kept_temps: None,
+        prediction: None,
     }];
     let inputs = BTreeMap::from([("r1".to_owned(), read.divergence_inputs())]);
     let cache = DivergenceCache::default();

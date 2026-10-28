@@ -158,6 +158,7 @@ fn model_with(lang: Lang, worktrees: Vec<WorktreeView>, sessions: Vec<SessionVie
                     tier: None,
                     checked_utc_ms: None,
                     kept_temps: None,
+                    prediction: None,
                 },
             },
         )))),
