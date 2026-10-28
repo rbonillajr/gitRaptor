@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: medium
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-28
 domain: GRP
 epic: E-001
 feature: time-machine
@@ -15,6 +15,7 @@ related:
   rules:
     - BR-TMC-001
   stories: [US-TMC-002]
+  specs: [DS-US-TMC-014]
 covers: [BR-TMC-EDGE-001, D-TMC-8, D-TMC-14]
 blocked_by: []
 tags: [time-machine, undo, remoto]
@@ -71,7 +72,7 @@ Entonces el commit se deshace sin aviso sobre el remoto
 ## Diseño y Dev Spec
 
 - **Diseño (flujo/UX):** Pendiente de diseño.
-- **Dev Spec:** pendiente (lo genera el Arquitecto).
+- **Dev Spec:** [DS-US-TMC-014](../dev-specs/US-TMC-014-undo-ya-empujado.md) (approved).
 
 ## Dependencias
 
