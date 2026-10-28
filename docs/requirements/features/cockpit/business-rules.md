@@ -260,7 +260,9 @@ IF ⚡ en el par (rama, base) → aviso + confirmación
 
 **Ejemplo**: claude-1 sigue Activo en `feat-pagos` con HEAD `a1b2c3` → "el agente sigue activo; se integra hasta el commit a1b2c3. ¿Continuar?" Si sí, el merge se hace en el worktree principal, que tiene `main` sacada.
 
-**Fuentes**: Q-CKP-10, Q-CKP-26.
+> Decisión del orquestador (2026-10-27), validada por PO: "destino limpio" significa sin cambios en archivos seguidos (preparados, modificados, borrados o en conflicto). Los archivos sin seguimiento del destino no bloquean el merge: Git no los sobrescribe y el snapshot previo los guarda (Q-CKP-37, DS-US-CKP-014 I6).
+
+**Fuentes**: Q-CKP-10, Q-CKP-26, Q-CKP-37.
 
 ### BR-CKP-ELIG-003: Rebase de la rama del agente
 

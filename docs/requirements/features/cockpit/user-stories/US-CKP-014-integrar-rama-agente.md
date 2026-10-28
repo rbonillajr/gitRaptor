@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: high
 created: 2026-10-04
-updated: 2026-10-09
+updated: 2026-10-27
 feature: cockpit
 related:
   context:
@@ -92,4 +92,4 @@ _Pendiente — lo completa el Arquitecto (Dev Spec). Catálogo y ejecutor: ADR-C
 ## Diseño y Dev Spec
 
 - **Diseño:** DSYS-GRP-001 (ConfirmPrompt con default No, aviso con Deshacer); ADR-GRP-004 § 3.
-- **Dev Spec:** pendiente.
+- **Dev Spec:** [DS-US-CKP-014](../dev-specs/US-CKP-014-integrar-rama-agente.md).
