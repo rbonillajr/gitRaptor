@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: high
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-27
 feature: cockpit
 related:
   context:
@@ -86,4 +86,4 @@ _Pendiente — lo completa el Arquitecto (Dev Spec). ADR-CKP-002 § 5 y § 7._
 ## Diseño y Dev Spec
 
 - **Diseño:** DSYS-GRP-001 (ConfirmPrompt).
-- **Dev Spec:** pendiente.
+- **Dev Spec:** [DS-US-CKP-024](../dev-specs/US-CKP-024-integrar-casos-limite.md) (T003, el aviso ⚡, bloqueada por el PR-B de TS-CKP-001).
