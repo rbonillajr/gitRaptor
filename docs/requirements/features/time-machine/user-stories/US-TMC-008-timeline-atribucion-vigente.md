@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: medium
 created: 2026-10-03
-updated: 2026-10-27
+updated: 2026-10-28
 domain: GRP
 epic: E-001
 feature: time-machine
@@ -15,6 +15,7 @@ related:
   rules:
     - BR-TMC-001
   stories: [US-TMC-002, US-TMC-006, US-GRP-010]
+  specs: [DS-US-TMC-008]
 covers: [BR-TMC-CONS-005, D-TMC-2, D-TMC-18]
 blocked_by: []
 tags: [time-machine, timeline, atribucion-vigente]
@@ -40,7 +41,7 @@ BR-TMC-CONS-005 (atribución vigente; registro del undo inmutable) · D-TMC-2 (Q
 
 Dado tres commits de una sesión detectada como "claude-1" en "feat-login"
 Cuando el desarrollador corrige esa atribución a "codex-1"
-Entonces los tres commits figuran en el timeline como "codex-1 (registrado)"
+Entonces los tres commits figuran en el timeline como "codex-1" con origen registrado
 
 **Escenario: Las demás sesiones no cambian**
 
@@ -75,7 +76,7 @@ Entonces la atribución de esos eventos es la detectada
 ## Diseño y Dev Spec
 
 - **Diseño (flujo/UX):** Pendiente de diseño.
-- **Dev Spec:** pendiente (lo genera el Arquitecto).
+- **Dev Spec:** [DS-US-TMC-008](../dev-specs/US-TMC-008-timeline-atribucion-vigente.md) (approved).
 
 ## Dependencias
 
