@@ -442,6 +442,92 @@ fn a_timed_out_or_cancelled_commit_unstages_what_it_added() {
     );
 }
 
+/// Creates the release file of the hook at `.0` when dropped, so no hook process outlives the
+/// test, whatever it did.
+struct Release(PathBuf);
+
+impl Drop for Release {
+    fn drop(&mut self) {
+        let _ = std::fs::write(&self.0, "");
+    }
+}
+
+/// A grandchild of `git` that ignores Ctrl-C and a terminate and inherits its pipes: before the
+/// fix the executor waited for their EOF forever once `git` ended. Its group is killed, and
+/// since a hook process died the commit cannot claim the repo is unchanged.
+#[test]
+fn a_hook_grandchild_holding_the_pipes_does_not_hang_a_timed_out_commit() {
+    let f = Fixture::with_commit(&git());
+    f.git(&["checkout", "-q", "-b", "feat/x"]);
+    let _release = Release(f.repo.join(".git/hooks/pre-commit.release"));
+    hook(
+        &f,
+        &format!("(trap '' INT TERM; {WAIT_FOR_RELEASE}) &\n{WAIT_FOR_RELEASE}"),
+    );
+    let wt = f.repo.clone();
+    let rig = Rig::build(f, wt, alone(), Some(Duration::from_secs(5)));
+    rig.f.write("new.txt", "new\n");
+    let commits = rig.commits();
+    let plan = rig.prepare(Some(&["new.txt"]));
+
+    let got = rig.run(&plan);
+
+    assert_eq!(
+        step_failure(got),
+        StepFailure::Changed,
+        "a hook process had to be killed: failed-changed, never failed-unchanged"
+    );
+    assert_eq!(rig.commits(), commits, "no commit");
+}
+
+/// The hook itself outlives the Ctrl-C that ends `git` (a shell hook does so by chance when the
+/// Ctrl-C lands as its `sleep` exits, the flaky hang on CI; this one ignores it) and holds its
+/// pipes: it is terminated once `git` ended, and `git` let go of its own lock.
+#[test]
+fn a_hook_that_ignores_the_interrupt_does_not_hang_a_timed_out_commit() {
+    let f = Fixture::with_commit(&git());
+    f.git(&["checkout", "-q", "-b", "feat/x"]);
+    let _release = Release(f.repo.join(".git/hooks/pre-commit.release"));
+    hook(&f, &format!("trap '' INT\n{WAIT_FOR_RELEASE}"));
+    let wt = f.repo.clone();
+    let rig = Rig::build(f, wt, alone(), Some(Duration::from_secs(5)));
+    rig.f.write("new.txt", "new\n");
+    let commits = rig.commits();
+    let plan = rig.prepare(Some(&["new.txt"]));
+
+    let got = rig.run(&plan);
+
+    assert_eq!(
+        step_failure(got),
+        StepFailure::Changed,
+        "the hook had to be terminated: failed-changed"
+    );
+    assert_eq!(rig.commits(), commits, "no commit");
+    assert!(
+        !rig.wt.join(".git/index.lock").exists(),
+        "git let go of its own lock once its hook died"
+    );
+}
+
+/// A hook that leaves a background job holding the pipes of `git` does not hold the commit
+/// that landed: its output is waited for a bounded time, and the job is not killed.
+#[test]
+fn a_hook_background_job_does_not_hold_a_landed_commit() {
+    let rig = Rig::new();
+    let release = Release(rig.f.repo.join(".git/hooks/pre-commit.release"));
+    hook(&rig.f, &format!("({WAIT_FOR_RELEASE}) &"));
+    rig.f.write("new.txt", "new\n");
+
+    let done = rig.commit(Some(&["new.txt"]));
+
+    assert!(
+        done.outcome.output.new_commit.is_some(),
+        "the commit landed"
+    );
+    assert_eq!(rig.changed_by_head(), "A\tnew.txt");
+    drop(release);
+}
+
 /// MCP010-G53 (⛔5.3): the interrupted commit leaves an orphan `index.lock` (the hook takes the
 /// write permission of `.git` away, so Git cannot remove its own lock when the interrupt kills
 /// it): `rm --cached` fails and the result is `failed-changed`, never `failed-unchanged`; the

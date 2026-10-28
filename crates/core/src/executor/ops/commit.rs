@@ -235,6 +235,22 @@ impl CommitStep {
     }
 }
 
+impl CommitStep {
+    /// The failure of a `git` that did not land: the files it added are unstaged again, and it
+    /// is unchanged only if that worked and no hook descendant had to be killed (one may have
+    /// died mid-write).
+    fn stopped(&self, ctx: &mut StepCtx<'_>, ran: &std::io::Result<GitRun>) -> StepError {
+        let stop = stop_of(ran);
+        if !self.unstage(ctx) {
+            return StepError::new("the index could not be put back");
+        }
+        if matches!(ran, Ok(r) if r.forced) {
+            return StepError::new("a hook process outlived the interrupt and was killed");
+        }
+        StepError::unchanged(stop)
+    }
+}
+
 fn stop_of(run: &std::io::Result<GitRun>) -> StepFailure {
     match run {
         Ok(r) if r.interrupted == Some(Interrupt::TimeLimit) => StepFailure::TimeLimit,
@@ -272,11 +288,7 @@ impl ProtectedStep for CommitStep {
             let ran = self.launch(ctx, &add, None, &self.cancel.clone())?;
             if !matches!(&ran, Ok(r) if r.status.success()) {
                 // `add` writes the index whole or not at all; still, put it back.
-                let stop = stop_of(&ran);
-                if !self.unstage(ctx) {
-                    return Err(StepError::new("the index could not be put back"));
-                }
-                return Err(StepError::unchanged(stop));
+                return Err(self.stopped(ctx, &ran));
             }
         }
         let ran = run_git(ctx, commit, &self.cancel.clone());
@@ -289,13 +301,7 @@ impl ProtectedStep for CommitStep {
                 ..StepOutput::default()
             }),
             None if self.old != ZERO_OID => Err(StepError::new("branch moved")),
-            _ => {
-                let stop = stop_of(&ran);
-                if !self.unstage(ctx) {
-                    return Err(StepError::new("the index could not be put back"));
-                }
-                Err(StepError::unchanged(stop))
-            }
+            _ => Err(self.stopped(ctx, &ran)),
         }
     }
 }
