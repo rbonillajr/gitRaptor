@@ -1,0 +1,351 @@
+{
+  "source": {
+    "kind": "devspec",
+    "ref": "docs/requirements/features/motor-local/dev-specs/US-GRP-010-dev-spec.md"
+  },
+  "criteria": [
+    {
+      "id": "GRP010-API-RESERVED",
+      "statement": "attribution.correct y attribution.withdraw-correction están implementados, son reservados y no se ofrecen al perfil mcp (BR-AUTH-001, SEC-14)",
+      "verify": "cargo test -p gitraptor-api --lib -- --list 2>/dev/null | grep -q '^attribution::tests::attribution_methods_are_reserved_and_not_mcp: test' && cargo test -p gitraptor-api --lib attribution::tests::attribution_methods_are_reserved_and_not_mcp -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/api/src/attribution_tests.rs"
+      ]
+    },
+    {
+      "id": "GRP010-API-BLOCK",
+      "statement": "El módulo attribution posee el bloque −33160 y ATTRIBUTION_REJECTED es −33160 'attribution-rejected' (ADR-GRP-016)",
+      "verify": "cargo test -p gitraptor-api --lib -- --list 2>/dev/null | grep -q '^attribution::tests::attribution_rejected_is_in_its_block: test' && cargo test -p gitraptor-api --lib attribution::tests::attribution_rejected_is_in_its_block -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/api/src/attribution_tests.rs"
+      ]
+    },
+    {
+      "id": "GRP010-API-WIRE",
+      "statement": "Forma en el cable: AttributionCorrectParams con agent, worktree y session_id opcional (deny_unknown_fields); AttributionRejection en kebab-case con registered-session y same-agent; candidates omitido si vacío",
+      "verify": "cargo test -p gitraptor-api --lib -- --list 2>/dev/null | grep -q '^attribution::tests::correct_params_wire_form: test' && cargo test -p gitraptor-api --lib attribution::tests::correct_params_wire_form -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/api/src/attribution_tests.rs"
+      ]
+    },
+    {
+      "id": "GRP010-EFF-1",
+      "statement": "Sin registros, la atribución vigente es la detectada",
+      "verify": "cargo test -p gitraptor-core --lib -- --list 2>/dev/null | grep -q '^daemon::attribution::tests::effective_without_records_is_the_detected_one: test' && cargo test -p gitraptor-core --lib daemon::attribution::tests::effective_without_records_is_the_detected_one -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/daemon/attribution_tests.rs"
+      ]
+    },
+    {
+      "id": "GRP010-EFF-2",
+      "statement": "Una corrección fija su agente con origen registered",
+      "verify": "cargo test -p gitraptor-core --lib -- --list 2>/dev/null | grep -q '^daemon::attribution::tests::a_correction_replaces_the_agent_with_origin_registered: test' && cargo test -p gitraptor-core --lib daemon::attribution::tests::a_correction_replaces_the_agent_with_origin_registered -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/daemon/attribution_tests.rs"
+      ]
+    },
+    {
+      "id": "GRP010-EFF-3",
+      "statement": "Una segunda corrección reemplaza a la primera (D3)",
+      "verify": "cargo test -p gitraptor-core --lib -- --list 2>/dev/null | grep -q '^daemon::attribution::tests::a_second_correction_replaces_the_first: test' && cargo test -p gitraptor-core --lib daemon::attribution::tests::a_second_correction_replaces_the_first -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/daemon/attribution_tests.rs"
+      ]
+    },
+    {
+      "id": "GRP010-EFF-4",
+      "statement": "Retirar vuelve a la detectada, nunca a una corrección anterior (Q50, D3)",
+      "verify": "cargo test -p gitraptor-core --lib -- --list 2>/dev/null | grep -q '^daemon::attribution::tests::withdrawing_returns_to_the_detected_one_not_to_an_earlier_correction: test' && cargo test -p gitraptor-core --lib daemon::attribution::tests::withdrawing_returns_to_the_detected_one_not_to_an_earlier_correction -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/daemon/attribution_tests.rs"
+      ]
+    },
+    {
+      "id": "GRP010-EFF-5",
+      "statement": "Una sesión confirmada (P16) vuelve a origen registered al retirar (D2)",
+      "verify": "cargo test -p gitraptor-core --lib -- --list 2>/dev/null | grep -q '^daemon::attribution::tests::a_confirmed_session_withdrawn_returns_registered: test' && cargo test -p gitraptor-core --lib daemon::attribution::tests::a_confirmed_session_withdrawn_returns_registered -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/daemon/attribution_tests.rs"
+      ]
+    },
+    {
+      "id": "GRP010-CORE-1",
+      "statement": "6a: corregir en un repo no observado → repo-not-observed; filas de sessions y attribution_records iguales",
+      "verify": "cargo test -p gitraptor-core --test us_grp_010 -- --list 2>/dev/null | grep -q '^correcting_in_an_unobserved_repo_is_rejected: test' && cargo test -p gitraptor-core --test us_grp_010 correcting_in_an_unobserved_repo_is_rejected -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_010.rs"
+      ]
+    },
+    {
+      "id": "GRP010-CORE-2",
+      "statement": "6b: worktree sin sesión detectada → no-detected-attribution; nada cambia",
+      "verify": "cargo test -p gitraptor-core --test us_grp_010 -- --list 2>/dev/null | grep -q '^correcting_without_a_detected_attribution_is_rejected: test' && cargo test -p gitraptor-core --test us_grp_010 correcting_without_a_detected_attribution_is_rejected -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_010.rs"
+      ]
+    },
+    {
+      "id": "GRP010-CORE-3",
+      "statement": "6b: --session de una sesión registrada → registered-session; filas iguales (D5)",
+      "verify": "cargo test -p gitraptor-core --test us_grp_010 -- --list 2>/dev/null | grep -q '^a_registered_session_is_told_to_withdraw_it: test' && cargo test -p gitraptor-core --test us_grp_010 a_registered_session_is_told_to_withdraw_it -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_010.rs"
+      ]
+    },
+    {
+      "id": "GRP010-CORE-4",
+      "statement": "Con corrección activa, corregir al agente detectado es éxito con matches_detected = true (D9)",
+      "verify": "cargo test -p gitraptor-core --test us_grp_010 -- --list 2>/dev/null | grep -q '^correcting_back_to_the_detected_agent_suggests_uncorrect: test' && cargo test -p gitraptor-core --test us_grp_010 correcting_back_to_the_detected_agent_suggests_uncorrect -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_010.rs"
+      ]
+    },
+    {
+      "id": "GRP010-CORE-5",
+      "statement": "6c: un agente recibe RESERVED_REFUSED auditado en los dos métodos y nada cambia; en la misma prueba, el desarrollador corrige con éxito esa misma sesión (depende de T004)",
+      "verify": "cargo test -p gitraptor-core --test us_grp_010 -- --list 2>/dev/null | grep -q '^an_agent_cannot_correct_and_it_is_audited: test' && cargo test -p gitraptor-core --test us_grp_010 an_agent_cannot_correct_and_it_is_audited -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_010.rs"
+      ]
+    },
+    {
+      "id": "GRP010-CORE-6",
+      "statement": "Los eventos crudos de la Time Machine y SessionActors siguen la corrección y su retirada",
+      "verify": "cargo test -p gitraptor-core --test us_grp_010 -- --list 2>/dev/null | grep -q '^the_time_machine_sees_the_current_attribution: test' && cargo test -p gitraptor-core --test us_grp_010 the_time_machine_sees_the_current_attribution -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_010.rs"
+      ]
+    },
+    {
+      "id": "GRP010-CORE-7",
+      "statement": "Corregir al agente vigente → same-agent; nada cambia (D5)",
+      "verify": "cargo test -p gitraptor-core --test us_grp_010 -- --list 2>/dev/null | grep -q '^a_same_agent_correction_is_rejected: test' && cargo test -p gitraptor-core --test us_grp_010 a_same_agent_correction_is_rejected -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_010.rs"
+      ]
+    },
+    {
+      "id": "GRP010-CORE-8",
+      "statement": "Varias sesiones detectadas presentes → ambiguous-session con candidatas (≤10, sin rutas)",
+      "verify": "cargo test -p gitraptor-core --test us_grp_010 -- --list 2>/dev/null | grep -q '^ambiguous_sessions_list_candidates: test' && cargo test -p gitraptor-core --test us_grp_010 ambiguous_sessions_list_candidates -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_010.rs"
+      ]
+    },
+    {
+      "id": "GRP010-CORE-9",
+      "statement": "--session elige una sesión terminada del worktree y la corrige (D4)",
+      "verify": "cargo test -p gitraptor-core --test us_grp_010 -- --list 2>/dev/null | grep -q '^correcting_an_ended_session_by_id: test' && cargo test -p gitraptor-core --test us_grp_010 correcting_an_ended_session_by_id -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_010.rs"
+      ]
+    },
+    {
+      "id": "GRP010-CORE-10",
+      "statement": "uncorrect sin corrección activa → not-corrected",
+      "verify": "cargo test -p gitraptor-core --test us_grp_010 -- --list 2>/dev/null | grep -q '^withdrawing_without_a_correction_is_rejected: test' && cargo test -p gitraptor-core --test us_grp_010 withdrawing_without_a_correction_is_rejected -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_010.rs"
+      ]
+    },
+    {
+      "id": "GRP010-CORE-11",
+      "statement": "Registrar el agente corregido responde already-registered sin nueva sesión ni confirm (D6)",
+      "verify": "cargo test -p gitraptor-core --test us_grp_010 -- --list 2>/dev/null | grep -q '^registering_the_corrected_agent_does_not_add_a_session: test' && cargo test -p gitraptor-core --test us_grp_010 registering_the_corrected_agent_does_not_add_a_session -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_010.rs"
+      ]
+    },
+    {
+      "id": "GRP010-CLI-1",
+      "statement": "Esc. 1: raptor agent correct Codex: una sesión other/Codex/registered y un commit posterior con actor Codex",
+      "verify": "cargo test -p gitraptor-cli --test attribution_correction -- --list 2>/dev/null | grep -q '^correcting_replaces_the_detected_attribution: test' && cargo test -p gitraptor-cli --test attribution_correction correcting_replaces_the_detected_attribution -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/attribution_correction.rs"
+      ]
+    },
+    {
+      "id": "GRP010-CLI-2",
+      "statement": "Esc. 2: c1 y c2 de la sesión presente pasan a Codex; c0 de la sesión terminada sigue Claude Code detected",
+      "verify": "cargo test -p gitraptor-cli --test attribution_correction -- --list 2>/dev/null | grep -q '^the_correction_reaches_the_session_from_its_start: test' && cargo test -p gitraptor-cli --test attribution_correction the_correction_reaches_the_session_from_its_start -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/attribution_correction.rs"
+      ]
+    },
+    {
+      "id": "GRP010-CLI-3",
+      "statement": "Esc. 3: con el agente simulado vivo, la detección no deshace la corrección; una sola sesión",
+      "verify": "cargo test -p gitraptor-cli --test attribution_correction -- --list 2>/dev/null | grep -q '^detection_does_not_undo_a_correction: test' && cargo test -p gitraptor-cli --test attribution_correction detection_does_not_undo_a_correction -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/attribution_correction.rs"
+      ]
+    },
+    {
+      "id": "GRP010-CLI-4",
+      "statement": "Esc. 4: raptor agent uncorrect devuelve la sesión y c1, c2 a Claude Code detected (Q50)",
+      "verify": "cargo test -p gitraptor-cli --test attribution_correction -- --list 2>/dev/null | grep -q '^withdrawing_returns_the_detected_attribution: test' && cargo test -p gitraptor-cli --test attribution_correction withdrawing_returns_the_detected_attribution -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/attribution_correction.rs"
+      ]
+    },
+    {
+      "id": "GRP010-CLI-5",
+      "statement": "Esc. 5: tras reiniciar el motor la sesión y sus eventos siguen de Codex",
+      "verify": "cargo test -p gitraptor-cli --test attribution_correction -- --list 2>/dev/null | grep -q '^the_correction_survives_an_engine_restart: test' && cargo test -p gitraptor-cli --test attribution_correction the_correction_survives_an_engine_restart -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/attribution_correction.rs"
+      ]
+    },
+    {
+      "id": "GRP010-CLI-6",
+      "statement": "6c e2e: un agente recibe 'only the developer can correct an attribution' (en) y 'solo el desarrollador puede corregir una atribución' (es)",
+      "verify": "cargo test -p gitraptor-cli --test attribution_correction -- --list 2>/dev/null | grep -q '^an_agent_correcting_is_told_only_the_developer_can: test' && cargo test -p gitraptor-cli --test attribution_correction an_agent_correcting_is_told_only_the_developer_can -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/attribution_correction.rs"
+      ]
+    },
+    {
+      "id": "GRP010-CLI-7",
+      "statement": "6b e2e: el texto de registered-session en en y es dice retirar el registro y registrar el agente correcto",
+      "verify": "cargo test -p gitraptor-cli --test attribution_correction -- --list 2>/dev/null | grep -q '^a_registered_session_text_says_withdraw_and_register: test' && cargo test -p gitraptor-cli --test attribution_correction a_registered_session_text_says_withdraw_and_register -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/attribution_correction.rs"
+      ]
+    },
+    {
+      "id": "GRP010-CLI-8",
+      "statement": "Corregir y retirar no modifican el repo (huella del testkit, NFR-01)",
+      "verify": "cargo test -p gitraptor-cli --test attribution_correction -- --list 2>/dev/null | grep -q '^repo_intact_correcting_does_not_modify_it: test' && cargo test -p gitraptor-cli --test attribution_correction repo_intact_correcting_does_not_modify_it -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/attribution_correction.rs"
+      ]
+    },
+    {
+      "id": "GRP010-CLI-MSG",
+      "statement": "Cada AttributionRejection tiene mensaje en en y es en el catálogo correction.*",
+      "verify": "cargo test -p gitraptor-cli --bin raptor -- --list 2>/dev/null | grep -q '^agent::correction_tests::every_correction_rejection_has_a_message: test' && cargo test -p gitraptor-cli --bin raptor agent::correction_tests::every_correction_rejection_has_a_message -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/src/agent_correction_tests.rs"
+      ]
+    },
+    {
+      "id": "GRP010-CORE-12",
+      "statement": "--session con un id que no es de ese worktree → unknown-session; nada cambia",
+      "verify": "cargo test -p gitraptor-core --test us_grp_010 -- --list 2>/dev/null | grep -q '^an_unknown_session_is_rejected: test' && cargo test -p gitraptor-core --test us_grp_010 an_unknown_session_is_rejected -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_010.rs"
+      ]
+    },
+    {
+      "id": "GRP010-CORE-13",
+      "statement": "Una carpeta de un repo observado que no es un worktree → not-a-worktree; nada cambia",
+      "verify": "cargo test -p gitraptor-core --test us_grp_010 -- --list 2>/dev/null | grep -q '^correcting_outside_a_worktree_is_rejected: test' && cargo test -p gitraptor-core --test us_grp_010 correcting_outside_a_worktree_is_rejected -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_010.rs"
+      ]
+    },
+    {
+      "id": "GRP010-CLI-9",
+      "statement": "D9 e2e: con corrección activa, raptor agent correct al agente detectado sugiere raptor agent uncorrect (texto en/es de correction.hint-uncorrect)",
+      "verify": "cargo test -p gitraptor-cli --test attribution_correction -- --list 2>/dev/null | grep -q '^correcting_back_to_the_detected_agent_hints_uncorrect: test' && cargo test -p gitraptor-cli --test attribution_correction correcting_back_to_the_detected_agent_hints_uncorrect -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/attribution_correction.rs"
+      ]
+    }
+  ],
+  "constraints": {
+    "deny_paths": [
+      "docs/ARTIFACTS.md",
+      "Cargo.lock",
+      "**/Cargo.toml",
+      "apps/mcp/**",
+      "crates/core/src/profile/schema.rs",
+      "crates/core/src/timemachine/**",
+      "docs/architecture/decisions/ADR-GRD-008*"
+    ],
+    "allow_dependency_changes": false
+  },
+  "scope": {
+    "projects": [
+      "gitraptor-api",
+      "gitraptor-core",
+      "gitraptor-cli"
+    ]
+  },
+  "hops": {
+    "design": {
+      "agent": "main-loop",
+      "model": "opus"
+    },
+    "critic": {
+      "agent": "nassa-core:plan-critic",
+      "model": "opus"
+    },
+    "tester": {
+      "agent": "nassa-core:criterion-tester",
+      "model": "sonnet"
+    },
+    "build": {
+      "agent": "nassa-dev-rust:rust-expert",
+      "model": "opus"
+    },
+    "review": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "opus"
+    },
+    "conformance": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "sonnet"
+    }
+  },
+  "suite": {
+    "command": "node tools/test/nextest-junit.mjs"
+  },
+  "layers": {
+    "runtime": {
+      "commands": [
+        {
+          "id": "suite",
+          "cmd": "node tools/test/nextest-junit.mjs"
+        }
+      ],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 600000,
+    "suiteTimeoutMs": 1800000
+  }
+}
