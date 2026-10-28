@@ -8,11 +8,11 @@ domain: GRP
 priority: high
 complexity: high
 created: 2026-10-05
-updated: 2026-10-05
+updated: 2026-10-27
 related:
   adrs: [ADR-GRP-015, ADR-GRP-005, ADR-GRP-010, ADR-CKP-001, ADR-TMC-004, ADR-TMC-006]
   stories: [US-GRP-017, US-GRP-019, US-TMC-004, TS-GRP-003, INF-GRP-002, TS-TMC-001, TS-CKP-001]
-  specs: []
+  specs: [DS-TS-GRP-005]
 ado:
   id: null
   url: null
@@ -29,7 +29,7 @@ tags: [motor-local, recursos, prioridad, qos, nice, ionice, ecoqos, bateria, dae
 **Quiero** una API única de clases de trabajo en `crates/core`, que fije la prioridad del SO de cada hilo o pool y que hereden los `git` hijos, y una fuente de energía inyectable que active el modo de ahorro
 **Para** cumplir RES-06, RES-07 y el mecanismo de RES-08 sin que cada módulo decida su prioridad por su cuenta (ADR-GRP-015)
 
-> Dev Spec: `dev-specs/TS-GRP-005-dev-spec.md` | Pendiente
+> Dev Spec: [DS-TS-GRP-005](../dev-specs/TS-GRP-005-dev-spec.md) | Escrita (2026-10-27), en dos PR: el PR-A (T001 a T006) cierra G5 de TS-CKP-001
 >
 > **Depende de**: TS-GRP-003 (daemon y autoarranque), US-GRP-002 (observador y reconciliación implementados) e INF-GRP-002 (escenario de estrés de RES-07). **ADRs**: ADR-GRP-015 (§ 1 y § 2), ADR-GRP-005 § 3 (unidad de autoarranque), ADR-GRP-010 (reconciliación), ADR-CKP-001 (pool del predictor), ADR-TMC-004 y ADR-TMC-006 (separar el hashing de la escritura del almacén).
 >
