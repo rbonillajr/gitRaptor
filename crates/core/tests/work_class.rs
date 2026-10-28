@@ -2,7 +2,9 @@
 //! on macOS. Each test runs its checks on a thread of its own, so the harness threads keep
 //! their class.
 
-use gitraptor_core::work_class::{self, Pool, PoolClass, WorkClass};
+use gitraptor_core::work_class::{self, WorkClass};
+#[cfg(target_os = "macos")]
+use gitraptor_core::work_class::{Pool, PoolClass};
 
 #[cfg(target_os = "macos")]
 #[test]
