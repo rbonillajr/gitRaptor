@@ -9,7 +9,6 @@ use gitraptor_api::guard::{
     Reason, RefChange, Rule,
 };
 
-use super::git_command::{FLAGS, WITH_EQUALS, WITH_VALUE};
 use super::refs::{branch_ref, short};
 
 /// Why an argv is not an operation an exception can cover.
@@ -136,9 +135,9 @@ pub fn parse(argv: &[String]) -> Result<Request, Unsupported> {
             dirs.push(args.next().ok_or(Unsupported::Form)?.clone());
             continue;
         }
-        // Every other global option could change the repo or its configuration after the
-        // normalization; one Git does not document is no better.
-        if is_global_option(arg) || arg.starts_with('-') {
+        // Every other global option (`-c`, `--git-dir`, `--work-tree`, ...) could change the repo or
+        // its configuration after the normalization; one Git does not document is no better.
+        if arg.starts_with('-') {
             return Err(Unsupported::Form);
         }
         break arg.as_str();
@@ -153,12 +152,6 @@ pub fn parse(argv: &[String]) -> Result<Request, Unsupported> {
         _ => return Err(Unsupported::Operation),
     };
     Ok(Request { dirs, form })
-}
-
-fn is_global_option(arg: &str) -> bool {
-    WITH_VALUE.contains(&arg)
-        || FLAGS.contains(&arg)
-        || WITH_EQUALS.iter().any(|p| arg.starts_with(p))
 }
 
 /// A name the exception can bind: not empty, not an option, no wildcard.
