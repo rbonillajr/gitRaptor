@@ -33,6 +33,11 @@ pub struct GuardRegistry {
 }
 
 impl GuardRegistry {
+    /// The exception tokens of this daemon.
+    pub fn exceptions(&self) -> &super::exception::Tokens {
+        todo!()
+    }
+
     /// A registry for the daemon of `dirs`.
     pub fn for_profile(dirs: crate::profile::ProfileDirs) -> Self {
         Self {

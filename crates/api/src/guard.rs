@@ -1354,3 +1354,117 @@ mod tests {
         assert!(serde_json::from_str::<GuardRepoParams>(r#"{"path":"/r","x":1}"#).is_err());
     }
 }
+
+/// Largest argv an exception request may carry.
+pub const MAX_EXCEPTION_ARGV: usize = 64;
+/// Largest single argument, in bytes, of an exception request.
+pub const MAX_EXCEPTION_ARG_BYTES: usize = 4096;
+
+/// Why an exception request or its end was refused.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+pub enum ExceptionRefusal {
+    NotInstalled,
+    OutdatedInstall,
+    AlreadyPending,
+    WindowOpen,
+    NoPending,
+    NotTheRequester,
+    UnsupportedForm,
+    UnsupportedOperation,
+    NotDenied,
+    NotExceptable,
+    ChildNotOurs,
+}
+
+/// Data of the `guard-exception-refused` error.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct GuardExceptionRefusedData {
+    pub reason: ExceptionRefusal,
+    pub remaining_ms: Option<u64>,
+}
+
+/// Params of `guard.exception`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct GuardExceptionParams {
+    pub path: String,
+    pub argv: Vec<String>,
+    pub confirm: Option<String>,
+}
+
+/// What an exception would allow, shown before it is applied.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct ExceptionPlanView {
+    pub operation: LoggedOperation,
+    pub rules: Vec<Rule>,
+}
+
+/// The secret that lets one git invocation through: 32 lowercase hex, never serialized by `Serialize`.
+#[derive(Clone, PartialEq, Eq, Deserialize, JsonSchema)]
+pub struct ExceptionToken(String);
+
+impl ExceptionToken {
+    /// The token of `hex`, or `None` unless it is exactly 32 lowercase hex characters.
+    pub fn from_secret(hex: String) -> Option<Self> {
+        let _ = hex;
+        todo!()
+    }
+
+    /// The secret, for the one place that hands it to git.
+    pub fn expose(&self) -> &str {
+        todo!()
+    }
+}
+
+impl std::fmt::Debug for ExceptionToken {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let _ = f;
+        todo!()
+    }
+}
+
+fn serialize_token<S: serde::Serializer>(
+    token: &ExceptionToken,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    let _ = (token, serializer);
+    todo!()
+}
+
+/// The environment handed to the one git invocation the exception covers.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct IssuedException {
+    #[serde(serialize_with = "serialize_token")]
+    pub token: ExceptionToken,
+    pub git: Untrusted,
+    pub config: Vec<String>,
+    pub ttl_ms: u64,
+}
+
+/// Result of `guard.exception`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct GuardExceptionResult {
+    pub pending: Option<PendingAction>,
+    pub plan: ExceptionPlanView,
+    pub issued: Option<IssuedException>,
+}
+
+/// Params of `guard.exception-child`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct GuardExceptionChildParams {
+    pub path: String,
+    pub action_id: String,
+    pub pid: u32,
+}
+
+/// Params of `guard.exception-end`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct GuardExceptionEndParams {
+    pub path: String,
+    pub action_id: String,
+}
+
+/// Result of `guard.exception-end`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct GuardExceptionEndResult {
+    pub consumed: bool,
+}
