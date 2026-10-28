@@ -159,4 +159,4 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 
 Implementado en: PR #289 ([DS-US-MCP-009](../dev-specs/US-MCP-009-dev-spec.md), junto con US-MCP-010).
 
-Queda abierto, y bloquea la liberación: US-MCP-007 en `main` (G3) y US-MCP-011 (G4); US-MCP-009 se libera junto con US-MCP-010 y US-MCP-011. Linux y Windows sin verificar (XP-45).
+Queda abierto, y bloquea la liberación: US-MCP-007 en `main` (G3) y US-MCP-011 (G4); US-MCP-009 se libera junto con US-MCP-010 y US-MCP-011. Linux y Windows sin verificar (XP-47).

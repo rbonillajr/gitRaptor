@@ -32,9 +32,9 @@ Ninguna enmienda cambia una aserción de comportamiento.
 
 ## Conformidad
 
-`docs/dev-briefs/us-mcp-009-010-safe-commit.conformance.md`. Debajo del escalón 2 solo quedan los documentos (aceptación = revisión), Linux/Windows (XP-45, XP-46) y el escenario 5 de US-MCP-009 sin e2e por stdio.
+`docs/dev-briefs/us-mcp-009-010-safe-commit.conformance.md`. Debajo del escalón 2 solo quedan los documentos (aceptación = revisión), Linux/Windows (XP-47, XP-46) y el escenario 5 de US-MCP-009 sin e2e por stdio.
 
 ## Lo que no se verificó
 
-- Linux y Windows en ejecución (XP-45, XP-46). Clippy cruzado de Windows limpio en `gitraptor-api`, `gitraptor-policy` y `gitraptor-git`; `gitraptor-core`, `gitraptor-cli` y `gitraptor-mcp` no compilan en cruzado desde este Mac (`libsqlite3-sys` necesita el compilador C de MSVC).
+- Linux y Windows en ejecución (XP-47, XP-46). Clippy cruzado de Windows limpio en `gitraptor-api`, `gitraptor-policy` y `gitraptor-git`; `gitraptor-core`, `gitraptor-cli` y `gitraptor-mcp` no compilan en cruzado desde este Mac (`libsqlite3-sys` necesita el compilador C de MSVC).
 - La comprobación de citas no encuentra ADR-MCP-001, ADR-CKP-002, US-MCP-007 ni US-MCP-011 en la memoria indexada, aunque los archivos existen: el índice está desactualizado.
