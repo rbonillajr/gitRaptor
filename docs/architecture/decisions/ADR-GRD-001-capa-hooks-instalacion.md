@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-04
 created: 2026-10-04
-updated: 2026-10-17
+updated: 2026-10-28
 deciders: [Rene Bonilla]
 domain: GRP
 feature: guardrails
@@ -419,3 +419,12 @@ Arreglo del dogfooding del 2026-10-17 (rama `fix/guard-legacy-install-recovery`)
 | **Pasos cerrados del log y mensajes** | Los fallos de instalación, actualización, reparación y desinstalación llevan un paso tipado (`GuardStep`, 14 valores) y ya no un texto: el log nunca dice `step=other`. Nueva capacidad `guard.recovery`, que trae el error `guard-failed` con `{step, protection}` (`protection` se lee de nuevo de la clave tras el fallo), el diagnóstico `leftover-folder` y `GuardUninstallResult.restores_hooks_path`. Sin la capacidad, el daemon responde como antes (`INTERNAL`). La CLI dice en en/es qué pasó y qué comando ejecutar | ADR-GRP-016 |
 
 **Pendiente**: la adopción de una huérfana (US-GRD-003). Un dispatcher huérfano de una versión anterior de `raptor-hook` no es idéntico al instalado, así que se queda y el estado lo dice. Windows (la variante `portable` de `read_folder` y `remove_recognized`) no se ha probado: queda para la etapa de validación multiplataforma.
+
+## Enmienda (2026-10-28, US-GRD-006 PR-B)
+
+Plantilla 4 de los dispatchers ([DS-US-GRD-006](../../requirements/features/guardrails/dev-specs/US-GRD-006-excepcion-consciente.md), § 9). **Decisión del orquestador (2026-10-21), validada por Arquitecto.** El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| El dispatcher pasa `GITRAPTOR_EXCEPTION_TOKEN` a `raptor hook` y lo **quita del entorno del hook previo encadenado**, para que un hook de terceros no lo vea | § 2, § 8 | D12 |
+| Una instalación de plantilla ≤ 3 no reenvía el token (falla cerrado: la excepción no se aplica) y `raptor guard exec` responde `outdated-install` | § 2, § 8 | D12 |
