@@ -2,9 +2,9 @@
 id: DS-TS-GRP-005
 title: "Dev Spec — Clases de trabajo del daemon y mecanismo de ahorro de energía"
 type: dev-spec
-status: draft
+status: partially-implemented
 created: 2026-10-27
-updated: 2026-10-27
+updated: 2026-10-28
 story: TS-GRP-005
 feature: motor-local
 domain: GRP
@@ -64,6 +64,8 @@ tags: [motor-local, recursos, prioridad, qos, ahorro-energia, power-source, daem
 
 # DS-TS-GRP-005 · Clases de trabajo del daemon y ahorro de energía
 
+Implementado en parte en: PR #298 (PR-A: T001 a T006, con D17). Falta el PR-B: T007 a T014.
+
 ## Contexto rápido
 
 Al terminar, cada hilo del daemon corre con la prioridad del SO de su clase (ADR-GRP-015 § 1), los `git` hijos del trabajo de fondo salen con prioridad baja, y el motor sabe si está en modo de ahorro (`engine.powerSaving` × fuente de energía), lo publica en `engine.resources` y se lo da a los consumidores. Hoy no puede: ningún hilo fija su clase (todos los `std::thread::Builder::new()` de `crates/core` heredan la del proceso), `engine.resources` publica `pools` y `power_saving` como `None` (`crates/core/src/resources/mod.rs:275`) y `TierConfig::from_settings` recibe `power_saving = false` porque el motor no tiene modo de ahorro (`crates/core/src/daemon/tiers.rs:63`).
@@ -122,6 +124,7 @@ El PR-B de esta Dev Spec (T007 a T014) no bloquea a TS-CKP-001. Hasta que llegue
 | D14 | **Gates por PR**: el PR-A no toca el camino del snapshot previo y su gate es el banco del motor de INF-GRP-002 sin regresión más los tests de RES-06 del PR. El PR-B lleva RES-07 (T013) como bloqueante. El observador se queda en `Default`, así que bajar su clase no se evalúa; el retraso de despertar en `Utility` (INF-GRP-002 § 6.3) se mide en T013 solo para la reconciliación periódica, como dato | ADR-GRP-015 § 1; INF-GRP-002 § 8 |
 | D15 | **Clave `engine.powerSaving`**: `auto` \| `on` \| `off`, por defecto `auto`, solo en el nivel de perfil (`x-gitraptor-levels = ["profile"]`); en equipo o local se ignora con el diagnóstico del validador de niveles | ADR-GRP-007; ADR-GRP-015 § 2 |
 | D16 | **Producto (refrenda D1, T007, T009 y T011).** (a) El PR-A no entrega nada observable y el predictor puede salir antes que la fuente real: por defecto (`auto` + `Unknown`) nadie pierde cálculo, y con `on` el par sale "sin calcular" con su motivo (BR-CKP-CALC-001). Condición: el PR-B entra antes del cierre de M2, porque TS-GRP-005 es Should de M2 y `engine.resources.power_saving` en `None` mientras el predictor ya pausa con `on` solo se acepta como estado intermedio de `main`. (b) BR-CONS-005 pasa a "como mucho, el intervalo de reconciliación vigente" (Enmienda 2026-10-27; US-GRP-019). (c) Si la revisión de seguridad rechaza `objc_msgSend`, T007 entrega solo la detección por batería: lo que el usuario pidió (Rene, 2026-10-05) es ahorrar con batería, y el bajo consumo con corriente queda pendiente con su nota en el PR y en XP-45, como dice T007. (d) `POWER_POLL` 30 s y `SPAWN_COST_BUDGET` 5 ms p95 no chocan con ningún NFR ni BR de producto | Decisión del orquestador (2026-10-27), validada por Arquitecto y PO |
+| D17 | **Hilos: solo QoS.** En macOS 26 (Darwin 25.6), una política de E/S en ámbito de hilo (`setiopolicy_np`, `IOPOL_SCOPE_THREAD`) saca al hilo de la QoS: `qos_class_self()` devuelve `UNSPECIFIED` y un `pthread_set_qos_class_self_np` posterior falla con `EPERM`. `qos::set_current` fija solo la QoS y el nivel de E/S del hilo lo deriva el SO de la QoS. ADR-GRP-015 § 1 solo pide la QoS en la columna de macOS, así que no se enmienda. Los hijos (D9) siguen con nice y `IOPOL_SCOPE_PROCESS`. ⚠️ ASSUMPTION: el kernel asigna a `Background` el nivel de E/S restringido; T013 lo mide como dato | Hallazgo de la implementación del PR-A. Decisión del orquestador (2026-10-28), validada por Arquitecto |
 
 > **Validación del PO (2026-10-27)**: alcance y producto validados. Corte en dos PR aceptado con la condición de D16 (a); BR-CONS-005 enmendada; fallback del bajo consumo aceptado; sin pregunta abierta nueva.
 
@@ -288,14 +291,14 @@ graph LR
 
 **Reglas**
 - Las reglas de ADR-GRP-002 (Enmienda 2026-10-07): un bloque `unsafe` por llamada con su `SAFETY`, `unsafe_op_in_unsafe_fn`, sin punteros en la API pública. Usa los símbolos de `libc` (`0.2.190`); los que no traiga se declaran a mano en `ffi_qos`.
-- `set_current(QosClass)`: QoS del hilo y política de E/S del hilo (`IOPOL_SCOPE_THREAD`: `UserInitiated` y `Default` → `IOPOL_IMPORTANT`, `Utility` → `IOPOL_UTILITY`, `Background` → `IOPOL_THROTTLE`). Devuelve `Result<(), QosError>`; un error no deja el hilo a medias: si falla la E/S tras fijar la QoS, restaura la QoS anterior.
+- `set_current(QosClass)`: fija solo la QoS del hilo; el nivel de E/S lo deriva el SO de la QoS (D17). Devuelve `Result<(), QosError>`; en error el hilo conserva su clase. `current_io()` (lectura de la política de E/S explícita del hilo, para el test) existe en `qos.rs`.
 - `lower_child(&mut Command, QosClass)` instala con `CommandExt::pre_exec` un cierre que solo hace `setpriority(PRIO_PROCESS, 0, nice)` y `setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_PROCESS, …)`: dos llamadas al sistema, sin reservar memoria ni tomar cerrojos (D9). Para `Default` y `UserInitiated` no instala nada.
 - `current() -> Option<QosClass>`: `qos_class_self()`; `QOS_CLASS_UNSPECIFIED` → `None`.
 
 - **Depende:** —
-- **Refs:** ADR-GRP-002, Enmienda 2026-10-07; ADR-GRP-015 § 1; D3, D9; G1
+- **Refs:** ADR-GRP-002, Enmienda 2026-10-07; ADR-GRP-015 § 1; D3, D9, D17; G1
 - **Aceptación:** `cargo test -p gitraptor-macsys --test qos`
-- **Guard ⛔1.1:** `qos::set_current_utility_reads_back_utility_and_iopol_utility`
+- **Guard ⛔1.1:** `qos::set_current_utility_reads_back_utility_and_no_thread_iopolicy`
 - **Guard ⛔1.2:** `qos::lower_child_background_runs_the_child_at_nice_10`
 
 ### T002 — API `work_class`: fijar, lanzar, bajar por un tramo y registro de pools
@@ -375,12 +378,14 @@ graph LR
 
 **Ubicación.**
 - `crates/core/src/daemon/power.rs` (**CREATE**: arranque y parada del hilo `raptor-power`; lector del mtime del documento de ajustes)
-- `crates/core/src/daemon/mod.rs` (**MODIFY**: `DaemonConfig.power: PowerConfig { source: Arc<dyn PowerSource>, poll: Duration }`, `for_current_user` con `platform_source()` y `POWER_POLL`; campo `power: PowerMode` en `Daemon`; `pub(crate) fn power(&self) -> PowerMode`; parada en `stop`)
+- `crates/core/src/daemon/mod.rs` (**MODIFY**: `DaemonConfig.power: PowerConfig { source: Arc<dyn PowerSource>, poll: Duration }`, `for_current_user` con `platform_source()` y `POWER_POLL`; campo `power: PowerMode` en `Daemon`; `pub fn power(&self) -> PowerMode`; parada en `stop`)
 
 **Reglas**
 - El hilo se lanza con `work_class::spawn_unpooled(WorkClass::Utility, "raptor-power", …)` y sale al cerrar el canal de parada, como `raptor-resources` (`resources/mod.rs:206`).
 - El modo inicial se resuelve antes de arrancar los módulos (`modules::Modules::start`), para que el predictor nunca vea un modo provisional.
 - Cada cambio va al log como `power_mode` (`setting`, `active`, `reading`); nada más se publica en el PR-A.
+- `Daemon::power()` es `pub` (no `pub(crate)`) porque el test de integración `crates/core/tests/power_daemon.rs` la llama desde fuera del crate.
+- `DaemonConfig.power` implementa `Default` (`UnknownPowerSource` + `POWER_POLL`) y todo literal de test fija `power: Default::default()`.
 - Un archivo propio y un campo en `Daemon` (ADR-GRP-016); sin gancho nuevo en `DaemonModule`: los consumidores leen el handle.
 
 - **Depende:** T002, T003, T004
@@ -632,6 +637,7 @@ pub enum QosClass { UserInitiated, Default, Utility, Background }
 pub struct QosError(pub i32);                                    // errno
 pub fn set_current(class: QosClass) -> Result<(), QosError>;
 pub fn current() -> Option<QosClass>;
+pub fn current_io() -> Option<QosClass>;  // política de E/S explícita del hilo; None sin política (D17)
 pub fn lower_child(cmd: &mut std::process::Command, class: QosClass);  // no-op en Default/UserInitiated
 
 // crates/core/src/work_class/mod.rs
@@ -703,7 +709,7 @@ impl PowerMonitor {
     pub fn step(&mut self, now: Instant) -> Option<PowerChange>;
     pub fn next_tick(&self, now: Instant) -> Instant;
 }
-impl Daemon { pub(crate) fn power(&self) -> PowerMode; }
+impl Daemon { pub fn power(&self) -> PowerMode; }
 impl Observer { pub fn set_power_saving(&self, active: bool); }           // T009
 ```
 
