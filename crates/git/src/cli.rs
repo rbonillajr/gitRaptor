@@ -1,7 +1,8 @@
 //! Typed functions of the closed Git CLI allowlist (ADR-GRP-009 § 3).
 //!
-//! There is no free-text entry point: each function builds a fixed argv. `status`, `diff`,
-//! `config --list` and `config --get-regexp` do not exist here on purpose (SEC-09, SEC-05).
+//! There is no free-text entry point: each function builds a fixed argv. `status`, `diff` and
+//! `config --list` do not exist here on purpose (SEC-09, SEC-05); `config --get-regexp` only
+//! runs with one fixed pattern and returns names, never values.
 //! Revisions go after `--end-of-options` so they are never parsed as options (SEC-02); in these
 //! subcommands a plain `--` would turn them into paths.
 
@@ -34,7 +35,20 @@ pub enum ConfigKey {
     BranchRemote(RefName),
     /// `branch.<name>.merge`.
     BranchMerge(RefName),
+    /// `branch.<name>.pushRemote`.
+    BranchPushRemote(RefName),
+    /// `push.default`.
+    PushDefault,
+    /// `remote.pushDefault`.
+    RemotePushDefault,
 }
+
+/// The fixed pattern of the textconv drivers (`diff.<driver>.textconv`). It matches dotted
+/// driver names too, so that one that cannot be neutralized is refused rather than missed.
+pub const TEXTCONV_PATTERN: &str = r"^diff\..+\.textconv$";
+
+/// At most this many textconv drivers are read; more is refused rather than truncated.
+pub const MAX_TEXTCONV_DRIVERS: usize = 64;
 
 impl ConfigKey {
     fn name(&self) -> String {
@@ -43,6 +57,9 @@ impl ConfigKey {
             Self::RemoteUrl(n) => format!("remote.{n}.url"),
             Self::BranchRemote(n) => format!("branch.{n}.remote"),
             Self::BranchMerge(n) => format!("branch.{n}.merge"),
+            Self::BranchPushRemote(n) => format!("branch.{n}.pushRemote"),
+            Self::PushDefault => "push.default".into(),
+            Self::RemotePushDefault => "remote.pushDefault".into(),
         }
     }
 }
@@ -263,6 +280,59 @@ impl<'a> GitCli<'a> {
             _ => value,
         }))
     }
+
+    /// The names of the textconv drivers of the effective configuration, from
+    /// `git config -z --name-only --get-regexp` with [`TEXTCONV_PATTERN`]. Values (the programs)
+    /// are never read.
+    ///
+    /// # Errors
+    ///
+    /// `InvalidInput` when a driver name is not a plain name (ASCII letters, digits, `-`, `_`)
+    /// or there are more than [`MAX_TEXTCONV_DRIVERS`]: the caller cannot neutralize what it
+    /// cannot name, so it must refuse.
+    pub fn textconv_drivers(&self) -> Result<Vec<String>, ReadError> {
+        let out = self.invoker.run(
+            &self.git.path,
+            Some(&self.repo),
+            Subcommand::Config,
+            &[
+                "-z".as_ref(),
+                "--name-only".as_ref(),
+                "--get-regexp".as_ref(),
+                "--end-of-options".as_ref(),
+                TEXTCONV_PATTERN.as_ref(),
+            ],
+        )?;
+        if out.code == Some(1) {
+            return Ok(Vec::new());
+        }
+        parse_textconv_names(&text(&out.into_success("config --get-regexp")?))
+    }
+}
+
+fn parse_textconv_names(out: &str) -> Result<Vec<String>, ReadError> {
+    let invalid = |why: &str| ReadError::InvalidInput(format!("textconv driver: {why}"));
+    let mut drivers: Vec<String> = Vec::new();
+    for key in out.split('\0').filter(|k| !k.is_empty()) {
+        let name = key
+            .strip_prefix("diff.")
+            .and_then(|k| k.strip_suffix(".textconv"))
+            .ok_or_else(|| invalid("unexpected key"))?;
+        let plain = !name.is_empty()
+            && name
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
+        if !plain {
+            return Err(invalid("not a plain name"));
+        }
+        if !drivers.iter().any(|d| d == name) {
+            drivers.push(name.to_owned());
+        }
+        if drivers.len() > MAX_TEXTCONV_DRIVERS {
+            return Err(invalid("too many"));
+        }
+    }
+    Ok(drivers)
 }
 
 fn text(bytes: &[u8]) -> String {
@@ -312,6 +382,45 @@ mod tests {
     #[test]
     fn log_format_never_invokes_gpg() {
         assert!(!LOG_FORMAT.contains("%G"));
+    }
+
+    #[test]
+    fn push_keys_are_fixed_names() {
+        let feat = RefName::new("feat-x").unwrap();
+        assert_eq!(ConfigKey::PushDefault.name(), "push.default");
+        assert_eq!(ConfigKey::RemotePushDefault.name(), "remote.pushDefault");
+        assert_eq!(
+            ConfigKey::BranchPushRemote(feat).name(),
+            "branch.feat-x.pushRemote"
+        );
+        assert!(RefName::new("-x").is_err(), "branch names stay validated");
+    }
+
+    #[test]
+    fn textconv_names_are_parsed_and_deduplicated() {
+        let out = "diff.canary.textconv\0diff.pdf_2.textconv\0diff.canary.textconv\0";
+        assert_eq!(
+            parse_textconv_names(out).unwrap(),
+            vec!["canary".to_owned(), "pdf_2".to_owned()]
+        );
+        assert!(parse_textconv_names("").unwrap().is_empty());
+    }
+
+    #[test]
+    fn textconv_names_that_cannot_be_neutralized_are_refused() {
+        for out in [
+            "diff.a b.textconv\0",
+            "diff..textconv\0",
+            "diff.x=y.textconv\0",
+            "diff.a.b.textconv\0",
+            "core.pager\0",
+        ] {
+            assert!(parse_textconv_names(out).is_err(), "{out:?}");
+        }
+        let many: String = (0..=MAX_TEXTCONV_DRIVERS)
+            .map(|i| format!("diff.d{i}.textconv\0"))
+            .collect();
+        assert!(parse_textconv_names(&many).is_err());
     }
 
     #[test]
