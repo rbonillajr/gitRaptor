@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: medium
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-27
 domain: GRP
 epic: E-001
 feature: time-machine
@@ -32,7 +32,7 @@ tags: [time-machine, timeline, atribucion-vigente]
 
 ## Reglas cubiertas
 
-BR-TMC-CONS-005 (atribución vigente; registro del undo inmutable) · D-TMC-2 (Q37), D-TMC-18 — ver [business-rules.md](../business-rules.md)
+BR-TMC-CONS-005 (atribución vigente; registro del undo inmutable) · D-TMC-2 (Q37; retirar la corrección, Q50 de motor-local), D-TMC-18 — ver [business-rules.md](../business-rules.md)
 
 ## Criterios de Aceptación
 
@@ -55,6 +55,12 @@ Cuando el desarrollador corrige esa sesión a "codex-1"
 Entonces el registro del undo conserva su solicitante y la operación sobre la que actuó
   Y el commit deshecho figura con la atribución vigente "codex-1 (registrado)"
 
+**Escenario: Retirar la corrección devuelve la atribución detectada en el timeline**
+
+Dado tres commits de una sesión detectada como "claude-1" en "feat-login" que el desarrollador corrigió a "codex-1"
+Cuando el desarrollador retira esa corrección
+Entonces los tres commits vuelven a figurar en el timeline como "claude-1 (detectado)"
+
 **Escenario: Sin corrección no cambia nada**
 
 Dado un timeline con eventos atribuidos a "claude-1"
@@ -74,5 +80,5 @@ Entonces la atribución de esos eventos es la detectada
 ## Dependencias
 
 - **Historias**: US-TMC-002, US-TMC-006; US-GRP-010 (corregir atribución) de motor-local.
-- **Externas**: ninguna. No cubre retirar una corrección: P17 de motor-local sigue abierta y se tratará cuando se cierre.
+- **Externas**: ninguna. P17 de motor-local se cerró el 2026-10-27 (Q50): al retirar una corrección, sus eventos vuelven a la atribución detectada, y el escenario de retirar la corrección lo exige en el timeline.
 - **Transversal**: transversal (lo define el Arquitecto): verificación en repos temporales, nunca en un repo real; mismo comportamiento en Windows, macOS y Linux; mensajes en inglés y español.

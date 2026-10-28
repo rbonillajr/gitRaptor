@@ -4,7 +4,7 @@ title: "Contexto — Motor local"
 type: context
 status: draft
 created: 2026-10-01
-updated: 2026-10-07
+updated: 2026-10-27
 domain: GRP
 epic: E-001
 feature: motor-local
@@ -428,6 +428,7 @@ Decisiones del [contexto de Guardrails](../guardrails/context.md) (CTX-GRD-001) 
 | Q47 | ¿Entran `raptor clone` y la pregunta de la TUI en un repo no observado? (propuestas A2 y A3) | **Sí.** `raptor clone` (US-GRP-021, Could): solo `git clone` con argv fijo y la pregunta al terminar; un agente puede clonar, pero no observar. La TUI (US-CKP-025, Should, del Cockpit) pregunta en un repo no observado y, fuera de un repo, lleva a los observados. | 2026-10-07 | Orquestador, validada por el PO | BR-AUTH-003 |
 | Q48 | ¿Se conectan GitHub o Azure DevOps para listar y clonar repos? (propuesta A4) | **En Fase 2**, como épica E-002, con opt-in explícito: tokens y red rompen el "100 % local" de NFR-03 si no son voluntarios. Sin historias en el MVP. | 2026-10-07 | Orquestador, validada por el PO | — (alcance OUT) |
 | Q49 | ¿El usuario necesita una historia propia para la observación por niveles (activo, dormido, despertar; propuesta B)? | **No.** Es comportamiento del enabler del Arquitecto (TS-GRP-006) y se verifica con sus escenarios; lo que ve el usuario (cuántos repos activos y dormidos y lo que cuesta cada nivel) está en la enmienda de US-GRP-017. **Condición del PO**: dormir no puede reducir la protección. Lo ocurrido en un repo dormido se registra igual (BR-CONS-005), y la captura de la Time Machine y Guardrails no pierden nada por dormir (NFR-01). Si el diseño no lo garantiza, vuelve al PO. **Respuesta del Arquitecto (2026-10-07)**: el dormido conserva su vigilancia como centinela y el primer cambio lo despierta y lo publica en ≤ 2 s p95 (RES-12); lo que solo encuentra la comprobación de respaldo es un hueco `dormant` (BR-EDGE-005). El PO lo acepta con un riesgo: durante el despertar, una edición destruida en menos de 2 s puede quedar sin capturar. | 2026-10-07 | Orquestador, validada por el PO | BR-CONS-005 |
+| Q50 | Al retirar una corrección, ¿los eventos que reatribuyó (Q37) vuelven a la atribución detectada? (P17) | **Sí.** Retirar una corrección la deja sin efecto entera: la sesión vuelve a su atribución detectada y los eventos que la corrección había reatribuido, desde el inicio de esa sesión, vuelven también a la atribución y al origen "detectado" que tenían. Los eventos de otras sesiones no cambian. **Motivo**: es el mismo de Q37 en sentido inverso; si los eventos se quedaran con la atribución retirada, la Time Machine ofrecería deshacer "lo que hizo Codex" con eventos que el desarrollador ya dijo que eran de Claude Code, y el undo por agente (US-TMC-011) usaría una atribución que nadie sostiene. Lo que ya se registró antes de retirarla, como quién pidió un undo, no se reescribe (D-TMC-18 de la Time Machine). Cierra P17 y quita la marca de supuesto de BR-CONS-002. | 2026-10-27 | Decisión del orquestador (2026-10-27), validada por PO y Arquitecto; abierta a veto de Rene | BR-CONS-002 |
 
 ## Preguntas abiertas
 
@@ -449,7 +450,7 @@ Decisiones del [contexto de Guardrails](../guardrails/context.md) (CTX-GRD-001) 
 | P14 | ~~¿La corrección alcanza los eventos ya atribuidos a la sesión mal detectada?~~ **Resuelta** el 2026-10-03 (Q37): sí, desde el inicio de esa sesión. | — |
 | P15 | ~~¿Se puede corregir sin ninguna atribución detectada?~~ **Resuelta** el 2026-10-03 (Q38): no; se indica que se use el registro. | — |
 | P16 | ~~Cuando un registro confirma una sesión ya detectada (Q39), ¿su origen pasa a "registrado"?~~ **Resuelta** el 2026-10-07. **Decisión de Rene (2026-10-07)**: sí, la sesión confirmada por registro pasa a origen "registrado" (BR-CONS-004, US-GRP-009). | — |
-| P17 | Al retirar una corrección, ¿los eventos que reatribuyó (Q37) vuelven a la atribución detectada? Supuesto: sí (BR-CONS-002). Las historias solo exigen que vuelva la atribución de la sesión. | PO (Rene Bonilla) |
+| P17 | ~~Al retirar una corrección, ¿los eventos que reatribuyó (Q37) vuelven a la atribución detectada? Supuesto: sí (BR-CONS-002). Las historias solo exigen que vuelva la atribución de la sesión.~~ **Resuelta** el 2026-10-27 (Q50, decisión del orquestador validada por PO y Arquitecto): sí, vuelven a la atribución detectada. US-GRP-010 lo exige y US-TMC-011 se desbloquea. | — |
 
 ---
 
@@ -470,6 +471,8 @@ Decisiones del [contexto de Guardrails](../guardrails/context.md) (CTX-GRD-001) 
 > **Nota 2026-10-04 (P8, P9 y P10)**: P8, P9 y P10 resueltas por ADR-GRP-007, 006 y 008, aceptados por Rene Bonilla. No cambia ninguna calificación: **8 ✅ · 5 ⚠️ · 0 🔴**.
 >
 > **Nota 2026-10-04 (configuración en tres niveles)**: con P8 y P10 resueltas y la regla de prohibiciones en CTX-GRD-001, ADR-GRD-003 y ADR-GRD-004, "Configuración en tres niveles (Q23)" pasa de ⚠️ a ✅ y el Known Risk 7 queda resuelto. Resultado: **9 ✅ · 4 ⚠️ · 0 🔴**.
+>
+> **Nota 2026-10-27 (Q50)**: decisión del orquestador validada por PO y Arquitecto, posterior a la aprobación del requerimiento. Cierra P17: al retirar una corrección, los eventos que reatribuyó vuelven a la atribución detectada. Se lleva a BR-CONS-002 (sin marca de supuesto) y a US-GRP-010, y desbloquea US-TMC-011 de la Time Machine (D-TMC-22). No cambia ninguna calificación.
 
 | Sección | Resultado | Nota |
 |---------|-----------|------|

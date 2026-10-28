@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: high
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-27
 feature: motor-local
 related:
   context:
@@ -16,6 +16,7 @@ related:
     - US-GRP-004
     - US-GRP-007
     - US-GRP-009
+  specs: [DS-US-GRP-010]
 tags:
   - motor-local
   - atribucion
@@ -31,12 +32,12 @@ tags:
 
 ## Reglas cubiertas
 
-BR-CONS-002 (corregir reemplaza la detectada, Q33; alcanza la sesión desde su inicio, Q37; sin detección no se corrige, Q38) · BR-CONS-003 · BR-VAL-002 · BR-AUTH-001 (un agente no corrige) · BR-CONS-005 (la corrección persiste) — ver [business-rules.md](../business-rules.md)
+BR-CONS-002 (corregir reemplaza la detectada, Q33; alcanza la sesión desde su inicio, Q37; sin detección no se corrige, Q38; retirarla devuelve también los eventos reatribuidos, Q50) · BR-CONS-003 · BR-VAL-002 · BR-AUTH-001 (un agente no corrige) · BR-CONS-005 (la corrección persiste) — ver [business-rules.md](../business-rules.md)
 
 ## Dependencias
 
 - **Historias**: US-GRP-007, US-GRP-009; US-GRP-004 (la corrección sobrevive a que el motor deje de ejecutarse y vuelva a arrancar).
-- **Externas**: ninguna. Abierta P17 (si al retirar la corrección los eventos reatribuidos vuelven a la atribución detectada); los escenarios solo exigen lo decidido.
+- **Externas**: ninguna. P17 cerrada el 2026-10-27 (Q50): al retirar la corrección, los eventos reatribuidos vuelven a la atribución detectada; lo exige el escenario de retirar la corrección. US-TMC-011 (undo por agente) depende de esa regla.
 - **Transversal**: todo escenario se cumple igual en Windows, macOS y Linux (BR-03) y sin escribir nada en el repo observado (BR-CONS-001); cómo se verifica lo define el plan técnico.
 
 ## Criterios de Aceptación
@@ -64,12 +65,13 @@ Dado la atribución de "feat-login" corregida a "otro agente: Codex"
 Cuando hay nueva actividad en "feat-login"
 Entonces "feat-login" sigue con una sola sesión, de "otro agente: Codex" con origen "registrado"
 
-**Escenario: Retirar la corrección devuelve la atribución detectada**
+**Escenario: Retirar la corrección devuelve la atribución detectada, también a lo reatribuido**
 
-Dado la atribución de "feat-login" corregida a "otro agente: Codex"
+Dado la atribución de "feat-login" corregida a "otro agente: Codex", con los commits "c1" y "c2" reatribuidos
   Y la sesión que el motor había detectado como "Claude Code" sigue presente
 Cuando el desarrollador retira la corrección
 Entonces "feat-login" tiene una sola sesión, de "Claude Code" con origen "detectado"
+  Y "c1" y "c2" vuelven a figurar como de "Claude Code" con origen "detectado"
 
 **Escenario: La corrección se mantiene tras reiniciar el motor**
 
@@ -92,3 +94,8 @@ Ejemplos:
 | el desarrollador | un worktree de "otro" | que el repo no está observado |
 | el desarrollador | "feat-pagos" | que no hay ninguna atribución detectada que corregir y que use el registro |
 | el agente "Claude Code" de "feat-login" | "feat-login" | que solo el desarrollador puede corregir una atribución |
+
+## Diseño y Dev Spec
+
+- **Diseño (flujo/UX):** Pendiente de diseño.
+- **Dev Spec:** [DS-US-GRP-010](../dev-specs/US-GRP-010-dev-spec.md)
