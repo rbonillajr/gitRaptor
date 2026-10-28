@@ -33,7 +33,7 @@ impl PathRefusal {
 }
 
 /// Code points HFS+ ignores when comparing names, copied from
-/// `crates/git/src/tm_write/tree_path.rs:HFS_IGNORABLE` (this crate does not depend on
+/// `HFS_IGNORABLE` of the Time Machine's tree-path rules in `gitraptor-git` (this crate does not depend on
 /// `gitraptor-git`). U+206A to U+206F are not forbidden characters, so without them
 /// `.g\u{206A}it` would open `.git` on macOS (CVE-2014-9390).
 const HFS_IGNORABLE: &[char] = &[
