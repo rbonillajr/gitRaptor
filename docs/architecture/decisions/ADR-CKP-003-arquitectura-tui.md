@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-04
 created: 2026-10-04
-updated: 2026-10-08
+updated: 2026-10-27
 deciders: [Orquestador (delegación de Rene Bonilla, 2026-10-04)]
 domain: GRP
 feature: cockpit
@@ -183,7 +183,7 @@ La TUI y la CLI usan la biblioteca cliente de `crates/api` (TS-GRP-004). Encima 
 
 ### 11. CLI de solo lectura (Q-CKP-20, BR-CKP-CONS-007)
 
-- `raptor status` y `raptor conflicts` reutilizan `client` (una instantánea, sin suscripción) y `present::ingest`. Ven por tanto el mismo estado que la TUI. Arrancan el daemon igual que ella (§ 5).
+- `raptor status` y `raptor conflicts` reutilizan `client` (una instantánea, sin suscripción) y `present::ingest`. Ven por tanto el mismo estado que la TUI. Arrancan el daemon igual que ella (§ 5). **Enmienda (2026-10-27, US-CKP-011)**: `raptor status` queda fuera de esta regla y conserva su camino previo a la TUI y su contrato JSON (US-GRP-001); `raptor conflicts` cumple el resto del § 11 (esquema propio y versionado, allowlist en un solo mapeo).
 - Salida humana con el renderer de texto, color solo en TTY (DSYS-GRP-001 § 4). `--json` usa un **esquema propio de `apps/cli`, versionado**, mapeado desde el modelo de vista, y no reenvía el contrato de `crates/api`. Así la allowlist (sin mensajes de commit ni contenido de diff) se impone en un solo mapeo, y el contrato interno puede evolucionar sin romper scripts.
 - ⚠️ **ASSUMPTION**: los códigos de salida siguen DSYS-GRP-001 § 4. `raptor conflicts` devuelve `4` si hay al menos un ⚡ vigente, para scripts; se confirma en la Dev Spec.
 - `raptor` sin subcomando abre la TUI si la entrada y la salida estándar son TTY. Si no, termina con código `2` y sugiere `raptor status`. **Enmienda (2026-10-05, INF-CKP-001)**: `raptor tui` es un alias explícito con el mismo comportamiento (decisión del orquestador, validada por Arquitecto).
@@ -309,6 +309,15 @@ Decisión del orquestador (2026-10-08), validada por el Arquitecto con ajustes. 
 | **Arranque bajo demanda.** `crates/api` define el contrato de lanzamiento (`trait Launch: Send`: `launch` y `wait_released`) y **`crates/core` lo implementa** (`InstalledLauncher`: autoarranque registrado, `raptor daemon` con entorno limpio por allowlist SEC-10 y espera a que se libere el lock). Lo inyecta la raíz de composición (el binario, `commands/tui.rs`). Un fallo al lanzar es `ClientError::Launch` y se muestra como "Motor no disponible", nunca como canal rechazado | § 5 |
 | **V5.** Ningún módulo de la lib de `apps/cli` importa `gitraptor_core`, sin excepción con nombre: el módulo `link` desaparece y `client::engine` usa solo `gitraptor_api`. Solo el binario construye el lanzador. Lo comprueban `apps/cli/tests/tui_boundaries.rs` y `crates/api/tests/client_boundary.rs` (api sin core ni procesos; core sin una segunda copia de las comprobaciones) | V5 |
 | **E3.** Los puntos autorizados a lanzar procesos fuera de `crates/git` son `tui::editor` y **el lanzador de `crates/core`** (no la biblioteca cliente de `crates/api`) | E3 |
+
+## Enmienda (2026-10-27, US-CKP-011): `raptor status` conserva su camino y su contrato JSON
+
+Origen: [DS-US-CKP-011](../../requirements/features/cockpit/dev-specs/US-CKP-011-cli-solo-lectura.md), C1, C6 y N1. **Decisión del orquestador (2026-10-27), validada por Arquitecto (revisión).**
+
+| Cambio | Dónde |
+|---|---|
+| **`raptor status` queda exento de "reutilizan `client` y `present::ingest`".** Existía antes que la TUI y conserva su camino propio (`engine.snapshot` + `sessions.list` + `guard.status`) y su JSON, que es un contrato publicado desde US-GRP-001. Rehacerlo sobre `present::ingest` rompería ese contrato: la ingesta produce `SafeText`, que recorta los nombres a 100 caracteres y no sirve para un script. La paridad con la TUI la prueba un test de punta a punta que compara las dos salidas sobre el mismo fixture en reposo (DS-US-CKP-011, T002) | § 11 |
+| **`raptor conflicts` cumple el resto del § 11**: JSON con esquema propio de `apps/cli`, versionado (`schema_version: 1`), mapeado campo a campo con structs propios y sin reenviar los tipos de `crates/api`, de modo que la allowlist se impone en un solo mapeo | § 11 |
 
 ## Referencias
 
