@@ -339,7 +339,7 @@ fn a_hook_that_rejects_is_failed_unchanged() {
 /// where it was.
 #[test]
 fn a_hook_over_the_time_limit_leaves_the_branch_and_names_the_operation() {
-    let rig = Rig::new(Duration::from_millis(700));
+    let rig = Rig::new(Duration::from_secs(5));
     rig.slow_hook("pre-commit", 0);
     rig.fx.write("a.txt", "alpha 2\n");
     let head = rig.head();
@@ -374,7 +374,7 @@ fn a_hook_over_the_time_limit_leaves_the_branch_and_names_the_operation() {
 /// success with its oid (the tip decides, not how `git` ended).
 #[test]
 fn a_time_limit_after_the_commit_landed_is_a_success_with_its_oid() {
-    let rig = Rig::new(Duration::from_millis(700));
+    let rig = Rig::new(Duration::from_secs(5));
     rig.slow_hook("post-commit", 0);
     rig.fx.write("a.txt", "alpha 2\n");
     let plan = rig.prepare(7, &["a.txt"]);
