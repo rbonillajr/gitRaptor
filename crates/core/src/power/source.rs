@@ -1,6 +1,6 @@
 //! Where the power reading comes from.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, PoisonError};
 
 use super::PowerReading;
 
@@ -14,29 +14,32 @@ pub struct UnknownPowerSource;
 
 impl PowerSource for UnknownPowerSource {
     fn read(&self) -> PowerReading {
-        todo!("T003")
+        PowerReading::Unknown
     }
 }
 
 /// A source a test sets by hand. Public so other modules and crates can use it (TS-CKP-001).
 #[derive(Debug, Clone)]
-pub struct FakePowerSource {}
+pub struct FakePowerSource {
+    reading: Arc<Mutex<PowerReading>>,
+}
 
 impl FakePowerSource {
     pub fn new(reading: PowerReading) -> Self {
-        let _ = reading;
-        todo!("T003")
+        Self {
+            reading: Arc::new(Mutex::new(reading)),
+        }
     }
 
+    /// What every clone reads from now on.
     pub fn set(&self, reading: PowerReading) {
-        let _ = reading;
-        todo!("T003")
+        *self.reading.lock().unwrap_or_else(PoisonError::into_inner) = reading;
     }
 }
 
 impl PowerSource for FakePowerSource {
     fn read(&self) -> PowerReading {
-        todo!("T003")
+        *self.reading.lock().unwrap_or_else(PoisonError::into_inner)
     }
 }
 

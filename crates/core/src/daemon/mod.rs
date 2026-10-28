@@ -361,6 +361,8 @@ pub struct Daemon {
     detector: Option<crate::detect::Detector>,
     /// The engine's own consumption (US-GRP-017).
     resources: Arc<crate::resources::ResourceMonitor>,
+    /// The power-saving mode and the `raptor-power` thread that follows it (TS-GRP-005).
+    power: power::PowerThread,
     /// Ahead/behind already counted for observed changes (US-GRP-012).
     divergence_cache: observe::DivergenceCache,
     /// Periodic reconciliations that found differences: a value above 0 in
@@ -666,6 +668,10 @@ impl Daemon {
         let mcp_repos = Arc::new(crate::timemachine::protected::McpRepos::new(enabled));
         let (handle, control_rx) = ShutdownHandle::new();
         let config_dirs = config.dirs.clone();
+        // Past the last fallible step, so a failed start leaves no log open behind it.
+        crate::work_class::set_logger(Some(logger.clone()));
+        // Resolved before the modules start, so none of them sees a provisional mode.
+        let power = power::PowerThread::start(&config.power, &config.dirs, &logger);
         let mut daemon = Self {
             config,
             lock,
@@ -690,6 +696,7 @@ impl Daemon {
                 config_dirs,
                 Arc::default(),
             )),
+            power,
             divergence_cache: observe::DivergenceCache::default(),
             periodic_diffs: 0,
             tiers: tiers::Tiers::default(),
@@ -729,7 +736,7 @@ impl Daemon {
 
     /// The power-saving mode, for the modules that follow it (TS-GRP-005, D7).
     pub fn power(&self) -> crate::power::PowerMode {
-        todo!("T005")
+        self.power.mode()
     }
 
     pub fn state(&self) -> EngineState {
@@ -972,6 +979,8 @@ impl Daemon {
             server.shutdown();
         }
         self.resources.stop();
+        self.power.stop();
+        crate::work_class::set_logger(None);
         // Save the last known state of every repo before "observed until" moves past it: a
         // change whose live batch the loop did not write yet would otherwise be found again,
         // as a `reconciled` event, by the next start. Only the loop writes the stores, so the
