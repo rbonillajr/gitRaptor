@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-04
 created: 2026-10-04
-updated: 2026-10-08
+updated: 2026-10-28
 deciders: [Rene Bonilla]
 domain: GRP
 feature: guardrails
@@ -246,3 +246,17 @@ Aplicada desde Q-CKP-15 y DEP-CKP-10 de [CTX-CKP-001](../../requirements/feature
 - **Registro**: `exception`, `exception-cancelled` o `exception-rejected` con `layer = cockpit`, una sola entrada por plan (ADR-GRD-006, Enmienda (2026-10-04, Cockpit)).
 - **Sin cola**: "pedir confirmación" se aplica como denegar sin cola mientras no exista US-GRD-015, con el factor de ADR-GRD-008 (DEP-CKP-8).
 - **Validación añadida**: una excepción del Cockpit cancelada en la ventana deja `exception-cancelled` y no ejecuta nada; aplicada, una sola `exception`; pedida desde un proceso que desciende de un agente, `exception-rejected`; una transición distinta de la registrada se evalúa de nuevo.
+
+## Enmienda (2026-10-28, US-GRD-006 PR-B)
+
+Flujo de la excepción consciente en `raptor guard exec` ([DS-US-GRD-006](../../requirements/features/guardrails/dev-specs/US-GRD-006-excepcion-consciente.md), § 9). **Decisión del orquestador (2026-10-21), validada por Arquitecto.** El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| **Normaliza el daemon, después de autorizar**, con el traductor puro de `crates/policy`. La CLI solo envía el argv, que nunca se guarda. Formas admitidas del MVP: push, borrar una rama local y rebase; `commit`, `merge`, `worktree add` y `pull` quedan fuera | § 3, pasos 1 y 2 | D2, D3, Q-GRD-47 |
+| **Anuncio y ventana**: el anuncio es la entrada `reserved.audit` aceptada más `GuardStatus.pending`, como en US-GRD-003. No hay evento `reserved-action-pending` | § 1, "Anuncio y ventana" | D7 |
+| **Respuesta** con la ruta validada de `git` y la lista de `-c`; el **hijo se registra en una tercera llamada** (`guard.exception-child`); espera acotada de 2 s; las reglas del anuncio forman parte de la ligadura del token | § 3, pasos 4 a 7 | D5, D9, D11 |
+| La auditoría `used` es un `AuditOutcome::Used` nuevo, sujeto a `audit.outcomes` y a la capacidad `guard.exception` | § 3 | S-B1 |
+| El TTL del token se mide con reloj monotónico | § 3 | S-B3 |
+
+Las menciones de `reserved-action-pending` en el § 1 y en la Enmienda (2026-10-04, Cockpit) se leen como este anuncio para `raptor guard exec`; la del Cockpit conserva su forma. Notas de preparación: [prep PR-B](../../dev-briefs/us-grd-006-prb-exception-flow.prep.md).

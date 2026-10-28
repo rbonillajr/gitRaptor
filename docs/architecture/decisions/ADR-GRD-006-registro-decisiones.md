@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-04
 created: 2026-10-04
-updated: 2026-10-07
+updated: 2026-10-28
 deciders: [Rene Bonilla]
 domain: GRP
 feature: guardrails
@@ -224,3 +224,13 @@ Origen: [DS-TS-CKP-003](../../requirements/features/cockpit/dev-specs/TS-CKP-003
 | Sustituye la fila "`layer` hoy siempre es `hooks`" de la Enmienda (2026-10-07, US-GRD-005): las entradas del ejecutor llevan `layer = mcp` o `cockpit`. El `CHECK` de la columna ya admite esos valores, así que no hay migración. La capa entra en la clave de agregación, también en la fila `rate-limited` | § 1, § 2 |
 | Un plan del ejecutor deja también `notice` si corrió permitido con avisos. `config.relax-ignored` no aplica al ejecutor; un `git` nieto sí lo emite, porque no es el ejecutor | § 1, Enmienda Cockpit |
 | Capacidad `guard.log-layers`: con ella, la consulta devuelve la capa real; sin ella, el listado omite las entradas que no son `hooks` y el resumen las cuenta igual. `raptor guard log` puede ocultar `hooks` en la tabla compacta y muestra siempre la capa en la salida detallada y en JSON. El filtro por capa del § 6 es un pendiente de US-GRD-005 (a más tardar cuando cierre US-GRD-016) | § 6 |
+
+## Enmienda (2026-10-28, US-GRD-006 PR-B)
+
+Entradas de la excepción consciente ([DS-US-GRD-006](../../requirements/features/guardrails/dev-specs/US-GRD-006-excepcion-consciente.md), § 9). **Decisión del orquestador (2026-10-21), validada por Arquitecto.** El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| Las entradas `exception*` llevan el `action_id` en la clave de agregación, solo cuando existe: las claves actuales no cambian | § 1 | D16 |
+| El tope de entradas en vuelo no descarta las `exception*` | § 1 | D16 |
+| `exception-rejected` se escribe sin sondear el disco | § 1 | D17, S-B2 |
