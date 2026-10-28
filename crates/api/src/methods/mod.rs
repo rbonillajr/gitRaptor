@@ -164,6 +164,14 @@ impl MethodSpec {
         Self { since, ..self }
     }
 
+    /// A method declared ahead of the story that implements it.
+    pub(crate) const fn ahead(self, story: &'static str) -> Self {
+        Self {
+            implemented_by: Some(story),
+            ..self
+        }
+    }
+
     /// A method that may modify a repo.
     pub(crate) const fn writes(self, writes: RepoWrite) -> Self {
         Self { writes, ..self }
@@ -244,6 +252,8 @@ mod tests {
             if m.name.starts_with("timemachine.") {
                 assert!(!m.reserved, "{}", m.name);
                 assert!(story.starts_with("US-TMC-"), "{}", m.name);
+            } else if m.name.starts_with("guard.exception") {
+                assert_eq!(story, "US-GRD-006", "{}", m.name);
             } else {
                 assert!(m.reserved);
                 assert!(story.starts_with("US-GRP-"));

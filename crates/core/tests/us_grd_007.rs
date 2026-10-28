@@ -105,6 +105,7 @@ impl Setup {
 
     fn params(&self, hook: Hook, operation: GuardOperation) -> EvaluateParams {
         EvaluateParams {
+            exception_token: None,
             repo_id: REPO_ID.into(),
             common_dir: self.common.to_string_lossy().into_owned(),
             hook,

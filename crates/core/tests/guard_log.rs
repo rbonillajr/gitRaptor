@@ -34,6 +34,7 @@ fn oid(c: char) -> RefValue {
 
 fn force_push(branch: &str, remote: &str) -> EvaluateParams {
     EvaluateParams {
+        exception_token: None,
         repo_id: "r".into(),
         common_dir: "/tmp/demo/.git".into(),
         hook: Hook::PrePush,
@@ -183,6 +184,7 @@ fn kpi_counts_the_period_only() {
 fn notices_do_not_count() {
     let (_tp, _repos, mut store) = store();
     let params = EvaluateParams {
+        exception_token: None,
         hook: Hook::CommitMsg,
         operation: Operation::Commit {
             stage: CommitStage::CommitMsg,
@@ -239,6 +241,7 @@ fn allowed_without_rule_is_not_logged() {
         ..ctx(NOW, "main")
     };
     let commit = EvaluateParams {
+        exception_token: None,
         hook: Hook::CommitMsg,
         operation: Operation::Commit {
             stage: CommitStage::CommitMsg,

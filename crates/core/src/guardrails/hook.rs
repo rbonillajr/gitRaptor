@@ -493,6 +493,7 @@ fn commit(args: &HookArgs, env: &HookEnv) -> HookOutcome {
         _ => (CommitStage::CommitMsg, Some(message_facts(args, env))),
     };
     let params = EvaluateParams {
+        exception_token: None,
         repo_id: args.repo.clone(),
         common_dir: args.common.to_string_lossy().into_owned(),
         hook: args.hook,
@@ -598,6 +599,7 @@ fn second_line(args: &HookArgs, env: &HookEnv, input: &[u8]) -> Option<HookOutco
         return None;
     }
     let params = EvaluateParams {
+        exception_token: None,
         repo_id: args.repo.clone(),
         common_dir: args.common.to_string_lossy().into_owned(),
         hook: args.hook,
@@ -777,6 +779,7 @@ fn ask_daemon(args: &HookArgs, full: &Operation) -> Asked {
         return Asked::Nothing(granted);
     };
     let params = EvaluateParams {
+        exception_token: None,
         repo_id: args.repo.clone(),
         common_dir: args.common.to_string_lossy().into_owned(),
         hook: args.hook,

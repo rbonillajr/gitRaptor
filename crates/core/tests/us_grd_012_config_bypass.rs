@@ -83,6 +83,7 @@ impl Repo {
 
     fn params(&self, operation: Operation) -> EvaluateParams {
         EvaluateParams {
+            exception_token: None,
             repo_id: "0000-ffff".into(),
             common_dir: self.common.clone(),
             hook: Hook::ReferenceTransaction,
@@ -307,6 +308,7 @@ fn a_shallow_clone_is_judged_like_any_other() {
     let bad = git(&dest, &["commit-tree", &bad_tree, "-p", &main, "-m", "b"]);
     let eval = |new: &str| {
         let params = EvaluateParams {
+            exception_token: None,
             repo_id: "0000-ffff".into(),
             common_dir: common.clone(),
             hook: Hook::ReferenceTransaction,

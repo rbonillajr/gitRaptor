@@ -1,13 +1,19 @@
 //! Exception tokens (US-GRD-006): issued per repo, presented by the git child, consumed once.
+//!
+//! The store keeps only the SHA-256 of each token, compared in constant time. A token is valid
+//! for [`TOKEN_TTL`] until its first presentation; after that only the git child it was bound to
+//! reuses it, for the transitions it was bound to, until `end` or [`CONSUMED_MAX`].
 
 use std::collections::HashMap;
-use std::sync::{Condvar, Mutex};
-use std::time::Duration;
+use std::sync::{Condvar, Mutex, MutexGuard, PoisonError};
+use std::time::{Duration, Instant};
+
+use sha2::{Digest, Sha256};
 
 use gitraptor_api::guard::ExceptionPlanView;
 pub use gitraptor_api::guard::ExceptionToken;
 use gitraptor_api::guard::{ExceptionRefusal, Rule};
-use gitraptor_policy::guard::exception::{Binding, Transition};
+use gitraptor_policy::guard::exception::{Binding, Transition, covers};
 
 use super::pending::Requester;
 
@@ -29,7 +35,10 @@ pub struct ExceptionPlan {
 impl ExceptionPlan {
     /// The wire view of this plan.
     pub fn view(&self) -> ExceptionPlanView {
-        todo!()
+        ExceptionPlanView {
+            operation: self.binding.operation.clone(),
+            rules: self.rules.clone(),
+        }
     }
 }
 
@@ -74,17 +83,54 @@ pub enum Rejection {
     RuleNotAnnounced,
 }
 
-/// One repo's issued token.
+/// One repo's issued token: its digest, never the token itself.
 #[derive(Debug)]
-struct Slot;
+struct Slot {
+    digest: [u8; 32],
+    action_id: String,
+    requester: Requester,
+    plan: ExceptionPlan,
+    issued_ms: i64,
+    /// The git child the requester started: pid and start time.
+    child: Option<(u32, u64)>,
+    /// When the first valid presentation consumed it.
+    consumed_ms: Option<i64>,
+}
 
-/// The tokens by repo id.
+impl Slot {
+    fn stale(&self, now_ms: i64) -> bool {
+        match self.consumed_ms {
+            None => now_ms > self.issued_ms + TOKEN_TTL.as_millis() as i64,
+            Some(at) => now_ms > at + CONSUMED_MAX.as_millis() as i64,
+        }
+    }
+
+    /// Whether `presented` is one of the bound transitions: the same ref movement, or the same
+    /// ref rebased onto the same base.
+    fn covers(&self, presented: &Transition) -> bool {
+        self.plan
+            .binding
+            .transitions
+            .iter()
+            .any(|bound| match (bound, presented) {
+                (
+                    Transition::Rebase { refname, base },
+                    Transition::Rebase {
+                        refname: other_ref,
+                        base: other_base,
+                    },
+                ) => refname == other_ref && base == other_base,
+                (Transition::Ref { .. }, Transition::Ref { .. }) => bound == presented,
+                _ => false,
+            })
+    }
+}
+
+/// The tokens by repo id: one pending exception per repo.
 pub struct Tokens {
-    #[allow(dead_code)]
     slots: Mutex<HashMap<String, Slot>>,
-    #[allow(dead_code)]
+    /// Signalled when a child is bound or a token ends.
     bound: Condvar,
-    #[allow(dead_code)]
     child_wait: Duration,
 }
 
@@ -96,68 +142,181 @@ impl Default for Tokens {
 
 impl std::fmt::Debug for Tokens {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let _ = f;
-        todo!()
+        f.debug_struct("Tokens")
+            .field("issued", &self.lock().len())
+            .finish_non_exhaustive()
     }
 }
 
 /// SHA-256 of `token`.
 pub fn digest(token: &str) -> [u8; 32] {
-    let _ = token;
-    todo!()
+    Sha256::digest(token.as_bytes()).into()
 }
 
-/// Constant-time equality of two digests.
+/// Equality of two digests in constant time: every byte is read, with no early exit.
 pub fn ct_eq(a: &[u8; 32], b: &[u8; 32]) -> bool {
-    let _ = (a, b);
-    todo!()
+    a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }
 
 impl Tokens {
     /// Tokens whose `present` waits up to `child_wait` for the child.
     pub fn new(child_wait: Duration) -> Self {
-        let _ = child_wait;
-        todo!()
+        Self {
+            slots: Mutex::default(),
+            bound: Condvar::new(),
+            child_wait,
+        }
     }
 
-    /// Issues a token for `bound`; `None` if randomness fails.
+    fn lock(&self) -> MutexGuard<'_, HashMap<String, Slot>> {
+        self.slots.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    fn by_action<'a>(
+        slots: &'a mut HashMap<String, Slot>,
+        action_id: &str,
+    ) -> Option<(&'a String, &'a mut Slot)> {
+        slots.iter_mut().find(|(_, s)| s.action_id == action_id)
+    }
+
+    /// Issues a token for `bound`, replacing any other of its repo. `None` when the OS has no
+    /// randomness to give: without a CSPRNG there is no token.
     pub fn issue(&self, bound: Bound, now_ms: i64) -> Option<ExceptionToken> {
-        let _ = (bound, now_ms);
-        todo!()
+        let mut secret = [0u8; 16];
+        getrandom::fill(&mut secret).ok()?;
+        let hex: String = secret.iter().map(|b| format!("{b:02x}")).collect();
+        let token = ExceptionToken::from_secret(hex)?;
+        let slot = Slot {
+            digest: digest(token.expose()),
+            action_id: bound.action_id,
+            requester: bound.requester,
+            plan: bound.plan,
+            issued_ms: now_ms,
+            child: None,
+            consumed_ms: None,
+        };
+        self.lock().insert(bound.repo_id, slot);
+        self.bound.notify_all();
+        Some(token)
     }
 
     /// Binds the git `child` of the exception `action_id` to its `requester`.
+    ///
+    /// # Errors
+    ///
+    /// `no-pending` for an unknown action, `not-the-requester` from another process and
+    /// `child-not-ours` when a child is already bound.
     pub fn bind_child(
         &self,
         action_id: &str,
         requester: Requester,
         child: (u32, u64),
     ) -> Result<(), ExceptionRefusal> {
-        let _ = (action_id, requester, child);
-        todo!()
+        let mut slots = self.lock();
+        let (_, slot) =
+            Self::by_action(&mut slots, action_id).ok_or(ExceptionRefusal::NoPending)?;
+        if slot.requester != requester {
+            return Err(ExceptionRefusal::NotTheRequester);
+        }
+        if slot.child.is_some() {
+            return Err(ExceptionRefusal::ChildNotOurs);
+        }
+        slot.child = Some(child);
+        drop(slots);
+        self.bound.notify_all();
+        Ok(())
     }
 
-    /// Checks a presentation and consumes the token on the first success.
+    /// Checks a presentation and consumes the token on the first success. Waits on the
+    /// connection thread, at most the child wait, for the child to be bound.
     pub fn present(&self, p: &Presentation<'_>, now_ms: i64) -> Presented {
-        let _ = (p, now_ms);
-        todo!()
+        let wanted = digest(p.token.expose());
+        let deadline = Instant::now() + self.child_wait;
+        let mut slots = self.lock();
+        loop {
+            let Some(slot) = slots
+                .get_mut(p.repo_id)
+                .filter(|s| ct_eq(&s.digest, &wanted))
+            else {
+                return Presented::Rejected(Rejection::Unknown);
+            };
+            if slot.stale(now_ms) {
+                return Presented::Rejected(Rejection::Expired);
+            }
+            if slot.plan.worktree != p.worktree {
+                return Presented::Rejected(Rejection::OtherWorktree);
+            }
+            let Some(child) = slot.child else {
+                let left = deadline.saturating_duration_since(Instant::now());
+                if left.is_zero() {
+                    return Presented::Rejected(Rejection::ChildNotBound);
+                }
+                slots = self
+                    .bound
+                    .wait_timeout(slots, left)
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .0;
+                continue;
+            };
+            if p.git != child || p.git_parent != slot.requester {
+                return Presented::Rejected(Rejection::NotTheChild);
+            }
+            if p.transitions.is_empty() || !p.transitions.iter().all(|t| slot.covers(t)) {
+                return Presented::Rejected(Rejection::OtherTransition);
+            }
+            if !covers(&slot.plan.rules, p.reasons) {
+                return Presented::Rejected(Rejection::RuleNotAnnounced);
+            }
+            let first = slot.consumed_ms.is_none();
+            if first {
+                slot.consumed_ms = Some(now_ms);
+            }
+            return Presented::Applied {
+                action_id: slot.action_id.clone(),
+                first,
+            };
+        }
     }
 
-    /// Ends the exception `action_id`; whether it had been consumed.
+    /// Ends the exception `action_id` and forgets its token; whether it had been consumed.
+    ///
+    /// # Errors
+    ///
+    /// `no-pending` for an unknown action and `not-the-requester` from another process.
     pub fn end(&self, action_id: &str, requester: Requester) -> Result<bool, ExceptionRefusal> {
-        let _ = (action_id, requester);
-        todo!()
+        let mut slots = self.lock();
+        let (repo, slot) =
+            Self::by_action(&mut slots, action_id).ok_or(ExceptionRefusal::NoPending)?;
+        if slot.requester != requester {
+            return Err(ExceptionRefusal::NotTheRequester);
+        }
+        let consumed = slot.consumed_ms.is_some();
+        let repo = repo.clone();
+        slots.remove(&repo);
+        drop(slots);
+        self.bound.notify_all();
+        Ok(consumed)
     }
 
-    /// Drops what expired; the action ids dropped.
+    /// Drops the tokens never presented within their TTL and those consumed more than
+    /// [`CONSUMED_MAX`] ago; the action ids dropped.
     pub fn sweep(&self, now_ms: i64) -> Vec<String> {
-        let _ = now_ms;
-        todo!()
+        let mut dropped = Vec::new();
+        self.lock().retain(|_, slot| {
+            let stale = slot.stale(now_ms);
+            if stale {
+                dropped.push(slot.action_id.clone());
+            }
+            !stale
+        });
+        dropped
     }
 
     /// The digest of the token of `action_id`.
     pub fn digest_of(&self, action_id: &str) -> Option<[u8; 32]> {
-        let _ = action_id;
-        todo!()
+        self.lock()
+            .values()
+            .find(|s| s.action_id == action_id)
+            .map(|s| s.digest)
     }
 }

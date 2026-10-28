@@ -117,6 +117,7 @@ mod tests {
 
     fn params() -> EvaluateParams {
         EvaluateParams {
+            exception_token: None,
             repo_id: "0000-ffff".into(),
             common_dir: "/repo/.git".into(),
             hook: Hook::ReferenceTransaction,
@@ -222,6 +223,8 @@ mod tests {
                 blocked: 3,
                 notices: 5,
                 rate_limited: 0,
+                exceptions: 0,
+                exceptions_rejected: 0,
             },
             entries: vec![
                 e(LogKind::Denial, Rule::ConfigProtected),

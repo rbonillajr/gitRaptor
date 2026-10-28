@@ -326,6 +326,7 @@ mod tests {
 
     fn params(refname: &str, old: RefValue) -> EvaluateParams {
         EvaluateParams {
+            exception_token: None,
             repo_id: "r".into(),
             common_dir: "/r/.git".into(),
             hook: Hook::ReferenceTransaction,

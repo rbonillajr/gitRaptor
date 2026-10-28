@@ -133,6 +133,7 @@ impl Raw {
 fn denial(branch: &str, layer: LogLayer) -> LogEntry {
     let oid = |c: char| RefValue::Oid(c.to_string().repeat(40));
     let params = EvaluateParams {
+        exception_token: None,
         repo_id: "r".into(),
         common_dir: "/tmp/demo/.git".into(),
         hook: Hook::PrePush,

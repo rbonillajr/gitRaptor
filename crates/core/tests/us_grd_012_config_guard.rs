@@ -172,6 +172,7 @@ fn an_unverifiable_movement_by_an_agent_is_denied() {
         },
     );
     let params = EvaluateParams {
+        exception_token: None,
         repo_id: "0000-ffff".into(),
         common_dir: common.to_string_lossy().into_owned(),
         hook: Hook::ReferenceTransaction,

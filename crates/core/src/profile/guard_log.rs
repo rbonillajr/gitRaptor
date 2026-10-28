@@ -178,6 +178,9 @@ impl RepoStore {
                     blocked: row.get::<_, i64>(0)?.max(0) as u64,
                     notices: row.get::<_, i64>(1)?.max(0) as u64,
                     rate_limited: row.get::<_, i64>(2)?.max(0) as u64,
+                    // Counted once the `exception*` entries are written.
+                    exceptions: 0,
+                    exceptions_rejected: 0,
                 })
             },
         )?;

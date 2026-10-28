@@ -204,6 +204,7 @@ impl Backend {
             ),
         };
         EvaluateParams {
+            exception_token: None,
             repo_id: REPO_A.into(),
             common_dir: common,
             hook,

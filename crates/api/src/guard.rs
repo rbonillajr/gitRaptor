@@ -214,7 +214,7 @@ pub struct Reason {
     pub params: Vec<Param>,
 }
 
-/// Exception state of a decision (ADR-GRD-007). Always `none` until US-GRD-006.
+/// Exception state of a decision (ADR-GRD-007): `applied` only with a valid exception token.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum ExceptionState {
@@ -434,6 +434,14 @@ pub struct EvaluateParams {
     /// the daemon granted `guard.authorship` (D11).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub authorship: Option<AuthorshipFacts>,
+    /// The conscious exception token the hook received from its git (US-GRD-006). Sent only when
+    /// the daemon granted `guard.exception`; reading it validates its form.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "expose_token_opt"
+    )]
+    pub exception_token: Option<ExceptionToken>,
 }
 
 /// Protection state of the hook layer (BR-WF-002, ADR-GRD-005 § 3). Until the
@@ -575,6 +583,9 @@ pub struct PendingAction {
     pub applies_at_ms: i64,
     /// Length of the window.
     pub window_ms: u64,
+    /// What a conscious exception would skip. Only with `guard.exception`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exception: Option<ExceptionPlanView>,
 }
 
 /// What a [`PendingAction`] does.
@@ -1257,6 +1268,16 @@ pub struct GuardLogSummary {
     pub notices: u64,
     /// Of the above, how many are counted only in the rows over the cap.
     pub rate_limited: u64,
+    /// Conscious exceptions used: outside the KPI. Only with `guard.exception`.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub exceptions: u64,
+    /// Exception attempts refused: outside the KPI. Only with `guard.exception`.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub exceptions_rejected: u64,
+}
+
+fn is_zero(n: &u64) -> bool {
+    *n == 0
 }
 
 /// A period the engine was not running: the hooks decided alone and nothing was logged.
@@ -1360,111 +1381,162 @@ pub const MAX_EXCEPTION_ARGV: usize = 64;
 /// Largest single argument, in bytes, of an exception request.
 pub const MAX_EXCEPTION_ARG_BYTES: usize = 4096;
 
-/// Why an exception request or its end was refused.
+/// Why an exception request or its end was refused (`data` of `GUARD_EXCEPTION_REFUSED`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
 pub enum ExceptionRefusal {
+    /// The repo has no confirmed install of this profile.
     NotInstalled,
+    /// The install predates the dispatcher that forwards the token: reinstall.
     OutdatedInstall,
+    /// Another reserved action is already waiting in this repo.
     AlreadyPending,
+    /// The window has not closed yet.
     WindowOpen,
+    /// No such announcement: cancelled, expired, already applied or never made.
     NoPending,
+    /// The announcement is someone else's: only its requester confirms or ends it.
     NotTheRequester,
+    /// The operation is admitted, but not in this form (an option, a URL, a wildcard, `pull`).
     UnsupportedForm,
+    /// The exception does not cover this git command.
     UnsupportedOperation,
+    /// Nothing denies the operation: it needs no exception.
     NotDenied,
+    /// A rule that denies it cannot be skipped.
     NotExceptable,
+    /// The child is not a direct child of the requester, or one is already bound.
     ChildNotOurs,
 }
 
-/// Data of the `guard-exception-refused` error.
+/// `data` of a `GUARD_EXCEPTION_REFUSED` error.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct GuardExceptionRefusedData {
     pub reason: ExceptionRefusal,
+    /// With `window-open`: how long until it closes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub remaining_ms: Option<u64>,
 }
 
-/// Params of `guard.exception`.
+/// `guard.exception` parameters. Without `confirm`, normalizes `argv` and announces the
+/// exception; with the `action_id` of that announcement, once the window closed, issues the token.
+/// `argv` is at most [`MAX_EXCEPTION_ARGV`] arguments of [`MAX_EXCEPTION_ARG_BYTES`] each.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct GuardExceptionParams {
     pub path: String,
+    /// The command after `--`, starting with `git`. Never stored, logged or audited.
     pub argv: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub confirm: Option<String>,
 }
 
-/// What an exception would allow, shown before it is applied.
+/// What an exception covers: the normalized operation and the rules it skips.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct ExceptionPlanView {
     pub operation: LoggedOperation,
     pub rules: Vec<Rule>,
 }
 
-/// The secret that lets one git invocation through: 32 lowercase hex, never serialized by `Serialize`.
-#[derive(Clone, PartialEq, Eq, Deserialize, JsonSchema)]
+/// The secret that lets one git invocation through: 32 lowercase hex characters. Its `Debug` is
+/// redacted and it has no `Serialize`: only the fields that must carry it write it.
+#[derive(Clone, PartialEq, Eq, JsonSchema)]
 pub struct ExceptionToken(String);
 
 impl ExceptionToken {
     /// The token of `hex`, or `None` unless it is exactly 32 lowercase hex characters.
     pub fn from_secret(hex: String) -> Option<Self> {
-        let _ = hex;
-        todo!()
+        let valid = hex.len() == 32 && hex.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'));
+        valid.then_some(Self(hex))
     }
 
     /// The secret, for the one place that hands it to git.
     pub fn expose(&self) -> &str {
-        todo!()
+        &self.0
     }
 }
 
 impl std::fmt::Debug for ExceptionToken {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let _ = f;
-        todo!()
+        f.write_str("ExceptionToken(<redacted>)")
     }
 }
 
-fn serialize_token<S: serde::Serializer>(
+impl<'de> Deserialize<'de> for ExceptionToken {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let text = String::deserialize(deserializer)?;
+        // The message never repeats the text: it may be a token.
+        Self::from_secret(text).ok_or_else(|| serde::de::Error::custom("not an exception token"))
+    }
+}
+
+fn expose_token<S: serde::Serializer>(
     token: &ExceptionToken,
     serializer: S,
 ) -> Result<S::Ok, S::Error> {
-    let _ = (token, serializer);
-    todo!()
+    serializer.serialize_str(token.expose())
 }
 
-/// The environment handed to the one git invocation the exception covers.
+fn expose_token_opt<S: serde::Serializer>(
+    token: &Option<ExceptionToken>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    match token {
+        Some(token) => serializer.serialize_some(token.expose()),
+        None => serializer.serialize_none(),
+    }
+}
+
+/// What the requester hands to the one git invocation the exception covers.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct IssuedException {
-    #[serde(serialize_with = "serialize_token")]
+    #[serde(serialize_with = "expose_token")]
     pub token: ExceptionToken,
+    /// The daemon's validated git: the client never searches `PATH`.
     pub git: Untrusted,
+    /// `name=value` pairs, each passed as `-c` before the user's arguments.
     pub config: Vec<String>,
+    /// How long the token lives until git presents it.
     pub ttl_ms: u64,
 }
 
-/// Result of `guard.exception`.
+/// `guard.exception` result: the announcement and its plan, or the issued token.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct GuardExceptionResult {
+    /// Set by the first call, while the window is open.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pending: Option<PendingAction>,
     pub plan: ExceptionPlanView,
+    /// Set by the confirmation, once the window closed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub issued: Option<IssuedException>,
 }
 
-/// Params of `guard.exception-child`.
+/// `guard.exception-child` parameters: the git the requester just started.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct GuardExceptionChildParams {
     pub path: String,
     pub action_id: String,
     pub pid: u32,
 }
 
-/// Params of `guard.exception-end`.
+/// `guard.exception-end` parameters: the git of the exception finished.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct GuardExceptionEndParams {
     pub path: String,
     pub action_id: String,
 }
 
-/// Result of `guard.exception-end`.
+/// `guard.exception-end` result.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct GuardExceptionEndResult {
+    /// Whether a hook presented the token and the exception applied.
     pub consumed: bool,
 }

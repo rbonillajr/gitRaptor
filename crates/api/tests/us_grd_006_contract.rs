@@ -2,7 +2,9 @@
 //! exception: its types, its three methods, its capability and its error. Existing types that gain
 //! a field are driven with JSON strings, so this file compiles before those fields exist.
 
+use gitraptor_api::Untrusted;
 use gitraptor_api::capability;
+use gitraptor_api::capability::CAPABILITIES_PROTOCOL;
 use gitraptor_api::guard::{
     EvaluateParams, ExceptionRefusal, ExceptionToken, GuardExceptionChildParams,
     GuardExceptionEndParams, GuardExceptionEndResult, GuardExceptionParams,
@@ -13,7 +15,6 @@ use gitraptor_api::methods::{
     CAP_GUARD_EXCEPTION, GROUPS, GUARD_EXCEPTION, GUARD_EXCEPTION_CHILD, GUARD_EXCEPTION_END,
     GUARD_EXCEPTION_REFUSED, GUARD_UNINSTALL_REFUSED, RepoWrite, spec,
 };
-use gitraptor_api::{MIN_COMPATIBLE_PROTOCOL, Untrusted};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
@@ -277,8 +278,8 @@ fn exception_methods_are_reserved_outside_mcp_and_without_since() {
         assert!(!m.mcp, "{name} should not be offered to raptor-mcp");
         assert_eq!(m.writes, RepoWrite::None, "{name} does not write the repo");
         assert_eq!(
-            m.since, MIN_COMPATIBLE_PROTOCOL,
-            "{name} should carry no .since (MIN_COMPATIBLE_PROTOCOL)"
+            m.since, CAPABILITIES_PROTOCOL,
+            "{name} is discovered in hello.methods from the frozen CAPABILITIES_PROTOCOL, like every method added since"
         );
         assert_eq!(
             m.implemented_by,

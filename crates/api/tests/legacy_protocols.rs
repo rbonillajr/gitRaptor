@@ -88,7 +88,7 @@ fn every_legacy_protocol_keeps_its_methods() {
 
 /// Methods added after the freeze: a client of protocol 9 finds them in the
 /// handshake's `methods` (ADR-GRP-016 § 1). US-MCP-002, US-MCP-003, US-GRD-005, US-GRP-020,
-/// US-GRD-003, US-TMC-019, US-GRD-014 and US-GRP-005.
+/// US-GRD-003, US-TMC-019, US-GRD-014, US-GRP-005 and US-GRD-006.
 const AFTER_FREEZE_FULL: &[&str] = &[
     "mcp.enable",
     "mcp.disable",
@@ -98,6 +98,9 @@ const AFTER_FREEZE_FULL: &[&str] = &[
     "guard.uninstall",
     "guard.cancel",
     "guard.confirm",
+    "guard.exception",
+    "guard.exception-child",
+    "guard.exception-end",
     "discovery.roots",
     "discovery.candidates",
     "discovery.root.add",

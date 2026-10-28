@@ -104,15 +104,19 @@ pub const CAP_GUARD_PERMISSIONS: Capability = Capability::new("guard.permissions
 /// view of before. `raptor-mcp` may take it for the diagnostics, never `confirm`.
 pub const CAP_GUARD_TEAM_CONFIRMATION: Capability = Capability::new("guard.team-confirmation");
 
-/// Reserved: issues an exception token for one denied operation (US-GRD-006). Not in `GROUP` yet.
+/// The conscious exception (US-GRD-006; reserved, and it relaxes: announced, with a cancellable
+/// window enforced by the daemon). The first call normalizes the argv and announces; the
+/// requester confirms once the window closed and receives a one-use token.
 pub const GUARD_EXCEPTION: &str = "guard.exception";
-/// Reserved: binds the git child of an exception to its requester. Not in `GROUP` yet.
+/// Binds the git the requester started to its exception token (reserved).
 pub const GUARD_EXCEPTION_CHILD: &str = "guard.exception-child";
-/// Ends an exception, consumed or not. Not in `GROUP` yet.
+/// Ends an exception and says whether it was used (not reserved: only the requester).
 pub const GUARD_EXCEPTION_END: &str = "guard.exception-end";
-/// The daemon serves `guard.exception`. Not in `GROUP` yet.
+/// The conscious exception: its methods, `EvaluateParams.exception_token`,
+/// `PendingAction.exception` and the exception counters of `guard.log`.
 pub const CAP_GUARD_EXCEPTION: Capability = Capability::new("guard.exception");
-/// An exception request refused; the data carries the reason. Not in `GROUP` yet.
+/// `guard.exception`, `guard.exception-child` or `guard.exception-end` did nothing: `data` is
+/// [`crate::guard::GuardExceptionRefusedData`]. Joins `GROUP.errors` with its messages.
 pub const GUARD_EXCEPTION_REFUSED: ErrorSpec = ErrorSpec::new(BLOCK - 2, "guard-exception-refused");
 
 pub(super) const GROUP: Group = Group {
@@ -132,6 +136,15 @@ pub(super) const GROUP: Group = Group {
             .since(CAPABILITIES_PROTOCOL),
         method(GUARD_CANCEL, false, false).since(CAPABILITIES_PROTOCOL),
         method(GUARD_CONFIRM, true, false).since(CAPABILITIES_PROTOCOL),
+        method(GUARD_EXCEPTION, true, false)
+            .since(CAPABILITIES_PROTOCOL)
+            .ahead("US-GRD-006"),
+        method(GUARD_EXCEPTION_CHILD, true, false)
+            .since(CAPABILITIES_PROTOCOL)
+            .ahead("US-GRD-006"),
+        method(GUARD_EXCEPTION_END, false, false)
+            .since(CAPABILITIES_PROTOCOL)
+            .ahead("US-GRD-006"),
     ],
     capabilities: &[
         CAP_GUARD_AUTHORSHIP,
@@ -147,6 +160,7 @@ pub(super) const GROUP: Group = Group {
         CAP_GUARD_RECOVERY,
         CAP_GUARD_PERMISSIONS,
         CAP_GUARD_TEAM_CONFIRMATION,
+        CAP_GUARD_EXCEPTION,
     ],
     error_block: Some(BLOCK),
     errors: &[GUARD_UNINSTALL_REFUSED, GUARD_FAILED],
