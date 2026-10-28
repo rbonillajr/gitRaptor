@@ -1,7 +1,7 @@
 {
   "$defs": {
     "AppliesTo": {
-      "description": "Who a `protectedBranches` or `forbiddenPaths` rule applies to.",
+      "description": "Who a policy rule applies to.",
       "enum": [
         "agents",
         "everyone"
@@ -27,6 +27,61 @@
         "onAgentCommit": {
           "$ref": "#/$defs/OnAgentCommit",
           "description": "With `human-author` only: `deny` (default) or `warn`."
+        }
+      },
+      "type": "object"
+    },
+    "CommitFormat": {
+      "description": "`policies.commitFormat`: the first line of the message follows Conventional Commits 1.0.0\n(`type(scope)!: description`, a blank line before any body). The messages Git writes\n(merge commits, `Revert \"…\"`, `fixup!`/`squash!`/`amend!`) do not break it; `{}` already asks\nfor the format.",
+      "properties": {
+        "appliesTo": {
+          "$ref": "#/$defs/AppliesTo",
+          "description": "`agents` (default): only detected or registered agents; `everyone`: also the person."
+        },
+        "effect": {
+          "$ref": "#/$defs/PolicyEffect",
+          "description": "`deny` (default) or `ask`."
+        },
+        "style": {
+          "$ref": "#/$defs/FormatStyle",
+          "description": "Only `conventional` (default)."
+        },
+        "types": {
+          "description": "From 1 to 32 types of `[a-z][a-z0-9-]{0,31}`; an invalid one is dropped alone, and if all\nare dropped no type is accepted. Without it, the eleven of `config-conventional`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "x-gitraptor-types": true
+        }
+      },
+      "type": "object"
+    },
+    "DiffSize": {
+      "description": "`policies.diffSize`: the most lines (added plus deleted) one commit may change. A binary file\ncounts 0, a submodule 1 per side, a mode change 0, an exact rename 0 and a rename with edits\nits edited lines; line endings and whitespace count. `exclude` removes paths from the count\nof this rule only: a personal level or the worktree cannot exempt the team's rule. With\n`appliesTo: everyone` the person cannot make a large direct commit either, and there is no\nconscious exception for a direct commit.",
+      "properties": {
+        "appliesTo": {
+          "$ref": "#/$defs/AppliesTo",
+          "description": "`agents` (default): only detected or registered agents; `everyone`: also the person."
+        },
+        "effect": {
+          "$ref": "#/$defs/PolicyEffect",
+          "description": "`deny` (default) or `ask`."
+        },
+        "exclude": {
+          "description": "At most 64 path patterns of at most 256 bytes, as `forbiddenPaths`. An invalid one is\ndropped alone.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "x-gitraptor-patterns": true
+        },
+        "maxLines": {
+          "description": "Required, from 1 to 100 000. Without it the rule does not exist.",
+          "format": "uint32",
+          "maximum": 100000,
+          "minimum": 1,
+          "type": "integer"
         }
       },
       "type": "object"
@@ -76,6 +131,13 @@
         }
       },
       "type": "object"
+    },
+    "FormatStyle": {
+      "description": "`policies.commitFormat.style`.",
+      "enum": [
+        "conventional"
+      ],
+      "type": "string"
     },
     "Observation": {
       "description": "`engine.observation` section: when an observed repo goes dormant and how\nits safety nets run. Never at the team level.",
@@ -216,6 +278,24 @@
             "local"
           ]
         },
+        "commitFormat": {
+          "$ref": "#/$defs/CommitFormat",
+          "description": "Format of the commit message (US-GRD-009, BR-VAL-003). One format rules: the first level\nthat declares it, from the floor down to the personal levels.",
+          "x-gitraptor-levels": [
+            "profile",
+            "team",
+            "local"
+          ]
+        },
+        "diffSize": {
+          "$ref": "#/$defs/DiffSize",
+          "description": "Limit of changed lines per commit (US-GRD-009, BR-VAL-003). Every level that declares it\nbrings its own rule; the commit must meet all of them.",
+          "x-gitraptor-levels": [
+            "profile",
+            "team",
+            "local"
+          ]
+        },
         "forbiddenPaths": {
           "$ref": "#/$defs/PatternPolicy",
           "description": "Paths a commit cannot touch (US-GRD-008, BR-VAL-003). Only adds protection.",
@@ -241,6 +321,14 @@
         "team",
         "local"
       ]
+    },
+    "PolicyEffect": {
+      "description": "What a broken `diffSize` or `commitFormat` rule does.",
+      "enum": [
+        "deny",
+        "ask"
+      ],
+      "type": "string"
     },
     "PowerSaving": {
       "description": "`engine.powerSaving`.",
