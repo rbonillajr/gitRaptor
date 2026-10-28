@@ -132,6 +132,7 @@ impl Fixture {
 /// Subcommands of the CLI allowlist (ADR-GRP-009 § 3).
 pub const ALLOWED: &[&str] = &[
     "version",
+    "--exec-path",
     "rev-parse",
     "for-each-ref",
     "worktree",
