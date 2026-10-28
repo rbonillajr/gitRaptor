@@ -810,7 +810,7 @@ Cada decisión es **Decisión del orquestador (2026-10-21)**, validada por quien
 
 ## Estado de la implementación (2026-10-27)
 
-- **Hecho** (PR #PENDIENTE, junto con DS-US-MCP-009): T001 a T008. Forma léxica compartida en `crates/api/src/commit_paths.rs`, validación en `raptor-mcp`, contraste con el worktree en el daemon (también bajo el cerrojo), archivos nuevos nombrados con vuelta atrás si el commit no entra, worktree compartido y corpus de rutas. Enmiendas aplicadas: ADR-MCP-001 (2026-10-21, US-MCP-010), BR-MCP v0.5 (VAL-001, EDGE-003, EDGE-010) y contrato del canal.
+- **Hecho** (PR #289, junto con DS-US-MCP-009): T001 a T008. Forma léxica compartida en `crates/api/src/commit_paths.rs`, validación en `raptor-mcp`, contraste con el worktree en el daemon (también bajo el cerrojo), archivos nuevos nombrados con vuelta atrás si el commit no entra, worktree compartido y corpus de rutas. Enmiendas aplicadas: ADR-MCP-001 (2026-10-21, US-MCP-010), BR-MCP v0.5 (VAL-001, EDGE-003, EDGE-010) y contrato del canal.
 - **Corrección de § Contrato de API** (crítica PC-7, aprobada): `.g\u{200C}it/x` es `path-invalid`, no `path-outside-worktree`, porque el paso 2.2 de T002 corre antes que el 2.4.
 - **Abierto, bloquea liberación en Windows**: G1, en la etapa de validación multiplataforma (XP-46); macOS y Linux no esperan. Las tres historias (US-MCP-009, US-MCP-010, US-MCP-011) se liberan juntas (D14).
 - **Sin verificar**: Linux (XP-46 a) y Windows (XP-46 b).

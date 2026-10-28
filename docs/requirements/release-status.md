@@ -113,8 +113,8 @@
 | [US-MCP-005](features/mcp/user-stories/US-MCP-005-respuestas-acotadas-y-seguras.md) | Un agente recibe respuestas acotadas que no pueden darle órdenes ni filtrar secretos | Implementado (`implemented`) | #157, #159 | — |
 | [US-MCP-008](features/mcp/user-stories/US-MCP-008-snapshot-manual.md) | Un agente guarda por MCP un punto de recuperación antes de un cambio arriesgado | Implementado (`implemented`) | #213 | — |
 | [INF-MCP-001](features/mcp/technical-stories/INF-MCP-001-corpus-seguridad-mcp.md) | Corpus de seguridad del MCP como suite de CI que bloquea el merge | Implementado en parte (`partially-implemented`) | — | — |
-| [US-MCP-009](features/mcp/user-stories/US-MCP-009-safe-commit.md) | Un agente commitea por MCP con las reglas del repo y con un punto de recuperación previo | Implementado en parte (`partially-implemented`) | — | — |
-| [US-MCP-010](features/mcp/user-stories/US-MCP-010-safe-commit-rutas.md) | Un agente commitea solo los archivos que nombra y nunca fuera de su worktree | Implementado en parte (`partially-implemented`) | — | — |
+| [US-MCP-009](features/mcp/user-stories/US-MCP-009-safe-commit.md) | Un agente commitea por MCP con las reglas del repo y con un punto de recuperación previo | Implementado en parte (`partially-implemented`) | #289 | — |
+| [US-MCP-010](features/mcp/user-stories/US-MCP-010-safe-commit-rutas.md) | Un agente commitea solo los archivos que nombra y nunca fuera de su worktree | Implementado en parte (`partially-implemented`) | #289 | — |
 | [US-MCP-013](features/mcp/user-stories/US-MCP-013-confirmacion-sin-cola.md) | Un agente sabe que una acción necesita al desarrollador y a quién acudir | Implementado en parte (`partially-implemented`) | #267 | — |
 | [US-MCP-006](features/mcp/user-stories/US-MCP-006-registrar-agente.md) | Un agente sin soporte completo se declara por MCP y su trabajo queda a su nombre | Borrador (`draft`) | — | — |
 | [US-MCP-007](features/mcp/user-stories/US-MCP-007-confused-deputy.md) | Un hook lanzado por una escritura de un agente no puede usar los poderes del desarrollador | Borrador (`draft`) | — | — |
@@ -299,8 +299,8 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-GRD-017](features/guardrails/user-stories/US-GRD-017-sin-snapshot-no-se-ejecuta.md) | Una operación destructiva permitida no se ejecuta sin un punto de recuperación | Implementado en parte (`partially-implemented`) | #260 | — |
 | [US-GRD-018](features/guardrails/user-stories/US-GRD-018-autoria-commits-persona-y-agente.md) | Cada commit entra a nombre de la persona y deja constancia del agente que lo hizo, con la exigencia que fija el equipo | Implementado en parte (`partially-implemented`) | #137, #141, #150, #152, #153, #154 | 3 |
 | [US-GRP-005](features/motor-local/user-stories/US-GRP-005-hueco-sin-atribuir.md) | El desarrollador distingue lo que el motor no vio ocurrir | Implementado en parte (`partially-implemented`) | — | — |
-| [US-MCP-009](features/mcp/user-stories/US-MCP-009-safe-commit.md) | Un agente commitea por MCP con las reglas del repo y con un punto de recuperación previo | Implementado en parte (`partially-implemented`) | — | — |
-| [US-MCP-010](features/mcp/user-stories/US-MCP-010-safe-commit-rutas.md) | Un agente commitea solo los archivos que nombra y nunca fuera de su worktree | Implementado en parte (`partially-implemented`) | — | — |
+| [US-MCP-009](features/mcp/user-stories/US-MCP-009-safe-commit.md) | Un agente commitea por MCP con las reglas del repo y con un punto de recuperación previo | Implementado en parte (`partially-implemented`) | #289 | — |
+| [US-MCP-010](features/mcp/user-stories/US-MCP-010-safe-commit-rutas.md) | Un agente commitea solo los archivos que nombra y nunca fuera de su worktree | Implementado en parte (`partially-implemented`) | #289 | — |
 | [US-MCP-013](features/mcp/user-stories/US-MCP-013-confirmacion-sin-cola.md) | Un agente sabe que una acción necesita al desarrollador y a quién acudir | Implementado en parte (`partially-implemented`) | #267 | — |
 | [SPIKE-GRD-002](features/guardrails/technical-stories/SPIKE-GRD-002-factor-so-daemon.md) | Factor de autenticación del SO invocado desde el daemon en los tres SO | Listo (`ready`) | — | — |
 | [TD-GRP-002](features/motor-local/technical-stories/TD-GRP-002-motor-bajo-rafaga.md) | Frescura y memoria del motor bajo una ráfaga de archivos | Listo (`ready`) | — | — |
@@ -484,13 +484,13 @@ Corpus de seguridad del MCP como suite de CI que bloquea el merge
 
 - *La ficha no lista los pendientes en "Estado de la implementación".*
 
-### [US-MCP-009](features/mcp/user-stories/US-MCP-009-safe-commit.md)
+### [US-MCP-009](features/mcp/user-stories/US-MCP-009-safe-commit.md) — #289
 
 Un agente commitea por MCP con las reglas del repo y con un punto de recuperación previo
 
 - *La ficha no lista los pendientes en "Estado de la implementación".*
 
-### [US-MCP-010](features/mcp/user-stories/US-MCP-010-safe-commit-rutas.md)
+### [US-MCP-010](features/mcp/user-stories/US-MCP-010-safe-commit-rutas.md) — #289
 
 Un agente commitea solo los archivos que nombra y nunca fuera de su worktree
 
