@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: high
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-28
 feature: motor-local
 related:
   context:
@@ -15,6 +15,7 @@ related:
   stories:
     - US-GRP-007
     - US-GRP-009
+  specs: [DS-US-GRP-008]
 tags:
   - motor-local
   - atribucion

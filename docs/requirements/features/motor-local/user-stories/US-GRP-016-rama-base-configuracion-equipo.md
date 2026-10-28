@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: medium
 created: 2026-10-03
-updated: 2026-10-04
+updated: 2026-10-28
 feature: motor-local
 related:
   context:
@@ -16,6 +16,7 @@ related:
     - US-GRP-012
     - US-GRP-013
     - TS-GRD-001
+  specs: [DS-US-GRP-016]
 tags:
   - motor-local
   - rama-base
@@ -88,6 +89,8 @@ Entonces el ahead/behind de cada worktree de "demo" se calcula contra "develop"
 
 Dado una máquina nueva con un perfil de GitRaptor vacío
   Y el repo "demo" recién clonado, cuya configuración del equipo define la rama base "develop"
+  Y "develop" solo existe en "demo" como la copia que el repo conoce del remoto
 Cuando el desarrollador añade "demo"
 Entonces la rama base de "demo" es "develop" desde la primera consulta del estado
+  Y el ahead/behind de cada worktree de "demo" se calcula contra esa copia de "develop" (Q58)
   Y el estado del motor la marca como "no confirmada" mientras "demo" no tenga rama base confirmada

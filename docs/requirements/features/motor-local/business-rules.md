@@ -106,6 +106,8 @@ ELSE se acepta el registro como "otro agente" con el nombre declarado
 - **Cursor registrado como agente** (Q32): registrar "Cursor" en `feat-pagos` → sesión de "otro agente: Cursor", origen "registrado". Sin ese registro, lo que se hace en Cursor queda "sin atribuir" (BR-EDGE-004).
 - **Mensaje informativo**: "Codex se registró como otro agente: se observa y se le atribuye su actividad, sin funciones específicas."
 
+> **Decisión del orquestador (2026-10-28), validada por PO y Arquitecto (Q53)**: en el MVP, "se le atribuye su actividad" significa su sesión y sus eventos de Git, como los commits. Los cambios sin commitear del worktree siguen "sin atribuir" aunque el agente registrado sea su única sesión, igual que los de Claude Code (Q52, BR-EDGE-004): el motor no separa por archivo lo que hizo el agente de lo que hizo el desarrollador.
+
 **Referencias**:
 - User Story: US-GRP-009
 - BRD: BR-02, D2 (revisada en v0.5), § 11
@@ -337,6 +339,8 @@ Actor: Agente (Claude Code u otro agente, incluidos Codex y Cursor; Q32)
 Puede: Registrarse en un worktree de un repo ya observado
 No puede: Añadir ni retirar repos observados (Q40); corregir una atribución (BR-CONS-002)
 ```
+
+> **Decisión del orquestador (2026-10-28), validada por PO y Arquitecto (Q59)**: el motor rechaza estas peticiones cuando las hace un proceso que **reconoce como agente**; en el MVP, solo Claude Code. Estar registrado no hace reconocible el proceso de un agente: el rechazo a Codex, Cursor y los demás llega con el soporte de cada uno (D2 del BRD). Hasta entonces, lo que uno de ellos pide desde una terminal es indistinguible de lo que pide el desarrollador, igual que su trabajo (Q35). Es un riesgo aceptado del MVP.
 
 **Tabla de permisos**:
 
@@ -699,6 +703,9 @@ Constraint: una corrección (BR-CONS-002) no cambia el número de sesiones
 >
 > **Decisión de Rene (2026-10-07)**: P16 = sí. Ratifica el supuesto; el origen de una sesión confirmada por registro es "registrado".
 - El desarrollador edita en Cursor dentro de `feat-login`, donde trabaja Claude Code → una sola sesión (Claude Code); el editor del humano no cuenta como sesión de agente (BR-EDGE-004).
+- Claude Code en `feat-login` lanza desde su terminal otro Claude Code en `feat-login` (un subagente) → una sola sesión, la del que lo lanzó; no compartido (Q55). Si el desarrollador abre por su cuenta un segundo Claude Code en `feat-login` → dos sesiones; compartido.
+
+> **Decisión del orquestador (2026-10-28), validada por PO y Arquitecto (Q55)**: un Claude Code lanzado por otro Claude Code en el mismo worktree es trabajo de la misma sesión: cuenta dentro de la del que lo lanzó y no vuelve compartido el worktree. Dos sesiones de Claude Code son dos lanzamientos independientes.
 
 **Referencias**:
 - User Story: US-GRP-011, US-GRP-009 (registro que confirma una sesión detectada)
@@ -789,6 +796,12 @@ Constraint: la rama base del motor es la misma que la de Guardrails
 
 **Rama base inexistente** (Q42): si la rama base (la definida o `main`) no existe en el repo, el motor indica que no puede calcular ahead/behind; nunca elige otra rama por su cuenta.
 
+> **Decisión del orquestador (2026-10-28), validada por PO y Arquitecto (Q58)**: la rama base "existe en el repo" si existe como rama local **o** como la copia que el repo conoce de ella en el remoto del que se lee la configuración del equipo. Si existe como local, el ahead/behind se calcula contra la local; si solo existe la copia del remoto, contra esa copia, sin traer novedades (Q12). Solo si no existe de ninguna de las dos formas se indica que no se puede calcular. La copia del remoto es la misma rama, no otra, así que la frase anterior sigue en pie.
+>
+> - Clon recién hecho de `demo`, cuya configuración del equipo define `develop`, sin rama local `develop` y con su copia del remoto → ahead/behind contra esa copia de `develop` desde la primera consulta, marcado "no confirmado" (BR-EDGE-007).
+> - Mismo repo con rama local `develop` → ahead/behind contra la rama local.
+> - Repo sin `develop` local ni en su copia del remoto → no se puede calcular.
+
 **Entrega en dos pasos** (Q36): esta regla describe el comportamiento final. En el MVP la rama base es `main` en todos los repos, de forma provisional (US-GRP-012). Leerla de la configuración del equipo es US-GRP-016, bloqueada por Guardrails (F-001-04) y el ADR de formato de la configuración (P8).
 
 **Referencias**:
@@ -873,6 +886,10 @@ Acción al cumplirse: la sesión pasa a Inactivo
 - Repo con umbral ajustado a 15 minutos: última actividad 10:00:00; a las 10:05:00 sigue Activo; a las 10:15:00 sin actividad → Inactivo.
 - Personal: el desarrollador ajusta `gitRaptor` a 15 minutos en su configuración local; en el clon de otra persona el mismo repo sigue con su propio valor.
 - Equipo ignorado: la configuración del repo del equipo de `otro-repo` trae un umbral de 30 minutos y el desarrollador no lo ajusta en ningún nivel personal → 5 minutos.
+- Bajar el umbral: sesión activa con última actividad a las 10:00:00 y umbral de 15 minutos; a las 10:08:00 el desarrollador lo baja a 5 minutos → pasa a Inactivo en la siguiente comprobación del motor (Q56).
+- Subir el umbral: sesión Inactiva desde las 10:05:00 con umbral de 5 minutos; a las 10:07:00 el desarrollador lo sube a 30 minutos → sigue Inactiva hasta la siguiente actividad en su worktree (Q56).
+
+> **Decisión del orquestador (2026-10-28), validada por PO y Arquitecto (Q56, Q57)**: un cambio del umbral se aplica a las sesiones en marcha desde la siguiente comprobación del motor, contra la última actividad de cada una. Bajarlo puede pasar una sesión activa a Inactivo; subirlo no reactiva una sesión inactiva, porque solo la actividad la vuelve a Activo (BR-WF-001). El umbral efectivo se verifica por su efecto; mostrarlo y de qué nivel sale no es parte de esta regla en el MVP (Q57).
 
 **Referencias**:
 - User Story: US-GRP-007, US-GRP-013
@@ -951,7 +968,13 @@ Acción al cumplirse: la sesión pasa a Inactivo
 **Ejemplo**:
 - El desarrollador modifica `README.md` en Cursor dentro de `feat-login` mientras Claude Code está activo allí, y el motor no tiene evidencia de que lo hiciera Claude Code → el cambio queda "sin atribuir".
 - El desarrollador abre Cursor sobre `feat-pagos`, donde no hay ningún agente, y edita un archivo → no aparece ninguna sesión de agente y el cambio queda "sin atribuir".
-- El desarrollador registra "Cursor" como agente en `feat-pagos` → desde ese momento es "otro agente: Cursor" y su actividad se le atribuye (BR-VAL-001).
+- El desarrollador registra "Cursor" como agente en `feat-pagos` → desde ese momento es "otro agente: Cursor" y su actividad se le atribuye (BR-VAL-001). En el MVP, eso son su sesión y sus commits; los cambios sin commitear de `feat-pagos` siguen "sin atribuir" (Q53).
+- Claude Code edita `login.txt` en `feat-login` sin commitear → el cambio queda "sin atribuir"; cuando lo commitea, el commit es de Claude Code (Q52).
+- El desarrollador hace un commit desde su editor en `feat-login`, donde Claude Code está activo, y el motor no vio ningún Git de esa sesión que escribiera → el evento queda "sin atribuir", con la pista "inferido: Claude Code" (Q54).
+
+> **Decisión del orquestador (2026-10-28), validada por PO y Arquitecto (Q52, Q53)**: en el MVP no hay evidencia suficiente para atribuir a un agente un cambio sin commitear, así que **todo cambio sin commitear figura "sin atribuir"**, sea de Claude Code, de un agente registrado o del desarrollador. Las sesiones y los eventos de Git se siguen atribuyendo. Atribuir los cambios sin commitear queda para un enabler posterior al MVP; la Time Machine ya los trata como "sin agente" (D-TMC-27) y los recupera con sus snapshots sin depender del actor.
+>
+> **Decisión del orquestador (2026-10-28), validada por PO y Arquitecto (Q54)**: una **pista** como "inferido: Claude Code" no es una atribución. El actor sigue siendo "sin atribuir"; la pista se muestra con su propia etiqueta (BR-CONS-003) y no cuenta como de ese agente para el undo por agente, la meta del 90 % ni la comprobación de autoría del commit. Rene puede vetarlo.
 
 **Referencias**:
 - User Story: US-GRP-008
@@ -1103,3 +1126,4 @@ Cada regla debe estar reflejada en al menos un **escenario Gherkin** (criterio d
 | 1.17 | 2026-10-27 | PO (AADD) para Rene Bonilla | Decisión del orquestador (2026-10-27), validada por PO, sobre la propuesta del Arquitecto (ADR-GRP-015 § 2; DS-TS-GRP-005, G5). BR-CONS-005: enmienda "un evento perdido sin marca se recupera, como mucho, en el intervalo de reconciliación vigente" (5 min con corriente, 15 min en ahorro de energía; la cifra de 15 min sigue como supuesto). Se refleja en US-GRP-019. |
 | 1.18 | 2026-10-27 | PO (AADD) para Rene Bonilla | Decisión del orquestador (2026-10-27), validada por PO y Arquitecto; Q50 del contexto, que cierra P17. BR-CONS-002: al retirar una corrección, los eventos que reatribuyó vuelven a la atribución detectada; se quita la marca de supuesto `[POR VERIFICAR]` y se añaden la línea de la regla formal y el ejemplo de `c1` y `c2`. |
 | 1.19 | 2026-10-28 | PO (AADD) para Rene Bonilla | Decisión del orquestador (2026-10-27), validada por Arquitecto y PO; Q51 del contexto, de DS-US-GRP-010 (D2, D3, D5). BR-CONS-002: una segunda corrección reemplaza a la primera; retirar vuelve a la detectada y nunca a una corrección anterior, con origen "registrado" si la sesión estaba confirmada (P16); corregir al agente vigente se rechaza; una sesión nacida por registro no se corrige, se retira el registro. Sin reglas nuevas: conteos y matriz sin cambios. |
+| 1.20 | 2026-10-28 | PO (AADD) para Rene Bonilla | Decisiones del orquestador (2026-10-28), validadas por PO y Arquitecto; Q52 a Q59 del contexto, de las Dev Specs de US-GRP-006, 008, 011, 013 y 016. BR-EDGE-004: en el MVP todo cambio sin commitear queda "sin atribuir", también el de Claude Code y el de un agente registrado (Q52, Q53), y una pista "inferido" no es atribución (Q54), con tres ejemplos nuevos. BR-VAL-001: "se le atribuye su actividad" son su sesión y sus eventos de Git (Q53). BR-CONS-004: un Claude Code lanzado por otro en el mismo worktree es la misma sesión (Q55). BR-TIME-001: un cambio del umbral se aplica desde la siguiente comprobación; subirlo no reactiva (Q56, Q57). BR-CONS-006: la rama base existe si existe como local o como copia conocida del remoto; la local tiene preferencia (Q58). BR-AUTH-001: el rechazo alcanza a los procesos que el motor reconoce como agente, en el MVP solo Claude Code (Q59). Sin reglas nuevas: conteos y matriz sin cambios. |
