@@ -508,14 +508,34 @@ pub(crate) fn set_divergence(view: &mut WorktreeView, found: DivergenceView) {
 /// repo. Its `gitdir` is writable by an agent; this keeps the engine from
 /// being pointed at the whole disk.
 pub fn linked_is_trusted(common_dir: &Path, id: &str, root: &Path) -> bool {
-    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"));
-    linked_is_trusted_in(common_dir, id, root, home.as_deref().map(Path::new))
+    linked_is_trusted_in(common_dir, id, root, &home_folders())
 }
 
-/// [`linked_is_trusted`] with the home folder given instead of read from the process
-/// environment, so a caller (and a test) states which folder is refused as a root.
+/// The folders SEC-11 refuses as a root, read from the process environment: `HOME`, and on
+/// Windows also `USERPROFILE`. Git for Windows often sets `HOME` to another folder (say
+/// `D:\home`), and the profile folder must still be refused.
+pub fn home_folders() -> Vec<PathBuf> {
+    home_folders_from(|name| std::env::var_os(name))
+}
+
+/// [`home_folders`] with the environment given, so a test states it.
+pub fn home_folders_from(var: impl Fn(&str) -> Option<std::ffi::OsString>) -> Vec<PathBuf> {
+    let names: &[&str] = if cfg!(windows) {
+        &["HOME", "USERPROFILE"]
+    } else {
+        &["HOME"]
+    };
+    names
+        .iter()
+        .filter_map(|name| var(name).filter(|value| !value.is_empty()))
+        .map(PathBuf::from)
+        .collect()
+}
+
+/// [`linked_is_trusted`] with the home folders given instead of read from the process
+/// environment, so a caller (and a test) states which folders are refused as a root.
 /// The `id` is one name the repo registers: a folder of `<common>/worktrees`, never a path.
-pub fn linked_is_trusted_in(common_dir: &Path, id: &str, root: &Path, home: Option<&Path>) -> bool {
+pub fn linked_is_trusted_in(common_dir: &Path, id: &str, root: &Path, homes: &[PathBuf]) -> bool {
     let mut parts = Path::new(id).components();
     let one_name =
         matches!(parts.next(), Some(std::path::Component::Normal(_))) && parts.next().is_none();
@@ -523,17 +543,19 @@ pub fn linked_is_trusted_in(common_dir: &Path, id: &str, root: &Path, home: Opti
     if !one_name || !std::fs::symlink_metadata(&admin).is_ok_and(|m| m.is_dir()) {
         return false;
     }
-    root_is_bounded(common_dir, root, home)
+    root_is_bounded(common_dir, root, homes)
         && gitdir_of(root).is_some_and(|target| canonical(&target) == canonical(&admin))
 }
 
-/// A root the engine may be pointed at: not `/`, a drive root, the home folder or an ancestor
-/// of the repo.
-fn root_is_bounded(common_dir: &Path, root: &Path, home: Option<&Path>) -> bool {
-    if root.parent().is_none() || common_dir.starts_with(root) {
+/// A root the engine may be pointed at: not `/`, a drive root, a home folder or an ancestor
+/// of the repo. Both sides of each comparison are in the same canonical form, so a root
+/// written another way (`\\?\C:\…` against `C:\…`) is not let through.
+fn root_is_bounded(common_dir: &Path, root: &Path, homes: &[PathBuf]) -> bool {
+    let root = canonical(root);
+    if root.parent().is_none() || canonical(common_dir).starts_with(&root) {
         return false;
     }
-    !home.is_some_and(|home| canonical(home) == canonical(root))
+    !homes.iter().any(|home| canonical(home) == root)
 }
 
 /// Where the `.git` link file of `root` points, resolved against `root`; `None` if `.git` is
@@ -558,7 +580,7 @@ pub fn worktree_is_trusted_in(
     root: &Path,
     main: bool,
     admin_name: Option<&str>,
-    home: Option<&Path>,
+    homes: &[PathBuf],
 ) -> bool {
     if !std::fs::symlink_metadata(root).is_ok_and(|m| m.is_dir()) {
         return false;
@@ -569,14 +591,14 @@ pub fn worktree_is_trusted_in(
             match std::fs::symlink_metadata(&git) {
                 Ok(m) if m.is_dir() => canonical(&git) == canonical(common_dir),
                 Ok(m) if m.is_file() => {
-                    root_is_bounded(common_dir, root, home)
+                    root_is_bounded(common_dir, root, homes)
                         && gitdir_of(root)
                             .is_some_and(|target| canonical(&target) == canonical(common_dir))
                 }
                 _ => false,
             }
         }
-        (false, Some(id)) => linked_is_trusted_in(common_dir, id, root, home),
+        (false, Some(id)) => linked_is_trusted_in(common_dir, id, root, homes),
         (false, None) => false,
     }
 }
@@ -596,15 +618,8 @@ pub fn open_worktree(
     if std::fs::symlink_metadata(root).is_err() {
         return Err(ReadError::Unavailable("the worktree is not there".into()));
     }
-    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"));
     let refused = || ReadError::Untrusted("the repo does not own this worktree's .git".into());
-    if !worktree_is_trusted_in(
-        common_dir,
-        root,
-        main,
-        admin_name,
-        home.as_deref().map(Path::new),
-    ) {
+    if !worktree_is_trusted_in(common_dir, root, main, admin_name, &home_folders()) {
         return Err(refused());
     }
     let reader = RepoReader::open(root, &ReaderOptions::default())?;

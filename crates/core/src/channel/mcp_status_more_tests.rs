@@ -346,7 +346,7 @@ fn a_root_that_is_a_symlink_is_untrusted() {
     let mut repo = repo_of(vec![view(&link.to_string_lossy(), true)], None);
     repo.path = Untrusted::from_os(common.as_os_str());
 
-    let read = facts(&repo, 0, None);
+    let read = facts(&repo, 0, &[]);
     assert!(read.exists, "the link is there");
     assert!(!read.trusted_link);
     assert_eq!(
@@ -369,7 +369,7 @@ fn a_linked_git_file_that_is_a_symlink_or_huge_is_not_trusted() {
         std::fs::create_dir_all(dir).unwrap();
     }
     let good = format!("gitdir: {}\n", admin.display());
-    let trusted = |root: &Path| crate::observe::linked_is_trusted_in(&common, "w", root, None);
+    let trusted = |root: &Path| crate::observe::linked_is_trusted_in(&common, "w", root, &[]);
 
     std::fs::write(root.join(".git"), &good).unwrap();
     assert!(trusted(&root));

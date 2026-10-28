@@ -62,9 +62,9 @@ fn owned_by_me(_paths: &[&Path]) -> Option<bool> {
     None
 }
 
-/// Reads the [`WorktreeFacts`] of worktree `w` of `repo`; `home` is the folder SEC-11 refuses
-/// as a root.
-pub(crate) fn facts(repo: &RepoView, w: usize, home: Option<&Path>) -> WorktreeFacts {
+/// Reads the [`WorktreeFacts`] of worktree `w` of `repo`; `homes` are the folders SEC-11
+/// refuses as a root.
+pub(crate) fn facts(repo: &RepoView, w: usize, homes: &[PathBuf]) -> WorktreeFacts {
     let Some(view) = repo.worktrees.get(w) else {
         return WorktreeFacts {
             exists: false,
@@ -90,7 +90,7 @@ pub(crate) fn facts(repo: &RepoView, w: usize, home: Option<&Path>) -> WorktreeF
             || view
                 .admin_name
                 .as_ref()
-                .is_some_and(|id| observe::linked_is_trusted_in(common, id.raw(), root, home)));
+                .is_some_and(|id| observe::linked_is_trusted_in(common, id.raw(), root, homes)));
     WorktreeFacts {
         exists,
         owned_by_me: owned_by_me(&owners),
