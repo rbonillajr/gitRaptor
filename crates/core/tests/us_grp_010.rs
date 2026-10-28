@@ -87,6 +87,7 @@ fn daemon_role(spec: &Value, dirs: ProfileDirs) {
         tm_prior_layer: None,
         tiers: Default::default(),
         discovery: Default::default(),
+        power: Default::default(),
         tm_capture: Default::default(),
     };
     let daemon = Daemon::start(config).unwrap();
