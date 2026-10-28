@@ -15,6 +15,8 @@ related:
   stories:
     - US-CKP-014
     - US-TMC-002
+  specs:
+    - DS-US-CKP-017
 tags:
   - cockpit
   - acciones-por-agente
@@ -82,4 +84,4 @@ _Pendiente — lo completa el Arquitecto (Dev Spec). Cuarentena y bloqueo: ADR-C
 ## Diseño y Dev Spec
 
 - **Diseño:** DSYS-GRP-001 (ConfirmPrompt con default No).
-- **Dev Spec:** pendiente.
+- **Dev Spec:** [DS-US-CKP-017](../dev-specs/US-CKP-017-descartar-worktree.md) (draft).
