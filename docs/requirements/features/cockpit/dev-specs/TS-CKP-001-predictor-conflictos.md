@@ -575,7 +575,7 @@ graph LR
 
 **Reglas**
 - Escenario con `ENGINE_BENCH_ROOT` y `repogen::generate`, como los existentes. ≥ 200 muestras, descartando las 10 primeras (ADR-GRP-011 § 4).
-- `FRESHNESS_TARGET` es **gate** (Brief § 8, fila 6: 96 ms de p95 medidos frente a 5 s). El p95 del motor (`ENGINE_P95`) es gate desde el principio, medido solo y durante una ráfaga del predictor (E9, que el SPIKE dejó para su fase (b)).
+- `FRESHNESS_TARGET` es **gate** (Brief § 8, fila 6: 96 ms de p95 medidos frente a 5 s). El p95 del motor (`ENGINE_P95`) es gate desde el principio, medido solo y durante una ráfaga del predictor (E9, que el SPIKE dejó para su fase (b)). Los dos gates los aplica el banco al ejecutarse con la máquina en reposo (`cargo bench -p gitraptor-cli --bench engine -- --only prediction`); el CI de PR no lo ejecuta. **Decisión del orquestador (2026-10-28), PC-6 del crítico**: el PR-B deja el escenario construido y reproducible, y la cifra en reposo se registra en G11; no bloquea el cierre de la historia.
 - La huella del daemon (RES-02) se mide en reposo con el trabajador cerrado (`WORKER_IDLE_EXIT`); durante la ráfaga se informa la RSS del daemon más la del trabajador.
 
 - **Depende:** T006, T009
@@ -1006,6 +1006,6 @@ Corre `/security-review --scope devspec docs/requirements/features/cockpit/dev-s
 | G6 | ADR-GRP-009 (Enmienda 2026-10-04, Cockpit) pide "pila de atributos sin `.gitattributes` del disco", que es más laxo que L-04. Este spec sigue a ADR-CKP-001 § 1: ni disco, ni índice, ni árbol (la ruta por defecto de `gix` lee el índice o el árbol de `HEAD`, anexo A3) | Corregir el texto de ADR-GRP-009 | Orquestador |
 | G7 | D4 y D5 añaden dos motivos de `pendiente` que ADR-CKP-001 § 6 no tiene, porque los niveles (ADR-GRP-010, 2026-10-07) y la pausa (ADR-GRP-015) son posteriores | **Hecho (2026-10-20)**: incluidos en la Enmienda (2026-10-20) de ADR-CKP-001 | — |
 | G8 | El texto de NFR-07 en el BRD depende de la rama (ADR-CKP-001 § 11). Ganó R-A2W: la predicción no usa el Git CLI | Reformular la justificación de Git 2.38 | PO |
-| G11 | La fase (b) del SPIKE (máquina en reposo) no ha corrido: confirma las cifras y mide E9 (p95 del motor con ráfaga) | Si cambia una cifra, actualizar § Valores numéricos; si E9 muestra regresión, revisar `PREDICT_CONCURRENCY` y la clase del trabajador antes que la rama. T012 mide E9 como gate en cualquier caso | Orquestador |
+| G11 | La fase (b) del SPIKE (máquina en reposo) no ha corrido: confirma las cifras y mide E9 (p95 del motor con ráfaga) | Si cambia una cifra, actualizar § Valores numéricos; si E9 muestra regresión, revisar `PREDICT_CONCURRENCY` y la clase del trabajador antes que la rama. T012 deja el escenario `prediction` del banco, que aplica los dos gates al ejecutarse en reposo. **Pendiente (2026-10-28)**: ejecutarlo en reposo y anotar aquí el p95 de frescura y el de E9. Si E9 sale en regresión, se abre una TD de cockpit que reabre TS-CKP-001 | Orquestador |
 | G9 | `static_check.rs:64` prohíbe `write_buf` fuera de `tm_write/store`: `dry_merge/memory.rs` necesita la excepción de T010, condicionada a `with_object_memory` | Ninguna (T010) | — |
 | G10 | Solo se verificará en macOS y Linux; Windows sigue la etapa de validación multiplataforma | Etapa de validación | Rene |

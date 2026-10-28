@@ -269,5 +269,12 @@ pub fn page(details: Vec<PairDetail>, cursor: Option<&str>) -> PredictionPage {
     unimplemented!("T009")
 }
 
+/// `changed` split into batches whose `scope.event` notification fits in `budget` bytes, in
+/// order; each carries the `repo_id`, and the `removed` ids go in the first.
+pub fn split_changed(changed: PredictionChanged, budget: usize) -> Vec<PredictionChanged> {
+    let _ = (changed, budget);
+    unimplemented!("T009")
+}
+
 #[cfg(test)]
 mod tests;

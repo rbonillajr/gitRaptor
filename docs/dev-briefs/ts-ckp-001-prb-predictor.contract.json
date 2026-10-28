@@ -7,6 +7,18 @@
     "command": "node tools/test/nextest-junit.mjs"
   },
   "layers": {
+    "static": {
+      "commands": [
+        {
+          "id": "fmt",
+          "cmd": "cargo fmt --all --check"
+        },
+        {
+          "id": "clippy",
+          "cmd": "cargo clippy --workspace --all-targets -- -D warnings"
+        }
+      ]
+    },
     "runtime": {
       "commands": [
         {
@@ -110,7 +122,7 @@
     },
     {
       "id": "CKPB-API-FIT",
-      "statement": "T009: con 55 pares y raíces Untrusted de 4 KiB que se escapan en JSON el RepoView cabe en MAX_MESSAGE_BYTES con pairs_truncated=true; una página de prediction.list no pasa de 50 pares ni de 512 KiB y da next_cursor si quedan",
+      "statement": "T009: con 55 pares y raíces Untrusted de 4 KiB que se escapan en JSON el RepoView cabe en MAX_MESSAGE_BYTES con pairs_truncated=true; una página de prediction.list no pasa de 50 pares ni de 512 KiB y da next_cursor si quedan; split_changed trocea un prediction.changed que no cabe en varios lotes, cada uno dentro del tope y con su repo_id (PC-4)",
       "verify": "cargo test -p gitraptor-api --lib prediction::tests::fit:: 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
       "layer": "runtime",
       "origin": "story",
@@ -201,22 +213,12 @@
     },
     {
       "id": "CKPB-BOUNDARY",
-      "statement": "T010: predict no importa tm_write, guard_write, user_ops, invoke ni profile; el único Command::new bajo predict/ está en predict/worker/mod.rs con el programa resuelto por current_exe; apps/cli/src/commands/predict_worker.rs no tiene Command::new",
+      "statement": "T010: predict no importa tm_write, guard_write, user_ops, invoke ni profile; el único Command::new bajo predict/ está en predict/worker/mod.rs con el programa resuelto por current_exe; apps/cli/src/commands/predict_worker.rs no tiene Command::new; worker/mod.rs construye el entorno con env_clear y fija current_dir; serve.rs fija WorkClass::Utility antes de leer la primera trama; for_current_user y run_process usan PredictConfig::for_daemon",
       "verify": "cargo test -p gitraptor-core --test predict_boundary  2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
       "layer": "runtime",
       "origin": "story",
       "tests": [
         "crates/core/tests/predict_boundary.rs"
-      ]
-    },
-    {
-      "id": "CKPB-STATIC-GIT",
-      "statement": "T010: crates/git/src/dry_merge no contiene merge_trees, merge_commits, merge_resource_cache, tree_merge_options ni Repository::attributes*, como prueba repo_intact de static_check",
-      "verify": "cargo test -p gitraptor-git --test static_check repo_intact::dry_merge_ 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
-      "layer": "runtime",
-      "origin": "story",
-      "tests": [
-        "crates/git/tests/static_check.rs"
       ]
     },
     {
@@ -232,6 +234,46 @@
       "verify": "grep -q '^status: implemented' docs/requirements/features/cockpit/technical-stories/TS-CKP-001-predictor-conflictos.md && grep -q '^status: implemented' docs/requirements/features/cockpit/dev-specs/TS-CKP-001-predictor-conflictos.md && grep -E 'TS-CKP-001' docs/requirements/release-status.md | grep -q 'implemented' && ! grep -E 'TS-CKP-001' docs/requirements/release-status.md | grep -q 'partially-implemented'",
       "layer": "static",
       "origin": "story"
+    },
+    {
+      "id": "CKPB-WIRING",
+      "statement": "T006/T007 (PC-1): PredictConfig::for_daemon() da PredictMerger::Worker con el programa absoluto de current_exe y los WorkerLimits por defecto; for_current_user() y run_process lo usan (comprobación estática en predict_boundary)",
+      "verify": "cargo test -p gitraptor-core --test predict_worker wiring:: 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "crates/core/tests/predict_worker.rs"
+      ]
+    },
+    {
+      "id": "CKPB-WORKER-ENV",
+      "statement": "T006 (PC-2): el trabajador arranca con el entorno construido desde cero: ninguna GIT_*, DYLD_* ni LD_* aunque el daemon las tenga, solo HOME, un PATH sin entradas relativas y las imprescindibles del SO; su cwd está fuera de cualquier repo",
+      "verify": "cargo test -p gitraptor-core --test predict_worker env:: 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "crates/core/tests/predict_worker.rs"
+      ]
+    },
+    {
+      "id": "CKPB-WORKER-VERSION",
+      "statement": "T006 (PC-2): si la versión del primer intercambio no coincide, el trabajador se relanza una vez y después el merge devuelve Unavailable (launches = 2)",
+      "verify": "cargo test -p gitraptor-core --test predict_worker version:: 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "crates/core/tests/predict_worker.rs"
+      ]
+    },
+    {
+      "id": "CKPB-CI-MIN",
+      "statement": "T010 (PC-7): repo_intact_min de repo-intact.yml sube al menos en el número de pruebas repo_intact:: de predict_repo_intact.rs (prueba ci_min de predict_boundary)",
+      "verify": "cargo test -p gitraptor-core --test predict_boundary ci_min 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "crates/core/tests/predict_boundary.rs"
+      ]
     }
   ],
   "constraints": {

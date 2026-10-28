@@ -46,6 +46,7 @@ Decisiones del orquestador (2026-10-28) dentro de lo que la spec ya fija. Ningun
 - **S13 · Hostiles de T010.** El blob de 100 MB se corta por cabecera con los límites reales. Los dos casos de muerte (10.000 archivos en conflicto por memoria y blob denso por plazo) usan `WorkerLimits` reducidos para que sean rápidos y deterministas. En los tres, el daemon sigue respondiendo a `daemon.status`.
 - **S14 · CI.** `repo_intact_min` de `.github/workflows/repo-intact.yml` sube en el número de pruebas `repo_intact::` nuevas. No cambia ninguna variable `RUST_*` ni `CARGO_*`.
 - **S15 · Independencia del actor.** Las pruebas del predictor no dependen de sesiones de agente (`session_present` sigue en `false`). Si un arnés de daemon necesita el detector, usa `AgentMatcher::only(["raptor-fake-agent"])`, y la suite pasa igual dentro y fuera de una sesión de Claude Code.
+- **S17 · Caché por triple con dos entradas.** "Si la triple vuelve, el resultado se reutiliza" (T009, base movida) debe valer también cuando el resultado de la base intermedia ya terminó. Por eso cada par guarda los resultados de sus **dos** últimas triples, no solo el último (`Entry.done` pasa de `Option` a una lista acotada a 2). La memoria sigue acotada por par, y un repo dormido la suelta igual (D4). Lo prueba CKPB-PUB-BASE (`base_move_back_reuses_cached_triple`).
 - **S16 · Cierre (T013).** TS-CKP-001 y su Dev Spec pasan a `implemented`, con la fila de `backlog.md`, el índice `technical-stories.md` y `release-status.md` regenerado.
 
 ## Convenciones observadas
