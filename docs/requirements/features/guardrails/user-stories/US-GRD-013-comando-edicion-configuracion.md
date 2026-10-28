@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: medium
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-28
 feature: guardrails
 related:
   context:
@@ -15,6 +15,8 @@ related:
   stories:
     - US-GRD-010
     - US-GRD-014
+  specs:
+    - DS-US-GRD-013
 tags:
   - guardrails
   - comando-edicion
@@ -37,7 +39,7 @@ BR-CONS-006 (comando, Guardrails: no pisa cambios a mano, escritura atómica y r
 ## Dependencias
 
 - **Historias**: US-GRD-010 (precedencia), US-GRD-014 (rama base como valor del equipo).
-- **Externas**: **desbloqueada el 2026-10-04** al aceptarse [ADR-GRD-008](../../../../architecture/decisions/ADR-GRD-008-factor-autenticacion-fuera-de-banda.md) (factor de autenticación del sistema operativo fuera del canal del agente, gate de Q-GRD-19). Su Dev Spec espera a dos cosas: los resultados de [SPIKE-GRD-002](../technical-stories/SPIKE-GRD-002-factor-so-daemon.md) (parte macOS; Linux y Windows: Pendiente: etapa de validación multiplataforma, con fail-closed mientras tanto) y el trinquete de los niveles personales de Q-GRD-32 (enmienda de ADR-GRD-004, aplicada el 2026-10-04). P8 ya no la bloquea (ADR-GRP-007). Endurecer con el comando no exige el factor. Donde el factor no está disponible, relajar no se ofrece (ADR-GRD-008, OQ-GRD-008-1 y 7). Distinguir al humano: transversal (ADR-GRD-008; R-GRD-3). Por Q-GRD-17 y Q-GRD-20, un endurecimiento del comando en el nivel de equipo se aplica al commitearlo en el worktree; una relajación, solo cuando llega a la rama principal y el desarrollador la confirma en su máquina (Q-GRD-21).
+- **Externas**: **desbloqueada el 2026-10-04** al aceptarse [ADR-GRD-008](../../../../architecture/decisions/ADR-GRD-008-factor-autenticacion-fuera-de-banda.md) (factor de autenticación del sistema operativo fuera del canal del agente, gate de Q-GRD-19). Su Dev Spec ya existe (DS-US-GRD-013, 2026-10-28) con un corte fail-closed aceptado por el PO: todo lo que piden los escenarios se implementa sin esperar, y relajar responde `factor-unavailable` sin escribir (Q-GRD-19). Solo relajar con el factor espera a los resultados de [SPIKE-GRD-002](../technical-stories/SPIKE-GRD-002-factor-so-daemon.md) (parte macOS; Linux y Windows: Pendiente: etapa de validación multiplataforma, con fail-closed mientras tanto), mediante una enmienda de la Dev Spec; US-GRD-015 espera al mismo SPIKE. El trinquete de los niveles personales de Q-GRD-32 (enmienda de ADR-GRD-004, aplicada el 2026-10-04) se construye en una historia aparte del PO. P8 ya no la bloquea (ADR-GRP-007). Endurecer con el comando no exige el factor. Donde el factor no está disponible, relajar no se ofrece (ADR-GRD-008, OQ-GRD-008-1 y 7). Distinguir al humano: transversal (ADR-GRD-008; R-GRD-3). Por Q-GRD-17 y Q-GRD-20, un endurecimiento del comando en el nivel de equipo se aplica al commitearlo en el worktree; una relajación, solo cuando llega a la rama principal y el desarrollador la confirma en su máquina (Q-GRD-21).
 - **Transversal**: Windows, macOS y Linux; pruebas de interrupción (NFR-12).
 
 ## Criterios de Aceptación
@@ -84,9 +86,15 @@ Entonces el comando lo rechaza, no escribe nada y el intento queda en el registr
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección)._
+Resumen de [DS-US-GRD-013](../dev-specs/US-GRD-013-comando-edicion-configuracion.md); el detalle y las decisiones están allí.
+
+- **Comando**: `raptor config set|unset|add|remove <KEY> [<VALUE>] --level team|profile|local [--path] [--yes]`, con una lista cerrada de claves de Guardrails. Método reservado `guard.config-edit` del daemon: un agente no lo usa, ni para endurecer (BR-AUTH-004), y su intento queda auditado.
+- **Corte respecto a SPIKE-GRD-002**: todo lo que piden los escenarios se implementa ya. Relajar, en cualquier nivel, responde `factor-unavailable` sin escribir (fail-closed, ADR-GRD-008) hasta que el SPIKE dé resultados; entonces una enmienda de la Dev Spec cambia ese único punto por el flujo del factor. US-GRD-015 comparte la dependencia.
+- **Cambios que no hizo él**: en el nivel de equipo solo escribe si el archivo coincide con el `HEAD` del worktree o con su última escritura (marca en el almacén del repo). En los niveles personales parte del archivo tal como está y rechaza si cambia entre la lectura y la escritura.
+- **Escritura**: copia del archivo anterior en el perfil, temporal + `fsync` + `rename` atómico, sin commit. Puntos de corte para las pruebas de interrupción (NFR-12).
+- **Rama base inexistente**: avisa y pregunta (`[y/N]`), y sin respuesta no escribe (Q-GRD-16).
 
 ## Diseño y Dev Spec
 
 - **Diseño:** no aplica (textos del comando: CLI, i18n en/es).
-- **Dev Spec:** pendiente (Arquitecto).
+- **Dev Spec:** [DS-US-GRD-013](../dev-specs/US-GRD-013-comando-edicion-configuracion.md) (2026-10-28; decisiones del orquestador validadas por el Arquitecto y el PO; relajar con factor espera a SPIKE-GRD-002).
