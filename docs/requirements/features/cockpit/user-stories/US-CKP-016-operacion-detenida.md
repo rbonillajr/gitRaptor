@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: high
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-28
 feature: cockpit
 related:
   context:
@@ -63,7 +63,7 @@ Entonces "main" vuelve al commit previo al merge, sin operación en curso, y Des
 
 Dado el merge de "feat-pagos" detenido
 Cuando el desarrollador busca Deshacer
-Entonces Deshacer aparece desactivado con "aborta primero el merge en curso"
+Entonces Deshacer aparece desactivado con "hay un merge en curso; abórtalo o termínalo primero"
 
 **Escenario: Operación de Git a medias hecha por el agente**
 
@@ -104,4 +104,4 @@ _Pendiente — lo completa el Arquitecto (Dev Spec). Cancelar: ADR-CKP-002 § 6.
 ## Diseño y Dev Spec
 
 - **Diseño:** DSYS-GRP-001.
-- **Dev Spec:** [DS-US-CKP-016](../dev-specs/US-CKP-016-operacion-detenida.md) (draft).
+- **Dev Spec:** [DS-US-CKP-016](../dev-specs/US-CKP-016-operacion-detenida.md) (approved).
