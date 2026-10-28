@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: low
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-27
 feature: cockpit
 related:
   context:
@@ -61,9 +61,15 @@ Entonces no existe ningún comando que lo haga y la ayuda remite a la TUI
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto (Dev Spec)._
+Detalle en [DS-US-CKP-011](../dev-specs/US-CKP-011-cli-solo-lectura.md). La forma de la predicción es la de [DS-TS-CKP-001 § Contrato de API](../dev-specs/TS-CKP-001-predictor-conflictos.md#contrato-de-api).
+
+- `raptor status --json` conserva su forma de US-GRP-001 y solo añade el campo `schema_version: 1` (C11); un test de punta a punta prueba que su `--json` coincide con la TUI en worktrees, agentes, estados, archivos y ahead/behind (C1).
+- `raptor conflicts` lee los pares con `prediction.list`, sin métodos nuevos en el canal, y los imprime en texto o en un JSON propio con `schema_version: 1`, sin contenido de archivos ni mensajes de commit (C2, C6).
+- Código de salida `4` con al menos un ⚡ conocido (`current` o `recalculating`); `0` sin él, aunque queden pares por calcular, lo que el JSON dice con `complete` (C4, C5).
+- La CLI no tiene órdenes de BR-07; la ayuda de `raptor tui` dice que integrar, rebasar o descartar se hace en la TUI (C9).
+- `conflicts` espera a T009 de TS-CKP-001; la paridad de `status` y la ayuda no.
 
 ## Diseño y Dev Spec
 
 - **Diseño:** DSYS-GRP-001 (CLI).
-- **Dev Spec:** pendiente.
+- **Dev Spec:** [DS-US-CKP-011](../dev-specs/US-CKP-011-cli-solo-lectura.md) (`draft`; `conflicts` bloqueado por T009 y el PR-B de TS-CKP-001).

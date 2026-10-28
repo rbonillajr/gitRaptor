@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: high
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-27
 feature: cockpit
 related:
   context:
@@ -74,9 +74,15 @@ Entonces la acción está desactivada con el motivo "el worktree no está dispon
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto (Dev Spec)._
+Detalle en [DS-US-CKP-012](../dev-specs/US-CKP-012-ver-diff.md), que fija además el contrato de las consultas bajo demanda (N8 de ADR-CKP-003).
+
+- Métodos nuevos `diff.worktree` y `query.cancel`, en sus módulos del contrato; ninguno se ofrece a `raptor-mcp` (D1).
+- El daemon calcula el diff en un pool propio con `gix`, sin filtros ni `git` hijo, y responde fuera de orden a la conexión que lo pidió; nunca lo registra ni lo persiste (D2, D6).
+- Entraría al merge: merge-base con la base confirmada contra `HEAD`. Sin commitear: `HEAD` contra el working tree, con los archivos sin seguimiento (D5).
+- Topes por archivo, en total y de tiempo; al superarlos, "truncado" con aviso, nunca un error. Binarios sin contenido (D4, D7).
+- La TUI gana un cursor de fila y la tecla `d`, desactivada con motivo en un worktree no disponible; el diff se ve a pantalla completa, sin atribución por archivo (D8, D10 a D12).
 
 ## Diseño y Dev Spec
 
 - **Diseño:** DSYS-GRP-001.
-- **Dev Spec:** pendiente.
+- **Dev Spec:** [DS-US-CKP-012](../dev-specs/US-CKP-012-ver-diff.md) (`draft`, sin gaps bloqueantes).
