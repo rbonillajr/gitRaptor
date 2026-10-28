@@ -316,6 +316,7 @@ impl Connection<'_> {
             rules: RuleSet {
                 authorship: false,
                 policies: true,
+                commit_policies: true,
                 second_line_skip: false,
                 permissions: true,
             },
