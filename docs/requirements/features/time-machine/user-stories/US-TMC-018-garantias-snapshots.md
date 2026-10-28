@@ -75,4 +75,4 @@ Entonces el estado de los worktrees, las ramas visibles y los cambios pendientes
 
 - **Historias**: US-TMC-001.
 - **Externas**: ninguna. El mecanismo y la ubicación los decide el Arquitecto con estas garantías (D-TMC-11).
-- **Transversal**: transversal (lo define el Arquitecto): verificación en repos temporales, nunca en un repo real; mismo comportamiento en Windows, macOS y Linux; mensajes en inglés y español. Se cierra en macOS y Linux; en Windows, la huella con el daemon y que el mantenimiento del usuario no quede bloqueado (TQ-26): **Pendiente: etapa de validación multiplataforma** (XP-48).
+- **Transversal**: transversal (lo define el Arquitecto): verificación en repos temporales, nunca en un repo real; mismo comportamiento en Windows, macOS y Linux; mensajes en inglés y español. Se cierra en macOS y Linux; en Windows, la huella con el daemon y que el mantenimiento del usuario no quede bloqueado (TQ-26): **Pendiente: etapa de validación multiplataforma** (XP-49).

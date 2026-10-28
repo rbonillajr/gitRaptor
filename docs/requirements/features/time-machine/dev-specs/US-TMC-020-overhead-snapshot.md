@@ -606,8 +606,8 @@ Regla del proyecto: **ninguna cifra de tiempo en tests debug**. Los gates de ren
 | Plataforma | Cómo se verifica | Pendiente |
 |---|---|---|
 | macOS | `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`, banco `--gate reference` en el Mac de referencia | — |
-| Linux | Banco en `ubuntu-latest` en cada PR (primeras cifras de Linux para ADR-TMC-006); tests de proceso | Cifra absoluta frente a 200 ms en máquina dedicada: **Pendiente: etapa de validación multiplataforma** (XP-51) |
-| Windows | Compila; `PriorWatch` y la captura son portables | Banco, canal (cliente Unix-only en CI) y CLI: **Pendiente: etapa de validación multiplataforma** (receta de la máquina Windows con el binario release) (XP-51) |
+| Linux | Banco en `ubuntu-latest` en cada PR (primeras cifras de Linux para ADR-TMC-006); tests de proceso | Cifra absoluta frente a 200 ms en máquina dedicada: **Pendiente: etapa de validación multiplataforma** (XP-52) |
+| Windows | Compila; `PriorWatch` y la captura son portables | Banco, canal (cliente Unix-only en CI) y CLI: **Pendiente: etapa de validación multiplataforma** (receta de la máquina Windows con el binario release) (XP-52) |
 
 ---
 
