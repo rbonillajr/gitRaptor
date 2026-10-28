@@ -4,7 +4,7 @@ title: "Dev Spec — Predictor de conflictos en el daemon: solape y conflicto pr
 type: dev-spec
 status: partially-implemented
 created: 2026-10-09
-updated: 2026-10-27
+updated: 2026-10-28
 story: TS-CKP-001
 feature: cockpit
 domain: GRP
@@ -51,9 +51,9 @@ lineage:
 constitution_gates: []
 validation:
   must_read_resolved: true
-  gaps_blocking: 1
+  gaps_blocking: 0
   ready_to_implement: true
-  blocked_tasks: [T006, T007, T009, T010, T012, T013]
+  blocked_tasks: []
   gaps_release: 0
   ready_to_release: true
 tags: [cockpit, prediccion-conflictos, merge-en-seco, solape, daemon, proceso-trabajador, r-a2w, spike-ckp-001, nfr-01, sec-09, sec-12, m-02, m-06, l-04]
@@ -61,7 +61,7 @@ tags: [cockpit, prediccion-conflictos, merge-en-seco, solape, daemon, proceso-tr
 
 # DS-TS-CKP-001 · Predictor de conflictos en el daemon
 
-Implementado en parte en: PR #275 (T001 a T005, T011 y la excepción G9 de T010). Faltan T006, T007, T009, T010, T012 y T013 (G5; G2 cerrado el 2026-10-27).
+Implementado en parte en: PR #275 (T001 a T005, T011 y la excepción G9 de T010). Faltan T006, T007, T009, T010, T012 y T013, que construye el PR-B (G2 cerrado el 2026-10-27 por #283; G5 cerrado el 2026-10-28 por #298).
 
 ## Contexto rápido
 
@@ -165,7 +165,7 @@ Las ramas R-A2, R-B y R-SOLAPE quedan descartadas y se borraron con sus tareas (
 | G2 | ~~Forma del estado y del evento de predicción en el contrato: tipos, nombres de campos, consulta bajo demanda, evento de lote y capacidad~~. **Cerrado (2026-10-27)** por D16: la forma está en [§ Contrato de API](#contrato-de-api) y la implementa T009. El dueño pasa a TS-CKP-001 ([Enmienda (2026-10-27, G2) de ADR-CKP-001](../../../../architecture/decisions/ADR-CKP-001-prediccion-conflictos-merge-en-seco.md)). Lleva la marca `has_merge_rule` (D14). La consulta del perfil `mcp` (`mcp.conflicts`) la añade US-MCP-016 sobre este estado | — | — | — | — |
 | G3 | ~~`gix` ≥ 0.89.0 en el workspace~~. **Cerrado (2026-10-20)**: `gix` 0.89 y `gix-pack` 0.76 están en `main` (PR #251). La feature `merge` solo en `crates/git/Cargo.toml` la añade T005 | — | — | — | — |
 | G4 | ~~Enmienda de ADR-GRP-009 Validación 5 para R-A2W~~. **Cerrado (2026-10-20)**: aplicada como [Enmienda (2026-10-20, SPIKE-CKP-001) de ADR-GRP-009](../../../../architecture/decisions/ADR-GRP-009-frontera-solo-lectura-git.md): el lanzador del trabajador del predictor (`crates/core::predict::worker`) es el único módulo autorizado fuera de `crates/git` para lanzar el propio binario, con argv fijo y sin shell. Las enmiendas de R-B quedan descartadas | — | — | — | — |
-| G5 | TS-GRP-005 (`WorkClass::Utility` y `PowerSource`) está en `ready`, sin implementar. TS-CKP-001 no la lista en `related.stories` | Bloqueante | T007 (y T006, T010, T012, T013 por arrastre) | Implementar TS-GRP-005 antes de T007 y añadirla a las dependencias de TS-CKP-001. **Nota (2026-10-27)**: lo cierra el PR-A de [DS-TS-GRP-005](../../motor-local/dev-specs/TS-GRP-005-dev-spec.md#qué-desbloquea-el-pr-b-de-ts-ckp-001) (T001 a T006: `work_class`, `PowerMode`, `FakePowerSource` y `Daemon::power()`); su PR-B no bloquea a TS-CKP-001 | Orquestador |
+| G5 | ~~TS-GRP-005 (`WorkClass::Utility` y `PowerSource`) está en `ready`, sin implementar. TS-CKP-001 no la lista en `related.stories`~~. **Cerrado (2026-10-28)** por el PR-A de TS-GRP-005 (#298): `work_class`, `PowerMode`, `FakePowerSource` y `Daemon::power()` están en `main`; el guard `power_saving_computes_no_pair` lo escribe T007 en el PR-B | — | T007 (y T006, T010, T012, T013 por arrastre) | Implementar TS-GRP-005 antes de T007 y añadirla a las dependencias de TS-CKP-001. **Nota (2026-10-27)**: lo cierra el PR-A de [DS-TS-GRP-005](../../motor-local/dev-specs/TS-GRP-005-dev-spec.md#qué-desbloquea-el-pr-b-de-ts-ckp-001) (T001 a T006: `work_class`, `PowerMode`, `FakePowerSource` y `Daemon::power()`); su PR-B no bloquea a TS-CKP-001 | Orquestador |
 
 ---
 
@@ -255,7 +255,7 @@ Los tres consumidores leen el mismo resultado del motor (BR-CKP-CONS-001). T009 
 
 ### El trabajo de un vistazo
 
-Tres frentes y un cierre: el predictor común (T001 a T003, T009), el merge en seco y su trabajador (T004 a T007) y las verificaciones (T010 a T012), con T013 al final. Bloqueadas: T007 por G5; T006, T009, T010, T012 y T013 van con ella en el PR-B (D15). G2 se cerró el 2026-10-27 (D16).
+Tres frentes y un cierre: el predictor común (T001 a T003, T009), el merge en seco y su trabajador (T004 a T007) y las verificaciones (T010 a T012), con T013 al final. T006, T007, T009, T010, T012 y T013 van en el PR-B (D15), sin bloqueos: G2 se cerró el 2026-10-27 (D16, #283) y G5 el 2026-10-28 (#298).
 
 | # | Tarea | Depende | Aterriza en |
 |---|---|---|---|
