@@ -86,6 +86,7 @@ Las rutas cortas de la columna Origen van bajo `docs/requirements/features/`. La
 | XP-57 | Windows | DS-US-CKP-018 C4, BR-CKP-VAL-001, SEC-02 | La ruta explícita de "Crear worktree" rechaza en Windows real las rutas UNC (`\\servidor\compartido\x`), las de prefijo `\\?\` y `\\.\`, y las que llevan un nombre de dispositivo (`CON`, `NUL`, `COM1`…), antes de llamar al daemon y otra vez en él; nada se crea | Máquina Windows | pendiente |
 | XP-58 | Windows | DS-US-CKP-018 C8 | Orden de lanzamiento de Claude Code citada para `cmd` y PowerShell (rutas con espacios, `&`, `%`, `^`, comillas). Hasta validarla, el panel muestra la ruta y "abre una terminal en esa carpeta y ejecuta claude", sin orden compuesta | Máquina Windows | pendiente |
 | XP-59 | Linux y Windows | US-CKP-021, DS-US-CKP-021 § 9.5 | Historial de la TUI y Deshacer desde él, validados solo en macOS (`apps/cli/tests/tui_history.rs`, `cfg(target_os = "macos")`). Falta: (a) Linux: primera ejecución verde de `tui_history` en CI ubuntu; (b) Windows: cuando el canal tenga transporte (XP-01), el historial conecta y confirmar trabajo de otro agente responde `confirmation-unavailable` con su texto (H9) | CI + Máquina Windows | pendiente |
+| XP-60 | Linux y Windows | US-GRP-010, DS-US-GRP-010 § 9.5 | Corregir y retirar una atribución (`raptor agent correct`/`uncorrect`), validado solo en macOS. Falta: (a) Linux: primera ejecución verde de `us_grp_010` y `us_grp_010_not_a_worktree` en CI ubuntu (daemon hijo y desarrollador bajo `script`) y portar el e2e `attribution_correction` (`cfg(target_os = "macos")`); (b) Windows: los métodos compilan, pero el canal reservado rechaza al solicitante sin identidad verificable (D12 de US-GRP-009, XP-19): validarlo en la máquina de Rene con el binario release y perfil temporal. Etiqueta: validación multiplataforma pendiente | CI ubuntu + máquina Windows | pendiente |
 
 ## Contenedor Linux: resultados del 2026-10-05
 
@@ -473,3 +474,4 @@ Rutas de `docs/requirements/features/` abreviadas (`motor-local/`, `time-machine
 - **XP-57**: cockpit/dev-specs/US-CKP-018-crear-worktree.md (C4, G3, § 9.5)
 - **XP-58**: cockpit/dev-specs/US-CKP-018-crear-worktree.md (C8, G3, § 9.5)
 - **XP-59**: apps/cli/tests/tui_history.rs (`cfg(target_os = "macos")`); cockpit/dev-specs/US-CKP-021-historial-aviso-purga.md § 9.5
+- **XP-60**: crates/core/tests/us_grp_010.rs y crates/core/tests/us_grp_010_not_a_worktree.rs (`cfg` macOS y Linux); apps/cli/tests/attribution_correction.rs (`cfg` macOS); motor-local/dev-specs/US-GRP-010-dev-spec.md § 9.5

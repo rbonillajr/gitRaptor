@@ -25,7 +25,7 @@
 | [cockpit](#cockpit) | 8 | 0 | 6 | 0 | 18 | 1 | 33 |
 | [guardrails](#guardrails) | 12 | 0 | 8 | 1 | 4 | 0 | 25 |
 | [mcp](#mcp) | 6 | 0 | 4 | 0 | 10 | 0 | 20 |
-| [motor-local](#motor-local) | 15 | 2 | 9 | 2 | 13 | 0 | 41 |
+| [motor-local](#motor-local) | 16 | 2 | 9 | 2 | 12 | 0 | 41 |
 | [time-machine](#time-machine) | 13 | 1 | 1 | 0 | 16 | 0 | 31 |
 
 ### cockpit
@@ -129,7 +129,7 @@
 
 ### motor-local
 
-41 fichas: 15 implementado, 2 hecho, 9 implementado en parte, 2 listo, 13 borrador.
+41 fichas: 16 implementado, 2 hecho, 9 implementado en parte, 2 listo, 12 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -143,6 +143,7 @@
 | [US-GRP-005](features/motor-local/user-stories/US-GRP-005-hueco-sin-atribuir.md) | El desarrollador distingue lo que el motor no vio ocurrir | Implementado (`implemented`) | — | — |
 | [US-GRP-007](features/motor-local/user-stories/US-GRP-007-sesiones-claude-code.md) | El desarrollador sabe qué sesión de Claude Code trabaja en cada worktree y si sigue activa | Implementado (`implemented`) | #80, #119, #124, #155, #169, #228 | — |
 | [US-GRP-009](features/motor-local/user-stories/US-GRP-009-registro-explicito-agente.md) | El desarrollador o el agente declaran qué agente trabaja en un worktree | Implementado (`implemented`) | #106 | — |
+| [US-GRP-010](features/motor-local/user-stories/US-GRP-010-corregir-atribucion.md) | El desarrollador corrige una atribución automática equivocada | Implementado (`implemented`) | — | — |
 | [US-GRP-012](features/motor-local/user-stories/US-GRP-012-rama-base-main.md) | El desarrollador ve el ahead/behind de cada worktree contra la rama base del repo | Implementado (`implemented`) | #55 | — |
 | [US-GRP-017](features/motor-local/user-stories/US-GRP-017-consumo-recursos-status.md) | El desarrollador ve cuánto consume GitRaptor en su máquina | Implementado (`implemented`) | #93, #173 | — |
 | [US-GRP-020](features/motor-local/user-stories/US-GRP-020-carpetas-codigo-repos-descubiertos.md) | El desarrollador ve los repos que aparecen en sus carpetas de código sin tener que añadirlos uno a uno | Implementado (`implemented`) | #170, #153, #178 | — |
@@ -165,7 +166,6 @@
 | [TS-GRP-007](features/motor-local/technical-stories/TS-GRP-007-factor-so-reservados-windows.md) | Factor del SO (Windows Hello) para los comandos reservados de alto riesgo en Windows | Borrador (`draft`) | — | — |
 | [US-GRP-006](features/motor-local/user-stories/US-GRP-006-retirar-y-volver-a-anadir.md) | El desarrollador recupera el historial de un repo que retiró y volvió a añadir | Borrador (`draft`) | — | — |
 | [US-GRP-008](features/motor-local/user-stories/US-GRP-008-editor-humano-sin-atribuir.md) | El trabajo que el desarrollador hace en su editor nunca se atribuye a Claude Code | Borrador (`draft`) | — | — |
-| [US-GRP-010](features/motor-local/user-stories/US-GRP-010-corregir-atribucion.md) | El desarrollador corrige una atribución automática equivocada | Borrador (`draft`) | — | — |
 | [US-GRP-011](features/motor-local/user-stories/US-GRP-011-worktree-compartido.md) | El desarrollador ve todas las sesiones de un worktree compartido | Borrador (`draft`) | — | — |
 | [US-GRP-013](features/motor-local/user-stories/US-GRP-013-umbral-inactividad-por-repo.md) | El desarrollador ajusta para un repo cuándo una sesión pasa a inactiva | Borrador (`draft`) | — | — |
 | [US-GRP-014](features/motor-local/user-stories/US-GRP-014-git-ausente-o-antiguo.md) | El desarrollador sabe qué Git le falta y el motor empieza solo cuando lo instala | Borrador (`draft`) | — | — |
@@ -270,6 +270,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-GRD-019](features/guardrails/user-stories/US-GRD-019-quien-ejecuto-y-a-nombre-de-quien.md) | El desarrollador ve quién ejecutó cada commit y a nombre de quién entró cuando no coinciden | Implementado (`implemented`) | #144, #147, #151, #175 | — |
 | [US-GRP-003](features/motor-local/user-stories/US-GRP-003-estados-especiales-no-disponible.md) | El desarrollador sabe qué worktree está en un estado especial o ya no existe | Implementado (`implemented`) | — | — |
 | [US-GRP-005](features/motor-local/user-stories/US-GRP-005-hueco-sin-atribuir.md) | El desarrollador distingue lo que el motor no vio ocurrir | Implementado (`implemented`) | — | — |
+| [US-GRP-010](features/motor-local/user-stories/US-GRP-010-corregir-atribucion.md) | El desarrollador corrige una atribución automática equivocada | Implementado (`implemented`) | — | — |
 | [US-GRP-020](features/motor-local/user-stories/US-GRP-020-carpetas-codigo-repos-descubiertos.md) | El desarrollador ve los repos que aparecen en sus carpetas de código sin tener que añadirlos uno a uno | Implementado (`implemented`) | #170, #153, #178 | — |
 | [US-GRP-022](features/motor-local/user-stories/US-GRP-022-aceptar-descartar-repo-descubierto.md) | El desarrollador decide qué repos descubiertos se observan y los que descarta no vuelven a aparecer | Implementado (`implemented`) | #170 | — |
 | [US-MCP-004](features/mcp/user-stories/US-MCP-004-status-completo-y-no-disponible.md) | Un agente sabe por MCP quién más trabaja en su repo, contra qué base y con qué protección | Implementado (`implemented`) | — | — |
@@ -333,7 +334,6 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-GRD-016](features/guardrails/user-stories/US-GRD-016-misma-decision-por-mcp.md) | Un agente que usa las herramientas MCP recibe la misma decisión que con Git directo | Borrador (`draft`) | — | — |
 | [US-GRP-006](features/motor-local/user-stories/US-GRP-006-retirar-y-volver-a-anadir.md) | El desarrollador recupera el historial de un repo que retiró y volvió a añadir | Borrador (`draft`) | — | — |
 | [US-GRP-008](features/motor-local/user-stories/US-GRP-008-editor-humano-sin-atribuir.md) | El trabajo que el desarrollador hace en su editor nunca se atribuye a Claude Code | Borrador (`draft`) | — | — |
-| [US-GRP-010](features/motor-local/user-stories/US-GRP-010-corregir-atribucion.md) | El desarrollador corrige una atribución automática equivocada | Borrador (`draft`) | — | — |
 | [US-GRP-011](features/motor-local/user-stories/US-GRP-011-worktree-compartido.md) | El desarrollador ve todas las sesiones de un worktree compartido | Borrador (`draft`) | — | — |
 | [US-GRP-013](features/motor-local/user-stories/US-GRP-013-umbral-inactividad-por-repo.md) | El desarrollador ajusta para un repo cuándo una sesión pasa a inactiva | Borrador (`draft`) | — | — |
 | [US-GRP-016](features/motor-local/user-stories/US-GRP-016-rama-base-configuracion-equipo.md) | La rama base la define la configuración del equipo | Borrador (`draft`) | — | — |
