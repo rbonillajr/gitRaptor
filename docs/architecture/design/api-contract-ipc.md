@@ -6,7 +6,7 @@ status: draft
 domain: GRP
 feature: motor-local
 created: 2026-10-04
-updated: 2026-10-27
+updated: 2026-10-28
 related:
   adrs: [ADR-GRP-005, ADR-GRP-016, ADR-GRP-011, ADR-GRP-013, ADR-CKP-002, ADR-CKP-003, ADR-TMC-004]
   stories: [TS-GRP-004, US-GRP-001, US-GRP-012, TS-TMC-004, TS-CKP-002, INF-CKP-001]
@@ -62,7 +62,10 @@ Una conexión de protocolo 9 recibe también `capabilities`: los nombres de toda
 | `operation.commit` | — (US-MCP-009 y US-MCP-010) | La operación `commit` del catálogo, los rechazos de `-32014` propios de `commit` (incluido `data.path`), `OperationFailedData.failure` en `-32011`, `data.reason = requester-connections` en `-32006` y `commit` (`CommitDone`) en el resultado de `operation.run` (ver [Commit](#commit-us-mcp-009-y-us-mcp-010)). Sin ella, `commit` sigue en `-32004` con `implemented_by: "US-MCP-009"` |
 | `timemachine.timeline-manual` | — (US-MCP-008) | `timemachine.timeline` sirve entradas `manual-snapshot` y el nivel de protección `manual`; sin la capacidad se filtran |
 | `timemachine.timeline-inferred` | — (TS-GRP-008) | `timemachine.timeline` lleva `inferred` (`{kind, session_id, trailer}`, la pista de ADR-GRP-012) en las entradas de eventos de Git sin agente; sin la capacidad el campo no se envía |
+| `timemachine.timeline-gaps` | — (US-TMC-007) | `timemachine.timeline` lleva `gaps` (los huecos del motor y los "sin espacio" que tocan la vista, sin punto para restaurar) y puede declarar `gaps` en `unavailable`; sin la capacidad ni el campo ni la fuente se envían |
 | `audit.outcomes` | — (M-01 y L-01 de #209) | `audit.list` y `reserved.audit` llevan también el fin de una acción anunciada: resultados `applied`, `cancelled`, `failed` y `expired` (sin `reason`), con `client_partial: true` porque la auditoría solo guarda el proceso (`pid`, `start_us`) de quien la pidió; el resto de `client` no está registrado y va neutro. Sin la capacidad esas filas no se envían y la salida es la de antes. Nunca llega a `raptor-mcp` |
+| `timemachine.on-remote` | — (US-TMC-014) | `UndoResult`/`RestoreResult` llevan `on_remote` y `McpUndoResult` `on_remote_commits`; sin la capacidad no se envían |
+| `operation.editor` | — (US-CKP-013) | El daemon prepara `open-in-editor` y devuelve `PrepareResult.editor`; el plan no se guarda (`expires_in_ms = 0`, `operation.run` → `plan-unknown`). Sin la capacidad, `-32004` con `implemented_by = US-CKP-013` (DS-US-CKP-013 K1, K2) |
 
 > **`audit.outcomes`** (Decisión del orquestador, 2026-10-09; validada por el Arquitecto). `RefusalReason` no gana un motivo `risk-accepted`: el fin de una acción no es un rechazo, así que el resultado basta y la razón queda solo en la tabla permanente (con la versión de ADR-GRD-007 § 2). Tampoco se inventa un `ClientIdentity` completo (la auditoría append-only no puede corregirse después): `client_partial` dice que solo se conoce el proceso. El daemon filtra por resultado en SQL, antes del `LIMIT`; una fila ilegible (corrupta) se omite y la página se rellena con las siguientes (hasta 8 lecturas). El id de la acción no sale por el cable.
 
@@ -177,6 +180,7 @@ La operación `snapshot` del catálogo guarda un punto de recuperación a petici
 - Rechazos: `-32014` con `data.reason = write-in-progress` si el mismo solicitante tiene otro snapshot manual sin terminar; `-33060` con `SnapshotQuotaData` si una ventana de la cuota está llena; `-33061` si se agota el presupuesto de tiempo.
 - `timemachine.timeline`, con la capacidad `timemachine.timeline-manual`, añade entradas `manual-snapshot` `{snapshot_id, label, channel}` (`EntryOrigin::ManualSnapshot`; `label` es texto no confiable y `channel`, `cli`, `tui`, `mcp` o `hook`) y el nivel de protección `manual`. Una conexión sin la capacidad no recibe ni una ni otro.
 - `timemachine.timeline`, con la capacidad `timemachine.timeline-inferred` (TS-GRP-008), añade a la entrada de un evento de Git **sin agente** el campo opcional `inferred`, con la misma forma que `GitEventView.inferred` de `engine.events` (US-GRD-019): `kind`, `session_id` y `trailer` (`confirmed` o `unconfirmed`). Es una pista, nunca cambia el actor. No aparece si la pista está `contradicted` o si el evento se observó con `human-author`. Una conexión sin la capacidad no recibe el campo.
+- `timemachine.timeline`, con la capacidad `timemachine.timeline-gaps` (US-TMC-007), añade `gaps`: una lista de `TimelineGap` con etiqueta `kind`. `unobserved` lleva `started_utc_ms`, `ended_utc_ms` (ausente si sigue abierto), `utc_offset_s`, `cause` (la de `GapView` de `events.gaps`) y `during_session`. `no-space` lleva `started_utc_ms`, `ended_utc_ms`, `utc_offset_s` y `cause` (`free-space`, `limit` o `quota`, DS-US-TMC-022). Solo los huecos que tocan la vista (desde `since` o desde la entrada más antigua si la lista se cortó), con cualquier filtro de worktree o agente, hasta 200 por fuente. Ninguno lleva id de punto (la fila dice "sin punto para restaurar dentro del hueco"). Si una fuente no se lee, `unavailable` lleva `gaps`. Una conexión sin la capacidad no recibe ni el campo ni esa fuente.
 
 ## Commit (US-MCP-009 y US-MCP-010)
 

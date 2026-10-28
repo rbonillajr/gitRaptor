@@ -5,7 +5,7 @@ type: adr
 status: accepted
 accepted: 2026-10-04
 created: 2026-10-04
-updated: 2026-10-27
+updated: 2026-10-28
 date: 2026-10-04
 domain: GRP
 feature: cockpit
@@ -480,3 +480,16 @@ De § 3, trabajo afectado de `commit`. Origen: [DS-US-MCP-009](../../requirement
 - **Invierte para `commit`** la regla conservadora "sin atribución clara o con atribución mixta, cuenta como otro actor". Las demás operaciones del catálogo la conservan.
 - **`foreign-work` sale del contrato de `commit`**: `permission` nunca lo devuelve para `commit`, y `not-own-work` no tiene caso que lo produzca.
 - **Riesgo residual declarado**: "todo lo preparado" se lleva también lo que el desarrollador preparó en ese worktree. El snapshot previo lo recupera.
+
+## Enmienda (2026-10-28, US-CKP-013)
+
+**Decisión del orquestador (2026-10-28), validada por Arquitecto y PO** (revisión 2026-10-28). Origen: [DS-US-CKP-013](../../requirements/features/cockpit/dev-specs/US-CKP-013-abrir-en-editor.md) K6 y K10; Q-CKP-55 y Q-CKP-56. Precisa § 10. El `status` sigue en `accepted`.
+
+- **Windows**: `argv[0]` solo `.exe`/`.com` (Q-CKP-56). Un `.cmd`, `.bat` o `.ps1` lo ejecuta `cmd.exe` o PowerShell, que son shells (NFR-02), y se rechaza con `script-launcher`.
+- **Valor rechazado**: un `cockpit.editor` rechazado cede al nivel siguiente (local → perfil → `$VISUAL`/`$EDITOR`) con confirmación obligatoria en la TUI (Q-CKP-55).
+
+## Enmienda (2026-10-28, US-CKP-018)
+
+**Decisión del orquestador (2026-10-28), validada por Arquitecto y PO.** Origen: [DS-US-CKP-018](../../requirements/features/cockpit/dev-specs/US-CKP-018-crear-worktree.md) C3. Precisa § 1 ("Ruta nueva de `create-worktree`"). El `status` sigue en `accepted`.
+
+- La ruta explícita solo la acepta la capa `cockpit`: el ejecutor rechaza `create-worktree` con `path` para cualquier otra capa con `not-available-for-layer`, además del esquema MCP sin `path` (DS-US-CKP-018 C3).

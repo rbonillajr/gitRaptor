@@ -158,7 +158,7 @@ Aplicada desde DEP-CKP-5 de [CTX-CKP-001](../../requirements/features/cockpit/co
 - **Para todos los clientes** del repo: dos TUIs ven el mismo timeline sin pedirlo otra vez (BR-CKP-CONS-004). El inicio y el fin de cada operación del catálogo llegan por la misma vía (ADR-CKP-002 § 2).
 - **Atribución**: el evento lleva el solicitante congelado; el actor vigente lo sigue resolviendo cada consulta (§ 5). Un cambio de atribución ya se publica por ADR-GRP-013 § 6.
 - **Fuera de NFR-04**: la Time Machine no tiene presupuesto de frescura propio en el MVP; la latencia se reporta sin gate.
-- **Forma del evento** (tipo, campos y secuencia dentro del stream del repo): **pendiente, dueño: worker del canal (TS-GRP-004)**.
+- **Forma del evento** (tipo, campos y secuencia dentro del stream del repo): **pendiente, dueño: worker del canal (TS-GRP-004)**. En el MVP se cierra sin evento propio: ver Enmienda (2026-10-28, US-CKP-021).
 
 **Validación añadida**: con una TUI sin pantalla suscrita, un undo produce el evento de `terminada` después de su fila en el oplog; una muerte forzada antes de anotar no publica nada.
 
@@ -321,3 +321,9 @@ Aplicada desde la [Dev Spec de US-TMC-004](../../requirements/features/time-mach
 - La pausa se abre con la primera captura omitida y se cierra con la primera tomada; un cambio de causa durante la pausa no escribe nada. Al arrancar se reconstruye de la última entrada.
 
 **Validación añadida** (definida en DS-US-TMC-022 T004; tests por implementar): la reconstrucción conserva la cadena; una pausa se abre y se cierra una sola vez y sobrevive a un reinicio sin duplicarse.
+
+## Enmienda (2026-10-28, US-CKP-021)
+
+**Decisión del orquestador (2026-10-28), validada por Arquitecto y PO** (Q-CKP-60, cerrada). Origen: [DS-US-CKP-021](../../requirements/features/cockpit/dev-specs/US-CKP-021-historial-aviso-purga.md) H3. Precisa la "Forma del evento" de la Enmienda (2026-10-04, Cockpit); no cambia el oplog, sus entidades ni la recuperación. El `status` sigue en `accepted`.
+
+- DEP-CKP-5 se cierra en el MVP sin evento propio (Q-CKP-60, cerrada): la TUI refresca el timeline con `git.event`, `operation.finished` y `attribution.changed` del repo, y cada 60 s con la vista abierta, y vuelve a consultar (DS-US-CKP-021 H3). El evento propio queda para después del MVP.
