@@ -64,6 +64,10 @@ impl Daemon {
         for (repo_id, e) in &expired {
             self.audit_pending(repo_id, e, "expired", e.requester, now);
         }
+        // Tokens never presented in their TTL, or consumed long ago (monotonic clock).
+        self.guard
+            .exceptions()
+            .sweep(crate::guardrails::exception::monotonic_ms());
         let invoker = self.config.env.invoker();
         let instance = self.profile.instance_id().to_owned();
         let Some((_, store)) = self.stores.iter_mut().find(|(id, _)| *id == entry.repo_id) else {
@@ -379,10 +383,59 @@ impl Daemon {
                     }
                 }
             }
-            GuardRequest::Cancel(requester) => {
+            GuardRequest::ExceptionAnnounce(ask) => {
+                let reply = super::guard_exception::announce(
+                    &self.guard,
+                    store,
+                    repo_id,
+                    common,
+                    now,
+                    *ask,
+                );
+                if matches!(reply, GuardReply::Exception(_)) {
+                    self.logger
+                        .info("guard_exception_announced", &[("repo", Field::id(repo_id))]);
+                }
+                reply
+            }
+            GuardRequest::ExceptionIssue {
+                action_id,
+                requester,
+                drivers,
+            } => {
+                let (reply, action) = super::guard_exception::issue(
+                    &self.guard,
+                    &git,
+                    repo_id,
+                    now,
+                    &action_id,
+                    requester,
+                    drivers.as_deref(),
+                );
+                if let Some(action) = action {
+                    let outcome = if matches!(reply, GuardReply::Exception(_)) {
+                        "applied"
+                    } else {
+                        "failed"
+                    };
+                    self.logger
+                        .info("guard_exception_issued", &[("repo", Field::id(repo_id))]);
+                    audit = Some((action, outcome, requester));
+                }
+                reply
+            }
+            GuardRequest::Cancel(requester, actor) => {
                 let cancelled = self.guard.pending().cancel(repo_id, now);
                 match cancelled {
                     Some(action) => {
+                        if action.kind == PendingKind::Exception
+                            && let Some(entry) =
+                                super::guard_exception::cancelled_entry(common, &action, actor)
+                            && store.record_guard_decision(&entry).is_err()
+                        {
+                            self.logger
+                                .error("guard_log_write_failed", &[("repo", Field::id(repo_id))]);
+                        }
                         self.logger
                             .info("guard_uninstall_cancelled", &[("repo", Field::id(repo_id))]);
                         audit = Some((action, "cancelled", requester));
@@ -549,6 +602,7 @@ impl Daemon {
         let operation = match action.kind {
             PendingKind::Uninstall => gitraptor_api::methods::GUARD_UNINSTALL,
             PendingKind::ConfirmTeam => gitraptor_api::methods::GUARD_CONFIRM,
+            PendingKind::Exception => gitraptor_api::methods::GUARD_EXCEPTION,
         };
         let mut detail = format!("action {}", action.action_id);
         if let Some(fingerprint) = &action.fingerprint {

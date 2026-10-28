@@ -56,6 +56,7 @@ error.registration-rejected = el registro se rechazó
 error.guard-rejected = la protección no se instaló
 error.guard-uninstall-refused = la protección no se retiró
 error.guard-failed = falló un paso de la protección
+error.guard-exception-refused = la excepción consciente se rechazó
 error.root-rejected = la carpeta no puede ser una carpeta de código
 error.root-broad = la carpeta es amplia: confírmala desde tu propia terminal
 error.root-unknown = esa carpeta no es una carpeta de código declarada

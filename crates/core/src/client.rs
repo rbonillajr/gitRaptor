@@ -330,6 +330,9 @@ pub(crate) fn debug_overrides() -> Vec<(std::ffi::OsString, std::ffi::OsString)>
             crate::guardrails::pending::WINDOW_ENV,
             crate::timemachine::hook_prior::DEADLINE_ENV,
             crate::guardrails::protection::HEALTH_ENV,
+            crate::guardrails::exception::TTL_ENV,
+            crate::guardrails::exception::CHILD_WAIT_ENV,
+            "GITRAPTOR_TEST_GUARD_FAIL_USED_AUDIT",
         ] {
             if let Some(value) = std::env::var_os(name) {
                 env.push((name.into(), value));

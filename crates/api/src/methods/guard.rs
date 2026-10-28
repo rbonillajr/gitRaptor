@@ -143,15 +143,9 @@ pub(super) const GROUP: Group = Group {
             .since(CAPABILITIES_PROTOCOL),
         method(GUARD_CANCEL, false, false).since(CAPABILITIES_PROTOCOL),
         method(GUARD_CONFIRM, true, false).since(CAPABILITIES_PROTOCOL),
-        method(GUARD_EXCEPTION, true, false)
-            .since(CAPABILITIES_PROTOCOL)
-            .ahead("US-GRD-006"),
-        method(GUARD_EXCEPTION_CHILD, true, false)
-            .since(CAPABILITIES_PROTOCOL)
-            .ahead("US-GRD-006"),
-        method(GUARD_EXCEPTION_END, false, false)
-            .since(CAPABILITIES_PROTOCOL)
-            .ahead("US-GRD-006"),
+        method(GUARD_EXCEPTION, true, false).since(CAPABILITIES_PROTOCOL),
+        method(GUARD_EXCEPTION_CHILD, true, false).since(CAPABILITIES_PROTOCOL),
+        method(GUARD_EXCEPTION_END, false, false).since(CAPABILITIES_PROTOCOL),
     ],
     capabilities: &[
         CAP_GUARD_AUTHORSHIP,
@@ -171,6 +165,10 @@ pub(super) const GROUP: Group = Group {
         CAP_GUARD_EXCEPTION,
     ],
     error_block: Some(BLOCK),
-    errors: &[GUARD_UNINSTALL_REFUSED, GUARD_FAILED],
+    errors: &[
+        GUARD_UNINSTALL_REFUSED,
+        GUARD_FAILED,
+        GUARD_EXCEPTION_REFUSED,
+    ],
     ..Group::new("guard")
 };

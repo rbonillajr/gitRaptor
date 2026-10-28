@@ -192,6 +192,7 @@ fn base_entry(req: &GateRequest, first: Option<&Operation>, shape: Option<&PlanS
         decision_id: String::new(),
         authorship,
         layer: log_layer(req.layer),
+        action_id: None,
     }
 }
 

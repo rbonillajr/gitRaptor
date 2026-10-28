@@ -624,6 +624,8 @@ pub enum PendingKind {
     /// Confirm the team baseline of the main branch (US-GRD-014). Only with
     /// `guard.team-confirmation`: an older client could not decode it.
     ConfirmTeam,
+    /// Let one denied git operation through (US-GRD-006). Only with `guard.exception`.
+    Exception,
 }
 
 /// `guard.uninstall` parameters. Without `confirm`, announces the uninstall and opens the
@@ -1137,6 +1139,13 @@ pub enum LogKind {
     Notice,
     /// The hook layer changed state (ADR-GRD-005 § 5). Only with `guard.protection`.
     ProtectionState,
+    /// A conscious exception let a denied operation through: outside the KPI. Only with
+    /// `guard.exception`.
+    Exception,
+    /// An attempt at a conscious exception was refused. Only with `guard.exception`.
+    ExceptionRejected,
+    /// An announced exception was cancelled inside its window. Only with `guard.exception`.
+    ExceptionCancelled,
 }
 
 /// Whether an entry carries every field or only the counters over the insert cap.
@@ -1378,7 +1387,7 @@ pub struct GuardExceptionRefusedData {
 /// `guard.exception` parameters. Without `confirm`, normalizes `argv` and announces the
 /// exception; with the `action_id` of that announcement, once the window closed, issues the token.
 /// `argv` is at most [`MAX_EXCEPTION_ARGV`] arguments of [`MAX_EXCEPTION_ARG_BYTES`] each.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct GuardExceptionParams {
     pub path: String,
@@ -1386,6 +1395,17 @@ pub struct GuardExceptionParams {
     pub argv: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub confirm: Option<String>,
+}
+
+// The argv never enters a `Debug`: it can name branches, remotes and options.
+impl std::fmt::Debug for GuardExceptionParams {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GuardExceptionParams")
+            .field("path", &self.path)
+            .field("argv", &format_args!("<{} redacted>", self.argv.len()))
+            .field("confirm", &self.confirm)
+            .finish()
+    }
 }
 
 /// What an exception covers: the normalized operation and the rules it skips.

@@ -135,6 +135,19 @@ pub(super) fn reason_text(reason: &Reason, denied: DeniedOp, tr: Tr) -> String {
     .join("\n")
 }
 
+/// The key of what a cause of `system.snapshot-failed` means, in business words.
+pub(super) fn cause_key(cause: Option<Cause>) -> &'static str {
+    match cause {
+        Some(Cause::SnapshotTimeLimit) => "snapshotreq.cause.time-limit",
+        Some(Cause::SnapshotNoSpace) => "snapshotreq.cause.no-space",
+        Some(Cause::SnapshotQuotaExceeded) => "snapshotreq.cause.quota-exceeded",
+        Some(Cause::SnapshotDiscarded) => "snapshotreq.cause.discarded",
+        Some(Cause::SnapshotNoWorktree) => "snapshotreq.cause.no-worktree",
+        Some(Cause::SnapshotUnavailable) => "snapshotreq.cause.unavailable",
+        _ => "snapshotreq.cause.internal",
+    }
+}
+
 /// The key of the rule's name in `raptor guard log`.
 pub(super) fn log_rule_key() -> &'static str {
     "snapshotreq.log.rule"

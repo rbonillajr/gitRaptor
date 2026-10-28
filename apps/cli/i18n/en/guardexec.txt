@@ -1,0 +1,32 @@
+# User-facing messages of `raptor`, English (NFR-10, ADR-GRP-003): `raptor guard exec`, the
+# conscious exception of the developer (US-GRD-006). One `key = text` per line. Placeholders are
+# `{name}`; the code fills them by name, never by concatenating. Every key exists in
+# ../es/guardexec.txt too. Only the developer reads these: no text an agent gets mentions them.
+
+guardexec.header = Conscious exception in {repo}: {operation}.
+guardexec.skips = It will skip: {rules}.
+guardexec.no-prior = If the recovery point cannot be saved, the operation will run anyway.
+guardexec.confirm = Run this operation once, skipping those rules? [y/N]
+guardexec.window = Announced to every client. It runs in {seconds} s; to cancel it: raptor guard cancel (in any terminal) or Ctrl-C here.
+guardexec.cancelled = cancelled: the operation did not run.
+guardexec.kept = nothing ran: the protection stays as it was.
+guardexec.no-answer = no answer: nothing ran.
+guardexec.not-used = the exception was not used: the operation did not match the announced one and was evaluated as always.
+guardexec.unavailable = this version of the engine does not support the conscious exception; nothing ran.
+guardexec.no-engine = without GitRaptor running there is no conscious exception: start GitRaptor (raptor daemon status starts it) and repeat the operation.
+guardexec.non-utf8 = the git command has an argument that is not valid text; nothing ran.
+guardexec.no-folder = the current folder cannot be read; nothing ran.
+guardexec.git-failed = git could not be started; nothing ran.
+guardexec.refused-agent = refused: only the developer can ask for a conscious exception, not an agent or a process it started.
+guardexec.refused.not-installed = this repo is not protected by GitRaptor: there is no rule to skip.
+guardexec.refused.outdated-install = the protection of this repo predates the conscious exception: reinstall it with `raptor guard install` (it updates in place) and repeat.
+guardexec.refused.already-pending = another reserved action is already waiting in this repo: let it finish or cancel it (raptor guard cancel) and repeat.
+guardexec.refused.window-open = the window has not closed yet.
+guardexec.refused.no-pending = the announcement is no longer waiting (cancelled or expired): nothing ran.
+guardexec.refused.not-the-requester = only the command that announced the exception can run it.
+guardexec.refused.unsupported-form = the conscious exception does not admit this form of the command: name the remote by its name and each branch explicitly (no URL, wildcard, --all, --mirror, --tags, -c, rebase -i).
+guardexec.refused.unsupported-operation = the conscious exception only admits push, deleting a local branch (branch -d/-D) and a non-interactive rebase.
+guardexec.refused.pull = pull is not admitted: bring the changes with git fetch and ask for the exception for the rebase.
+guardexec.refused.not-denied = nothing denies this operation, so it needs no exception: run it with plain git.
+guardexec.refused.not-exceptable = a rule that denies this operation cannot be skipped by an exception; nothing ran.
+guardexec.refused.child-not-ours = the git that started is not the one this exception was issued for; nothing was skipped.

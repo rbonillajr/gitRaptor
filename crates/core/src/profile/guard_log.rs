@@ -169,7 +169,9 @@ impl RepoStore {
                  COALESCE(SUM(CASE WHEN kind = 'denial' AND origin = 'daemon'
                      THEN count END), 0),
                  COALESCE(SUM(CASE WHEN kind = 'notice' THEN count END), 0),
-                 COALESCE(SUM(CASE WHEN detail = 'rate-limited' THEN count END), 0)
+                 COALESCE(SUM(CASE WHEN detail = 'rate-limited' THEN count END), 0),
+                 COALESCE(SUM(CASE WHEN kind = 'exception' THEN count END), 0),
+                 COALESCE(SUM(CASE WHEN kind = 'exception-rejected' THEN count END), 0)
              FROM guardrails_decisions
              WHERE last_ms >= ?1 AND (?2 = 0 OR NOT EXISTS (SELECT 1 FROM json_each(reasons) WHERE json_extract(value, '$.rule') = 'config.relax-ignored'))",
             params![since, hide],
@@ -178,9 +180,9 @@ impl RepoStore {
                     blocked: row.get::<_, i64>(0)?.max(0) as u64,
                     notices: row.get::<_, i64>(1)?.max(0) as u64,
                     rate_limited: row.get::<_, i64>(2)?.max(0) as u64,
-                    // Counted once the `exception*` entries are written.
-                    exceptions: 0,
-                    exceptions_rejected: 0,
+                    // Outside the KPI: never in `blocked` (ADR-GRD-006 § 6).
+                    exceptions: row.get::<_, i64>(3)?.max(0) as u64,
+                    exceptions_rejected: row.get::<_, i64>(4)?.max(0) as u64,
                 })
             },
         )?;

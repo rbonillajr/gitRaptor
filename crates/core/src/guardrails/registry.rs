@@ -53,6 +53,27 @@ impl GuardRegistry {
         }
     }
 
+    /// The protected repo whose common directory is `common_dir`, with its id.
+    pub fn by_common_dir(&self, common_dir: &str) -> Option<(String, GuardEntry)> {
+        self.repos
+            .read()
+            .ok()?
+            .iter()
+            .find(|(_, e)| e.common_dir == common_dir)
+            .map(|(id, e)| (id.clone(), e.clone()))
+    }
+
+    /// The protected repo `path` names, compared without reading the disk: `path` is inside
+    /// the folder of its common directory (the main worktree) or inside the common directory.
+    pub fn by_lexical_path(&self, path: &std::path::Path) -> Option<(String, GuardEntry)> {
+        self.repos.read().ok()?.iter().find_map(|(id, e)| {
+            let common = std::path::Path::new(&e.common_dir);
+            let main = common.parent().filter(|_| common.ends_with(".git"));
+            (path.starts_with(common) || main.is_some_and(|m| path.starts_with(m)))
+                .then(|| (id.clone(), e.clone()))
+        })
+    }
+
     pub fn get(&self, repo_id: &str) -> Option<GuardEntry> {
         self.repos.read().ok()?.get(repo_id).cloned()
     }

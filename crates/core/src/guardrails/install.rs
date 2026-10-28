@@ -985,7 +985,7 @@ pub fn folder_moved(ctx: &GuardCtx<'_>, common: &Path, store: &RepoStore) -> boo
 /// Whether the confirmed install in place is of an older template or has an upgrade that was
 /// not confirmed: the journal or its `dispatch.conf` names an older template, or a dispatcher of
 /// the current template is missing (ADR-GRD-001 § 8, DS-US-GRD-018 D6).
-fn outdated(common: &Path, journal: Option<&Journal>) -> bool {
+pub(crate) fn outdated(common: &Path, journal: Option<&Journal>) -> bool {
     if journal.is_some_and(|j| j.upgrade.is_some() || j.template < TEMPLATE_VERSION) {
         return true;
     }

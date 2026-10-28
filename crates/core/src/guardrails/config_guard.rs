@@ -64,6 +64,7 @@ pub fn relax_entry(
         decision_id: decision.decision_id.clone(),
         authorship: None,
         layer: gitraptor_api::guard::LogLayer::Hooks,
+        action_id: None,
     })
 }
 

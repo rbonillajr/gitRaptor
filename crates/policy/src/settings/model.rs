@@ -187,8 +187,8 @@ pub struct Policies {
 /// `/` apart from a trailing one it is found at any depth (`secrets/`, `*.pem`), with a `/`
 /// in the middle or at the start it is anchored to the root (`config/prod.yml`, `/secrets`),
 /// and a directory covers what is below it. No negations (`!`) and no comments (`#`). With
-/// `appliesTo: everyone` the person is held too and, with no conscious exception in the MVP,
-/// a protected branch is frozen for local pulls and fast-forwards as well.
+/// `appliesTo: everyone` the person is held too, local pulls and fast-forwards of a protected
+/// branch included; the person's conscious exception (`raptor guard exec`) skips it.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PatternPolicy {

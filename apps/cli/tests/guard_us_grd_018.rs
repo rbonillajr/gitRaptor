@@ -636,7 +636,7 @@ fn a_template_1_install_is_upgraded_by_reinstalling() {
     assert!(out.status.success(), "{}", text(&out));
     let folder = m.f.repo.join(".git/gitraptor");
     let conf = std::fs::read_to_string(folder.join("dispatch.conf")).unwrap();
-    assert!(conf.contains("template\t3\n"), "{conf}");
+    assert!(conf.contains("template\t4\n"), "{conf}");
     for hook in [
         "pre-commit",
         "commit-msg",

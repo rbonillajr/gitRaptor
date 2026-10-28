@@ -1142,6 +1142,9 @@ pub enum AuditOutcome {
     /// The confirmation of the team baseline was not applied: what it would confirm changed
     /// after the plan was shown (US-GRD-014). Only with `audit.outcomes`.
     Changed,
+    /// A conscious exception token was presented and consumed by its git (US-GRD-006). Only
+    /// with `audit.outcomes` and `guard.exception`.
+    Used,
 }
 
 impl AuditOutcome {
@@ -1150,7 +1153,12 @@ impl AuditOutcome {
     pub const fn needs_capability(self) -> bool {
         matches!(
             self,
-            Self::Applied | Self::Cancelled | Self::Failed | Self::Expired | Self::Changed
+            Self::Applied
+                | Self::Cancelled
+                | Self::Failed
+                | Self::Expired
+                | Self::Changed
+                | Self::Used
         )
     }
 }

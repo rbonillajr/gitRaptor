@@ -90,11 +90,11 @@ fn the_hook_accepts_templates_1_2_and_3() {
         .collect();
         HookArgs::parse(&argv)
     };
-    for good in ["1", "2", "3"] {
+    for good in ["1", "2", "3", "4"] {
         let args = parse(good).unwrap_or_else(|| panic!("template {good} is accepted"));
         assert_eq!(args.template.to_string(), good);
     }
-    for bad in ["0", "4"] {
+    for bad in ["0", "5"] {
         assert!(parse(bad).is_none(), "template {bad} is rejected");
     }
 }
@@ -159,6 +159,7 @@ fn env_of(dir: &Path) -> HookEnv {
     HookEnv {
         git_dir: Some(dir.join(".git")),
         cwd: dir.to_path_buf(),
+        exception_token: None,
     }
 }
 
