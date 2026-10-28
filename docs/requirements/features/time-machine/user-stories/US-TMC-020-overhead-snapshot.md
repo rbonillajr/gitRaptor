@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: medium
 created: 2026-10-03
-updated: 2026-10-04
+updated: 2026-10-28
 domain: GRP
 epic: E-001
 feature: time-machine
@@ -15,7 +15,8 @@ related:
   rules:
     - BR-TMC-001
   stories: [US-TMC-001, US-TMC-004]
-covers: [D-TMC-21]
+  specs: [DS-US-TMC-020]
+covers: [D-TMC-21, D-TMC-42, D-TMC-43]
 blocked_by: []
 tags: [time-machine, rendimiento, nfr-04]
 ---
@@ -66,7 +67,7 @@ Y en la CLI y en la TUI el desarrollador sabe que la operación sigue en curso m
 ## Diseño y Dev Spec
 
 - **Diseño (flujo/UX):** Pendiente de diseño.
-- **Dev Spec:** pendiente (lo genera el Arquitecto).
+- **Dev Spec:** [DS-US-TMC-020](../dev-specs/US-TMC-020-overhead-snapshot.md)
 
 ## Dependencias
 

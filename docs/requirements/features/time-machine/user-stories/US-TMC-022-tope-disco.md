@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: medium
 created: 2026-10-05
-updated: 2026-10-05
+updated: 2026-10-28
 domain: GRP
 epic: E-001
 feature: time-machine
@@ -17,7 +17,8 @@ related:
     - BR-TMC-001
   adrs: [ADR-TMC-007, ADR-GRP-015]
   stories: [US-TMC-016, US-TMC-004, US-GRP-017]
-covers: [BR-TMC-TIME-001, D-TMC-15, D-TMC-25]
+  specs: [DS-US-TMC-022]
+covers: [BR-TMC-TIME-001, BR-TMC-EDGE-002, D-TMC-15, D-TMC-25, D-TMC-37, D-TMC-38, D-TMC-39]
 blocked_by: []
 tags: [time-machine, retencion, disco, tope, recursos]
 ---
@@ -27,16 +28,16 @@ tags: [time-machine, retencion, disco, tope, recursos]
 ## Descripción
 
 **Como** desarrollador orquestador con un disco limitado
-**Quiero** fijar un tope de disco para la Time Machine y que, al acercarse, se purguen con aviso los puntos más antiguos que no estén protegidos
+**Quiero** fijar un tope de disco para la Time Machine y que, al acercarse a ese tope o a la cuota de un repo, se purguen con aviso los puntos más antiguos que no estén protegidos
 **Para** usar la Time Machine sin miedo a que llene mi disco, sin perder nunca el punto anterior a una operación destructiva
 
-**Valor**: el disco de la Time Machine queda acotado (RES-09), no solo por antigüedad, y sigue sin perderse nada sin aviso (NFR-01).
+**Valor**: el disco de la Time Machine queda acotado (RES-09), no solo por antigüedad, y sigue sin perderse nada sin aviso (NFR-01). La cuota por repo (5 GiB por defecto) se gestiona igual que el tope total: quien trabaja en un solo repo no deja de capturar al llegar a la cuota mientras haya puntos antiguos que purgar (D-TMC-38, TQ-24 → a, abierta a veto de Rene).
 
 > **Origen**: decisión de Rene Bonilla (2026-10-05): tope configurable que purga lo más antiguo sin tocar los snapshots protegidos y avisa. Amplía D-TMC-15 y BR-TMC-TIME-001 con la purga por tamaño (ADR-TMC-007, Enmienda 2026-10-05). Prioridad: decisión del orquestador (2026-10-05), validada por el PO: **Should, fuera de M1**; sube a M1 si US-GRP-017 mide durante el dogfooding un almacén por encima de 2 GiB.
 
 ## Reglas cubiertas
 
-BR-TMC-TIME-001 (ampliada: purga por tamaño con aviso visto y 24 h; nunca puntos protegidos) · D-TMC-15 (ampliada), D-TMC-25 · RES-09 — ver [business-rules.md](../business-rules.md)
+BR-TMC-TIME-001 (ampliada: purga por tamaño, del tope total y de la cuota del repo, con aviso visto y 24 h; nunca puntos protegidos) · BR-TMC-EDGE-002 (causas del hueco "sin espacio") · D-TMC-15 (ampliada), D-TMC-25 (su parte de la cuota, sustituida), D-TMC-37, D-TMC-38 (un solo aviso del tope; cuota como el tope), D-TMC-39 (tope y cuota detienen la observación y el manual, nunca los previos; repos que ya no se observan) · RES-09 — ver [business-rules.md](../business-rules.md)
 
 ## Dependencias
 
@@ -88,3 +89,15 @@ Ejemplos:
 | 20 | perfil | 20 | no hay diagnóstico |
 | 2 | equipo | 10 | se avisa de que la clave no se admite en ese nivel |
 | 0 | perfil | 10 | se avisa de que el valor está fuera de rango |
+
+**Escenario: La cuota de un repo se gestiona como el tope**
+
+Dado una cuota de 5 GiB por repo, un tope de 10 GiB y un solo repo con 4,1 GiB de snapshots
+Cuando corre el trabajo de purga
+Entonces la CLI y la TUI avisan de que el repo pasó el 80 % de su cuota
+  Y el aviso dice cuántos puntos se purgarán, de qué periodo y cuánto espacio se libera
+
+## Diseño y Dev Spec
+
+- **Diseño (flujo/UX):** Pendiente de diseño.
+- **Dev Spec:** [DS-US-TMC-022](../dev-specs/US-TMC-022-tope-disco.md)

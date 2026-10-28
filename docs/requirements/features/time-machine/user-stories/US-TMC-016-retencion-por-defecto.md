@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: medium
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-28
 domain: GRP
 epic: E-001
 feature: time-machine
@@ -14,8 +14,9 @@ related:
     - CTX-TMC-001
   rules:
     - BR-TMC-001
-  stories: [US-TMC-001]
-covers: [BR-TMC-TIME-001, D-TMC-15, D-TMC-25]
+  stories: [US-TMC-001, US-TMC-022]
+  specs: [DS-US-TMC-016]
+covers: [BR-TMC-TIME-001, D-TMC-15, D-TMC-25, D-TMC-37, D-TMC-38]
 blocked_by: []
 tags: [time-machine, retencion]
 ---
@@ -32,7 +33,7 @@ tags: [time-machine, retencion]
 
 ## Reglas cubiertas
 
-BR-TMC-TIME-001 (retención por defecto, purga segura, aviso visto + 24 h, la cuota no adelanta la purga) · D-TMC-15, D-TMC-25 (TQ-5, TQ-11) — ver [business-rules.md](../business-rules.md)
+BR-TMC-TIME-001 (retención por defecto, purga segura, aviso visto + 24 h; la cuota nunca purga puntos recientes ni protegidos) · D-TMC-15, D-TMC-25 (TQ-11), D-TMC-37 (cuándo corresponde purgar), D-TMC-38 (aviso de conjunto fijo; "mostrado" = pintado en la CLI con terminal o en la TUI; TQ-24 → a) — ver [business-rules.md](../business-rules.md)
 
 ## Criterios de Aceptación
 
@@ -52,10 +53,10 @@ Cuando corresponde purgar
 Entonces no se purga ningún punto
   Y los puntos de hace 40 días siguen disponibles para restaurar
 
-**Escenario: Alcanzar la cuota de disco no adelanta la purga**
+**Escenario: Alcanzar la cuota no purga puntos recientes ni protegidos**
 
 Dado que el almacén de snapshots del repo alcanzó su cuota
-  Y todos los puntos tienen menos de 30 días
+  Y todos sus puntos tienen menos de 7 días o están protegidos
 Cuando corresponde purgar
 Entonces no se purga ningún punto
 
@@ -86,7 +87,7 @@ Entonces todo punto que no se purgó por completo sigue disponible para restaura
 ## Diseño y Dev Spec
 
 - **Diseño (flujo/UX):** Pendiente de diseño.
-- **Dev Spec:** pendiente (lo genera el Arquitecto).
+- **Dev Spec:** [DS-US-TMC-016](../dev-specs/US-TMC-016-retencion-por-defecto.md)
 
 ## Dependencias
 
