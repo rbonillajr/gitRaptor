@@ -282,8 +282,17 @@ mod tests {
     #[test]
     fn no_tool_edits_the_configuration_or_decides_the_queue() {
         const FORBIDDEN: [&str; 11] = [
-            "config", "guard", "approve", "reject", "queue", "confirm", "exception", "install",
-            "uninstall", "enable", "disable",
+            "config",
+            "guard",
+            "approve",
+            "reject",
+            "queue",
+            "confirm",
+            "exception",
+            "install",
+            "uninstall",
+            "enable",
+            "disable",
         ];
         for tool in tools() {
             for word in FORBIDDEN {

@@ -362,8 +362,15 @@ fn policy_denied_names_the_rule_and_its_level() {
         Lang::En,
     );
     assert!(body["params"].get("reasons").is_none(), "{body}");
-    assert_eq!(body["params"]["rules"], json!(["permission.commit"]), "{body}");
-    assert_eq!(body["message"], "A repo rule denied the commit: permission.commit.");
+    assert_eq!(
+        body["params"]["rules"],
+        json!(["permission.commit"]),
+        "{body}"
+    );
+    assert_eq!(
+        body["message"],
+        "A repo rule denied the commit: permission.commit."
+    );
 }
 
 /// Every refusal of the table with the params its template takes.
