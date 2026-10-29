@@ -1097,12 +1097,18 @@ impl Inner {
         // never a value of its argv or environment (SEC-04), and at most
         // [`MAX_REDIRECT_READS`] reads.
         let mut facts: HashMap<u32, Option<GitFacts>> = HashMap::new();
-        let mut facts_of = |pid: u32| -> Option<GitFacts> {
+        let mut facts_of = |git: &ProcEntry| -> Option<GitFacts> {
+            let pid = git.pid;
             if let Some(known) = facts.get(&pid) {
                 return *known;
             }
             let read = if facts.len() < MAX_REDIRECT_READS {
-                self.procs.git_facts(pid)
+                // Read by pid: it counts only if that pid is still the
+                // same process afterwards, or a `git` that wrote and ended
+                // could lend its pid to one that reads.
+                self.procs
+                    .git_facts(pid)
+                    .filter(|_| self.procs.exe(git).is_some())
             } else {
                 None
             };
@@ -1138,7 +1144,7 @@ impl Inner {
                                 .as_deref()
                                 .filter(|c| repo.is_some_and(|r| r.contains(c)))
                             {
-                                let read = facts_of(g.pid);
+                                let read = facts_of(g);
                                 harmless = read.map(|f| f.harmless);
                                 // Its own folder outside the common dir: the
                                 // only place where its target matters.
@@ -1151,7 +1157,7 @@ impl Inner {
                             if cwd.as_deref().is_some_and(|c| {
                                 repo.is_some_and(|r| r.contains(c) && !r.in_common(c))
                             }) {
-                                let read = facts_of(g.pid);
+                                let read = facts_of(g);
                                 redirect = read.map(|f| f.redirect);
                                 writes = read.map(|f| f.writes);
                             }
