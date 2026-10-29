@@ -537,3 +537,109 @@ fn raptor_restore_with_a_too_short_prefix_exits_2_and_changes_nothing() {
     let changes = diff(&before, &m.fx.fingerprint());
     assert!(changes.is_empty(), "{changes:#?}");
 }
+
+/// Whether the snapshot `id` of the Time Machine store holds `path` (relative to a worktree)
+/// with exactly `content`, read with the system Git from the store of the repo.
+fn snapshot_holds(m: &Machine, id: &str, path: &str, content: &str) -> bool {
+    let repo_id = m.oplog.lock().unwrap().repo_id().to_owned();
+    let dirs = ProfileDirs::under_root(&m.profile);
+    let store = gitraptor_core::timemachine::oplog::repo_dir(&dirs, &repo_id)
+        .unwrap()
+        .join("store.git");
+    let git = |args: &[&str]| {
+        let mut argv = vec!["--git-dir", store.to_str().unwrap()];
+        argv.extend_from_slice(args);
+        m.fx.git_command(&m.fx.home, &argv).output().unwrap()
+    };
+    let snap_ref = format!("refs/tm/snap/{id}");
+    let tree = git(&["ls-tree", "-r", "--name-only", &snap_ref]);
+    let suffix = format!("/files/{path}");
+    text(&tree.stdout)
+        .lines()
+        .filter(|l| l.ends_with(&suffix))
+        .any(|l| text(&git(&["show", &format!("{snap_ref}:{l}")]).stdout) == content)
+}
+
+/// NFR-01: an edit made after a restore, then a raw `git reset --hard` that moves nothing. The
+/// continuous capture holds the edit, and the timeline offers that capture as the point before
+/// the reset, never the restore's prior (which does not hold it): restoring it brings the edit
+/// back. The reset runs as soon as the edit is captured.
+#[test]
+fn an_edit_after_a_restore_survives_a_raw_reset_hard() {
+    let m = machine();
+    let login = m.worktree.join("src/login.rs");
+    std::fs::write(&login, "fn login() { validar_token(); }\n").unwrap();
+    let point = m.reset_hard().prior_snapshot_id;
+    let out = m.raptor(&m.worktree, &["restore", &point], "en_US.UTF-8");
+    assert!(out.status.success(), "{}", text(&out.stderr));
+
+    let edit = "fn login() { validar_token(); renovar(); }\n";
+    std::fs::write(&login, edit).unwrap();
+    // Signal: an observation that holds the edit. Each complete snapshot is read once.
+    let deadline = Instant::now() + Duration::from_secs(45);
+    let mut seen = std::collections::HashSet::new();
+    loop {
+        let snaps = m
+            .oplog
+            .lock()
+            .unwrap()
+            .snapshots(&Default::default())
+            .unwrap();
+        let fresh: Vec<String> = snaps
+            .into_iter()
+            .filter(|s| s.complete.is_some())
+            .map(|s| s.record.snapshot_id)
+            .filter(|id| seen.insert(id.clone()))
+            .collect();
+        if fresh
+            .iter()
+            .any(|id| snapshot_holds(&m, id, "src/login.rs", edit))
+        {
+            break;
+        }
+        assert!(Instant::now() < deadline, "the edit was never captured");
+        std::thread::sleep(Duration::from_millis(50));
+    }
+
+    let reset =
+        m.fx.git_command(&m.worktree, &["reset", "-q", "--hard"])
+            .status()
+            .unwrap();
+    assert!(reset.success());
+    assert_eq!(std::fs::read_to_string(&login).unwrap(), "fn login() {}\n");
+
+    // Signal: the engine recorded the reset, and the timeline offers its point.
+    let deadline = Instant::now() + Duration::from_secs(45);
+    let before_reset = loop {
+        let shown = text(&m.raptor(&m.worktree, &["timeline"], "en_US.UTF-8").stdout);
+        let line = shown
+            .lines()
+            .rfind(|l| l.contains("reset") && l.contains("without moving it"))
+            .map(str::to_owned);
+        if let Some(id) = line
+            .and_then(|l| l.split_whitespace().last().map(str::to_owned))
+            .filter(|id| id != "-")
+        {
+            break id;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "the reset never reached the timeline: {shown}"
+        );
+        std::thread::sleep(Duration::from_millis(50));
+    };
+    assert_ne!(
+        &before_reset,
+        &point[..8],
+        "the restore's prior does not hold the edit"
+    );
+
+    let out = m.raptor(&m.worktree, &["restore", &before_reset], "en_US.UTF-8");
+    assert!(
+        out.status.success(),
+        "{}{}",
+        text(&out.stdout),
+        text(&out.stderr)
+    );
+    assert_eq!(std::fs::read_to_string(&login).unwrap(), edit);
+}
