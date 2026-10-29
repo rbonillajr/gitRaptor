@@ -332,6 +332,7 @@ impl Worker {
                 }
                 self.deferred.remove(&repo_id);
                 dirty.remove(&repo_id);
+                self.release_if_nothing_active();
             }
             Msg::Tier(repo_id, Tier::Active) => {
                 self.state(&repo_id).dormant = false;
@@ -355,6 +356,7 @@ impl Worker {
                 self.store.forget(&repo_id);
                 dirty.remove(&repo_id);
                 touched.remove(&repo_id);
+                self.release_if_nothing_active();
             }
             Msg::Done(done) => {
                 let repo_id = done.key.repo_id.clone();
@@ -386,6 +388,16 @@ impl Worker {
                     }
                 }
             }
+        }
+    }
+
+    /// Closes the worker at once when no repo is left active (D4): a dormant repo keeps no
+    /// resident state, and the worker's memory must not count at rest either.
+    fn release_if_nothing_active(&self) {
+        if let Some(pool) = &self.pool
+            && self.repos.values().all(|s| s.dormant)
+        {
+            pool.release_worker();
         }
     }
 
