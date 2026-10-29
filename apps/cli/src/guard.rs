@@ -675,16 +675,13 @@ fn status_lines(status: &GuardStatus, tr: Tr) -> Vec<String> {
             .as_ref()
             .filter(|h| h.status == HooksStatus::Inactive)
     {
-        let cause = hooks
-            .cause
-            .map_or_else(String::new, |c| cause_text_in(c, tr));
-        out.push(tr.t(
-            "guard.state.hooks-inactive",
-            &[
-                ("status", &tr.t("guard.hooks.inactive", &[])),
-                ("cause", &cause),
-            ],
-        ));
+        out.push(match hooks.cause {
+            Some(c) => tr.t(
+                "guard.state.hooks-inactive",
+                &[("cause", &cause_text_in(c, tr))],
+            ),
+            None => tr.t("guard.state.hooks-inactive-bare", &[]),
+        });
     }
     out.extend(protection_lines(status, tr));
     // Granted but unprotected reads as a contradiction: the permission only
