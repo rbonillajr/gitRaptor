@@ -29,6 +29,7 @@ use gitraptor_policy::team::{Confirmed, ConfirmedFloor};
 const REPO_ID: &str = "0000-ffff";
 const FORMAT: &str = r#"{"policies":{"commitFormat":{}}}"#;
 const SIZE: &str = r#"{"policies":{"diffSize":{"maxLines":400}}}"#;
+const BOTH: &str = r#"{"policies":{"diffSize":{"maxLines":400},"commitFormat":{}}}"#;
 /// The trailer an agent's commit carries, so the authorship rule never decides here.
 const TRAILER: &str = "\n\nCo-Authored-By: Claude <noreply@anthropic.com>";
 
@@ -319,4 +320,40 @@ fn a_size_rule_fails_closed_in_the_plan() {
         size.params.iter().all(|p| p.kind != ParamKind::Oid),
         "{size:?}"
     );
+}
+
+/// Both rules govern the agent and the message is out of format: the format still decides
+/// exactly (no cause, the hook's own reason), and the size is unverifiable.
+#[test]
+fn with_both_rules_the_format_stays_exact_and_the_size_fails_closed() {
+    let r = rig(BOTH);
+    let message = &with_trailer("arreglos varios");
+    let from_hook = hook(&r, &agent(), &stored_commit(&r, message));
+    let hook_format: Vec<String> = commit_policy_reasons(&from_hook)
+        .into_iter()
+        .filter(|x| x.starts_with("CommitFormat/"))
+        .collect();
+    assert_eq!(hook_format.len(), 1, "fixture: {from_hook:?}");
+    let from_plan = plan(&r, &agent(), message);
+    assert_eq!(from_plan.applied_effect, Effect::Deny, "{from_plan:?}");
+    let format = from_plan
+        .reasons
+        .iter()
+        .find(|x| x.rule == Rule::CommitFormat)
+        .expect("the plan names the format");
+    assert_eq!(format.cause, hook_format_cause(&from_hook), "{format:?}");
+    assert_ne!(format.cause, Some(Cause::Unverifiable), "{format:?}");
+    let size = from_plan
+        .reasons
+        .iter()
+        .find(|x| x.rule == Rule::DiffSize)
+        .expect("the plan names the size rule");
+    assert_eq!(size.cause, Some(Cause::Unverifiable), "{size:?}");
+}
+
+fn hook_format_cause(d: &Decision) -> Option<Cause> {
+    d.reasons
+        .iter()
+        .find(|x| x.rule == Rule::CommitFormat)
+        .and_then(|x| x.cause)
 }
