@@ -141,7 +141,7 @@
 | [US-GRP-003](features/motor-local/user-stories/US-GRP-003-estados-especiales-no-disponible.md) | El desarrollador sabe qué worktree está en un estado especial o ya no existe | Implementado (`implemented`) | — | — |
 | [US-GRP-004](features/motor-local/user-stories/US-GRP-004-observacion-continua.md) | El desarrollador encuentra lo ocurrido aunque no tuviera GitRaptor abierto | Implementado (`implemented`) | #112 | — |
 | [US-GRP-005](features/motor-local/user-stories/US-GRP-005-hueco-sin-atribuir.md) | El desarrollador distingue lo que el motor no vio ocurrir | Implementado (`implemented`) | — | — |
-| [US-GRP-007](features/motor-local/user-stories/US-GRP-007-sesiones-claude-code.md) | El desarrollador sabe qué sesión de Claude Code trabaja en cada worktree y si sigue activa | Implementado (`implemented`) | #80, #119, #124, #155, #169, #228 | — |
+| [US-GRP-007](features/motor-local/user-stories/US-GRP-007-sesiones-claude-code.md) | El desarrollador sabe qué sesión de Claude Code trabaja en cada worktree y si sigue activa | Implementado (`implemented`) | #80, #119, #124, #155, #169, #228, #315 | — |
 | [US-GRP-009](features/motor-local/user-stories/US-GRP-009-registro-explicito-agente.md) | El desarrollador o el agente declaran qué agente trabaja en un worktree | Implementado (`implemented`) | #106 | — |
 | [US-GRP-010](features/motor-local/user-stories/US-GRP-010-corregir-atribucion.md) | El desarrollador corrige una atribución automática equivocada | Implementado (`implemented`) | — | — |
 | [US-GRP-012](features/motor-local/user-stories/US-GRP-012-rama-base-main.md) | El desarrollador ve el ahead/behind de cada worktree contra la rama base del repo | Implementado (`implemented`) | #55 | — |
@@ -160,7 +160,7 @@
 | [TD-GRP-001](features/motor-local/technical-stories/TD-GRP-001-acl-windows.md) | Verificación de ACL en Windows: git.exe (SEC-10) y perfil (SEC-06) | Implementado en parte (`partially-implemented`) | #72 | 2 |
 | [TS-GRP-004](features/motor-local/technical-stories/TS-GRP-004-canal-clientes.md) | Canal local de clientes y contrato de mensajes | Implementado en parte (`partially-implemented`) | #36, #87, #123, #133, #158 | 3 |
 | [TS-GRP-005](features/motor-local/technical-stories/TS-GRP-005-clases-trabajo-ahorro-energia.md) | Clases de trabajo del daemon y mecanismo de ahorro de energía | Implementado en parte (`partially-implemented`) | #298 | — |
-| [US-GRP-008](features/motor-local/user-stories/US-GRP-008-editor-humano-sin-atribuir.md) | El trabajo que el desarrollador hace en su editor nunca se atribuye a Claude Code | Implementado en parte (`partially-implemented`) | — | — |
+| [US-GRP-008](features/motor-local/user-stories/US-GRP-008-editor-humano-sin-atribuir.md) | El trabajo que el desarrollador hace en su editor nunca se atribuye a Claude Code | Implementado en parte (`partially-implemented`) | #315 | — |
 | [TD-GRP-002](features/motor-local/technical-stories/TD-GRP-002-motor-bajo-rafaga.md) | Frescura y memoria del motor bajo una ráfaga de archivos | Listo (`ready`) | — | — |
 | [TD-GRP-003](features/motor-local/technical-stories/TD-GRP-003-nfr04-maquina-referencia.md) | Presupuesto de NFR-04 sin gate automático: medirlo en una máquina de referencia | Listo (`ready`) | — | — |
 | [TD-GRP-004](features/motor-local/technical-stories/TD-GRP-004-corroborar-ambito-worktree-s3.md) | Corroborar con el reflog de HEAD el ámbito worktree de S3 y blindar la lectura de la redirección | Borrador (`draft`) | — | — |
@@ -231,7 +231,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-GRP-001](features/motor-local/user-stories/US-GRP-001-estado-worktrees-repo-anadido.md) | El desarrollador ve el estado de cada worktree del repo que añadió | Implementado (`implemented`) | #46 | — |
 | [US-GRP-002](features/motor-local/user-stories/US-GRP-002-cambios-eventos-en-vivo.md) | El desarrollador ve los cambios y eventos de Git de sus worktrees casi al instante | Implementado (`implemented`) | #57, #75 | — |
 | [US-GRP-004](features/motor-local/user-stories/US-GRP-004-observacion-continua.md) | El desarrollador encuentra lo ocurrido aunque no tuviera GitRaptor abierto | Implementado (`implemented`) | #112 | — |
-| [US-GRP-007](features/motor-local/user-stories/US-GRP-007-sesiones-claude-code.md) | El desarrollador sabe qué sesión de Claude Code trabaja en cada worktree y si sigue activa | Implementado (`implemented`) | #80, #119, #124, #155, #169, #228 | — |
+| [US-GRP-007](features/motor-local/user-stories/US-GRP-007-sesiones-claude-code.md) | El desarrollador sabe qué sesión de Claude Code trabaja en cada worktree y si sigue activa | Implementado (`implemented`) | #80, #119, #124, #155, #169, #228, #315 | — |
 | [US-GRP-009](features/motor-local/user-stories/US-GRP-009-registro-explicito-agente.md) | El desarrollador o el agente declaran qué agente trabaja en un worktree | Implementado (`implemented`) | #106 | — |
 | [US-GRP-012](features/motor-local/user-stories/US-GRP-012-rama-base-main.md) | El desarrollador ve el ahead/behind de cada worktree contra la rama base del repo | Implementado (`implemented`) | #55 | — |
 | [US-GRP-017](features/motor-local/user-stories/US-GRP-017-consumo-recursos-status.md) | El desarrollador ve cuánto consume GitRaptor en su máquina | Implementado (`implemented`) | #93, #173 | — |
@@ -304,7 +304,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-GRD-010](features/guardrails/user-stories/US-GRD-010-endurecer-sin-relajar.md) | El desarrollador endurece las reglas en su máquina sin poder relajar las del equipo | Implementado en parte (`partially-implemented`) | #217 | — |
 | [US-GRD-016](features/guardrails/user-stories/US-GRD-016-misma-decision-por-mcp.md) | Un agente que usa las herramientas MCP recibe la misma decisión que con Git directo | Implementado en parte (`partially-implemented`) | #313 | — |
 | [US-GRD-018](features/guardrails/user-stories/US-GRD-018-autoria-commits-persona-y-agente.md) | Cada commit entra a nombre de la persona y deja constancia del agente que lo hizo, con la exigencia que fija el equipo | Implementado en parte (`partially-implemented`) | #137, #141, #150, #152, #153, #154 | 3 |
-| [US-GRP-008](features/motor-local/user-stories/US-GRP-008-editor-humano-sin-atribuir.md) | El trabajo que el desarrollador hace en su editor nunca se atribuye a Claude Code | Implementado en parte (`partially-implemented`) | — | — |
+| [US-GRP-008](features/motor-local/user-stories/US-GRP-008-editor-humano-sin-atribuir.md) | El trabajo que el desarrollador hace en su editor nunca se atribuye a Claude Code | Implementado en parte (`partially-implemented`) | #315 | — |
 | [US-MCP-009](features/mcp/user-stories/US-MCP-009-safe-commit.md) | Un agente commitea por MCP con las reglas del repo y con un punto de recuperación previo | Implementado en parte (`partially-implemented`) | #289 | — |
 | [US-MCP-010](features/mcp/user-stories/US-MCP-010-safe-commit-rutas.md) | Un agente commitea solo los archivos que nombra y nunca fuera de su worktree | Implementado en parte (`partially-implemented`) | #289 | — |
 | [US-MCP-013](features/mcp/user-stories/US-MCP-013-confirmacion-sin-cola.md) | Un agente sabe que una acción necesita al desarrollador y a quién acudir | Implementado en parte (`partially-implemented`) | #267 | — |
@@ -569,7 +569,7 @@ Clases de trabajo del daemon y mecanismo de ahorro de energía
 
 - *La ficha no lista los pendientes en "Estado de la implementación".*
 
-### [US-GRP-008](features/motor-local/user-stories/US-GRP-008-editor-humano-sin-atribuir.md)
+### [US-GRP-008](features/motor-local/user-stories/US-GRP-008-editor-humano-sin-atribuir.md) — #315
 
 El trabajo que el desarrollador hace en su editor nunca se atribuye a Claude Code
 

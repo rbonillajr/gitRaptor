@@ -131,7 +131,7 @@ Entonces el evento del commit queda "sin atribuir"
 
 ## Estado de la implementación (2026-10-08)
 
-Implementado en: PR #80, #119, #124, #155, #169, #228 (TS-GRP-008: ámbito del `git` ajeno en S3, 2026-10-09), PR #PRNUM (`git` ajeno que no puede producir un evento, 2026-10-28).
+Implementado en: PR #80, #119, #124, #155, #169, #228 (TS-GRP-008: ámbito del `git` ajeno en S3, 2026-10-09), PR #315 (`git` ajeno que no puede producir un evento, 2026-10-28).
 
 Notas (fuera del alcance de esta ficha o sin bloquearla):
 - La medición en el dogfooding real es de SPIKE-GRP-001 (criterio 2 de M1).

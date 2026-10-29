@@ -162,7 +162,7 @@ sequenceDiagram
 |---|---|---|---|
 | T001 | Contrato: actor de los cambios y su capacidad | — | `crates/api/src/` |
 | T002 | Proyectar el actor de los cambios | T001 | `crates/core/src/change_attribution.rs`, `observe.rs`, `channel/` |
-| T003 | S3: un `git` de la sesión solo es evidencia si escribe **(hecha en PR #PRNUM)** | — | `crates/macsys/`, `crates/core/src/detect/` |
+| T003 | S3: un `git` de la sesión solo es evidencia si escribe **(hecha en PR #315)** | — | `crates/macsys/`, `crates/core/src/detect/` |
 | T004 | Mostrar el actor de los cambios en `raptor status` | T001 | `apps/cli/` |
 | T005 | Probar los escenarios | T002, T003, T004 | `apps/cli/tests/`, `crates/core/` |
 | T006 | Cerrar la historia | T005 | `docs/` |
@@ -213,7 +213,7 @@ flowchart LR
 
 ### T003 — S3: un `git` de la sesión solo es evidencia si escribe
 
-> **Implementado en: PR #PRNUM (2026-10-28)**, en `fix/attribution-detected-session`, junto con la Enmienda (2026-10-28, `git` ajeno que no puede producir un evento) de ADR-GRP-012. **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO.** Diferencias con los pasos: la lectura única devuelve los argumentos y la redirección (`process_git_args_and_redirect` en macsys), y `detect/procs.rs` deriva `writes` y `harmless` en `GitFacts`. Linux usa la implementación por defecto de `git_facts`, que lee `cmdline` y `environ` en dos pasos. Los tests de aceptación conservan sus nombres: `subcommand_writes_table` (macsys); `a_session_git_that_only_reads_is_no_evidence`, `a_session_git_that_redirects_is_no_evidence`, `an_unreadable_session_git_is_no_evidence` y `a_writing_session_git_is_still_evidence` (`detect/tests.rs`); y `the_s3_log_line_carries_only_counters`, actualizado con `foreign_harmless` y `sessions_not_writing`.
+> **Implementado en: PR #315 (2026-10-28)**, en `fix/attribution-detected-session`, junto con la Enmienda (2026-10-28, `git` ajeno que no puede producir un evento) de ADR-GRP-012. **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO.** Diferencias con los pasos: la lectura única devuelve los argumentos y la redirección (`process_git_args_and_redirect` en macsys), y `detect/procs.rs` deriva `writes` y `harmless` en `GitFacts`. Linux usa la implementación por defecto de `git_facts`, que lee `cmdline` y `environ` en dos pasos. Los tests de aceptación conservan sus nombres: `subcommand_writes_table` (macsys); `a_session_git_that_only_reads_is_no_evidence`, `a_session_git_that_redirects_is_no_evidence`, `an_unreadable_session_git_is_no_evidence` y `a_writing_session_git_is_still_evidence` (`detect/tests.rs`); y `the_s3_log_line_carries_only_counters`, actualizado con `foreign_harmless` y `sessions_not_writing`.
 
 **Objetivo.** Un `git` de la sesión cuenta como evidencia de un evento solo si su subcomando puede mover una ref o el `HEAD` y no redirige su destino. Si no se puede saber, no cuenta.
 

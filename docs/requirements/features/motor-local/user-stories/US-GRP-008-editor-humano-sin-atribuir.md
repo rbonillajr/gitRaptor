@@ -73,7 +73,7 @@ Entonces el evento del commit figura como "sin atribuir"
 
 ## Estado de la implementación (2026-10-28)
 
-Implementado en: PR #PRNUM, en parte (T003 de [DS-US-GRP-008](../dev-specs/US-GRP-008-dev-spec.md): un `git` de la sesión solo es evidencia de S3 si su subcomando puede mover una ref o el `HEAD` y no redirige su destino, D4).
+Implementado en: PR #315, en parte (T003 de [DS-US-GRP-008](../dev-specs/US-GRP-008-dev-spec.md): un `git` de la sesión solo es evidencia de S3 si su subcomando puede mover una ref o el `HEAD` y no redirige su destino, D4).
 
 Queda pendiente: T001, T002 y T004 (el actor de los cambios sin commitear en `raptor status`), y T005 y T006 (la prueba de los tres escenarios y el cierre de la ficha). El escenario "Un commit del desarrollador junto a Claude Code no se atribuye a Claude Code" ya tiene su prueba de S3 con un `git` de lectura de la sesión vivo: `a_session_reader_does_not_take_the_developers_commit` en `apps/cli/tests/events_s4_hook_attribution.rs`.
 
