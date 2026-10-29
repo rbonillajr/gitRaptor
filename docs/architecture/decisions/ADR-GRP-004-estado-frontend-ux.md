@@ -5,15 +5,19 @@ type: adr
 status: accepted
 date: 2026-10-01
 created: 2026-10-01
-updated: 2026-10-05
+updated: 2026-10-28
 deciders: [Rene Bonilla]
-related: [BRD-GRP-001, ADR-GRP-001, ADR-GRP-002, ADR-GRP-003, ADR-GRP-005, ADR-GRP-007, ADR-CKP-003]
+related: [BRD-GRP-001, ADR-GRP-001, ADR-GRP-002, ADR-GRP-003, ADR-GRP-005, ADR-GRP-007, ADR-GRP-017, ADR-CKP-003]
+changelog:
+  - 2026-10-04: enmienda Cockpit (SEC-12 en CLI/TUI).
+  - 2026-10-05: enmienda MCP (vista acotada para un agente).
+  - 2026-10-28: enmienda de alcance D7 (las secciones 1 a 3 se aplican ya a la app de escritorio); eventos del daemon y capas que entran en UI-1.
 tags: [react, state-management, tanstack-query, zustand, jotai, xstate, react-hook-form, zod, tanstack-router, ux, optimistic-ui]
 ---
 
 # ADR-GRP-004 — Estado del frontend y patrones de UX
 
-> **Alcance:** aplica a la **Fase 3** (app de escritorio Tauri + React y webviews de la extensión). En el MVP (CLI/TUI + MCP) solo aplican los **patrones de UX** de la sección 3, adaptados a la TUI (feedback inmediato, undo antes que confirmación, teclado primero, errores accionables). **(Enmienda 2026-10-04, Cockpit)**: en el MVP aplican además la salida segura en CLI/TUI (SEC-12) y el modelo de estado de la TUI de ADR-CKP-003; ver la sección final.
+> **Alcance:** aplica a la **Fase 3** (app de escritorio Tauri + React y webviews de la extensión). En el MVP (CLI/TUI + MCP) solo aplican los **patrones de UX** de la sección 3, adaptados a la TUI (feedback inmediato, undo antes que confirmación, teclado primero, errores accionables). **(Enmienda 2026-10-04, Cockpit)**: en el MVP aplican además la salida segura en CLI/TUI (SEC-12) y el modelo de estado de la TUI de ADR-CKP-003; ver la sección final. **(Enmienda 2026-10-28, D7)**: las secciones 1 a 3 se aplican ya a la app de escritorio; solo los webviews de la extensión siguen en la Fase 3. Ver la sección final.
 
 ## Contexto
 
@@ -117,3 +121,33 @@ Decisión del orquestador (2026-10-05), validada por Arquitecto, PO y security-e
 
 - **La parte del MCP de SEC-12 queda cerrada** por ADR-MCP-001 § 5: allowlist de campos por herramienta, topes de § 6, escape con las categorías de L-03 y rechazos con código estable.
 - **CLI y TUI lanzadas por un agente**: si el solicitante resuelto es un agente, el daemon les aplica el perfil `mcp`. `raptor status` y la TUI muestran entonces la vista acotada del MCP y, en un repo no habilitado, "repo no habilitado para el MCP" con la acción del desarrollador. La regla "`raptor status` muestra lo mismo que la TUI" (US-CKP-011) vale para el desarrollador. La atribución sale del proceso, nunca del cwd: el desarrollador que trabaja en el worktree de un agente conserva su vista.
+
+## Enmienda 2026-10-28 (app de escritorio en el MVP, D7)
+
+**Decisión de Rene Bonilla (2026-10-28, D7)**: la app de escritorio entra en el MVP. **Las secciones 1 a 3 se aplican ya a la app**; los webviews de la extensión siguen en Fase 3. Las herramientas elegidas no cambian. Lo que sigue es **Decisión del orquestador (2026-10-28), validada por Arquitecto**, y solo fija cómo llega el estado del motor y qué capas entran en UI-1. La frontera con el daemon está en [ADR-GRP-017](./ADR-GRP-017-app-escritorio-cliente-daemon.md).
+
+**De dónde sale el estado del motor** (precisa el Contexto: "comandos de Tauri o JSON-RPC más un stream de eventos"):
+
+1. El backend Tauri es el cliente del canal. Mantiene la conexión con el daemon y aplica el patrón de ADR-CKP-003: instantánea N, suscripción N+1, `resync` y reconexión.
+2. El frontend pide datos con comandos de Tauri de la lista cerrada (ADR-GRP-017 § 1) desde `queryFn` de **TanStack Query**.
+3. Los eventos llegan por un `Channel` de Tauri por suscripción, en orden de secuencia. Cada evento aplica su delta con `setQueryData`. Un hueco en la secuencia o un `resync` del daemon invalidan las consultas afectadas (`invalidateQueries`), sin parchear a ciegas.
+4. Los tipos de comandos y eventos se generan desde `crates/api` (ADR-GRP-002, Enmienda 2026-10-28). No se escriben a mano.
+
+**Capas en UI-1**:
+
+| Capa (§ 1) | UI-1 | Nota |
+|---|---|---|
+| TanStack Query | **Sí** | Estado del motor: repos, worktrees, agentes, grafo, timeline, decisiones de Guardrails, conflictos previstos |
+| Zustand | **Sí** | Estado de la ventana. Las preferencias se persisten en el almacenamiento del webview, en la carpeta de datos de la app y no en el perfil, del que el daemon sigue siendo el único escritor (ADR-GRP-006) |
+| Selectores de Zustand / Jotai | Selectores, **sí**; Jotai, solo si el perfilado con 10 agentes lo pide | — |
+| XState | **UI-2** (asistentes de rebase y merge con conflictos) | El flujo de las acciones reservadas, del factor y de la ventana D5 lo dicta el daemon con `reserved-action-pending`. La UI lo pinta y no lo modela con una máquina propia que pueda divergir |
+| React Hook Form + Zod | **UI-2** (editor de la configuración) | "Añadir repo" usa el selector nativo que abre el backend |
+| TanStack Router | **Sí**, con historial en memoria o hash | La vista se restaura al reabrir la app (§ 3, "El estado sobrevive") |
+| `useState` / `useReducer` | Sí | — |
+
+**Ajustes a las secciones 2 y 3**:
+
+- **`useOptimistic` no se usa en escrituras que pasan por el ejecutor, por Guardrails o por el factor del SO** (Deshacer, merge, descartar un agente, stash, excepción, añadir o proteger un repo). Guardrails puede denegarlas y el humano puede rechazar el factor. Mostrar un éxito que luego se revierte engaña justo en las operaciones de seguridad. Para esas escrituras, "Feedback < 100 ms" se cumple con el estado pendiente y su motivo ("esperando la autenticación del sistema", "en cola"). El optimismo queda para el estado propio de la UI. Sustituye los ejemplos de la fila "Respuesta instantánea" del § 2.
+- **"Undo antes que confirmación"** se mantiene: el botón "Deshacer" lo respalda la Time Machine. Mientras el factor del SO no exista, el botón muestra el comando de terminal equivalente (ADR-GRP-017 § 5).
+- **App lanzada por un agente**: muestra la vista acotada del perfil `mcp` y lo dice ("abierta por un agente"), igual que la CLI y la TUI de la Enmienda (2026-10-05, MCP).
+- **SEC-12 en la app** (sustituye el punto 6, "Fase 3 (referencia)", de la Enmienda Cockpit): el backend aplica a todo texto no confiable las mismas categorías de escape que `present::ingest`. Dónde se comparte el saneador (candidato: `crates/api`) lo decide la Dev Spec. React lo pinta como texto: sin `dangerouslySetInnerHTML`, sin renderizar markdown de texto no confiable y sin enlaces activos desde texto del repo en UI-1. Lo comprueba una regla de ESLint (ADR-GRP-017, V5).
