@@ -99,8 +99,16 @@ fn tool_params(code: McpToolError, params: Option<&Value>) -> Option<Value> {
         McpToolError::TooManyPaths => Some(json!({"max": MAX_COMMIT_PATHS})),
         McpToolError::PolicyDenied => {
             let rules: Vec<&str> = denied_rules(params).collect();
+            let reasons: Vec<Value> = denied_reasons(params)
+                .map(|(rule, level)| json!({"rule": rule, "level": level}))
+                .collect();
             let decision = field("decision_id").filter(|v| v.is_string())?;
-            Some(json!({"rules": rules, "decision_id": decision}))
+            let mut out = json!({"rules": rules, "decision_id": decision});
+            // Absent rather than empty: a denial without a valid pair keeps the body it had.
+            if !reasons.is_empty() {
+                out["reasons"] = reasons.into();
+            }
+            Some(out)
         }
         McpToolError::FailedUnchanged if field("reason").is_some() => field("reason")
             .and_then(Value::as_str)
@@ -161,6 +169,17 @@ fn untrusted_path(params: Option<&Value>) -> Option<String> {
     Some(text)
 }
 
+/// Whether `rule` is a policy's own rule code, never repo text.
+fn is_rule_code(rule: &str) -> bool {
+    rule.len() <= 64
+        && rule
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b"-._".contains(&b))
+}
+
+/// The levels a reason of a denial may name; anything else drops the pair, not the answer.
+const DENIED_LEVELS: [&str; 6] = ["minimum", "floor", "worktree", "profile", "local", "system"];
+
 /// The rule codes of a denial: the policy's own names, never repo text.
 fn denied_rules(params: Option<&Value>) -> impl Iterator<Item = &str> {
     params
@@ -169,13 +188,43 @@ fn denied_rules(params: Option<&Value>) -> impl Iterator<Item = &str> {
         .into_iter()
         .flatten()
         .filter_map(Value::as_str)
-        .filter(|rule| {
-            rule.len() <= 64
-                && rule
-                    .bytes()
-                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b"-._".contains(&b))
+        .filter(|rule| is_rule_code(rule))
+        .take(4)
+}
+
+/// The `(rule, level)` pairs of a denial, each field validated on its own: a rule code and one
+/// of [`DENIED_LEVELS`].
+fn denied_reasons(params: Option<&Value>) -> impl Iterator<Item = (&str, &'static str)> {
+    params
+        .and_then(|p| p.get("reasons"))
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|pair| {
+            let rule = pair.get("rule")?.as_str().filter(|r| is_rule_code(r))?;
+            let level = pair.get("level")?.as_str()?;
+            let level = DENIED_LEVELS.into_iter().find(|l| *l == level)?;
+            Some((rule, level))
         })
         .take(4)
+}
+
+/// The level of a denial's rule as the CLI names it (`guard.level.*`); the safe minimum names
+/// itself through its rule.
+fn level_words(level: &str, es: bool) -> Option<&'static str> {
+    Some(match (level, es) {
+        ("floor", false) => "team configuration",
+        ("floor", true) => "configuración del equipo",
+        ("worktree", false) => "team configuration on this branch",
+        ("worktree", true) => "configuración del equipo en esta rama",
+        ("profile", false) => "personal configuration",
+        ("profile", true) => "configuración personal",
+        ("local", false) => "local configuration",
+        ("local", true) => "configuración local",
+        ("system", false) => "default value",
+        ("system", true) => "valor por defecto",
+        _ => return None,
+    })
 }
 
 /// A template with a fixed message.
@@ -483,15 +532,26 @@ el commit."
         (E::PolicyDenied, lang) => {
             let rule = denied_rules(params).next();
             let es = lang == Lang::Es;
-            let message = match (rule, es) {
-                (Some(rule), false) => {
+            let level = rule.and_then(|rule| {
+                denied_reasons(params)
+                    .find(|(r, _)| *r == rule)
+                    .and_then(|(_, level)| level_words(level, es))
+            });
+            let message = match (rule, level, es) {
+                (Some(rule), Some(level), false) => {
+                    format!("A repo rule denied the commit: {rule} ({level}).")
+                }
+                (Some(rule), Some(level), true) => {
+                    format!("Guardrails denegó el commit por una regla del repo: {rule} ({level}).")
+                }
+                (Some(rule), None, false) => {
                     format!("A repo rule denied the commit: {rule}.")
                 }
-                (Some(rule), true) => {
+                (Some(rule), None, true) => {
                     format!("Guardrails denegó el commit por una regla del repo: {rule}.")
                 }
-                (None, false) => "A repo rule denied the commit.".to_owned(),
-                (None, true) => "Guardrails denegó el commit por una regla del repo.".to_owned(),
+                (None, _, false) => "A repo rule denied the commit.".to_owned(),
+                (None, _, true) => "Guardrails denegó el commit por una regla del repo.".to_owned(),
             };
             let action = if es {
                 "Cumple la regla o pide al desarrollador que la cambie."
