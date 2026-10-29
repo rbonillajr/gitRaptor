@@ -450,3 +450,11 @@ Decisión del orquestador (2026-10-21), validada por Arquitecto y PO. Origen: [D
 - **§ 4.2, rutas**: relativas a la raíz del worktree, nunca al cwd del agente (D13); forma canónica y la misma en todas las plataformas (D2).
 - **§ 5, códigos nuevos (D3)**: `invalid-path`, `path-outside-worktree`, `too-many-paths`, `path-ignored` y `other-session-present`, que § 5 ya nombraba y ahora se emite. Una ruta mala rechaza toda la llamada y vuelve como `{"untrusted": …}` en `params.path`.
 - **§ 9, MCP05**: la mitigación de rutas apunta a § Modelo de amenazas de [DS-US-MCP-010](../../requirements/features/mcp/dev-specs/US-MCP-010-dev-spec.md#modelo-de-amenazas).
+
+## Enmienda (2026-10-28, US-GRD-016)
+
+El `status` sigue en `accepted`. Aplica D1 y D3 de DS-US-GRD-016.
+
+- **`policy-denied` con `reasons`.** El cuerpo lleva, además de `rules` y `decision_id`, `reasons: [{rule, level}]`: un par por combinación distinta, en el orden de la decisión, como mucho cuatro. Cada campo se valida (código de regla ASCII de 64 bytes como mucho; `level` de `minimum`, `floor`, `worktree`, `profile`, `local`, `system`); un par inválido se descarta, no la respuesta, y sin pares válidos `reasons` no se escribe. Los `params` del motivo (texto del repo) no se reenvían. El texto nombra el nivel de la primera regla con las palabras de la CLI.
+- **Contrato de herramienta de escritura (§ 4.1).** Toda herramienta que escribe está en `WRITE_TOOLS` con la operación del catálogo que la decide el ejecutor: tiene `mcp: true` y está gobernada por Guardrails, salvo `snapshot` (§ 4.4). Ninguna herramienta edita la configuración ni decide la cola, y el perfil MCP no recibe ningún método `guard.*`. Lo fijan pruebas de `apps/mcp/src/server.rs` y `crates/api/src/methods/mod.rs`.
+- **Pendiente (presupuesto).** El peor `policy-denied` con cuatro `reasons` no cabe en `MCP_POLICY_REFUSAL_TOKENS` (125): ver el PR de US-GRD-016.

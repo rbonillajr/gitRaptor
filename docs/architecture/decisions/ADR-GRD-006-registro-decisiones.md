@@ -234,3 +234,10 @@ Entradas de la excepción consciente ([DS-US-GRD-006](../../requirements/feature
 | Las entradas `exception*` llevan el `action_id` en la clave de agregación, solo cuando existe: las claves actuales no cambian | § 1 | D16 |
 | El tope de entradas en vuelo no descarta las `exception*` | § 1 | D16 |
 | `exception-rejected` se escribe sin sondear el disco | § 1 | D17, S-B2 |
+
+## Enmienda (2026-10-28, US-GRD-016)
+
+El `status` sigue en `accepted`. Aplica D5 y D9 de DS-US-GRD-016.
+
+- **Entrada `mcp-allowlist`.** Cada cambio efectivo de la marca del MCP (`raptor mcp enable`/`disable` con `changed`) deja una entrada `protection-state` con `layer: mcp`, sin actor ni motivos, y la operación `{"kind": "mcp-allowlist", "from": <estado>, "to": <estado>}`. Un fallo al escribirla se registra en el log del daemon (`guard_mcp_log_failed`) y no deshace la marca. Solo la ve una conexión con `guard.protection-layers` (y `guard.log-layers`, por su capa). Sin aviso: el cambio lo hizo el desarrollador con un comando reservado.
+- **Filtro por capa hecho.** `guard.log` acepta `layer` (`hooks`, `mcp`, `cockpit`); se aplica a `entries` después de los filtros de capacidad, así que una conexión sin `guard.log-layers` que pide `mcp` o `cockpit` recibe la lista vacía. El resumen no cambia. En la CLI: `raptor guard log --layer <capa>`. Cierra el pendiente de la Enmienda 2026-10-09 (TS-CKP-003).
