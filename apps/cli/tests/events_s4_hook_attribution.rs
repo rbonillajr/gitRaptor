@@ -68,9 +68,19 @@ struct FakeClaude {
 impl FakeClaude {
     /// Runs `command` in its shell and waits for it.
     fn run(&mut self, command: &str) {
+        self.start(command);
+        self.wait();
+    }
+
+    /// Starts `command` in its shell without waiting for it.
+    fn start(&mut self, command: &str) {
         let stdin = self.stdin.as_mut().unwrap();
         writeln!(stdin, "{command}").unwrap();
         stdin.flush().unwrap();
+    }
+
+    /// Waits for the command started last.
+    fn wait(&mut self) {
         let mut line = String::new();
         loop {
             line.clear();
@@ -79,7 +89,7 @@ impl FakeClaude {
                 "fake claude died"
             );
             if let Some(ok) = line.split_once(DONE).map(|(_, ok)| ok) {
-                assert_eq!(ok.trim(), "true", "{command} failed");
+                assert_eq!(ok.trim(), "true", "the command failed");
                 return;
             }
         }
@@ -622,4 +632,232 @@ fn measure_quick_commits_with_a_foreign_git_in_another_worktree() {
     println!(
         "TS-GRP-008 measurement · foreign `git status` in another worktree ({polls} runs) · quick agent commits: {runs} · {counts:?}"
     );
+}
+
+// ----- A developer's read-only `git` in the same worktree (dogfooding 2026-10-28) ------------
+
+/// A `git` of the developer that only reads, alive in the worktree until dropped: no session
+/// above it, its folder in the worktree, so before the amendment of ADR-GRP-012 (2026-10-28) S3
+/// counted it as foreign and every commit of the session it overlapped stayed "you or other".
+struct DeveloperReader(Child);
+
+impl Drop for DeveloperReader {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
+impl Machine {
+    /// A post-commit hook that waits, so the `git commit` is alive when S3 samples it: the
+    /// outcome no longer depends on the S3 race. Only without Guardrails, whose hooks it would
+    /// replace.
+    fn slow_hooks(&self) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+        let hooks = self.outside.path().join("slow-hooks");
+        if !hooks.exists() {
+            std::fs::create_dir(&hooks).unwrap();
+            let post_commit = hooks.join("post-commit");
+            std::fs::write(&post_commit, "#!/bin/sh\nsleep 1\n").unwrap();
+            std::fs::set_permissions(&post_commit, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        hooks
+    }
+
+    /// The developer's `git <args>` in the worktree, left running with its input open (as an
+    /// editor keeps `git cat-file --batch`).
+    fn developer_reader(&self, args: &[&str]) -> DeveloperReader {
+        let child = Command::new(&self.f.git)
+            .args(args)
+            .env_clear()
+            .envs(self.env())
+            .current_dir(&self.f.repo)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        DeveloperReader(child)
+    }
+
+    /// A commit by the simulated Claude Code whose `git` is alive when S3 samples it; its oid.
+    fn agent_commit_seen(&self, claude: &mut FakeClaude, n: usize) -> String {
+        claude.run(&format!(
+            "printf '{n}\\n' >> agent.txt && {} add agent.txt && {} -c core.hooksPath='{}' commit -q -m 'agent {n}' -m '{TRAILER}'",
+            self.git_line(""),
+            self.git_line(""),
+            self.slow_hooks().display()
+        ));
+        self.head()
+    }
+
+    /// A commit by the developer whose `git` is alive when S3 samples it; its oid.
+    fn human_commit_seen(&self, n: usize) -> String {
+        std::fs::write(self.f.repo.join(format!("human{n}.txt")), "h\n").unwrap();
+        let out = self.human(&format!("add human{n}.txt"));
+        assert!(out.status.success(), "{}", text(&out));
+        let out = self.human(&format!(
+            "-c core.hooksPath='{}' commit -q -m 'human {n}'",
+            self.slow_hooks().display()
+        ));
+        assert!(out.status.success(), "{}", text(&out));
+        self.head()
+    }
+
+    /// The actor `raptor timeline --json` shows for the event `e`, as the developer reads it.
+    fn timeline_actor(&self, e: &GitEventView) -> Value {
+        let out = Command::new(RAPTOR)
+            .args(["timeline", "--json"])
+            .env_clear()
+            .envs(self.env())
+            .current_dir(&self.f.repo)
+            .stdin(Stdio::null())
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "{}", text(&out));
+        let timeline: Value = serde_json::from_slice(&out.stdout).unwrap();
+        let id = format!("event:{}", e.seq);
+        timeline["entries"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|entry| entry["id"] == id.as_str())
+            .unwrap_or_else(|| panic!("no {id} in {timeline:#}"))["actor"]
+            .clone()
+    }
+}
+
+/// The dogfooding case of 2026-10-28, without Guardrails: Claude Code commits from its shell
+/// while the developer has a `git` that only reads open in the same worktree. S3 sees the
+/// session's `git` and the reader cannot move a ref, so the commit is Claude Code's (S3), not
+/// "you or other".
+#[test]
+fn a_developers_read_only_git_does_not_hide_the_agents_commit() {
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let m = Machine::new(false);
+    let mut claude = m.launch_claude();
+    let _reader = m.developer_reader(&["cat-file", "--batch"]);
+
+    let agent = m.agent_commit_seen(&mut claude, 1);
+    let e = m.event(&agent);
+    assert_eq!(e.actor, claude_code_detected(), "{e:#?}");
+    assert_eq!(m.timeline_actor(&e)["kind"], "claude-code");
+
+    let repo_id = m.repo_id();
+    drop(claude);
+    m.stop();
+    let (session, evidence) = m.stored_evidence(&repo_id, &agent);
+    assert!(session.is_some());
+    assert_eq!(evidence.as_deref(), Some(S3));
+}
+
+/// The inverse, without Guardrails: the developer commits next to the live session and their
+/// own read-only `git`. Their `git commit` is foreign and can move a ref, so the commit is never
+/// Claude Code's (BR-EDGE-004, M1 criterion 2).
+#[test]
+fn a_developers_commit_next_to_the_session_and_a_reader_stays_unattributed() {
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let m = Machine::new(false);
+    let claude = m.launch_claude();
+    let _reader = m.developer_reader(&["cat-file", "--batch"]);
+
+    let human = m.human_commit_seen(1);
+    let e = m.event(&human);
+    assert_eq!(e.actor, Actor::Unattributed, "{e:#?}");
+    assert_eq!(m.timeline_actor(&e), json!({"actor": "unattributed"}));
+
+    let repo_id = m.repo_id();
+    drop(claude);
+    m.stop();
+    let (session, evidence) = m.stored_evidence(&repo_id, &human);
+    assert_eq!(session, None);
+    assert_ne!(evidence.as_deref(), Some(S3));
+    assert_ne!(evidence.as_deref(), Some(S4));
+}
+
+/// DS-US-GRP-008 D4, without Guardrails: Claude Code has a `git` that only reads alive in the
+/// worktree (`cat-file --batch`) while the developer's editor writes a commit in process (a `git`
+/// whose folder is outside the repo, D6). S3 sees no `git` that could have made the event, so the
+/// commit is never Claude Code's: at most the single-session hint (BR-EDGE-004, M1 criterion 2).
+#[test]
+fn a_session_reader_does_not_take_the_developers_commit() {
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let m = Machine::new(false);
+    let mut claude = m.launch_claude();
+    let fifo = m.outside.path().join("reader-input");
+    let out = Command::new("/usr/bin/mkfifo").arg(&fifo).output().unwrap();
+    assert!(out.status.success(), "{}", text(&out));
+    claude.start(&format!(
+        "{} < '{}' > /dev/null",
+        m.git_line("cat-file --batch"),
+        fifo.display()
+    ));
+    // Blocks until the session's shell opens the reading end: its `git` is then starting.
+    let input = std::fs::OpenOptions::new().write(true).open(&fifo).unwrap();
+
+    std::fs::write(m.f.repo.join("editor.txt"), "e\n").unwrap();
+    let git_dir = m.f.repo.join(".git");
+    for args in ["add editor.txt", "commit -q -m editor"] {
+        let out = Command::new("/bin/sh")
+            .arg("-c")
+            .arg(m.git_line(&format!(
+                "--git-dir='{}' --work-tree='{}' {args}",
+                git_dir.display(),
+                m.f.repo.display()
+            )))
+            .env_clear()
+            .envs(m.env())
+            .current_dir(m.outside.path())
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "{}", text(&out));
+    }
+    let editor = m.head();
+    let e = m.event(&editor);
+    assert_eq!(e.actor, Actor::Unattributed, "{e:#?}");
+    assert_eq!(m.timeline_actor(&e), json!({"actor": "unattributed"}));
+
+    drop(input);
+    claude.wait();
+    let repo_id = m.repo_id();
+    drop(claude);
+    m.stop();
+    let (session, evidence) = m.stored_evidence(&repo_id, &editor);
+    assert_eq!(session, None);
+    assert_ne!(evidence.as_deref(), Some(S3));
+    // S3 did see the session's reader, and left it out (integers only, SEC-04).
+    let log = std::fs::read_to_string(m.dirs().state.join("daemon.log")).unwrap();
+    assert!(
+        log.lines().any(|l| l.contains("s3_evidence")
+            && l.contains("event=commit")
+            && !l.contains("sessions_not_writing=0")),
+        "{log}"
+    );
+}
+
+/// With Guardrails the hook proves the session's `git` (S4) before S3 looks: the developer's
+/// reader changes nothing, and the developer's own commit stays unattributed.
+#[test]
+fn with_guardrails_a_developers_reader_changes_nothing() {
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let m = Machine::new(true);
+    let mut claude = m.launch_claude();
+    let _reader = m.developer_reader(&["cat-file", "--batch"]);
+
+    let agent = m.agent_commit(&mut claude, 1);
+    let e = m.event(&agent);
+    assert_eq!(e.actor, claude_code_detected(), "{e:#?}");
+
+    let human = m.human_commit(1);
+    let e = m.event(&human);
+    assert_eq!(e.actor, Actor::Unattributed, "{e:#?}");
+
+    let repo_id = m.repo_id();
+    drop(claude);
+    m.stop();
+    let (_, evidence) = m.stored_evidence(&repo_id, &agent);
+    assert_eq!(evidence.as_deref(), Some(S4));
+    let (session, evidence) = m.stored_evidence(&repo_id, &human);
+    assert_eq!(session, None);
+    assert_ne!(evidence.as_deref(), Some(S4));
 }
