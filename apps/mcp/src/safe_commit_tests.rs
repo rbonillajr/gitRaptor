@@ -289,8 +289,8 @@ fn engine_refusals_map_to_the_tool_codes() {
     }
 }
 
-/// `policy-denied` names each rule with its level, once per distinct pair in the decision's
-/// order and at most four; `rules` stays as it was, the reasons' `params` (repo text) never
+/// `policy-denied` names each rule with its level, one pair per rule in the decision's order
+/// and at most four; `rules` stays as it was, the reasons' `params` (repo text) never
 /// travel, and the text names the level of the first rule as the CLI does.
 #[test]
 fn policy_denied_names_the_rule_and_its_level() {
@@ -322,11 +322,12 @@ fn policy_denied_names_the_rule_and_its_level() {
             guardrails: Some(denial),
         }),
     ));
+    // One pair per rule, its first level: a rule at many levels never fills the four slots.
     let expected = json!([
         {"rule": "permission.commit", "level": "floor"},
-        {"rule": "permission.commit", "level": "worktree"},
         {"rule": "policy.protected-branch", "level": "profile"},
         {"rule": "permission.merge", "level": "local"},
+        {"rule": "permission.rebase", "level": "floor"},
     ]);
     assert_eq!(param(&denied, "reasons"), Some(&expected));
     assert_eq!(
