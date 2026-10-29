@@ -47,6 +47,7 @@ use crate::predict::{
 };
 use crate::timemachine::protected::TmRepos;
 use crate::watch::{ObserverHooks, Tier};
+use crate::work_class::{self, WorkClass};
 
 /// Longest the power watcher waits on one change before it looks at its stop flag. Far under
 /// the 60 s in which a change of the power-saving mode must apply.
@@ -104,16 +105,15 @@ pub(super) fn start(daemon: &Daemon) -> Option<Box<dyn DaemonModule>> {
             return None;
         };
         let forward = tx.clone();
-        bridge = std::thread::Builder::new()
-            .name("raptor-predict-done".into())
-            .spawn(move || {
-                for done in done_rx {
-                    if forward.send(Msg::Done(done)).is_err() {
-                        break;
-                    }
+        // Default like `raptor-predict`: it only hands the pool's results to that thread.
+        bridge = work_class::spawn_unpooled(WorkClass::Default, "raptor-predict-done", move || {
+            for done in done_rx {
+                if forward.send(Msg::Done(done)).is_err() {
+                    break;
                 }
-            })
-            .ok();
+            }
+        })
+        .ok();
         // Without the bridge no result would come back: better no pool than a silent one.
         if bridge.is_none() {
             daemon.logger.warn("predict_pool_unavailable", &[]);
@@ -125,9 +125,10 @@ pub(super) fn start(daemon: &Daemon) -> Option<Box<dyn DaemonModule>> {
     if pool.is_some() {
         let (tx, stop) = (tx.clone(), Arc::clone(&watcher_stop));
         let power = power.clone();
-        let watcher = std::thread::Builder::new()
-            .name("raptor-predict-power".into())
-            .spawn(move || watch_power(&power, version, saving, &tx, &stop));
+        let watcher =
+            work_class::spawn_unpooled(WorkClass::Utility, "raptor-predict-power", move || {
+                watch_power(&power, version, saving, &tx, &stop)
+            });
         if watcher.is_err() {
             // The pool still pauses itself; only the pairs' `power-saving` state is lost.
             daemon.logger.warn("predict_power_watch_unavailable", &[]);
