@@ -173,7 +173,7 @@ fn commit_shape(r: &Rig) -> PlanShape {
         old: r.tip.clone(),
         paths: vec!["src/a.rs".into()],
         authorship: commit_facts(&r.common, MESSAGE),
-        header: commit_header(&r.common, MESSAGE),
+        header: commit_header(&r.common, MESSAGE, 1),
     }
 }
 
