@@ -60,6 +60,8 @@ struct State {
     queue: PairQueue,
     /// The common dir of each queued pair's repo.
     repos: HashMap<PairKey, PathBuf>,
+    /// Close the worker as soon as the queue is empty (every repo went dormant, D4).
+    release: bool,
     stop: bool,
 }
 
@@ -74,6 +76,8 @@ enum Step {
     Run(Job),
     /// Nothing queued for a while: the merger may release its worker.
     Idle,
+    /// Close the worker now: nothing active is left to predict (D4).
+    Release,
     /// Look at the power-saving mode again.
     Recheck,
     Stop,
@@ -138,6 +142,13 @@ impl PredictPool {
         self.shared.state().queue.len()
     }
 
+    /// Closes the worker once the queue is empty, without waiting for its idle time: no repo is
+    /// active any more (D4), so its memory must not count at rest.
+    pub fn release_worker(&self) {
+        self.shared.state().release = true;
+        self.shared.work.notify_all();
+    }
+
     /// The pool holds its queue because the power-saving mode is on.
     pub fn paused(&self) -> bool {
         self.shared.paused.load(Ordering::Acquire)
@@ -187,6 +198,7 @@ fn run(shared: &Shared, merger: &dyn DryMerger, power: &PowerMode, done: &Sender
             Step::Idle => {
                 merger.close_if_idle(Instant::now());
             }
+            Step::Release => merger.close(),
             Step::Run(job) => {
                 if done.send(merge(merger, job)).is_err() {
                     // Nobody takes the results any more.
@@ -214,6 +226,10 @@ fn next_step(shared: &Shared, power: &PowerMode) -> Step {
                 continue;
             };
             return Step::Run(Job { repo, key, triple });
+        }
+        if state.release {
+            state.release = false;
+            return Step::Release;
         }
         let (next, wait) = shared
             .work
