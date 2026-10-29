@@ -207,13 +207,19 @@ fn commit_policy_text(reason: &Reason) -> String {
     let p = &reason.params;
     let level = level_text(reason.level);
     let oid = find(p, ParamKind::Oid);
+    // A commit a plan is about to make has no oid yet.
+    let commit = if p.iter().any(|x| x.kind == ParamKind::Oid) {
+        t("guard.reason.commit-oid", &[("oid", &oid)])
+    } else {
+        t("guard.reason.new-commit", &[])
+    };
     let asked = reason.cause == Some(Cause::AskUnavailable);
     let cause = if asked { None } else { reason.cause };
     let text = match (reason.rule, cause) {
         (Rule::DiffSize, Some(Cause::Unverifiable)) => t(
             "guard.reason.diff-size-unverifiable",
             &[
-                ("oid", &oid),
+                ("commit", &commit),
                 ("limit", &find(p, ParamKind::Limit)),
                 ("level", &level),
             ],
@@ -243,7 +249,7 @@ fn commit_policy_text(reason: &Reason) -> String {
         ),
         (_, Some(Cause::BodyNotSeparated)) => t(
             "guard.reason.commit-format-body",
-            &[("oid", &oid), ("level", &level)],
+            &[("commit", &commit), ("level", &level)],
         ),
         (_, cause) => t(
             if cause == Some(Cause::TypeNotAllowed) {
@@ -252,7 +258,7 @@ fn commit_policy_text(reason: &Reason) -> String {
                 "guard.reason.commit-format"
             },
             &[
-                ("oid", &oid),
+                ("commit", &commit),
                 ("level", &level),
                 ("types", &find(p, ParamKind::Types)),
                 ("example", &commit_format_example(p)),
@@ -1650,6 +1656,29 @@ mod tests {
         assert_eq!(text, t("guard.reason.policy-unverifiable", &[]));
         assert_ne!(text, t("guard.reason.config-protected", &[("path", &"")]));
         assert!(has_key("guard.reason.policy-unverifiable"));
+    }
+
+    /// A format denial of a commit a plan is about to make has no oid: it names "the new
+    /// commit", never an empty placeholder; one with an oid keeps naming it.
+    #[test]
+    fn a_commit_policy_reason_without_an_oid_names_the_new_commit() {
+        let types = Param::new(ParamKind::Types, "feat, fix".to_owned());
+        let reason = |params: Vec<Param>| Reason {
+            rule: Rule::CommitFormat,
+            level: Level::Floor,
+            cause: None,
+            params,
+        };
+        let planned = reason_text(&reason(vec![types.clone()]), &DeniedOp::Other);
+        assert!(
+            planned.contains(&t("guard.reason.new-commit", &[])),
+            "{planned}"
+        );
+        assert!(!planned.contains("«»"), "{planned}");
+        let oid = Param::new(ParamKind::Oid, "abc123".to_owned());
+        let stored = reason_text(&reason(vec![oid, types]), &DeniedOp::Other);
+        assert!(stored.contains("abc123"), "{stored}");
+        assert!(has_key("guard.reason.new-commit") && has_key("guard.reason.commit-oid"));
     }
 
     /// Every message the log can print exists in both languages (US-GRD-005).
