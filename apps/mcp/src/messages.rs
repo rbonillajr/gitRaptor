@@ -574,10 +574,10 @@ el commit."
             let size = denied_rules(params).any(|r| r == "policy.diff-size");
             let action = match (size, es) {
                 (true, true) => {
-                    "Este repo limita el tamaño de los commits y aquí no se puede contar antes de hacerlo: haz el commit con Git directamente, donde el hook lo cuenta con exactitud."
+                    "El tamaño de un commit aún no hecho no se puede contar aquí: haz el commit con Git directamente; su hook lo cuenta."
                 }
                 (true, false) => {
-                    "This repo limits commit size, which cannot be counted here before the commit exists: make the commit with Git directly, where the hook counts it exactly."
+                    "The size of a commit not made yet cannot be counted here: commit with Git directly; its hook counts it."
                 }
                 (false, true) => "Cumple la regla o pide al desarrollador que la cambie.",
                 (false, false) => "Follow the rule or ask the developer to change it.",
@@ -823,6 +823,52 @@ mod tests {
             125,
         )
         .unwrap();
+    }
+
+    /// A size limit cannot be counted for a commit not made yet: the refusal points to Git
+    /// directly, within the budget of a `policy-denied`, in both languages.
+    #[test]
+    fn a_diff_size_denial_points_to_git_directly() {
+        use gitraptor_api::mcp_view::{MCP_POLICY_REFUSAL_TOKENS, check_token_budget};
+        for lang in [Lang::En, Lang::Es] {
+            let body = refusal(
+                ToolRefusal {
+                    code: McpToolError::PolicyDenied,
+                    params: Some(json!({
+                        "rules": ["policy.diff-size", "policy.commit-format"],
+                        "reasons": [
+                            {"rule": "policy.diff-size", "level": "floor"},
+                            {"rule": "policy.commit-format", "level": "floor"}
+                        ],
+                        "decision_id": "f".repeat(32),
+                    })),
+                },
+                lang,
+            );
+            let action = body["action"].as_str().unwrap_or_default();
+            assert!(action.contains("Git"), "{body}");
+            check_token_budget(
+                "RES-MCP-03",
+                "policy-denied diff-size",
+                &body.to_string(),
+                MCP_POLICY_REFUSAL_TOKENS,
+            )
+            .unwrap();
+        }
+        let other = refusal(
+            ToolRefusal {
+                code: McpToolError::PolicyDenied,
+                params: Some(json!({
+                    "rules": ["permission.commit"],
+                    "decision_id": "f".repeat(32),
+                })),
+            },
+            Lang::En,
+        );
+        assert!(
+            !other["action"].as_str().unwrap_or_default().contains("Git"),
+            "{other}"
+        );
     }
 
     /// RES-MCP-03 and RES-MCP-04: the worst `policy-denied` (4 rules at the longest codes, a
