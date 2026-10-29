@@ -466,13 +466,43 @@ pub struct EvaluateParams {
     pub exception_token: Option<ExceptionToken>,
 }
 
-/// Protection state of the hook layer (BR-WF-002, ADR-GRD-005 § 3). Until the
-/// MCP layer exists, only these two.
+/// Protection state of a repo (BR-WF-002, ADR-GRD-005 § 3): the hooks half is "installed" (a
+/// confirmed install in the journal), its activity is `GuardStatus.hooks`; the MCP half is the
+/// repo's mark in the MCP allowlist.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum ProtectionState {
     Unprotected,
     HooksOnly,
+    McpOnly,
+    Full,
+}
+
+impl ProtectionState {
+    /// The state of the two halves.
+    pub const fn of(hooks_installed: bool, mcp_enabled: bool) -> Self {
+        match (hooks_installed, mcp_enabled) {
+            (false, false) => Self::Unprotected,
+            (false, true) => Self::McpOnly,
+            (true, false) => Self::HooksOnly,
+            (true, true) => Self::Full,
+        }
+    }
+
+    /// Whether the hooks are installed: `HooksOnly` or `Full`.
+    pub const fn hooks_installed(self) -> bool {
+        matches!(self, Self::HooksOnly | Self::Full)
+    }
+
+    /// Whether the repo is in the MCP allowlist: `McpOnly` or `Full`.
+    pub const fn mcp_enabled(self) -> bool {
+        matches!(self, Self::McpOnly | Self::Full)
+    }
+
+    /// The state a connection without `guard.protection-layers` reads: the hooks half only.
+    pub const fn downgraded(self) -> Self {
+        Self::of(self.hooks_installed(), false)
+    }
 }
 
 /// The developer's answer to the permission (BR-AUTH-002).
@@ -1224,6 +1254,12 @@ pub enum LoggedOperation {
         cause: Option<LossCause>,
         expected: bool,
     },
+    /// The repo entered or left the MCP allowlist (BR-WF-002): the protection state before and
+    /// after. Only with `guard.protection-layers`.
+    McpAllowlist {
+        from: ProtectionState,
+        to: ProtectionState,
+    },
 }
 
 /// A reason as logged: the rule, its level and its cause, without parameters.
@@ -1292,6 +1328,10 @@ pub struct GuardLogParams {
     /// Entries returned, most recent first (default 50, at most 500).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
+    /// Only the entries of this layer. A connection without `guard.log-layers` gets none of
+    /// `mcp` or `cockpit`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layer: Option<LogLayer>,
 }
 
 /// Occurrences of the period, summing `count` (ADR-GRD-006 § 6).
@@ -1520,6 +1560,33 @@ pub struct GuardExceptionEndResult {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn protection_state_of_covers_the_four_states() {
+        for (hooks, mcp, state) in [
+            (false, false, ProtectionState::Unprotected),
+            (false, true, ProtectionState::McpOnly),
+            (true, false, ProtectionState::HooksOnly),
+            (true, true, ProtectionState::Full),
+        ] {
+            assert_eq!(ProtectionState::of(hooks, mcp), state);
+            assert_eq!(state.hooks_installed(), hooks, "{state:?}");
+            assert_eq!(state.mcp_enabled(), mcp, "{state:?}");
+        }
+    }
+
+    #[test]
+    fn downgraded_keeps_the_hooks_half() {
+        use ProtectionState::*;
+        for (state, old) in [
+            (Unprotected, Unprotected),
+            (McpOnly, Unprotected),
+            (HooksOnly, HooksOnly),
+            (Full, HooksOnly),
+        ] {
+            assert_eq!(state.downgraded(), old, "{state:?}");
+        }
+    }
 
     #[test]
     fn codes_travel_in_kebab_case() {
