@@ -202,6 +202,42 @@ fn conflicts_on_branch(report: &OverlapReport) -> Vec<&Conflict> {
         .collect()
 }
 
+/// An operation's anchor of an older generation, with a mark above the current one's, does not
+/// hide the anchor of the current generation: the generation filters before the newest is chosen.
+#[test]
+fn an_older_generation_anchor_does_not_hide_the_current_one() {
+    let w = World::new();
+    let old_prior = w.capture(6, None, None);
+    let op = w.operation(agent("s1"), 2, &old_prior, &[]);
+    // Older generation: a larger mark of another numbering.
+    w.write_api("older generation\n");
+    let old_anchor = w.capture(50, Some(&op), None);
+    // Current generation, starting at the target.
+    w.write_api("v0\n");
+    let target = w.capture(1, None, None);
+    let floor = w.seq_of(&target);
+    assert!(
+        w.seq_of(&old_anchor) < floor,
+        "the old anchor is under the floor"
+    );
+    let anchor = w.capture(3, Some(&op), None);
+
+    let report = w.run(
+        &agent("s1"),
+        &OpRef::Oplog(op),
+        &target,
+        Vec::new(),
+        floor,
+        true,
+        None,
+    );
+    assert!(
+        !report.unverified,
+        "the anchor of the current generation is B: {report:?}"
+    );
+    assert_eq!(report.last_point.as_deref(), Some(anchor.as_str()));
+}
+
 /// A snapshot of an older engine generation caused by an event with the same seq as the undone
 /// one: under the current generation's floor it is never B, so an agent's change without a B of
 /// its generation is `unverified`.
