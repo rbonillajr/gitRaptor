@@ -431,9 +431,10 @@ pub fn commit_facts(common: &Path, message: &str) -> AuthorshipFacts {
         if let Some(c) = cleanup {
             options.cleanup = Cleanup::from_config(&c);
         }
-        // `auto` picks a character absent from the message: `#` unless it is used.
+        // `auto` picks the character Git picks, the same as `commit_header`.
         match comment.as_deref() {
-            Some("auto") | None => {}
+            Some("auto") => options.comment = auto_comment(message),
+            None => {}
             Some(c) if !c.is_empty() => options.comment = c.to_owned(),
             Some(_) => {}
         }
