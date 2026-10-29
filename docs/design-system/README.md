@@ -3,9 +3,9 @@ id: DSYS-GRP-001
 title: GitRaptor Design System
 type: design-system
 status: draft
-version: 0.8
+version: 0.9
 date: 2026-10-01
-updated: 2026-10-07
+updated: 2026-10-28
 owner: Rene Bonilla
 related: [BRD-GRP-001, ADR-GRP-002, ADR-GRP-003, ADR-GRP-004, ADR-CKP-003]
 tags: [design-system, design-tokens, tui, cli, ratatui, accessibility, theming, mvp]
@@ -18,6 +18,7 @@ changelog:
   - 0.6 (2026-10-05): Paleta A («Grafito y teal») decidida por Rene Bonilla; variante para terminal clara de cada token, detección del fondo (OSC 11, `COLORFGBG`) y `--theme light|dark|high-contrast`. Cierra § 8.1 y § 8.2.
   - 0.7 (2026-10-06): Enmienda de US-CKP-001: fila sin agente, columnas de AgentList que crecen hasta su texto, "–" para un recuento que el motor no publica, y profundidad de color y símbolos detectados del entorno.
   - 0.8 (2026-10-07): **Decisión de Rene (2026-10-07)**: acepta los ajustes de contraste de la paleta A (`#949494` y `#3a3a3a`).
+  - 0.9 (2026-10-28): **D7 (decisión de Rene, 2026-10-28)**: la app de escritorio entra en el MVP. Lo diferido para la app (tipografía web, radios, espaciado, salida CSS de los tokens, temas web claro y oscuro de la paleta A, estado de React) se adelanta para UI-1; el UI kit como paquete y Storybook llegan con UI-2 (ADR-GRP-003 y ADR-GRP-004, enmiendas del 2026-10-28). La extensión de VS Code sigue en la Fase 3. Los huecos concretos están en [DSF-DSK-001 § 8 y § 11](../requirements/features/desktop/design/design-flow.md).
 ---
 
 # GitRaptor Design System
@@ -37,6 +38,8 @@ El MVP de GitRaptor (BRD-GRP-001, Fase 1) tiene **tres superficies: CLI, TUI y s
 | Convenciones de salida de la CLI | Sistema de movimiento web (Motion) |
 | Contenido: voz, tono, mensajes de error y de política (humanos y agentes) | Patrones de UX y estado de React (ADR-GRP-004) |
 | Accesibilidad en terminal | Gobierno completo con Changesets y niveles de madurez |
+
+> **Enmienda 2026-10-28 (D7):** la app de escritorio deja de estar diferida y entra en el MVP. Para UI-1 se adelantan de la columna derecha la tipografía web, los radios y el espaciado en px, la salida CSS de los tokens con los temas claro y oscuro de la paleta A y los patrones de UX y estado de React (ADR-GRP-004). El UI kit como paquete (`packages/ui`) y Storybook llegan con UI-2; Motion y el tema `vscode` siguen en la Fase 3 con la extensión. Ver [ADR-GRP-003](../architecture/decisions/ADR-GRP-003-design-system.md) y el [design flow de la app](../requirements/features/desktop/design/design-flow.md).
 
 **Regla para crecer:** los tokens se definen desde ya en un formato neutral (DTCG JSON), así la Fase 3 los reutiliza sin rehacerlos. Todo lo demás se agrega cuando una fase lo requiera.
 
