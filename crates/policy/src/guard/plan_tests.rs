@@ -181,6 +181,31 @@ fn deleting_a_worktree_is_the_deletion_of_its_branch() {
     );
 }
 
+/// Deleting a worktree deletes its branch too, so the plan carries both permissions; every
+/// other shape carries exactly its own operation of the catalog.
+#[test]
+fn delete_worktree_knows_it_deletes_the_branch() {
+    use crate::settings::model::Operation as Op;
+    let delete = PlanShape::DeleteWorktree {
+        branch: FEAT.into(),
+        tip: B.into(),
+    };
+    assert_eq!(
+        delete.catalog_operations(),
+        [Op::WorktreeRemove, Op::BranchDelete]
+    );
+    for shape in shapes() {
+        let expected: &[Op] = match &shape {
+            PlanShape::Merge { .. } => &[Op::Merge],
+            PlanShape::Rebase { .. } => &[Op::Rebase],
+            PlanShape::CreateWorktree { .. } => &[Op::WorktreeAdd],
+            PlanShape::DeleteWorktree { .. } => &[Op::WorktreeRemove, Op::BranchDelete],
+            PlanShape::Commit { .. } => &[Op::Commit],
+        };
+        assert_eq!(shape.catalog_operations(), expected, "{shape:?}");
+    }
+}
+
 /// D2: the commit is evaluated as a commit plus the move of its branch with the sentinel
 /// `old -> old` (the new oid does not exist yet), with the prepared paths preloaded and the
 /// configuration ones the prepared paths under `.gitraptor/`.
