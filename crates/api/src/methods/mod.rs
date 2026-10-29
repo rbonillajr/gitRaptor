@@ -241,6 +241,15 @@ mod tests {
         assert_eq!(resources.writes, RepoWrite::None);
     }
 
+    /// ADR-MCP-001 § 4.1, BR-AUTH-004: the MCP profile gets no Guardrails method, so no MCP tool
+    /// can read the configuration's controls, relax them or decide the queue.
+    #[test]
+    fn mcp_gets_no_guardrails_method() {
+        for m in METHODS.iter().filter(|m| module_of(m.name) == "guard") {
+            assert!(!m.mcp, "{} is a Guardrails method offered to MCP", m.name);
+        }
+    }
+
     #[test]
     fn pending_methods_name_their_story() {
         for m in METHODS.iter().filter(|m| m.implemented_by.is_some()) {

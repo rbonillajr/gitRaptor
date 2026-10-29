@@ -14,6 +14,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use gitraptor_api::UntrustedName;
+use gitraptor_api::catalog::OperationId;
 use gitraptor_api::mcp_view::{
     MAX_MCP_PART_BYTES, MCP_READ_TIME_LIMIT, McpStatusView, McpToolError, compact_schema, for_mcp,
 };
@@ -47,6 +48,28 @@ session's repo and only if the developer enabled it for MCP. Fields shaped \
 
 /// The one tool of US-MCP-003: the state of the session's repo.
 pub const STATUS_TOOL: &str = "status";
+
+/// Every tool that writes, with the catalog operation the daemon's executor decides it as
+/// (ADR-MCP-001 § 4.1): a write tool is a catalog operation or does not exist.
+pub(crate) const WRITE_TOOLS: &[(&str, OperationId)] = &[
+    (SAFE_COMMIT_TOOL, OperationId::Commit),
+    (SNAPSHOT_TOOL, OperationId::Snapshot),
+];
+
+/// The tools `tools/list` announces: `status`, the only read-only one, and [`WRITE_TOOLS`].
+fn tools() -> Vec<Tool> {
+    let mut tools = vec![status_tool()];
+    for (name, _) in WRITE_TOOLS {
+        match *name {
+            SAFE_COMMIT_TOOL => tools.push(safe_commit::tool()),
+            SNAPSHOT_TOOL => tools.push(snapshot::tool()),
+            // A name without its definition announces nothing rather than a tool that cannot
+            // be called; `every_tool_is_read_only_or_a_catalog_operation` catches it.
+            _ => {}
+        }
+    }
+    tools
+}
 
 const STATUS_DESCRIPTION: &str = "This session's repo: worktree, requester; here: your changes, \
 ahead/behind, sessions; repo: base, protection, gaps, engine if not observing, other \
@@ -164,11 +187,7 @@ impl ServerHandler for Raptor {
         _request: Option<PaginatedRequestParams>,
         _context: RequestContext<RoleServer>,
     ) -> Result<ListToolsResult, ErrorData> {
-        Ok(ListToolsResult::with_all_items(vec![
-            status_tool(),
-            snapshot::tool(),
-            safe_commit::tool(),
-        ]))
+        Ok(ListToolsResult::with_all_items(tools()))
     }
 
     async fn call_tool(
@@ -233,6 +252,45 @@ impl ServerHandler for Raptor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gitraptor_api::catalog::entry;
+
+    /// ADR-MCP-001 § 4.1, BR-AUTH-004: every tool is `status` or a write tool that is a catalog
+    /// operation open to the MCP and governed by Guardrails (the snapshot is the only one that
+    /// is not, § 4.4).
+    #[test]
+    fn every_tool_is_read_only_or_a_catalog_operation() {
+        let listed: Vec<String> = tools().iter().map(|t| t.name.to_string()).collect();
+        assert_eq!(listed.len(), 1 + WRITE_TOOLS.len(), "{listed:?}");
+        for name in &listed {
+            assert!(
+                name == STATUS_TOOL || WRITE_TOOLS.iter().any(|(w, _)| w == name),
+                "{name} is neither read-only nor a catalog operation"
+            );
+        }
+        for (name, id) in WRITE_TOOLS {
+            let e = entry(*id);
+            assert!(e.mcp, "{name}: {id:?} is not open to the MCP");
+            assert_eq!(
+                e.governed.is_some(),
+                *id != OperationId::Snapshot,
+                "{name}: {id:?} must be governed by Guardrails"
+            );
+        }
+    }
+
+    /// ADR-MCP-001 § 4.1, BR-AUTH-004: no tool edits the configuration or decides the queue.
+    #[test]
+    fn no_tool_edits_the_configuration_or_decides_the_queue() {
+        const FORBIDDEN: [&str; 11] = [
+            "config", "guard", "approve", "reject", "queue", "confirm", "exception", "install",
+            "uninstall", "enable", "disable",
+        ];
+        for tool in tools() {
+            for word in FORBIDDEN {
+                assert!(!tool.name.contains(word), "{} contains {word}", tool.name);
+            }
+        }
+    }
 
     /// Only `tools`, without `listChanged` (Q-MCP-12, Q-MCP-13).
     #[test]
