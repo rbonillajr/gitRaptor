@@ -331,7 +331,7 @@ Aplicada desde la [Dev Spec de US-TMC-004](../../requirements/features/time-mach
 
 ## Enmienda (2026-10-28, fix/nfr01-uncommitted-capture-window)
 
-**Decisión del orquestador (2026-10-04), validada por Arquitecto**. Origen: el [Brief de tm-prior-point-binding](../../dev-briefs/tm-prior-point-binding.md), Enmienda 2026-10-28 (NFR-01: una edición captada tras un `raptor restore` o `raptor undo` se perdía si seguía un `git reset --hard` crudo que no mueve `HEAD`). No cambia el esquema del oplog ni su cadena: no hay migración y los hashes no cambian. El `status` sigue en `accepted`.
+**Decisión del orquestador (2026-10-28), validada por Arquitecto**. Origen: el [Brief de tm-prior-point-binding](../../dev-briefs/tm-prior-point-binding.md), Enmienda 2026-10-28 (NFR-01: una edición captada tras un `raptor restore` o `raptor undo` se perdía si seguía un `git reset --hard` crudo que no mueve `HEAD`). No cambia el esquema del oplog ni su cadena: no hay migración y los hashes no cambian. El `status` sigue en `accepted`.
 
 | Cambio | Dónde |
 |---|---|
