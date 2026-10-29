@@ -16,6 +16,7 @@ use gitraptor_api::guard::{
 };
 use gitraptor_api::{Actor, AgentKind};
 use gitraptor_git::{Hide, PathLimits};
+use gitraptor_policy::guard::commit_format::{Header, parse_with};
 use gitraptor_policy::guard::plan::{PlanShape, Preset, normalize};
 use gitraptor_policy::guard::policies::Touched;
 
@@ -142,6 +143,7 @@ fn rebase_preset(common: &Path, branch: &str, old_tip: &str, onto: &str) -> Opti
     Some(Preset {
         touched: Some(touched.clone()),
         config_touched: Some(touched),
+        commit: None,
     })
 }
 
@@ -285,7 +287,14 @@ impl GuardrailsEngine {
             actor: agent_of(&req.actor),
             worktree: Some(&req.worktree),
             layer: log_layer(req.layer),
-            rules: RuleSet::all(),
+            // Only a commit makes a commit the plan knows ahead: its branch update carries it.
+            rules: match shape {
+                PlanShape::Commit { .. } => RuleSet {
+                    commit_policies: true,
+                    ..RuleSet::all()
+                },
+                _ => RuleSet::all(),
+            },
             authorship,
             // D12: `main` and the main branch, for everyone, while the repo is unregistered.
             unregistered_bases: Some(&[]),
@@ -430,6 +439,61 @@ pub fn commit_facts(common: &Path, message: &str) -> AuthorshipFacts {
         }
     }
     authorship::facts(message.as_bytes(), &options)
+}
+
+/// The header of a commit `message` as `git commit -F -` stores it on a branch that already has
+/// commits: cleaned the way Git cleans a message without an editor (`commit.cleanup`,
+/// `core.commentChar` of the repo under `common`), then judged like the hook judges the stored
+/// commit. The text of the message never leaves this function.
+pub fn commit_header(common: &Path, message: &str) -> Header {
+    let (cleanup, comment) = super::evaluate::open(common)
+        .map(|reader| reader.commit_message_config())
+        .unwrap_or_default();
+    let stored = stored_message(message, cleanup.as_deref(), comment.as_deref());
+    let (head, body_separated, reverts) = gitraptor_git::message_facts(&stored);
+    // A plan's commit never has two parents: `Merge …` is never Git's own message here.
+    parse_with(&head, body_separated, 1, reverts)
+}
+
+/// The message Git stores for `git commit -F -` (no editor): `verbatim` keeps it, `strip` drops
+/// the comment lines and the blank space, any other mode (the default, `whitespace`, and
+/// `scissors`, which only cuts with an editor) drops the blank space alone.
+fn stored_message(message: &str, cleanup: Option<&str>, comment: Option<&str>) -> Vec<u8> {
+    let comment = match comment {
+        // `auto` only picks another character with an editor.
+        Some("auto") | Some("") | None => "#",
+        Some(c) => c,
+    };
+    match cleanup {
+        Some("verbatim") => message.as_bytes().to_vec(),
+        Some("strip") => stripspace(message, Some(comment)),
+        _ => stripspace(message, None),
+    }
+}
+
+/// Git's `strbuf_stripspace`: trailing whitespace of every line goes, comment lines go when a
+/// prefix is given, runs of blank lines become one and none is left at either end.
+fn stripspace(message: &str, comment: Option<&str>) -> Vec<u8> {
+    let mut out = Vec::with_capacity(message.len() + 1);
+    let mut blanks = false;
+    for line in message.split('\n') {
+        if comment.is_some_and(|c| line.starts_with(c)) {
+            continue;
+        }
+        // Git's own `isspace`: space, tab, CR and LF.
+        let line = line.trim_end_matches([' ', '\t', '\r']);
+        if line.is_empty() {
+            blanks = true;
+            continue;
+        }
+        if blanks && !out.is_empty() {
+            out.push(b'\n');
+        }
+        blanks = false;
+        out.extend_from_slice(line.as_bytes());
+        out.push(b'\n');
+    }
+    out
 }
 
 #[cfg(test)]

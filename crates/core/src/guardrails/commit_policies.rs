@@ -13,6 +13,7 @@ use gitraptor_policy::guard::commit_policies::{
 };
 use gitraptor_policy::guard::glob::Budget;
 use gitraptor_policy::guard::permissions::Chain;
+use gitraptor_policy::guard::plan::PlannedCommit;
 use gitraptor_policy::guard::policies::Source;
 
 use super::layers;
@@ -127,6 +128,37 @@ pub fn changes(
             }
         })
         .collect()
+}
+
+/// What the commit a plan is about to make brings, aligned with the single update of its
+/// sentinel transaction: the same gates as [`changes`], with the header the plan already judged.
+/// The commit does not exist yet, so its size cannot be counted: when a size rule governs
+/// `actor`, nothing can be said and the movement is `unverifiable` (stricter than Git direct,
+/// whose hook counts the stored commit).
+pub fn prospective(
+    planned: &PlannedCommit,
+    rules: &CommitPolicies,
+    actor: Option<AgentKind>,
+) -> Vec<Option<NewCommits>> {
+    if !rules.needs_commit_facts(actor) {
+        return Vec::new();
+    }
+    if rules.needs_lines(actor) {
+        return vec![Some(NewCommits {
+            commits: Vec::new(),
+            unverifiable: true,
+        })];
+    }
+    vec![Some(NewCommits {
+        commits: vec![CommitFacts {
+            oid: String::new(),
+            header: planned.header.clone(),
+            parents: planned.parents,
+            files: None,
+            partial: false,
+        }],
+        unverifiable: false,
+    })]
 }
 
 /// Whether the rules deny or ask for these commits.

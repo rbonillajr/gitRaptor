@@ -114,6 +114,7 @@ impl Rig {
                 old: oid('a'),
                 paths: vec!["src/a.rs".into()],
                 authorship: commit_facts(&self.common, message),
+                header: commit_header(&self.common, message),
             }),
         )
     }
@@ -354,6 +355,7 @@ fn decide_all_applies_the_permissions_of_the_known_operations() {
         old: oid('a'),
         paths: vec!["src/a.rs".into()],
         authorship: commit_facts(&common, "message"),
+        header: commit_header(&common, "message"),
     };
     let d = decide(&commit, &[Op::Commit]);
     assert_eq!(d.effect, Effect::Deny, "{d:?}");
@@ -365,4 +367,28 @@ fn decide_all_applies_the_permissions_of_the_known_operations() {
         1,
         "{d:?}"
     );
+}
+
+/// The message a plan judges is the one `git commit -F -` stores: blank space trimmed, comment
+/// lines dropped only by `strip`, kept verbatim by `verbatim`.
+#[test]
+fn the_planned_header_is_judged_on_the_message_git_stores() {
+    let stored = |m: &str, cleanup: Option<&str>, comment: Option<&str>| {
+        String::from_utf8(stored_message(m, cleanup, comment)).unwrap()
+    };
+    assert_eq!(
+        stored("\n\nfeat: x  \n\n\n\nbody\t\n\n", None, None),
+        "feat: x\n\nbody\n"
+    );
+    assert_eq!(stored("# note\nfeat: x", None, None), "# note\nfeat: x\n");
+    assert_eq!(stored("# note\nfeat: x", Some("strip"), None), "feat: x\n");
+    assert_eq!(
+        stored("; note\nfeat: x", Some("strip"), Some(";")),
+        "feat: x\n"
+    );
+    assert_eq!(
+        stored("# note\nfeat: x", Some("scissors"), None),
+        "# note\nfeat: x\n"
+    );
+    assert_eq!(stored(" feat: x \n", Some("verbatim"), None), " feat: x \n");
 }

@@ -12,7 +12,8 @@ const MAX_PREFIXES: usize = 8;
 const PREFIXES: [&[u8]; 3] = [b"fixup! ", b"squash! ", b"amend! "];
 
 /// What the grammar says of a message.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum Verdict {
     /// The first line follows the format (or is a message Git writes) and a body is separated.
     Conforms,
@@ -23,7 +24,7 @@ pub enum Verdict {
 }
 
 /// The facts of one message the rules need; the message itself is gone.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct Header {
     pub verdict: Verdict,
     /// The type in lowercase, to compare with the list of the repo; `None` for a message that

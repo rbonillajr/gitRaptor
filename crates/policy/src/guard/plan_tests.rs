@@ -82,12 +82,14 @@ fn shapes() -> Vec<PlanShape> {
             old: A.into(),
             paths: vec!["src/a.rs".into()],
             authorship: facts_of(true),
+            header: crate::guard::commit_format::parse(b"feat: x", true, 1),
         },
         PlanShape::Commit {
             branch: FEAT.into(),
             old: A.into(),
             paths: Vec::new(),
             authorship: facts_of(false),
+            header: crate::guard::commit_format::parse(b"feat: x", true, 1),
         },
     ]
 }
@@ -217,6 +219,7 @@ fn a_commit_is_the_commit_plus_the_old_to_old_sentinel_with_the_prepared_paths()
         old: A.into(),
         paths: vec!["src/a.rs".into(), ".gitraptor/settings.json".into()],
         authorship: facts.clone(),
+        header: crate::guard::commit_format::parse(b"feat: x", true, 1),
     });
     assert_eq!(
         n.evaluated,
@@ -266,6 +269,7 @@ fn more_than_100_000_prepared_paths_are_unverifiable() {
         old: A.into(),
         paths,
         authorship: facts_of(true),
+        header: crate::guard::commit_format::parse(b"feat: x", true, 1),
     });
     let touched = n.preset[1].touched.as_ref().expect("preloaded paths");
     assert!(touched.unverifiable, "{} paths kept", touched.paths.len());
