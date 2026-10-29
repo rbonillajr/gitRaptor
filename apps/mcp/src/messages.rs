@@ -569,10 +569,18 @@ el commit."
                 (None, _, false) => "A repo rule denied the commit.".to_owned(),
                 (None, _, true) => "Guardrails denegó el commit por una regla del repo.".to_owned(),
             };
-            let action = if es {
-                "Cumple la regla o pide al desarrollador que la cambie."
-            } else {
-                "Follow the rule or ask the developer to change it."
+            // The size of a commit that does not exist yet cannot be counted: the plan denies
+            // it, and Git directly, whose hook counts the stored commit, is the way through.
+            let size = denied_rules(params).any(|r| r == "policy.diff-size");
+            let action = match (size, es) {
+                (true, true) => {
+                    "Este repo limita el tamaño de los commits y aquí no se puede contar antes de hacerlo: haz el commit con Git directamente, donde el hook lo cuenta con exactitud."
+                }
+                (true, false) => {
+                    "This repo limits commit size, which cannot be counted here before the commit exists: make the commit with Git directly, where the hook counts it exactly."
+                }
+                (false, true) => "Cumple la regla o pide al desarrollador que la cambie.",
+                (false, false) => "Follow the rule or ask the developer to change it.",
             };
             return (message, action.to_owned());
         }
