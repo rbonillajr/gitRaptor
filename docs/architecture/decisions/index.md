@@ -248,7 +248,7 @@ Los ADR-CKP-001 a 003 (aceptados el 2026-10-04) son de la feature `cockpit` (F-0
 
 - **Pregunta**: con la app de escritorio en el MVP (D7, Rene Bonilla, 2026-10-28), ¿qué perfil y qué capa recibe una app sin terminal, y cómo prueba la presencia humana sin debilitar ADR-GRP-005 § 6, NFR-02 ni BR-AUTH?
 - **Decisión**: la app es un cliente más del canal local. Para escribir, el control 3 se sustituye por el factor del SO de ADR-GRD-008, invocado por el daemon: una presencia de sesión para la capa `cockpit` y un factor por acción para lo reservado. Sin factor, la app es de solo lectura y muestra el comando de terminal. Las alphas incluyen un `.dmg` sin firmar.
-- **Estado**: `proposed`. Decisión del orquestador (2026-10-28), validada por Arquitecto. Pasa a `accepted` tras la revisión del security-expert. Lo que depende de Rene (cuenta de Apple, updater, prioridad de SPIKE-GRD-002, cask) está en su sección "Pendiente de Rene".
+- **Estado**: `proposed`. Decisión del orquestador (2026-10-28), validada por Arquitecto y security-expert ("aprobar con cambios", aplicados). Pasa a `accepted` con la enmienda de ADR-GRD-008 (A-3) y las dependencias de spike. Lo que depende de Rene (cuenta de Apple, updater, prioridad de SPIKE-GRD-002, cask) está en su sección "Pendiente de Rene".
 - **Impacta**: UI-1 y UI-2 (BR-27), SPIKE-GRD-002, TS-GRP-007, INF-GRP-002 (V3), ADR-GRP-014.
 
 ## Pendientes fuera de los ADRs
