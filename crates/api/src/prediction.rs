@@ -231,15 +231,75 @@ pub enum ListParamsError {
 
 /// The id of a pair: the hex of a stable hash (no per-run salt) of the repo id, the root of `a`
 /// and the side `b` (`None`: the base). Always [`PAIR_ID_LEN`] lowercase hex digits.
+///
+/// The hash is 64-bit FNV-1a over a length-prefixed encoding of the three fields, so no two
+/// distinct triples share an encoding and the id survives a daemon restart.
 pub fn pair_id(repo_id: &str, a: &std::path::Path, b: Option<&std::path::Path>) -> String {
-    let _ = (repo_id, a, b);
-    unimplemented!("T009")
+    let mut hash = Fnv1a::new();
+    hash.write(b"gitraptor.pair.v1");
+    hash.field(repo_id.as_bytes());
+    hash.field(a.as_os_str().as_encoded_bytes());
+    match b {
+        None => hash.write(&[0]),
+        Some(b) => {
+            hash.write(&[1]);
+            hash.field(b.as_os_str().as_encoded_bytes());
+        }
+    }
+    format!("{:016x}", hash.0)
+}
+
+/// 64-bit FNV-1a: stable across runs and platforms, unlike `std`'s randomly keyed hasher.
+struct Fnv1a(u64);
+
+impl Fnv1a {
+    const OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+    const PRIME: u64 = 0x0000_0100_0000_01b3;
+
+    fn new() -> Self {
+        Self(Self::OFFSET)
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        for byte in bytes {
+            self.0 ^= u64::from(*byte);
+            self.0 = self.0.wrapping_mul(Self::PRIME);
+        }
+    }
+
+    /// A field with its length first, so `("ab", "c")` and `("a", "bc")` differ.
+    fn field(&mut self, bytes: &[u8]) {
+        self.write(&(bytes.len() as u64).to_le_bytes());
+        self.write(bytes);
+    }
 }
 
 /// Whether `id` has the form of a [`pair_id`].
 pub fn is_pair_id(id: &str) -> bool {
-    let _ = id;
-    unimplemented!("T009")
+    id.len() == PAIR_ID_LEN && id.bytes().all(is_lower_hex)
+}
+
+fn is_lower_hex(byte: u8) -> bool {
+    byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)
+}
+
+/// Prefix of the cursors [`page`] issues: an opaque token for the client.
+const CURSOR_PREFIX: &str = "pc1.";
+
+fn cursor_for(offset: usize) -> String {
+    format!("{CURSOR_PREFIX}{offset:x}")
+}
+
+/// The offset a cursor of [`page`] carries; `None` for any other text. A page never issues
+/// offset 0 (the first page goes without a cursor).
+fn cursor_offset(cursor: &str) -> Option<usize> {
+    let digits = cursor.strip_prefix(CURSOR_PREFIX)?;
+    if digits.is_empty() || digits.len() > 16 || !digits.bytes().all(is_lower_hex) {
+        return None;
+    }
+    usize::from_str_radix(digits, 16)
+        .ok()
+        .filter(|offset| *offset > 0)
 }
 
 /// Checks `prediction.list` parameters before any lookup.
@@ -249,31 +309,202 @@ pub fn is_pair_id(id: &str) -> bool {
 /// More than [`MAX_LIST_PAIR_IDS`] ids, an id not of the form of [`pair_id`], or a cursor not
 /// issued by [`page`].
 pub fn validate_list(params: &ListPredictionParams) -> Result<(), ListParamsError> {
-    let _ = params;
-    unimplemented!("T009")
+    if let Some(ids) = &params.pair_ids {
+        if ids.len() > MAX_LIST_PAIR_IDS {
+            return Err(ListParamsError::TooManyPairIds);
+        }
+        if !ids.iter().all(|id| is_pair_id(id)) {
+            return Err(ListParamsError::MalformedPairId);
+        }
+    }
+    if let Some(cursor) = &params.cursor
+        && cursor_offset(cursor).is_none()
+    {
+        return Err(ListParamsError::MalformedCursor);
+    }
+    Ok(())
+}
+
+/// Serialized size of `value`; a value that does not serialize never fits.
+fn json_len<T: Serialize>(value: &T) -> usize {
+    serde_json::to_vec(value).map_or(usize::MAX, |bytes| bytes.len())
+}
+
+/// Bytes one more element adds to a JSON array: itself and, at worst, a comma.
+fn element_len<T: Serialize>(value: &T) -> usize {
+    json_len(value).saturating_add(1)
 }
 
 /// The summary of `pairs` that fits in `budget` serialized bytes: whole pairs in order, the
 /// rest cut with `pairs_truncated: true`, and always the eight limits.
 pub fn fit_summary(pairs: Vec<PairSummary>, budget: usize) -> PredictionSummary {
-    let _ = (pairs, budget);
-    unimplemented!("T009")
+    let mut used = json_len(&PredictionSummary {
+        limits: LimitCode::ALL.to_vec(),
+        pairs: Vec::new(),
+        // The longer of the two values, so the count is an upper bound.
+        pairs_truncated: false,
+    });
+    let total = pairs.len();
+    let mut kept = Vec::with_capacity(total);
+    for pair in pairs {
+        let size = element_len(&pair);
+        if used.saturating_add(size) > budget {
+            break;
+        }
+        used += size;
+        kept.push(pair);
+    }
+    PredictionSummary {
+        limits: LimitCode::ALL.to_vec(),
+        pairs_truncated: kept.len() < total,
+        pairs: kept,
+    }
 }
 
 /// The page of `details` (already in page order) that starts at `cursor`: at most
 /// [`MAX_PAGE_PAIRS`] pairs and [`MAX_PAGE_BYTES`] serialized, with `next_cursor` when more
 /// remain. A pair that alone does not fit is cut in `overlap` (`overlap_partial: true`) and in
 /// `conflict.files` (`truncated: true`).
+///
+/// A cursor not issued by `page` starts at the first pair: [`validate_list`] refuses it first.
 pub fn page(details: Vec<PairDetail>, cursor: Option<&str>) -> PredictionPage {
-    let _ = (details, cursor);
-    unimplemented!("T009")
+    let start = cursor.and_then(cursor_offset).unwrap_or(0);
+    let total = details.len();
+    let mut used = json_len(&PredictionPage {
+        limits: LimitCode::ALL.to_vec(),
+        pairs: Vec::new(),
+        next_cursor: Some(cursor_for(usize::MAX)),
+    });
+    let mut pairs = Vec::new();
+    for detail in details.into_iter().skip(start) {
+        if pairs.len() == MAX_PAGE_PAIRS {
+            break;
+        }
+        let size = element_len(&detail);
+        if used.saturating_add(size) <= MAX_PAGE_BYTES {
+            used += size;
+            pairs.push(detail);
+        } else if pairs.is_empty() {
+            // Alone it does not fit: cut it rather than drop it.
+            let cut = cut_detail(detail, MAX_PAGE_BYTES.saturating_sub(used));
+            pairs.push(cut);
+            break;
+        } else {
+            break;
+        }
+    }
+    let next = start.saturating_add(pairs.len());
+    PredictionPage {
+        limits: LimitCode::ALL.to_vec(),
+        pairs,
+        next_cursor: (next < total).then(|| cursor_for(next)),
+    }
+}
+
+/// `detail` with as many of its overlap paths and conflict files, in order and taken in turns,
+/// as fit `budget` serialized bytes as an array element. A list that loses entries is flagged.
+fn cut_detail(detail: PairDetail, budget: usize) -> PairDetail {
+    let PairDetail {
+        mut summary,
+        overlap,
+        conflict,
+    } = detail;
+    let (mut conflict, files) = match conflict {
+        Some(mut c) => {
+            let files = std::mem::take(&mut c.files);
+            (Some(c), files)
+        }
+        None => (None, Vec::new()),
+    };
+    let (overlap_total, files_total) = (overlap.len(), files.len());
+    let partial_before = summary.overlap_partial;
+    let truncated_before = (
+        summary.conflict_truncated,
+        conflict.as_ref().is_some_and(|c| c.truncated),
+    );
+    // Measured with the flags a cut sets, so clearing one later never grows the size.
+    summary.overlap_partial |= overlap_total > 0;
+    summary.conflict_truncated |= files_total > 0;
+    if let Some(c) = conflict.as_mut() {
+        c.truncated |= files_total > 0;
+    }
+    let mut cut = PairDetail {
+        summary,
+        overlap: Vec::with_capacity(overlap_total),
+        conflict,
+    };
+    let mut used = element_len(&cut);
+    let mut overlap = overlap.into_iter();
+    let mut files = files.into_iter();
+    let mut overlap_open = overlap_total > 0;
+    let mut files_open = cut.conflict.is_some() && files_total > 0;
+    while overlap_open || files_open {
+        if overlap_open {
+            overlap_open = match overlap.next() {
+                Some(path) if used.saturating_add(element_len(&path)) <= budget => {
+                    used += element_len(&path);
+                    cut.overlap.push(path);
+                    true
+                }
+                _ => false,
+            };
+        }
+        if files_open && let Some(c) = cut.conflict.as_mut() {
+            files_open = match files.next() {
+                Some(file) if used.saturating_add(element_len(&file)) <= budget => {
+                    used += element_len(&file);
+                    c.files.push(file);
+                    true
+                }
+                _ => false,
+            };
+        }
+    }
+    // A list that kept every entry keeps the flags it came with.
+    if cut.overlap.len() == overlap_total {
+        cut.summary.overlap_partial = partial_before;
+    }
+    if let Some(c) = cut.conflict.as_mut()
+        && c.files.len() == files_total
+    {
+        cut.summary.conflict_truncated = truncated_before.0;
+        c.truncated = truncated_before.1;
+    }
+    cut
 }
 
 /// `changed` split into batches whose `scope.event` notification fits in `budget` bytes, in
 /// order; each carries the `repo_id`, and the `removed` ids go in the first.
+///
+/// A pair that alone does not fit a batch travels alone in its own.
 pub fn split_changed(changed: PredictionChanged, budget: usize) -> Vec<PredictionChanged> {
-    let _ = (changed, budget);
-    unimplemented!("T009")
+    if json_len(&changed) <= budget {
+        return vec![changed];
+    }
+    let PredictionChanged {
+        repo_id,
+        pairs,
+        removed,
+    } = changed;
+    let empty = |removed: Vec<String>| PredictionChanged {
+        repo_id: repo_id.clone(),
+        pairs: Vec::new(),
+        removed,
+    };
+    let mut batches = Vec::new();
+    let mut batch = empty(removed);
+    let mut used = json_len(&batch);
+    for pair in pairs {
+        let size = element_len(&pair);
+        if !batch.pairs.is_empty() && used.saturating_add(size) > budget {
+            batches.push(std::mem::replace(&mut batch, empty(Vec::new())));
+            used = json_len(&batch);
+        }
+        used = used.saturating_add(size);
+        batch.pairs.push(pair);
+    }
+    batches.push(batch);
+    batches
 }
 
 #[cfg(test)]

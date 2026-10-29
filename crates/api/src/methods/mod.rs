@@ -74,6 +74,7 @@ pub const GROUPS: &[&Group] = &[
     &mcp::GROUP,
     &observation::GROUP,
     &discovery::GROUP,
+    &prediction::GROUP,
 ];
 
 /// What one contract module declares, in its own file.

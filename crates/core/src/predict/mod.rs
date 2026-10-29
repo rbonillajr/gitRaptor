@@ -20,7 +20,7 @@ use gitraptor_api::messages::BaseStatusView;
 use gitraptor_git::dry_merge::DryMergeOutcome;
 
 use crate::observe::UncommittedPaths;
-use crate::predict::worker::WorkerConfig;
+use crate::predict::worker::{WorkerConfig, WorkerLimits};
 
 /// How the daemon runs the predictor's dry merges.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -45,7 +45,17 @@ impl PredictConfig {
     /// The configuration of a real daemon (`for_current_user`, `run_process`): the worker is
     /// this binary, resolved once by `current_exe`; `Off` when it cannot be resolved.
     pub fn for_daemon() -> Self {
-        unimplemented!("T006")
+        match std::env::current_exe() {
+            Ok(program) if program.is_absolute() => Self {
+                merger: PredictMerger::Worker(WorkerConfig {
+                    program,
+                    limits: WorkerLimits::default(),
+                }),
+            },
+            // Without its own binary the daemon cannot launch the worker: it starts with the
+            // predictor off rather than not at all.
+            _ => Self::default(),
+        }
     }
 }
 

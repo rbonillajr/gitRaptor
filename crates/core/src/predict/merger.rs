@@ -21,6 +21,16 @@ pub trait DryMerger: Send + Sync {
         limits: &DryMergeLimits,
         deadline: Instant,
     ) -> Result<DryMergeOutcome, DryMergeError>;
+
+    /// Releases what the merger holds between jobs (the worker process): the pool calls it when
+    /// it pauses for power saving or stops. Nothing by default.
+    fn close(&self) {}
+
+    /// Releases it when it has been idle long enough at `now`; whether it did. The pool calls it
+    /// while its queue is empty. Nothing by default.
+    fn close_if_idle(&self, _now: Instant) -> bool {
+        false
+    }
 }
 
 /// The merge in this process, with no deadline of its own.

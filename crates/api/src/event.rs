@@ -191,6 +191,9 @@ pub const KINDS: &[EventKind] = &[
     engine_repo(OPERATION_QUEUED),
     engine_repo(OPERATION_STARTED),
     engine_repo(OPERATION_FINISHED),
+    // A batch of pairs of one repo, only for a connection with
+    // `prediction.pairs`.
+    engine_repo(crate::methods::PREDICTION_CHANGED),
     change(WORKTREE_STATE, "US-GRP-001"),
     change(GIT_EVENT, "US-GRP-002"),
     change("gap.recorded", "US-GRP-005"),

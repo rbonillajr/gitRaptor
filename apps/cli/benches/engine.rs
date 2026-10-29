@@ -19,6 +19,12 @@
 //! `t0` to `t_render` of the frame that shows it (NFR-04: 500 ms p95), and its own stage
 //! (`t_client_recv` → `t_render`: 100 ms p95). `--only tui-modify` runs it alone.
 //!
+//! Scenario `prediction`: a commit in a worktree until `prediction.changed` publishes every pair
+//! of that worktree again (gate: 5 s p95), with the engine's latency measured meanwhile
+//! (`prediction-engine`, NFR-04's budget) and the RSS of the daemon plus its predictor's worker.
+//! The daemon is this binary, so it also answers the worker's hidden subcommand.
+//! `cargo bench -p gitraptor-cli --bench engine -- --only prediction` runs it alone.
+//!
 //! Gates (exit code 1), by `--gate` (INF-GRP-002, Enmienda 2026-10-05):
 //! - `reference` (default outside CI): the p95 of the engine total (`t0` → `t_client_recv`)
 //!   above 300 ms in any scenario, or above the provisional ceiling of a burst (NFR-04).
@@ -42,6 +48,14 @@ fn main() {
 #[cfg(unix)]
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    // The daemon below is this binary, so its predictor launches this binary as its worker.
+    if args.get(1).map(String::as_str) == Some(gitraptor_core::predict::worker::WORKER_SUBCOMMAND) {
+        let served = gitraptor_core::predict::worker::serve::serve(
+            &mut std::io::stdin().lock(),
+            &mut std::io::stdout().lock(),
+        );
+        std::process::exit(i32::from(served.is_err()));
+    }
     if let Some(i) = args.iter().position(|a| a == "--daemon-root") {
         std::process::exit(unix::daemon_main(std::path::Path::new(&args[i + 1])));
     }
@@ -67,6 +81,8 @@ mod unix {
         WorktreeView,
     };
     use gitraptor_api::methods;
+    use gitraptor_api::prediction::{PairSideView, PairStateView, PairSummary, PredictionChanged};
+    use gitraptor_api::scope::{Scope, ScopeEventNotification, ScopeSnapshot};
     use gitraptor_cli::client::engine::EngineConnector;
     use gitraptor_cli::client::{self as tui_client, ClientThread};
     use gitraptor_cli::model::{ConnState, Model, Size, WorktreeState};
@@ -104,6 +120,17 @@ mod unix {
     const SETTLE: Duration = Duration::from_millis(150);
     /// Tracked file every write scenario edits (exists in profile `H`).
     const TOUCHED: &str = "bench-touched.txt";
+    /// Scenario `prediction` (`--only prediction`) and the engine measured during it.
+    const PREDICTION: &str = "prediction";
+    const PREDICTION_ENGINE: &str = "prediction-engine";
+    /// File each commit of the `prediction` scenario writes, in every worktree.
+    const PREDICTED: &str = "bench-predicted.txt";
+    /// Gate: p95 from the end of a commit to its prediction published (ADR-CKP-001 § 5).
+    const FRESHNESS_TARGET_MS: f64 = 5_000.0;
+    /// How long a commit may wait for every pair of its worktree published again.
+    const PREDICTION_DEADLINE: Duration = Duration::from_secs(30);
+    /// How long the initial calculation of every pair may take.
+    const PREDICTION_SETTLE: Duration = Duration::from_secs(600);
 
     struct Opts {
         profile: String,
@@ -303,6 +330,8 @@ mod unix {
     struct Daemon {
         child: Child,
         dirs: ProfileDirs,
+        /// The observed repo.
+        repo_id: String,
     }
 
     impl Daemon {
@@ -311,10 +340,11 @@ mod unix {
                 private_dir(&profile_root.join(dir));
             }
             let dirs = ProfileDirs::under_root(profile_root);
-            {
+            let repo_id = {
                 let (mut profile, _) = Profile::open(dirs.clone()).unwrap();
-                profile.add_repo(common_dir, None, now_ms()).unwrap();
-            }
+                let (entry, _) = profile.add_repo(common_dir, None, now_ms()).unwrap();
+                entry.repo_id
+            };
             let child = Command::new(std::env::current_exe().unwrap())
                 .arg("--daemon-root")
                 .arg(profile_root)
@@ -327,7 +357,11 @@ mod unix {
                 .stderr(Stdio::inherit())
                 .spawn()
                 .unwrap();
-            let d = Self { child, dirs };
+            let d = Self {
+                child,
+                dirs,
+                repo_id,
+            };
             let start = Instant::now();
             let mut d = d;
             while d.connect().is_none() {
@@ -438,6 +472,138 @@ mod unix {
             }
         });
         rx
+    }
+
+    /// A `prediction.changed` as the prediction subscriber got it.
+    struct PredictionReceived {
+        t_client_recv: u64,
+        data: PredictionChanged,
+    }
+
+    /// Subscribes to the repo scope with `prediction.pairs` (the library client accepts every
+    /// capability it knows) and forwards every `prediction.changed`. The pairs the snapshot
+    /// already carries come first, with the time of the snapshot.
+    fn subscribe_prediction(
+        daemon: &Daemon,
+        stop: Arc<AtomicBool>,
+    ) -> Receiver<PredictionReceived> {
+        let mut client = daemon.connect().unwrap();
+        let scope = Scope::Repo {
+            repo_id: daemon.repo_id.clone(),
+        };
+        let snap: ScopeSnapshot = client
+            .call(methods::SCOPE_SNAPSHOT, json!({"scope": scope}))
+            .unwrap();
+        let _: Value = client
+            .call(
+                methods::SCOPE_SUBSCRIBE,
+                json!({"scope": scope, "from_seq": snap.scope_seq() + 1, "run_id": snap.run_id()}),
+            )
+            .unwrap();
+        let (tx, rx) = channel();
+        if let ScopeSnapshot::Repo(repo) = &snap
+            && let Some(prediction) = &repo.repo.prediction
+        {
+            let _ = tx.send(PredictionReceived {
+                t_client_recv: monotonic_ns(),
+                data: PredictionChanged {
+                    repo_id: daemon.repo_id.clone(),
+                    pairs: prediction.pairs.clone(),
+                    removed: Vec::new(),
+                },
+            });
+        }
+        std::thread::spawn(move || {
+            while !stop.load(Ordering::Relaxed) {
+                let Ok(Some(n)) = client.next_notification(Duration::from_millis(200)) else {
+                    continue;
+                };
+                let t_client_recv = monotonic_ns();
+                if n.method != methods::NOTIFY_SCOPE_EVENT {
+                    continue;
+                }
+                let Ok(note) = serde_json::from_value::<ScopeEventNotification>(n.params) else {
+                    continue;
+                };
+                if note.event.kind != methods::PREDICTION_CHANGED {
+                    continue;
+                }
+                let Ok(data) = serde_json::from_value(note.event.data) else {
+                    continue;
+                };
+                if tx
+                    .send(PredictionReceived {
+                        t_client_recv,
+                        data,
+                    })
+                    .is_err()
+                {
+                    return;
+                }
+            }
+        });
+        rx
+    }
+
+    /// Whether `pair` has `wt` as a side.
+    fn pair_has(pair: &PairSummary, wt: &Path) -> bool {
+        [&pair.a, &pair.b].into_iter().any(|side| match side {
+            PairSideView::Worktree { root } => Path::new(root.raw()) == wt,
+            PairSideView::Base {} => false,
+        })
+    }
+
+    /// A pair whose prediction is still being computed.
+    fn computing(pair: &PairSummary) -> bool {
+        matches!(
+            pair.state,
+            PairStateView::Calculating | PairStateView::Recalculating
+        )
+    }
+
+    /// The pairs of the repo as the prediction stream tells them.
+    struct Predictions {
+        rx: Receiver<PredictionReceived>,
+        pairs: HashMap<String, PairSummary>,
+        /// When each pair last arrived.
+        seen_at: HashMap<String, u64>,
+        /// `prediction.changed` events received.
+        received: u64,
+    }
+
+    impl Predictions {
+        fn absorb(&mut self, r: PredictionReceived) {
+            self.received += 1;
+            for id in &r.data.removed {
+                self.pairs.remove(id);
+                self.seen_at.remove(id);
+            }
+            for pair in r.data.pairs {
+                self.seen_at.insert(pair.pair_id.clone(), r.t_client_recv);
+                self.pairs.insert(pair.pair_id.clone(), pair);
+            }
+        }
+
+        /// Absorbs events until `done` holds over the known pairs, or `timeout` runs out.
+        fn until(&mut self, timeout: Duration, done: impl Fn(&Self) -> bool) -> bool {
+            let deadline = Instant::now() + timeout;
+            loop {
+                while let Ok(r) = self.rx.try_recv() {
+                    self.absorb(r);
+                }
+                if done(self) {
+                    return true;
+                }
+                let Some(left) = deadline.checked_duration_since(Instant::now()) else {
+                    return false;
+                };
+                match self.rx.recv_timeout(left) {
+                    Ok(r) => self.absorb(r),
+                    Err(RecvTimeoutError::Timeout) => return false,
+                    Err(RecvTimeoutError::Disconnected) => panic!("prediction subscriber gone"),
+                }
+            }
+        }
     }
 
     /// Last known state of each worktree, from the stream.
@@ -1515,6 +1681,140 @@ mod unix {
             let (fds, watches) = descriptors(pid);
             (cpu, rss, fds, watches)
         }
+
+        /// Scenario `prediction`: a commit in a worktree until `prediction.changed` publishes
+        /// every pair of that worktree computed again (`FRESHNESS_TARGET`), and the engine's own
+        /// latency measured while the predictor works on it (`prediction-engine`, NFR-04's
+        /// budget: `ENGINE_P95`). The footprint reports the daemon and its worker.
+        fn prediction(&mut self) {
+            let stop = Arc::new(AtomicBool::new(false));
+            let mut p = Predictions {
+                rx: subscribe_prediction(&self.daemon, stop.clone()),
+                pairs: HashMap::new(),
+                seen_at: HashMap::new(),
+                received: 0,
+            };
+            let roots = self.wts.len() + 1;
+            let between = roots * (roots - 1) / 2;
+            // The initial calculation of every pair, outside the measure.
+            let ready = p.until(PREDICTION_SETTLE, |p| {
+                p.pairs.len() >= between && !p.pairs.values().any(computing)
+            });
+            if !ready {
+                self.findings.push(Finding {
+                    level: Level::Fail,
+                    scenario: PREDICTION.into(),
+                    what: format!(
+                        "the {between} pairs between worktrees never settled within {PREDICTION_SETTLE:?}"
+                    ),
+                    measured: p.pairs.len() as f64,
+                    limit: between as f64,
+                    unit: "",
+                });
+                stop.store(true, Ordering::Relaxed);
+                return;
+            }
+            let daemon_peak = RssPeak::start(self.daemon.pid());
+            let (mut freshness, mut engine) = (Vec::new(), Vec::new());
+            let (mut lost, mut engine_lost) = (0usize, 0usize);
+            let mut worker_rss_mib = 0.0f64;
+            for i in 0..self.opts.samples {
+                let wt = self.wts[i % self.wts.len()].clone();
+                let other = self.wts[(i + 1) % self.wts.len()].clone();
+                // A pending pair (no confirmed base, an operation in progress) is not computed
+                // again by a commit.
+                let watched: Vec<String> = p
+                    .pairs
+                    .values()
+                    .filter(|x| pair_has(x, &wt) && x.state != PairStateView::Pending)
+                    .map(|x| x.pair_id.clone())
+                    .collect();
+                let since = monotonic_ns();
+                self.counter += 1;
+                std::fs::write(wt.join(PREDICTED), format!("{}\n", self.counter)).unwrap();
+                git(&wt, &["add", PREDICTED]);
+                git(&wt, &["commit", "-qm", "bench prediction"]);
+                let t0 = monotonic_ns();
+                // The engine, while the predictor works on that commit.
+                match self.modify_sample(&other) {
+                    Some(s) => engine.push(s),
+                    None => engine_lost += 1,
+                }
+                let settled = p.until(PREDICTION_DEADLINE, |p| {
+                    watched.iter().all(|id| {
+                        p.seen_at.get(id).is_some_and(|t| *t >= since)
+                            && p.pairs.get(id).is_some_and(|x| !computing(x))
+                    })
+                });
+                let last = watched.iter().filter_map(|id| p.seen_at.get(id)).max();
+                match last {
+                    Some(last) if settled => {
+                        freshness.push(last.saturating_sub(t0) as f64 / 1e6);
+                    }
+                    _ => lost += 1,
+                }
+                worker_rss_mib = worker_rss_mib.max(children_rss_mib(self.daemon.pid()));
+            }
+            let daemon_rss_mib = daemon_peak.finish();
+            stop.store(true, Ordering::Relaxed);
+
+            let kept: Vec<f64> = freshness.into_iter().skip(WARMUP).collect();
+            let summary = Summary::of(&kept);
+            let (p50, p95) = summary
+                .as_ref()
+                .map_or((f64::NAN, f64::NAN), |s| (s.p50, s.p95));
+            println!(
+                "\n{PREDICTION}: commit → prediction published, {} samples (lost {lost}): p50 {p50:.0} ms · p95 {p95:.0} ms (target {FRESHNESS_TARGET_MS:.0} ms) · daemon peak RSS {daemon_rss_mib:.1} MiB + worker {worker_rss_mib:.1} MiB",
+                kept.len()
+            );
+            if summary.is_none() || p95 > FRESHNESS_TARGET_MS {
+                self.findings.push(Finding {
+                    level: Level::Fail,
+                    scenario: PREDICTION.into(),
+                    what: "p95 from the end of a commit to its prediction published".into(),
+                    measured: p95,
+                    limit: FRESHNESS_TARGET_MS,
+                    unit: "ms",
+                });
+            }
+            if lost > 0 {
+                self.findings.push(Finding {
+                    level: Level::Fail,
+                    scenario: PREDICTION.into(),
+                    what: format!(
+                        "commits without their prediction within {PREDICTION_DEADLINE:?}"
+                    ),
+                    measured: lost as f64,
+                    limit: 0.0,
+                    unit: "",
+                });
+            }
+            self.report.insert(
+                PREDICTION.into(),
+                json!({
+                    "samples": kept.len(),
+                    "lost": lost,
+                    "p50_ms": p50,
+                    "p95_ms": p95,
+                    "target_p95_ms": FRESHNESS_TARGET_MS,
+                    "events": p.received,
+                    "daemon_peak_rss_mib": daemon_rss_mib,
+                    "worker_peak_rss_mib": worker_rss_mib,
+                }),
+            );
+            self.record(PREDICTION_ENGINE, false, engine, engine_lost);
+        }
+    }
+
+    /// Resident memory of the children of `pid` (the predictor's worker), in MiB.
+    fn children_rss_mib(pid: u32) -> f64 {
+        output("/usr/bin/pgrep", &["-P", &pid.to_string()])
+            .unwrap_or_default()
+            .lines()
+            .filter_map(|l| l.trim().parse::<u32>().ok())
+            .filter_map(proc_stat)
+            .map(|s| s.rss_mib)
+            .sum()
     }
 
     /// The scenarios one measuring step produces, so a regression is confirmed by measuring the
@@ -1854,6 +2154,9 @@ mod unix {
             footprint.burst_rss_mib = scale.peak_mib.max(stress.peak_mib);
             footprint.burst_cpu_pct = stress.cpu_pct;
             footprint.burst_back_s = stress.back_s;
+        }
+        if b.wants(PREDICTION) {
+            b.prediction();
         }
         // Regression gate of the shared runners (INF-GRP-002, Enmienda 2026-10-05). Before the
         // recreation, which leaves untracked files in the worktree of the bursts.
