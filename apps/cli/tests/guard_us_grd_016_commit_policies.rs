@@ -487,3 +487,108 @@ fn safe_commit_out_of_format_is_policy_denied() {
     assert_eq!(entries.len(), 1, "one decision: {entries:#?}");
     assert_eq!(entries[0]["layer"], "mcp", "{entries:#?}");
 }
+
+/// A conforming message by `safe_commit` lands, and the plan leaves its one entry only: the
+/// child's hooks reuse the plan's decision and write none of their own.
+#[test]
+fn safe_commit_conforming_lands_with_one_entry() {
+    let m = Machine::build(Some(FORMAT), "feat-a", true, true);
+    m.edit("src/a.rs", "a2\n");
+    let commits = m.commits();
+    let mut agent = m.agent_session();
+
+    let result = agent.commit(&Machine::msg("conforming"), Some(&["src/a.rs"]));
+
+    assert_ne!(result["isError"], true, "{result}");
+    assert_eq!(
+        m.commits(),
+        commits + 1,
+        "the commit did not land: {result}"
+    );
+    let entries = m.decisions(&[]);
+    assert!(
+        entries.len() <= 1 && entries.iter().all(|e| e["layer"] == "mcp"),
+        "at most the plan's entry, layer mcp: {entries:#?}"
+    );
+}
+
+/// What Git direct does with the same message: a commit by the agent's own `git`, refused.
+fn git_direct_refuses(m: &Machine, message: &str) {
+    let file = m.f.root.join("direct-msg.txt");
+    std::fs::write(&file, message).unwrap();
+    m.f.git_in(&m.wt, &["add", "src/a.rs"]);
+    let head = m.head();
+    let raw = m.agent_sh(&format!(
+        "'{}' commit -q -F '{}'",
+        path(&m.f.git),
+        path(&file)
+    ));
+    assert!(
+        !raw.status.success(),
+        "Git direct must refuse: {}",
+        text(&raw)
+    );
+    assert!(
+        text(&raw).contains("Conventional Commits"),
+        "{}",
+        text(&raw)
+    );
+    assert_eq!(m.head(), head, "Git direct moved the branch");
+}
+
+/// The plan judged a conforming message, but Git stored another one: `safe_commit` is refused,
+/// nothing lands and the refusal names the format, like Git direct.
+fn safe_commit_refused_on_the_stored_message(m: &Machine, message: &str) {
+    m.edit("src/a.rs", "a2\n");
+    let head = m.head();
+    let mut agent = m.agent_session();
+    let result = agent.commit(message, Some(&["src/a.rs"]));
+    if result["isError"] != true {
+        let stored = m.f.git_in(&m.wt, &["cat-file", "-p", "HEAD"]);
+        panic!("safe_commit landed: {result}\nstored: {stored:?}");
+    }
+    let refused = refusal(&result);
+    assert_eq!(refused["code"], "policy-denied", "{result}");
+    assert!(
+        refused["params"]["rules"]
+            .as_array()
+            .is_some_and(|r| r.iter().any(|x| x == "policy.commit-format")),
+        "{result}"
+    );
+    assert_eq!(m.head(), head, "the branch moved");
+    drop(agent);
+    git_direct_refuses(m, message);
+}
+
+/// A `commit.cleanup=verbatim` the plan does not read (the worktree's own configuration; the
+/// plan reads only the repo's) keeps the leading blank line, so the stored first line is empty
+/// and out of format. The global level cannot stand in here: the daemon's Git reads the HOME of
+/// the account, which a test must never write.
+#[test]
+fn a_cleanup_the_plan_does_not_read_is_judged_on_the_stored_message() {
+    let m = Machine::build(Some(FORMAT), "feat-a", true, true);
+    m.f.git_in(&m.wt, &["config", "extensions.worktreeConfig", "true"]);
+    m.f.git_in(
+        &m.wt,
+        &["config", "--worktree", "commit.cleanup", "verbatim"],
+    );
+    safe_commit_refused_on_the_stored_message(&m, &format!("\nfeat: y\n\n{CLAUDE}\n"));
+}
+
+/// A repo `prepare-commit-msg` hook, chained by the dispatchers, rewrites the first line.
+#[test]
+fn a_hook_that_rewrites_the_message_is_judged_on_the_stored_message() {
+    use std::os::unix::fs::PermissionsExt;
+    let m = Machine::build(Some(FORMAT), "feat-a", true, false);
+    let hooks = m.f.repo.join(".git/hooks");
+    std::fs::create_dir_all(&hooks).unwrap();
+    let hook = hooks.join("prepare-commit-msg");
+    std::fs::write(
+        &hook,
+        "#!/bin/sh\n{ printf 'wip changes\\n\\n'; cat \"$1\"; } > \"$1.new\" && mv \"$1.new\" \"$1\"\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
+    m.ok(&["guard", "install", "--yes", &m.repo()]);
+    safe_commit_refused_on_the_stored_message(&m, &Machine::msg("rewritten"));
+}
