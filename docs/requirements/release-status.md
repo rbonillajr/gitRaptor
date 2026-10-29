@@ -10,9 +10,9 @@
 
 | Estado | Fichas |
 |---|---|
-| Implementado (`implemented`) | 58 |
+| Implementado (`implemented`) | 59 |
 | Hecho (`done`) | 3 |
-| Implementado en parte (`partially-implemented`) | 28 |
+| Implementado en parte (`partially-implemented`) | 27 |
 | Listo (`ready`) | 3 |
 | Borrador (`draft`) | 57 |
 | Bloqueado (`blocked`) | 1 |
@@ -22,7 +22,7 @@
 
 | Feature | Implementado | Hecho | Implementado en parte | Listo | Borrador | Bloqueado | Total |
 |---|---|---|---|---|---|---|---|
-| [cockpit](#cockpit) | 8 | 0 | 6 | 0 | 18 | 1 | 33 |
+| [cockpit](#cockpit) | 9 | 0 | 5 | 0 | 18 | 1 | 33 |
 | [guardrails](#guardrails) | 14 | 0 | 7 | 1 | 3 | 0 | 25 |
 | [mcp](#mcp) | 6 | 0 | 4 | 0 | 10 | 0 | 20 |
 | [motor-local](#motor-local) | 16 | 2 | 10 | 2 | 11 | 0 | 41 |
@@ -30,11 +30,12 @@
 
 ### cockpit
 
-33 fichas: 8 implementado, 6 implementado en parte, 18 borrador, 1 bloqueado.
+33 fichas: 9 implementado, 5 implementado en parte, 18 borrador, 1 bloqueado.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
 | [INF-CKP-001](features/cockpit/technical-stories/INF-CKP-001-esqueleto-tui.md) | Esqueleto de la TUI: cliente del canal, bucle TEA, saneado único y gate de 100 ms | Implementado (`implemented`) | #100, #139, #174, #153 | — |
+| [TS-CKP-001](features/cockpit/technical-stories/TS-CKP-001-predictor-conflictos.md) | Predictor de conflictos en el daemon: solape y conflicto previsto publicados para todos los clientes | Implementado (`implemented`) | #275, #314 | — |
 | [TS-CKP-002](features/cockpit/technical-stories/TS-CKP-002-catalogo-ejecutor.md) | Catálogo de operaciones de usuario y ejecutor del daemon en dos fases | Implementado (`implemented`) | #73 | — |
 | [TS-CKP-003](features/cockpit/technical-stories/TS-CKP-003-capa-cockpit-guardrails.md) | Capa cockpit en la decisión de Guardrails, ligada al git del ejecutor y registrada una sola vez | Implementado (`implemented`) | #261 | — |
 | [TS-CKP-004](features/cockpit/technical-stories/TS-CKP-004-tokens-semanticos-simbolos.md) | Tokens semánticos y símbolos con fallback en el tema de la TUI | Implementado (`implemented`) | #50, #115 | — |
@@ -43,7 +44,6 @@
 | [US-CKP-003](features/cockpit/user-stories/US-CKP-003-estados-motor-conexion.md) | La TUI dice en qué estado está el motor y qué hacer en cada caso | Implementado (`implemented`) | #282 | — |
 | [US-CKP-026](features/cockpit/user-stories/US-CKP-026-autoria-en-la-flota.md) | El desarrollador ve en la flota de quién es el último commit de cada worktree y con qué agente | Implementado (`implemented`) | #147 | — |
 | [SPIKE-CKP-001](features/cockpit/technical-stories/SPIKE-CKP-001-prediccion-5s.md) | Predicción de conflictos en ≤ 5 s p95 sin escribir en el repo: merge en memoria frente a almacén en el perfil | Implementado en parte (`partially-implemented`) | #266 | 3 |
-| [TS-CKP-001](features/cockpit/technical-stories/TS-CKP-001-predictor-conflictos.md) | Predictor de conflictos en el daemon: solape y conflicto previsto publicados para todos los clientes | Implementado en parte (`partially-implemented`) | #275 | — |
 | [US-CKP-002](features/cockpit/user-stories/US-CKP-002-orden-atencion-terminadas.md) | La lista pone primero lo que pide atención y no se llena de sesiones viejas | Implementado en parte (`partially-implemented`) | #284 | — |
 | [US-CKP-005](features/cockpit/user-stories/US-CKP-005-terminal-pequena-sin-color.md) | La TUI se puede usar en una terminal pequeña, sin color o en ASCII | Implementado en parte (`partially-implemented`) | #273 | 2 |
 | [US-CKP-020](features/cockpit/user-stories/US-CKP-020-trabajo-de-otro-actor.md) | Tocar el trabajo de otro actor exige confirmar el plan concreto | Implementado en parte (`partially-implemented`) | #220 | 3 |
@@ -245,10 +245,11 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### M2
 
-112 fichas: 35 implementado, 3 hecho, 22 implementado en parte, 3 listo, 48 borrador, 1 bloqueado.
+112 fichas: 36 implementado, 3 hecho, 21 implementado en parte, 3 listo, 48 borrador, 1 bloqueado.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
+| [TS-CKP-001](features/cockpit/technical-stories/TS-CKP-001-predictor-conflictos.md) | Predictor de conflictos en el daemon: solape y conflicto previsto publicados para todos los clientes | Implementado (`implemented`) | #275, #314 | — |
 | [TS-CKP-002](features/cockpit/technical-stories/TS-CKP-002-catalogo-ejecutor.md) | Catálogo de operaciones de usuario y ejecutor del daemon en dos fases | Implementado (`implemented`) | #73 | — |
 | [TS-CKP-003](features/cockpit/technical-stories/TS-CKP-003-capa-cockpit-guardrails.md) | Capa cockpit en la decisión de Guardrails, ligada al git del ejecutor y registrada una sola vez | Implementado (`implemented`) | #261 | — |
 | [TS-CKP-004](features/cockpit/technical-stories/TS-CKP-004-tokens-semanticos-simbolos.md) | Tokens semánticos y símbolos con fallback en el tema de la TUI | Implementado (`implemented`) | #50, #115 | — |
@@ -292,7 +293,6 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [INF-MCP-001](features/mcp/technical-stories/INF-MCP-001-corpus-seguridad-mcp.md) | Corpus de seguridad del MCP como suite de CI que bloquea el merge | Implementado en parte (`partially-implemented`) | — | — |
 | [INF-TMC-001](features/time-machine/technical-stories/INF-TMC-001-arnes-caos-recuperable.md) | Arnés de caos y de garantías de los snapshots en los tres SO | Implementado en parte (`partially-implemented`) | — | — |
 | [SPIKE-CKP-001](features/cockpit/technical-stories/SPIKE-CKP-001-prediccion-5s.md) | Predicción de conflictos en ≤ 5 s p95 sin escribir en el repo: merge en memoria frente a almacén en el perfil | Implementado en parte (`partially-implemented`) | #266 | 3 |
-| [TS-CKP-001](features/cockpit/technical-stories/TS-CKP-001-predictor-conflictos.md) | Predictor de conflictos en el daemon: solape y conflicto previsto publicados para todos los clientes | Implementado en parte (`partially-implemented`) | #275 | — |
 | [TS-GRP-004](features/motor-local/technical-stories/TS-GRP-004-canal-clientes.md) | Canal local de clientes y contrato de mensajes | Implementado en parte (`partially-implemented`) | #36, #87, #123, #133, #158 | 3 |
 | [TS-GRP-005](features/motor-local/technical-stories/TS-GRP-005-clases-trabajo-ahorro-energia.md) | Clases de trabajo del daemon y mecanismo de ahorro de energía | Implementado en parte (`partially-implemented`) | #298 | — |
 | [US-CKP-002](features/cockpit/user-stories/US-CKP-002-orden-atencion-terminadas.md) | La lista pone primero lo que pide atención y no se llena de sesiones viejas | Implementado en parte (`partially-implemented`) | #284 | — |
@@ -396,12 +396,6 @@ Predicción de conflictos en ≤ 5 s p95 sin escribir en el repo: merge en memor
 - Fase (b) con la máquina en reposo (`measure.sh`): confirma las cifras y mide el p95 del motor con la ráfaga del predictor (E9).
 - Auditoría de `exec` con el tracer del kernel, si hay permisos.
 - Linux y Windows: *Pendiente: etapa de validación multiplataforma*.
-
-### [TS-CKP-001](features/cockpit/technical-stories/TS-CKP-001-predictor-conflictos.md) — #275
-
-Predictor de conflictos en el daemon: solape y conflicto previsto publicados para todos los clientes
-
-- *La ficha no lista los pendientes en "Estado de la implementación".*
 
 ### [US-CKP-002](features/cockpit/user-stories/US-CKP-002-orden-atencion-terminadas.md) — #284
 
