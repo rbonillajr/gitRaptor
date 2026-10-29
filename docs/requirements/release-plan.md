@@ -186,7 +186,7 @@ Estados (al 2026-10-28, sacados de [release-status.md](release-status.md)): **I*
 |---|---|---|---|---|
 | US-TMC-006 | Timeline: qué cambió, cuándo y quién | Must | I (PR #198) | — |
 | US-TMC-009, US-TMC-013, US-TMC-019 | Restaurar a un punto; no pisar a otro (undo); recuperable si el proceso muere | Must | I (PR #212 y #219; PR #219; PR #247) | — |
-| US-TMC-012, US-TMC-024, US-TMC-018 | No pisar a otro (restauración, desde el 2026-10-27: TQ-18, D-TMC-30); un agente no deshace lo ajeno; los snapshots no se publican | Must | Pend | — |
+| US-TMC-012, US-TMC-024, US-TMC-018 | No pisar a otro (restauración, desde el 2026-10-27: TQ-18, D-TMC-30); un agente no deshace lo ajeno; los snapshots no se publican | Must | US-TMC-012 implementada (PR #__PR__, sin certificar, 2026-10-29); US-TMC-024 y US-TMC-018 Pend | — |
 | US-TMC-011 | Undo por agente y periodo | Must | Pend | — (P17 cerrada el 2026-10-27, Q50 de motor-local) |
 | US-TMC-005 | Previo por hooks | Should | I (PR #248) | Deuda TD-TMC-001 |
 | US-TMC-003, US-TMC-007, US-TMC-008, US-TMC-010, US-TMC-014, US-TMC-015, US-TMC-016, US-TMC-022 | Redo; filtros; correcciones; últimos N minutos; aviso del remoto; rebase a medias; disco; tope | Should | Pend | **Propuesto para recorte (pendiente de Rene): US-TMC-008, US-TMC-014 y US-TMC-022, tanda A)** |

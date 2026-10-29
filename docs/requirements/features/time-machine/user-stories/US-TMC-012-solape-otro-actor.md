@@ -2,10 +2,10 @@
 id: US-TMC-012
 title: "Un undo nunca sobrescribe trabajo posterior de otro actor"
 type: us
-status: draft
+status: implemented
 priority: high
 created: 2026-10-03
-updated: 2026-10-27
+updated: 2026-10-29
 domain: GRP
 epic: E-001
 feature: time-machine
@@ -93,3 +93,19 @@ Entonces el undo se detiene sin cambiar el repo
 - **Historias**: US-TMC-002, US-TMC-006.
 - **Externas**: ninguna. Las opciones que se ofrecen tras detenerse se precisan en el diseño (design-flow).
 - **Transversal**: transversal (lo define el Arquitecto): verificación en repos temporales, nunca en un repo real; mismo comportamiento en Windows, macOS y Linux; mensajes en inglés y español.
+
+## Estado de la implementación (2026-10-29)
+
+Implementado en: PR #__PR__ (**sin certificar**: la línea base de `/implement` no se pudo medir por la carga de la máquina; decisión del coordinador).
+
+- **Hecho:** detección del solape en dos fases (DS-US-TMC-012 T001–T007). Fase 1 en el plan del undo, antes de la comprobación de ref en uso, y fase 2 bajo el bloqueo del repo, justo antes de escribir. Se comparan los árboles entre capturas (`StoreHandle::diff_trees`, `SnapshotStore::changed_between`) y se usa la atribución vigente de los eventos del intervalo. Cada ruta y cada rama queda como `conflict` (el undo se detiene con `overlap`), `kept` (el aplicador no la toca y se informa) o `written`. Si algo no se puede verificar (no hay base, un evento ilegible, se agota el plazo de 1,5 s o se supera el tope de rutas), el undo se detiene con `overlap-unverified`. El detalle solo llega a los clientes con la capacidad `timemachine.overlap`, nunca por MCP: el MCP recibe el rechazo y el número de rutas conservadas.
+- **Tests:** los 20 criterios del contrato `docs/dev-briefs/us-tmc-012-overlap-v2.contract.json` (`crates/core/tests/us_tmc_012.rs`, `tm_apply_keep.rs`, `overlap_tests.rs`, `changed_between_tests.rs`, `diff_trees_tests.rs`, `timemachine_overlap_tests.rs`, `apps/cli/src/undo/overlap_tests.rs` y el e2e `apps/cli/tests/undo_overlap_process.rs`, solo en macOS). Además, los tests de endurecimiento de la ronda de revisión: `overlap_hardening_tests.rs`, `undo_raw_events_tests.rs`, `tm_overlap_hardening.rs`, `diff_trees_bounds_tests.rs`, `conn_kept_total_tests.rs` y `overlap_kept_total_tests.rs`.
+- **Decisiones del orquestador (2026-10-28), validadas por la revisión de código y de seguridad (opus):**
+  - `UndoError::Overlap` lleva el informe en `Box<OverlapReport>`.
+  - `is_clean` por punto pasó a ser `clean_mask(points, event_seqs, floor)`, porque recalcular las ventanas en cada punto era demasiado lento con 1.000 puntos. `before_event` usa el mismo cálculo y da los mismos resultados.
+  - El core expone `overlap::local_utc_offset_s()` para la CLI, sin dependencias nuevas.
+  - En español, el texto dice "reemplazaría" en vez de "sobrescribiría".
+  - La base B debe ser de la generación actual. Si faltan eventos con una referencia sin atribuir, el resultado es `unverified`. El aplicador conserva las etapas de conflicto del previo en las rutas `kept`. El total real de `kept` va en `kept_total`.
+  - Los criterios SAME-ACTOR y SAME-SESSION se retiraron del contrato. El e2e `the_same_agent_session_is_not_another_actor` se retiró con ellos: el undo elige el evento más reciente de la pila del worktree, sin relación con el solape.
+- **Arreglo encontrado al probar (fuera del solape, necesario para él):** la cabeza del oplog (`oplog/chain.rs`, `write_head`) usaba un único archivo temporal compartido. Dos escritores concurrentes (el daemon y un hook) se pisaban: uno fallaba después de confirmar sus filas y una captura quedaba `Pending`, así que la base B del solape no era utilizable y el undo salía `overlap-unverified` de forma intermitente. Ahora cada escritura usa su propio temporal y la cabeza nunca retrocede (lock exclusivo `oplog.head.lock`). Lo revisó opus.
+- **Pendiente:** cachear por segmento las diferencias de ramas (revisión L2). Con eventos incompletos y una referencia de agente, un movimiento de otro actor sobre una rama que la referencia también movió en el mismo segmento puede no detectarse (riesgo abierto de M-02). Restaurar un objetivo con entradas de conflicto propias puede fallar con "bad object", por un código previo a esta historia. El presupuesto con 1.000 puntos no está medido. El solape de la restauración es US-TMC-024. Linux y Windows están en XP-65.

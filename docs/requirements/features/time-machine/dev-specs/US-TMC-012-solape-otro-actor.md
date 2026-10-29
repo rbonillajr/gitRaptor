@@ -2,9 +2,9 @@
 id: DS-US-TMC-012
 title: "Dev Spec — Un undo nunca sobrescribe trabajo posterior de otro actor"
 type: dev-spec
-status: draft
+status: implemented
 created: 2026-10-27
-updated: 2026-10-27
+updated: 2026-10-29
 story: US-TMC-012
 scope: backend
 frontend_surface: false
@@ -59,6 +59,8 @@ tags: [time-machine, undo, solape, atribucion, aplicador, i18n, m2]
 ---
 
 # DS-US-TMC-012 · Un undo nunca sobrescribe trabajo posterior de otro actor
+
+> **Implementado en: PR #__PR__** (2026-10-29, sin certificar). Estado y desvíos: ficha US-TMC-012, "Estado de la implementación".
 
 ## Contexto rápido
 
