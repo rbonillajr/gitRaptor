@@ -49,7 +49,7 @@ Todas las D: «Decisión del orquestador (2026-10-04), validada por Arquitecto»
 
 ## Enmienda 2026-10-28 (NFR-01: edición tras restore)
 
-**Decisión del orquestador (2026-10-04), validada por Arquitecto.** Rama `fix/nfr01-uncommitted-capture-window`. Enmienda la ventana de D2 para el `GuaranteedPrior`.
+**Decisión del orquestador (2026-10-28), validada por Arquitecto.** Rama `fix/nfr01-uncommitted-capture-window`. Enmienda la ventana de D2 para el `GuaranteedPrior`.
 
 **Bug.** Tras un `raptor restore` o `raptor undo` (previo garantizado y ancla con el mismo `cause_operation`), la observación continua capta una edición ~1 s después. Si sigue un `git reset --hard` crudo que no mueve `HEAD`, `f_P` es ese reset (el restore no movió ningún ref): la observación de la edición queda ensombrecida por (a), y el timeline y el undo ofrecen el previo del restore, sin la edición. Reproducido en un repo temporal; evidencia de Rene: se ofreció el previo `aea6241b`/`5d254fb9` en vez de la edición.
 
