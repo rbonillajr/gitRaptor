@@ -236,7 +236,11 @@ impl RepoReader {
     pub fn commit_message_config(&self) -> (Option<String>, Option<String>) {
         let config = self.repo.config_snapshot();
         let get = |key: &str| config.string(key).map(|v| v.to_string());
-        (get("commit.cleanup"), get("core.commentChar"))
+        // Git 2.45+ reads `core.commentString` first.
+        (
+            get("commit.cleanup"),
+            get("core.commentString").or_else(|| get("core.commentChar")),
+        )
     }
 
     /// `core.hooksPath` as the repo's own configuration says (no global or system level when
