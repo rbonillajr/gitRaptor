@@ -5,7 +5,7 @@ type: adr
 status: accepted
 date: 2026-10-05
 created: 2026-10-05
-updated: 2026-10-05
+updated: 2026-10-28
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
@@ -141,6 +141,22 @@ Decisión de Rene Bonilla (2026-10-05), D4 y D5 del documento de negocio:
 3. En macOS, `raptor --version` corre en arm64 y, con Rosetta, en x86_64. En Linux, `file` confirma que el binario es estático.
 4. `release-channels.yml` no corre mientras `RELEASE_PUBLISH_CHANNELS` no valga `true`.
 5. `license.yml` está en verde: todos los crates y paquetes declaran FSL-1.1-ALv2 y `LICENSE` coincide con el SHA-256 del texto oficial con el aviso rellenado. Los canales generados declaran la misma licencia.
+
+## Enmienda 2026-10-28: canal alpha semanal
+
+**Decisión del orquestador (2026-10-28), validada por el Arquitecto**, a partir de la decisión de Rene del mismo día: acceso anticipado con entregables semanales.
+
+1. **Cadencia y versión.** Cada viernes, desde el 2026-11-06, se etiqueta `v0.1.0-alpha.N` desde `main`. La versión entra por un PR `chore(release)` que sube `[workspace.package].version` y las entradas propias de `Cargo.lock` con `tools/release/bump-version.sh`; el script falla si cambia algo más del lock. El tag se crea sobre el commit ya mergeado (el rebase-merge reescribe los SHA). `main` conserva la versión del último alpha, en lugar de `0.0.0`. **No se estampa la versión en el CI**: rompería `--locked`, la regla del § 2 (tag igual a la versión del workspace) y la reproducibilidad del binario. Los `package.json` se quedan en `0.0.0`, porque npm no publica prereleases.
+2. **Qué adjunta el borrador.** El build sigue cubriendo los 6 targets, como validación, y `render-channels.mjs` los necesita. Pero el borrador de una alpha (`*-alpha.*`) solo adjunta, vía `tools/release/select-assets.sh`: los 2 archivos de macOS (arm64 y x86_64, firma ad hoc y **sin notarizar**), sus `.sha256`, los SBOM, `install.sh` y un `SHA256SUMS` filtrado a lo adjunto. Windows y Linux se ofrecen cuando terminen su etapa de validación (SEC-06 y TS-GRP-002 siguen abiertos en Windows). Publicar el borrador sigue siendo un paso humano (§ 3). Las notas salen de `docs/releases/v0.1.0-alpha.N.md` (plantilla en `docs/releases/alpha-template.md`).
+3. **Canal.** `install.sh` con la versión fija es el canal primario. `releases/latest` ignora prereleases y borradores, así que el `install.sh` del borrador se publica con su versión **estampada por defecto** (`default_version`, solo en prereleases; el instalador del CI prueba esa misma copia). La fórmula de Homebrew queda para cuando exista el tap `rbonillajr/homebrew-gitraptor`: `release-channels.yml` no publica prereleases (`!github.event.release.prerelease`), y usarla para el alpha obligaría a cambiar el flujo o a empujar la fórmula a mano cada semana. Pasos para Rene cuando quiera Homebrew: crear el tap, el secreto `HOMEBREW_TAP_TOKEN` y la variable `RELEASE_PUBLISH_CHANNELS`, y renderizar `channels/homebrew/Formula/gitraptor.rb` del run con otro nombre (`gitraptor-alpha`).
+4. **Qué hace `install.sh` en el alpha** (revisado con `/security-review`):
+   - valida la versión contra SemVer antes de ponerla en una URL o una ruta; `--proto '=https'` siempre, y `file://` solo con `RAPTOR_DOWNLOAD_BASE` explícito (para las pruebas);
+   - verifica el SHA256 **antes de extraer**, y después comprueba que el archivo trae exactamente la carpeta y los 5 archivos esperados, sin rutas absolutas, `..` ni enlaces;
+   - fija `umask 022` y `chmod 755`; se niega a instalar en un directorio escribible por todos; `--system` instala en `/usr/local/bin` y usa `sudo` solo si el usuario no puede escribir el directorio (así un enlace plantado en un `/usr/local/bin` de Homebrew en Intel no redirige una escritura de root), exige que ese directorio sea de root y sin escritura de grupo, y escribe con nombres de `mktemp`, nunca `sudo sh`;
+   - **cuarentena de macOS**: solo en Darwin, solo si existe el atributo `com.apple.quarantine`, sobre las 3 rutas exactas (nunca `xattr -c` ni `-r`) y con un aviso explícito de que el binario no está notarizado y se verificó por SHA256. Ni `curl` ni Homebrew ponen ese atributo; lo pone el navegador. Después corre `codesign --verify` y comprueba que `raptor --version` es la versión esperada;
+   - `--uninstall` borra solo `raptor`, `raptor-mcp` y `raptor-hook` del directorio indicado, solo si son archivos regulares que llevan dentro el nombre `gitraptor` (no ejecuta nada del directorio), y aborta antes de borrar nada si uno es un enlace o ajeno; nunca `rm -r`, nunca el perfil ni la Time Machine (NFR-01); se niega mientras el autoarranque esté registrado (`raptor daemon disable` primero).
+5. **Autenticidad.** `SHA256SUMS` prueba integridad, no autenticidad. Se recomienda activar `RELEASE_ATTEST` desde la primera alpha (las attestations son públicas e irreversibles: decide Rene), que cubren también `install.sh` e `install.ps1`, y verificar con `gh attestation verify`. Las releases inmutables de GitHub deberían activarse antes de publicar la primera alpha (raíz de confianza del `curl | sh`; revisión de seguridad M-01). Hipótesis a confirmar por Rene: el repo es público; si es privado, el `curl` anónimo no funciona y el canal entero no sirve.
+6. **Validación.** `tools/release/select-assets.test.sh` e `install.test.sh` (12 casos: checksum manipulado, versión inválida, archivo con entradas ajenas o con un enlace, directorio escribible por todos, cuarentena, desinstalación y su negativa con autoarranque, con un archivo ajeno o con un enlace) corren en el job `scripts` de `release.yml`. La corrida completa del tag se prueba con el primer tag real, que corta el coordinador.
 
 ## Referencias
 

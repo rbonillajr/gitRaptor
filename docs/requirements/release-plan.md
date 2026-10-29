@@ -23,6 +23,7 @@ related: [BRD-GRP-001, INF-GRP-003, INF-GRP-004, ADR-GRP-005, ADR-GRP-014]
 |---|---|---|---|---|
 | **M1** Dogfooding | 6 criterios del [backlog](backlog.md#hito-m1--dogfooding): 10 días de uso real, detección ≥ 90 %, un `undo` real, force-push bloqueado, recursos y frescura | Construido 100 %; criterios 50 % (2 cumplidos, 2 en parte, 1 en curso, 1 sin cumplir) | 2026-10-22 a 2026-11-06 | Rene: racha de 10 días con registro diario |
 | **M2** MVP completo en macOS | Las 112 fichas Must y Should del MVP que no son de M1, implementadas; gates del MVP obligatorios en CI, rendimiento medido en la máquina de referencia y la demo del BRD § 13 en macOS. US-MCP-009 se libera junto con US-MCP-010 y US-MCP-011 (G2 y G4 de DS-US-MCP-009) | 42,0 % (34 implementadas, 3 hechas y 20 en parte de 112); solo historias 34,5 % | Central 2027-01-14; rango 2026-12-21 a 2027-01-28 | La flota y las ventanas de revisión; cierre de M1; la cola de confirmación |
+| **EA** Acceso anticipado (alpha semanal) | Hito continuo, sin fichas propias: cada viernes un tag `v0.1.0-alpha.N` desde `main` (solo macOS, sin firmar) si cumple el [criterio de cada alpha](#ea-acceso-anticipado-alpha-semanal). Se cierra con la primera `v0.1.0-beta.N` | Pipeline y guía en el PR `chore/weekly-alpha`; la primera alpha está por cortar | Primera: 2026-11-06; luego cada viernes | M1 cerrado en lo que afecte a NFR-01 (W116 y W117) |
 | **M3** Beta multiplataforma | Sobre un tag `v0.1.0-beta.N`: los XP Must de `xplat-pendientes.md` cerrados, `cargo test` y "repo intacto" en verde en Linux y Windows reales, humo de punta a punta instalado | 37,5 % (8 hechos y 8 en parte de 32) | Por recalcular (no antes del cierre de M2); la del 2026-10-08 era 2026-11-02 a 2026-12-01 | Cierre de M2; rondas manuales de Rene; una máquina con Windows 11 |
 | **M4** v0.1.0: primera release instalable (piloto interno) | Release firmada en macOS y Windows, instalación y actualización verificadas en los tres SO, primera experiencia en una máquina nueva | 14,3 % (2 en parte de 7) | Por recalcular (no antes del cierre de M2); la del 2026-10-08 era 2026-11-09 a 2026-12-15 | Cierre de M3; cuentas de firma (externos); decisión D1 |
 
@@ -153,8 +154,8 @@ Estados (al 2026-10-28, sacados de [release-status.md](release-status.md)): **I*
 | US-CKP-006, US-CKP-007, US-CKP-008, US-CKP-009, US-CKP-010 | Predicción de conflictos: choque, vigencia, aviso, base sin confirmar y KPI | Must | Pend | SPIKE-CKP-001 y TS-CKP-001 ya están en parte; faltan sus consumidores |
 | US-CKP-012, US-CKP-014, US-CKP-015, US-CKP-016, US-CKP-017, US-CKP-018, US-CKP-024 | Revisar, integrar, poner al día, choque detenido, descartar, crear worktree, integrar con seguridad | Must | Pend | — (TS-CKP-003 ya está implementada) |
 | US-CKP-019, US-CKP-021, US-CKP-022 | Por qué frena Guardrails; historial; grafo | Must | Pend | — |
-| US-CKP-004, US-CKP-011, US-CKP-013 | Recordar la vista; consulta por CLI; abrir en el editor | Should | Pend | — (US-CKP-004 tiene Dev Spec desde el 2026-10-28; US-CKP-013 guarda su aprobación en las preferencias de US-CKP-004) |
-| US-CKP-023 | Cola de confirmación en la TUI | Should | Pend (blocked) | US-GRD-015 |
+| US-CKP-004, US-CKP-011, US-CKP-013 | Recordar la vista; consulta por CLI; abrir en el editor | Should | Pend | — (US-CKP-004 tiene Dev Spec desde el 2026-10-28; US-CKP-013 guarda su aprobación en las preferencias de US-CKP-004). **Propuesto para recorte (pendiente de Rene): US-CKP-011, tanda A; US-CKP-004 y US-CKP-013 solo en la tanda B, [ver EA](#propuesta-de-recorte-de-shoulds-de-m2-pendiente-de-rene)** |
+| US-CKP-023 | Cola de confirmación en la TUI | Should | Pend (blocked) | US-GRD-015. **Propuesto para recorte (pendiente de Rene): tanda A)** |
 | TS-CKP-002, TS-CKP-004, TS-CKP-005 | Catálogo y ejecutor; tokens; widgets | Must | I | — |
 | TS-CKP-003 | Capa del Cockpit en la decisión de Guardrails | Must | I (PR #261) | — |
 | SPIKE-CKP-001 | Predicción en ≤ 5 s | Must | P (PR #266) | Fase (b) con la máquina en reposo; auditoría de `exec`; Linux y Windows |
@@ -175,7 +176,7 @@ Estados (al 2026-10-28, sacados de [release-status.md](release-status.md)): **I*
 | US-GRD-017 | Destructiva permitida con punto previo | Must | I (PR #260, PR #301) | TD-TMC-001 |
 | US-GRD-004 | Aviso de protección caída | Should | P (PR #201) | Escenario 3 (repo retirado de la observación, con US-GRP-006); vigilante de `config` para el ≤ 5 s de los repos observados; H2 por worktree (`config.worktree`) |
 | US-GRD-009, US-GRD-014 | Tamaño de diff y formato; rama base del equipo | Should | I (PR #296; PR #277) | — |
-| US-GRD-013, US-GRD-015 | Configuración por comando; cola de confirmación | Should | Pend | Dev Spec tras SPIKE-GRD-002; US-GRD-013 espera además Q-GRD-32 |
+| US-GRD-013, US-GRD-015 | Configuración por comando; cola de confirmación | Should | Pend | Dev Spec tras SPIKE-GRD-002; US-GRD-013 espera además Q-GRD-32. **Propuesto para recorte (pendiente de Rene): ambas, tanda A)** |
 | TS-GRD-001 | Configuración commiteada | Must | I (PR #27) | — |
 | SPIKE-GRD-002 | Factor de autenticación del SO (la parte de macOS) | Must | R (ready) | Plan validado (2026-10-09); falta ejecutar el prototipo y la matriz en el Mac |
 
@@ -188,7 +189,7 @@ Estados (al 2026-10-28, sacados de [release-status.md](release-status.md)): **I*
 | US-TMC-012, US-TMC-024, US-TMC-018 | No pisar a otro (restauración, desde el 2026-10-27: TQ-18, D-TMC-30); un agente no deshace lo ajeno; los snapshots no se publican | Must | Pend | — |
 | US-TMC-011 | Undo por agente y periodo | Must | Pend | — (P17 cerrada el 2026-10-27, Q50 de motor-local) |
 | US-TMC-005 | Previo por hooks | Should | I (PR #248) | Deuda TD-TMC-001 |
-| US-TMC-003, US-TMC-007, US-TMC-008, US-TMC-010, US-TMC-014, US-TMC-015, US-TMC-016, US-TMC-022 | Redo; filtros; correcciones; últimos N minutos; aviso del remoto; rebase a medias; disco; tope | Should | Pend | — |
+| US-TMC-003, US-TMC-007, US-TMC-008, US-TMC-010, US-TMC-014, US-TMC-015, US-TMC-016, US-TMC-022 | Redo; filtros; correcciones; últimos N minutos; aviso del remoto; rebase a medias; disco; tope | Should | Pend | **Propuesto para recorte (pendiente de Rene): US-TMC-008, US-TMC-014 y US-TMC-022, tanda A)** |
 | US-TMC-020 | Overhead < 200 ms | Should | Pend | — (SPIKE-TMC-001 ya está hecho) |
 | TD-TMC-001 | Previo de hook: plazo real, cupo barato y cubo «sin atribuir» acotado (US-GRD-017) | Should | Pend | — |
 | TS-TMC-001, TS-TMC-002, TS-TMC-003 | Almacén, oplog, aplicador | Must | I | — |
@@ -207,7 +208,7 @@ Estados (al 2026-10-28, sacados de [release-status.md](release-status.md)): **I*
 | US-MCP-013 | "Necesita al humano" | Must | P (PR #267) | Contrato y ejecutor hechos; aceptación de extremo a extremo en US-MCP-009 |
 | US-MCP-011, US-MCP-012, US-MCP-018, US-MCP-019 | Worktree esperado, `undo`, `safe_rebase`, `create_worktree` | Must | Pend | — (TS-CKP-003 ya está implementada) |
 | US-MCP-016 | `check_conflicts` | Must | Pend | TS-CKP-001 (en parte) |
-| US-MCP-014 | Acción en espera del humano | Should | Pend | US-GRD-015 |
+| US-MCP-014 | Acción en espera del humano | Should | Pend | US-GRD-015. **Propuesto para recorte (pendiente de Rene): tanda A)** |
 | US-MCP-015 | Métricas del MCP | Should | Pend | — |
 | INF-MCP-001 | Corpus de seguridad en CI | Must | P | Casos de las herramientas futuras; Linux y Windows (XP-42) |
 
@@ -218,7 +219,7 @@ Estados (al 2026-10-28, sacados de [release-status.md](release-status.md)): **I*
 | US-GRP-020, US-GRP-022 | Repos descubiertos | Should | I | — |
 | US-GRP-003, US-GRP-005, US-GRP-010 | Estado especial; lo que no se vio; corregir la atribución | Must | I (PR #274; PR #280 y #285; PR #300) | Windows (XP-60 para US-GRP-010) |
 | US-GRP-008 | El editor nunca se atribuye | Must | Pend | — |
-| US-GRP-006, US-GRP-011, US-GRP-013, US-GRP-016 | Historial de un repo retirado; sesiones compartidas; umbral por repo; rama base del equipo | Should | Pend | — |
+| US-GRP-006, US-GRP-011, US-GRP-013, US-GRP-016 | Historial de un repo retirado; sesiones compartidas; umbral por repo; rama base del equipo | Should | Pend | **Propuesto para recorte (pendiente de Rene): US-GRP-006, solo tanda B (el cuerpo de la ficha dice Must, ver Huecos)** |
 | TS-GRP-003, TS-GRP-006 | Daemon, niveles | Must | I | — |
 | TS-GRP-001, TS-GRP-002 | Almacén, lectura | Must | D (done) | — |
 | TS-GRP-004 | Canal: N8 a N11 y retención de la auditoría | Should | P | — |
@@ -376,6 +377,73 @@ La pista B (cuentas, firma, tap, nombres de npm, runbook, CHANGELOG, `SECURITY.m
 - **Conservadora: 2026-12-15.** Si la firma de Windows empieza tarde, pasa a ser la ruta crítica: fecha de inicio más 2 a 6 semanas.
 - **Riesgo de ruta crítica:** la firma de Windows (identidad y elegibilidad) y la máquina con Windows 11, no el código: el pipeline ya existe y tiene un ensayo en verde.
 
+## EA: Acceso anticipado (alpha semanal)
+
+> Decisión de Rene (2026-10-28), validada por el Arquitecto y el PO (decisión del orquestador, 2026-10-28). El proceso y el versionado están en la enmienda del 2026-10-28 de [ADR-GRP-014](../architecture/decisions/ADR-GRP-014-pipeline-release-distribucion.md).
+
+**Objetivo.** Que un grupo pequeño use GitRaptor en su Mac con entregables semanales, mientras M2 sigue su curso. No es un hito con fichas: es una cadencia sobre `main`. Corre **en paralelo a M2** y no bloquea su cierre. Los dogfoods de M1 se hacen con el mismo binario.
+
+**Qué sale.** Cada viernes, desde el **2026-11-06**, un tag `v0.1.0-alpha.N` desde `main`, que produce un borrador de GitHub Release (prerelease) con `raptor`, `raptor-mcp` y `raptor-hook` para macOS arm64 y x86_64, `SHA256SUMS`, los SBOM e `install.sh`. **Sin firma ni notarización**, y las notas lo avisan. Windows y Linux no se ofrecen hasta que terminen su etapa de validación. Publicar el borrador es un paso humano (de Rene).
+
+**Criterio de cada alpha** (si algo falla, ese viernes no hay alpha; el número `N` no se consume y se anota el motivo):
+
+1. **CI en verde** en el commit de `main` que se etiqueta, incluidos los gates obligatorios (repo intacto y corpus de seguridad del MCP).
+2. **Pruebas de humo del orquestador** con el binario instalado por `install.sh`, en un repo de demo de macOS (nunca este repo ni el perfil real): instalar y `raptor --version`; `raptor repo add`; `raptor guard install` con un force-push bloqueado; abrir la TUI; conectar Claude Code (`raptor mcp install` y `raptor mcp enable`); `raptor undo` y `raptor restore` de una operación destructiva; desinstalar (`install.sh --uninstall`) comprobando que el perfil y la Time Machine quedan intactos.
+3. **Ninguna regresión de NFR-01 abierta con severidad alta** en macOS. El riesgo 12 solo afecta a Windows y figura en las notas como limitación conocida.
+4. **Notas de la versión en es y en**, hechas con [`docs/releases/alpha-template.md`](../releases/alpha-template.md) y guardadas como `docs/releases/v0.1.0-alpha.N.md` (el borrador las usa).
+
+**Procedimiento del viernes** (unos 10 minutos del coordinador; detalle en la enmienda del ADR):
+
+1. Rama desde `origin/main`: `sh tools/release/bump-version.sh 0.1.0-alpha.N` (sube `[workspace.package].version` y las entradas propias de `Cargo.lock`, y falla si cambia algo más).
+2. Notas en `docs/releases/v0.1.0-alpha.N.md`, PR `chore(release): v0.1.0-alpha.N` y rebase-merge con el CI en verde.
+3. Etiqueta anotada sobre el SHA ya mergeado de `origin/main` (el rebase reescribe los SHA): `git tag -a v0.1.0-alpha.N origin/main` y `git push origin v0.1.0-alpha.N`.
+4. `release.yml` deja el borrador; el coordinador corre las pruebas de humo y Rene lo publica.
+
+**Criterio de salida del hito.** Se cierra con la primera `v0.1.0-beta.N` (criterio 1 de M3); desde ahí las prereleases son betas. Mientras tanto, `main` lleva la versión del último alpha (ya no `0.0.0`).
+
+**No cambia** lo que ya decidió Rene: la v0.1.0 sigue siendo el piloto interno de M4, con release firmada. Las alphas no sustituyen a M3 ni a M4.
+
+### Propuesta de recorte de Shoulds de M2 (pendiente de Rene)
+
+> **Propuesto, no aplicado.** Ninguna ficha sale del plan hasta que Rene decida: siguen en las tablas de M2, marcadas "propuesto para recorte (pendiente de Rene)". Propone el PO y valida el Scrum Master (2026-10-28), porque la app de escritorio (W118) y las alphas semanales consumen capacidad de M2 y la fecha central (2027-01-14) no debe moverse. Ningún BR-xx se elimina: se aplazan a después de v0.1.0. Cada decisión se anotará en el backlog (criterio 1 de M2).
+
+**Cómo se calculan los días.** Cada ficha sin empezar vale 1 ficha equivalente; con 0,86 fichas por día natural (velocidad central del plan), son unos **1,2 días de calendario de M2**. Ninguna ficha tiene estimación propia, así que las cifras son del plan, no de cada historia.
+
+**Tanda A (recomendada): 8 fichas, unos 9,3 días centrales** (6,4 optimista; 11,1 conservador, con el colchón del 10 %).
+
+| Id | Título | Días est. | Motivo | Riesgo (BR/NFR) |
+|---|---|---|---|---|
+| US-GRD-015 | Cola de confirmación | 1,2 | La decisión 4 ya la recomendaba sacar: S-GRD-9 trata "pedir confirmación" como "denegar" | BR-13 (Should) queda entera para después de v0.1.0. US-MCP-013 (Must) cubre la variante "denegar" |
+| US-CKP-023 | Cola de confirmación en la TUI | 1,2 | Bloqueada por US-GRD-015 | BR-13 |
+| US-MCP-014 | Acción en espera del humano | 1,2 | Bloqueada por US-GRD-015 | BR-13; la variante "pendiente" de BR-MCP-WF-004 se queda sin historia |
+| US-GRD-013 | Configuración por comando | 1,2 | La alpha no la necesita: la configuración se edita a mano. Q-GRD-32 sigue abierta | BR-11 (Must) queda cubierta por TS-GRD-001 y US-GRD-007. BR-CONS-006 de Guardrails se aplaza |
+| US-CKP-011 | Consulta de la flota por CLI | 1,2 | La flota ya se ve en la TUI y por `status` del MCP; la app la repetirá | CONS-007 del Cockpit se aplaza. Sin NFR |
+| US-TMC-008 | Timeline con la atribución vigente | 1,2 | US-TMC-011 no depende de ella | BR-10 queda cubierta por US-TMC-006 y US-TMC-007. NFR-01 no cambia |
+| US-TMC-014 | Aviso de que lo deshecho sigue en el remoto | 1,2 | Es informativa: los datos locales no se pierden | BR-TMC-EDGE-001 se aplaza. **Riesgo de UX en la alpha**: el usuario puede creer que el undo también deshizo el remoto (las notas de la alpha lo avisan) |
+| US-TMC-022 | Límite de disco | 1,2 | US-TMC-016 (retención por defecto) se queda en M2 | RES-09. Vuelve si `status --resources` mide un almacén de más de 2 GiB (misma regla que en M1) |
+
+**Tanda B (solo si hace falta): 3 fichas, unos 3,5 días centrales.**
+
+| Id | Título | Días est. | Riesgo |
+|---|---|---|---|
+| US-CKP-004 y US-CKP-013 | Vista recordada; abrir en el editor | 2,3 | US-CKP-013 guarda su aprobación en las preferencias de US-CKP-004, así que van juntas. Recortarla quita "abrirlo en el editor" de **BR-07, que es Must**: lo decide Rene |
+| US-GRP-006 | Retirar un repo y volver a añadirlo | 1,2 | El cuerpo de la ficha dice Must y el índice Should (ver Huecos): resolverlo antes. Perder ese historial se percibiría como pérdida de datos; US-GRD-004 (escenario 3) la usa y quedaría en `P` con la decisión escrita |
+
+**Lo que no se recorta, y por qué.** US-GRD-018 (el resto, 0,6 días): lo que falta es el nivel local, que depende de US-GRP-013 (Should, fuera de ambas tandas); recortarla sola libera poco. US-TMC-003 y US-TMC-010: BR-09 (Must) dice "Undo / Redo" y comparten motor con US-TMC-011. US-TMC-007: la necesitan US-MCP-017 y US-TMC-011 (Must). US-TMC-015, US-TMC-016 y TD-TMC-001: protegen NFR-01. US-TMC-020 y US-MCP-015: los exigen los criterios 4 y 5 de M2. US-GRP-011, US-GRP-013 y US-GRP-016: están en cadenas de Musts. US-GRD-004 y US-CKP-025: son la experiencia de la alpha. TS-GRP-004 N8 a N11 y TS-GRP-005: canal de la app y RES-07.
+
+**Impacto en días** (cifras del Scrum Master).
+
+- La tanda A libera **unos 9,3 días centrales** (6,4 optimista; 11,1 conservador).
+- Lo que consume lo nuevo es de **9 a 14 días** (punto medio ~11,5): W118 UI-1 (de 5 a 7), el pipeline de la alpha (de 1,2 a 2,3, una vez), unas 10 alphas semanales (de 3 a 5) y los arreglos de lo que reporten los usuarios (sin estimar: el rango es un piso, no un techo).
+- **Con solo la tanda A, la fecha central pasa de 2027-01-14 a unos 2027-01-16** si el consumo es el medio, y se mantiene solo si el consumo no pasa de ~9 días. Con **A + B** (unos 12,8 días) se cubre hasta ~13 días de consumo.
+- El escenario conservador (2027-01-28) ya estaba más allá de la fecha y ningún recorte lo arregla.
+- **Riesgos de la cuenta.** El cuello de botella son la revisión y el CI de macOS, que la app y las alphas comparten: el coste real puede superar los días de desarrollo. Hay un posible doble conteo: el optimista del plan "no incluye los 3 a 6 días de la cola", pero sus fichas equivalentes sí cuentan US-GRD-015, US-CKP-023 y US-MCP-014; si es así, cortarlas no libera esos días en el optimista.
+- **Dependencias blandas de Musts a anotar si se corta**: US-TMC-011 cita US-TMC-014 y US-TMC-008 como opcionales (si se cortan, su PR lleva por su cuenta la llamada a `on_remote::check`); US-CKP-021 cita US-TMC-022 solo para las causas "límite y cuota" del aviso de purga, que quedan fuera de M2.
+- **Contrato del generador.** Si Rene aprueba, las fichas se mueven de las tablas de M2 a "Fuera de M2" y se regenera `release-status.md` (el total de 112 baja).
+- Recalcular en la primera revisión semanal tras la `v0.1.0-alpha.1`.
+
+**Recomendación del PO y del SM.** Aprobar la tanda A ya y decidir la B después de la primera alpha, cuando se conozca el consumo real.
+
 ## Decisiones de Rene (2026-10-08)
 
 | # | Decisión | Respuesta de Rene | Efecto en el plan |
@@ -409,6 +477,8 @@ Ninguna se ha tomado en su nombre. Hasta que decida, el plan aplica la recomenda
 | 13 | **Paridad en la beta:** ¿M3 exige paridad funcional en Windows y Linux o acepta degradación documentada (*fail-closed*)? | Aceptar degradación documentada en los XP Should | Criterio 5 de M3 |
 | 14 | **TD-GRP-002** (NFR-04 y NFR-05 no se cumplen bajo ráfaga en macOS): ¿bloquea v0.1.0 o sale como limitación conocida? | Bloquea M2 (criterio 4) | — |
 | 15 | **Pendientes de Guardrails:** Q-GRD-32 (relajación personal pendiente), adopción del factor por D8, desinstalar y la excepción de OQ-GRD-008-3: ¿entran al MVP? | Decidir antes de la ola de Guardrails de M2 | Pueden añadir historias a M2 |
+| 16 | **Recorte de Shoulds de M2** (tandas A y B de [EA](#propuesta-de-recorte-de-shoulds-de-m2-pendiente-de-rene)) | Aprobar la tanda A; decidir la B tras la primera alpha | Libera unos 9,3 días centrales; sin recorte, M2 se mueve unos 2 días o más |
+| 17 | **Alpha semanal:** repo público (el `curl` anónimo falla si es privado), activar `RELEASE_ATTEST` desde `alpha.1` (las attestations son públicas e irreversibles), aprobar el filtro de solo macOS del borrador, y crear el tap `rbonillajr/homebrew-gitraptor` si quiere Homebrew además del script | Repo público; `RELEASE_ATTEST` sí desde la primera alpha; script como canal primario | Define cómo se instala la alpha y si hay autenticidad verificable |
 
 ## Huecos y limpieza
 
