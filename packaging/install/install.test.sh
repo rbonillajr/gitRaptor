@@ -29,7 +29,7 @@ sha() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1"; else shasu
 mkdist() { # $1 = case dir
   mkdir -p "$1/stage/$name"
   for b in raptor raptor-mcp raptor-hook; do
-    printf '#!/bin/sh\necho "raptor %s"\n' "$V" > "$1/stage/$name/$b"
+    printf '#!/bin/sh\n# gitraptor\necho "raptor %s"\n' "$V" > "$1/stage/$name/$b"
     chmod 755 "$1/stage/$name/$b"
   done
   echo readme > "$1/stage/$name/README.md"; echo license > "$1/stage/$name/LICENSE"
@@ -102,10 +102,16 @@ mkdir -p "$root/home/.config/systemd/user"; : > "$root/home/.config/systemd/user
 if HOME="$root/home" RAPTOR_INSTALL_DIR="$c/bin" sh "$installer" --uninstall >/dev/null 2>&1 || [ ! -e "$c/bin/raptor" ]; then
   check no "uninstall refuses while autostart is on"; else check ok "uninstall refuses while autostart is on"; fi
 
-# 11. uninstall does not remove a foreign `raptor`
+# 11. uninstall removes nothing when one file is foreign or a symlink
 rm -f "$root/home/.config/systemd/user/gitraptor.service"
 c="$root/un3"; mkdir -p "$c/bin"; printf '#!/bin/sh\necho other tool\n' > "$c/bin/raptor"; chmod 755 "$c/bin/raptor"
 HOME="$root/home" RAPTOR_INSTALL_DIR="$c/bin" sh "$installer" --uninstall >/dev/null 2>&1 || true
 if [ -e "$c/bin/raptor" ]; then check ok "uninstall keeps a foreign raptor"; else check no "uninstall keeps a foreign raptor"; fi
 
+
+# 12. a symlink among the 3 names aborts the uninstall before anything is removed
+c="$root/un4"; mkdist "$c"; pack "$c"; run "$c" --version "$V" >/dev/null 2>&1
+rm "$c/bin/raptor-hook"; ln -s /bin/sh "$c/bin/raptor-hook"
+HOME="$root/home" RAPTOR_INSTALL_DIR="$c/bin" sh "$installer" --uninstall >/dev/null 2>&1 || true
+if [ -e "$c/bin/raptor" ] && [ -e "$c/bin/raptor-mcp" ]; then check ok "uninstall aborts on a symlink before removing"; else check no "uninstall aborts on a symlink before removing"; fi
 printf '%s checks passed\n' "$pass"

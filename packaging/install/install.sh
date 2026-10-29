@@ -12,8 +12,9 @@
 # touches GitRaptor's data (the profile and the Time Machine store).
 #
 # macOS: the early-access builds are not notarized. A download made by a browser carries the
-# com.apple.quarantine attribute and Gatekeeper blocks it; when (and only when) that attribute is
-# present on the 3 installed files, the installer removes it and says so.
+# com.apple.quarantine attribute, and an archive saved that way may carry it into the extracted
+# files (curl alone does not set it). When (and only when) the attribute is present on the 3
+# installed files, the installer removes it and says so.
 #
 # Environment:
 #   RAPTOR_VERSION        version to install (default: the one this script was published with,
@@ -22,7 +23,8 @@
 #   RAPTOR_DOWNLOAD_BASE  base URL that holds the archives and SHA256SUMS (default: the release);
 #                         a file:// URL is accepted only here, for tests
 #
-# SHA256SUMS comes from the same origin as the archive: it proves integrity, not authenticity.
+# SHA256SUMS comes from the same origin as the archive: it proves integrity, not authenticity, and
+# the early-access builds are verifiable only if the release is attested (RELEASE_ATTEST).
 # For authenticity, verify the archive with `gh attestation verify <archive> --repo rbonillajr/gitRaptor`.
 set -eu
 umask 022
@@ -56,8 +58,10 @@ case "$install_dir" in
   *) fail "the install directory must be an absolute path: $install_dir" ;;
 esac
 
-# Copy and replace one file next to its destination, with sudo only when --system asks for it.
-priv() { if [ "$system" = 1 ] && [ "$(id -u)" != 0 ]; then sudo "$@"; else "$@"; fi; }
+# sudo only when the directory is not writable by this user. A directory the user can write
+# (Homebrew on Intel owns /usr/local/bin) needs no privilege, and using sudo there would let a
+# planted symlink in it redirect a root-owned write.
+priv() { if [ "$system" = 1 ] && [ "$(id -u)" != 0 ] && [ ! -w "$install_dir" ]; then sudo "$@"; else "$@"; fi; }
 
 if [ "$uninstall" = 1 ]; then
   # Only the 3 files this installer puts there, and only when they are regular files that are
@@ -65,12 +69,15 @@ if [ "$uninstall" = 1 ]; then
   if [ -f "$HOME/Library/LaunchAgents/dev.gitraptor.plist" ] || [ -f "$HOME/.config/systemd/user/gitraptor.service" ]; then
     fail "the login autostart is still registered; run 'raptor daemon disable' first, then uninstall"
   fi
-  if [ -x "$install_dir/raptor" ] && [ ! -L "$install_dir/raptor" ]; then
-    case "$("$install_dir/raptor" --version 2>/dev/null || true)" in
-      "raptor "*) ;;
-      *) fail "$install_dir/raptor is not GitRaptor's; nothing was removed" ;;
-    esac
-  fi
+  # Nothing in the directory is executed. A file is removed only if it is a regular file that
+  # carries GitRaptor's name inside it; any symlink or foreign file aborts before anything goes.
+  for bin in $BINS; do
+    f="$install_dir/$bin"
+    [ -e "$f" ] || [ -L "$f" ] || continue
+    if [ -L "$f" ] || [ ! -f "$f" ] || ! grep -aq gitraptor "$f"; then
+      fail "$f is not a GitRaptor binary installed by this script; nothing was removed"
+    fi
+  done
   removed=0
   for bin in $BINS; do
     if [ -f "$install_dir/$bin" ] && [ ! -L "$install_dir/$bin" ]; then
@@ -128,6 +135,7 @@ printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$' \
 
 if [ -n "${RAPTOR_DOWNLOAD_BASE:-}" ]; then
   base="$RAPTOR_DOWNLOAD_BASE"
+  say "warning: using a non-default download source: $base"
   proto='=https,file'
 else
   base="https://github.com/${REPO}/releases/download/v${version}"
@@ -136,12 +144,13 @@ fi
 archive="raptor-${version}-${target}.tar.gz"
 
 tmp=$(mktemp -d 2>/dev/null || mktemp -d -t raptor-install)
-trap 'rm -rf "$tmp"' EXIT INT TERM
+trap 'rm -rf "$tmp"' EXIT
+trap 'exit 130' INT TERM
 
 say "downloading ${archive}"
-curl -fsSL --proto "$proto" --tlsv1.2 -o "$tmp/$archive" "$base/$archive" \
+curl -fsSL --proto "$proto" --proto-redir '=https' --tlsv1.2 -o "$tmp/$archive" "$base/$archive" \
   || fail "download failed: $base/$archive"
-curl -fsSL --proto "$proto" --tlsv1.2 -o "$tmp/SHA256SUMS" "$base/SHA256SUMS" \
+curl -fsSL --proto "$proto" --proto-redir '=https' --tlsv1.2 -o "$tmp/SHA256SUMS" "$base/SHA256SUMS" \
   || fail "download failed: $base/SHA256SUMS"
 
 expected=$(awk -v f="$archive" '$2 == f || $2 == "*" f { print $1 }' "$tmp/SHA256SUMS")
@@ -168,21 +177,26 @@ for bin in $BINS; do
   [ -f "$src/$bin" ] && [ ! -L "$src/$bin" ] || fail "unexpected archive layout: $bin"
 done
 
-# A writable-by-everyone directory would let anyone swap the binaries after the install.
+# A writable-by-everyone directory would let anyone swap the binaries after the install, and a
+# group-writable one must not be written as root.
 if [ -d "$install_dir" ]; then
-  # shellcheck disable=SC2012 # only the mode string is read, never a file name
-  case "$(ls -ld "$install_dir" | cut -c1-10)" in
-    ????????w*) fail "$install_dir is writable by everyone; refusing to install there" ;;
-  esac
+  [ -z "$(find "$install_dir" -maxdepth 0 -perm -002)" ] \
+    || fail "$install_dir is writable by everyone; refusing to install there"
+  if [ "$system" = 1 ] && [ ! -w "$install_dir" ] \
+     && [ -z "$(find "$install_dir" -maxdepth 0 -user 0 ! -perm -020)" ]; then
+    fail "$install_dir is not owned by root or is group-writable; refusing to write it as root"
+  fi
 fi
 
 priv mkdir -p "$install_dir"
 # raptor-hook is the Guardrails dispatcher: it must sit next to raptor (US-GRD-001).
 for bin in $BINS; do
-  # Copy next to the destination, then rename: a running binary is never half-written.
-  priv cp "$src/$bin" "$install_dir/.$bin.tmp.$$"
-  priv chmod 755 "$install_dir/.$bin.tmp.$$"
-  priv mv -f "$install_dir/.$bin.tmp.$$" "$install_dir/$bin"
+  # Copy next to the destination, then rename: a running binary is never half-written. The
+  # temporary name comes from mktemp (created exclusively), never from a guessable PID.
+  tmpf=$(priv mktemp "$install_dir/.$bin.XXXXXX")
+  priv cp "$src/$bin" "$tmpf"
+  priv chmod 755 "$tmpf"
+  priv mv -f "$tmpf" "$install_dir/$bin"
 done
 say "installed raptor ${version} (${target}) into ${install_dir}"
 
