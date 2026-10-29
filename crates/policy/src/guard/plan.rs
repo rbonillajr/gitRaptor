@@ -89,11 +89,14 @@ pub enum Expected {
     },
     /// `pre-commit`, `commit-msg` and the second line.
     CommitStages { authorship: AuthorshipFacts },
-    /// The parent is `old` and the paths are a subset of the prepared ones.
+    /// The parent is `old`, the paths are a subset of the prepared ones and the stored message
+    /// has the header the plan judged: a message Git or a hook stored differently is decided
+    /// again on the real commit.
     NewCommitOn {
         refname: String,
         old: String,
         paths: Vec<String>,
+        header: Header,
     },
     /// The abort of the atomic rebase.
     RestoreTo { refname: String, value: String },
@@ -134,6 +137,8 @@ pub struct MatchFacts {
     pub parents: Vec<String>,
     pub descends_from_onto: bool,
     pub new_paths: Option<Vec<String>>,
+    /// The header of the new commit's stored message, judged like the plan's.
+    pub new_header: Option<Header>,
 }
 
 /// Prepared paths of a commit beyond which nothing can be said (ADR-GRD-003, US-GRD-008).
@@ -309,6 +314,7 @@ pub fn normalize(shape: &PlanShape) -> Normalized {
                     refname: branch.clone(),
                     old: old.clone(),
                     paths: paths.clone(),
+                    header: header.clone(),
                 },
             ],
         },
@@ -348,6 +354,7 @@ fn update_matches(registered: &[Expected], update: &RefUpdate, facts: &MatchFact
             refname,
             old,
             paths,
+            header,
         } => {
             update.refname == *refname
                 && is_oid(&update.old, old)
@@ -358,6 +365,7 @@ fn update_matches(registered: &[Expected], update: &RefUpdate, facts: &MatchFact
                     .new_paths
                     .as_ref()
                     .is_some_and(|new| new.iter().all(|p| paths.contains(p)))
+                && facts.new_header.as_ref() == Some(header)
         }
         Expected::RestoreTo { refname, value } => {
             update.refname == *refname && is_oid(&update.new, value)

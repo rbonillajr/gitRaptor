@@ -11,6 +11,7 @@ use std::path::Path;
 use gitraptor_api::guard::{AuthorshipFacts, Decision, Effect, EvaluateParams, Operation, Rule};
 use gitraptor_api::{Actor, AgentKind};
 use gitraptor_git::{Ancestry, Count, Hide, PathLimits, RepoReader};
+use gitraptor_policy::guard::commit_format::{Header, parse_with};
 use gitraptor_policy::guard::plan::{Expected, MatchFacts, matches};
 
 use super::evaluate::{self, DecideInput, RuleSet, Served};
@@ -172,6 +173,7 @@ pub fn match_facts(reader: &RepoReader, op: &Operation, registered: &[Expected])
                             .ok()
                             .filter(|found| !found.unverifiable)
                             .map(|found| found.paths);
+                        out.new_header = stored_header(reader, old, new);
                     }
                 }
                 _ => {}
@@ -183,6 +185,31 @@ pub fn match_facts(reader: &RepoReader, op: &Operation, registered: &[Expected])
         }
     }
     out
+}
+
+/// The header of the message Git stored for the single new commit `new` on `old`, judged like
+/// the hook judges it; `None` when it cannot be read within the bounds.
+fn stored_header(reader: &RepoReader, old: &str, new: &str) -> Option<Header> {
+    let found = reader
+        .fresh_commit_changes(
+            Some(old),
+            new,
+            &[],
+            Hide::OldOnly,
+            &PathLimits::default(),
+            None,
+        )
+        .ok()
+        .filter(|found| !found.unverifiable)?;
+    let [commit] = found.commits.as_slice() else {
+        return None;
+    };
+    Some(parse_with(
+        &commit.head,
+        commit.body_separated,
+        commit.parents,
+        commit.reverts,
+    ))
 }
 
 fn agent_of(actor: &Actor) -> Option<AgentKind> {
@@ -230,7 +257,16 @@ pub fn serve_child(
         actor: agent_of(&child.who.actor),
         worktree: cwd,
         layer,
-        rules: RuleSet::all(),
+        // A commit the plan made differently from what it judged (a hook or the configuration
+        // rewrote its message) is decided again like Git direct decides it: with the commit
+        // policies, on the stored commit.
+        rules: RuleSet {
+            commit_policies: child
+                .transitions
+                .iter()
+                .any(|t| matches!(t, Expected::NewCommitOn { .. })),
+            ..RuleSet::all()
+        },
         authorship: params.authorship.as_ref(),
         unregistered_bases: Some(&[]),
     };
