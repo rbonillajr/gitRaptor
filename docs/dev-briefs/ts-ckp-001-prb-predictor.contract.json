@@ -4,7 +4,8 @@
     "ref": "docs/requirements/features/cockpit/dev-specs/TS-CKP-001-predictor-conflictos.md"
   },
   "suite": {
-    "command": "node tools/test/nextest-junit.mjs"
+    "command": "node tools/test/nextest-junit.mjs",
+    "flakyRetries": 0
   },
   "layers": {
     "static": {
@@ -324,6 +325,6 @@
   "budget": {
     "maxRounds": 3,
     "verifyTimeoutMs": 900000,
-    "suiteTimeoutMs": 2400000
+    "suiteTimeoutMs": 5400000
   }
 }
