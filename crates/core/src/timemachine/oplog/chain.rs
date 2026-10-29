@@ -288,8 +288,24 @@ fn to_hash(bytes: &[u8]) -> Hash {
 const HEAD_MAGIC: &str = "gitraptor-oplog-head";
 
 /// Writes the head file atomically: private temporary file, fsync, rename.
+///
+/// Every oplog handle of the repo (the daemon's, a hook process's) writes the head after its own
+/// commit, outside SQLite's lock, so the temporary file is unique to each write: with a shared
+/// name one writer removes or renames the other's file, and that writer then fails after its rows
+/// were committed. Concurrent renames leave the head of one of them, at most a batch behind,
+/// which `check_head` tolerates and the next batch corrects.
 pub(crate) fn write_head(path: &Path, tip: &Tip) -> io::Result<()> {
-    let tmp = path.with_extension("head.tmp");
+    static WRITES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let n = WRITES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let unique = [
+        "head.",
+        &std::process::id().to_string(),
+        "-",
+        &n.to_string(),
+        ".tmp",
+    ]
+    .concat();
+    let tmp = path.with_extension(unique);
     match fs::remove_file(&tmp) {
         Ok(()) => {}
         Err(err) if err.kind() == io::ErrorKind::NotFound => {}
@@ -507,5 +523,39 @@ mod tests {
         );
         assert_ne!(h, row_hash(&[0; 32], FORMAT, RowKind::Notice, 1, 1, &base));
         assert_ne!(h, row_hash(&[1; 32], FORMAT, RowKind::Journal, 1, 1, &base));
+    }
+
+    /// Two oplog handles write the head after their own commits, outside SQLite's lock: neither
+    /// write may fail because of the other, and the head is always one of theirs.
+    #[test]
+    fn concurrent_head_writes_never_fail() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("oplog.head");
+        let barrier = std::sync::Barrier::new(4);
+        std::thread::scope(|scope| {
+            for t in 0..4_i64 {
+                let (path, barrier) = (&path, &barrier);
+                scope.spawn(move || {
+                    barrier.wait();
+                    for i in 0..50 {
+                        let seq = t * 1000 + i;
+                        let tip = Tip {
+                            seq,
+                            batch: seq,
+                            hash: genesis(&seq.to_string()),
+                        };
+                        write_head(path, &tip).unwrap();
+                    }
+                });
+            }
+        });
+        assert!(matches!(read_head(&path).unwrap(), Head::At { .. }));
+        let left: Vec<_> = fs::read_dir(dir.path())
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name())
+            .filter(|n| n != "oplog.head")
+            .collect();
+        assert!(left.is_empty(), "temporary files left: {left:?}");
     }
 }
