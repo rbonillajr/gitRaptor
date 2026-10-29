@@ -588,8 +588,10 @@ fn protection_state_follows_the_allowlist() {
     assert_eq!(leaving["layer"], "mcp", "{entries:#?}");
 }
 
-/// GRD016-E2E-FULL-INACTIVE (D5, condition of the PO to Q-GRD-54): a replaced dispatcher does not
-/// change the state; the diagnostic goes next to it in every output.
+/// GRD016-E2E-FULL-INACTIVE (D5 and Q-GRD-54, revised 2026-10-28): the hooks half of the state is
+/// the active one (BR-WF-002), so a replaced dispatcher drops a `full` repo to `mcp-only`, with the
+/// diagnostic and its recovery next to the state in every output. The name is kept for the
+/// contract's criterion id.
 #[test]
 fn a_full_repo_with_replaced_hooks_stays_full_and_shows_the_diagnostic() {
     let m = Machine::build(None, "feat-a", true, true);
@@ -602,23 +604,27 @@ fn a_full_repo_with_replaced_hooks_stays_full_and_shows_the_diagnostic() {
 
     let status = m.status();
     assert_eq!(
-        status["state"], "full",
-        "a repo with an allowlist and installed hooks stays `full`: {status:#}"
+        status["state"], "mcp-only",
+        "a repo with an allowlist and inactive hooks is `mcp-only`: {status:#}"
     );
     assert_eq!(status["hooks"]["status"], "inactive", "{status:#}");
 
     let out = m.raptor(&["guard", "status", &m.repo()]);
     let shown = text(&out).to_lowercase();
     assert!(
-        shown.contains("full") && shown.contains("inactive"),
+        shown.contains("mcp only") && shown.contains("inactive"),
         "the text must show the state and the diagnostic together: {shown}"
+    );
+    assert!(
+        shown.contains("raptor guard install"),
+        "the text must name the recovery: {shown}"
     );
 
     let mut agent = m.agent_session();
     let id = agent.send("tools/call", json!({"name": "status", "arguments": {}}));
     let answer = agent.read(id);
     let repo = &answer["result"]["structuredContent"]["repo"];
-    assert_eq!(repo["protection"], "full", "{answer}");
+    assert_eq!(repo["protection"], "mcp-only", "{answer}");
     assert!(
         repo["protection_lost"].is_string(),
         "the MCP status view must carry protection_lost: {answer}"

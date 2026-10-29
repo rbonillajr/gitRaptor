@@ -142,11 +142,12 @@ fn the_four_states_read_in_both_languages() {
     );
 }
 
-/// A `full` repo with replaced hooks shows the state and the diagnostic together.
+/// A repo in the MCP allowlist whose hooks were replaced reads `mcp-only` (the hooks half is the
+/// active one, BR-WF-002), with the diagnostic right after the state and the recovery action.
 #[test]
-fn full_with_inactive_hooks_shows_both() {
+fn mcp_only_with_inactive_hooks_shows_both() {
     let s = GuardStatus {
-        state: ProtectionState::Full,
+        state: ProtectionState::McpOnly,
         ..status(
             true,
             &["main"],
@@ -154,16 +155,16 @@ fn full_with_inactive_hooks_shows_both() {
         )
     };
     for (tr, state, inactive) in [
-        (EN, "state: full", "hooks: inactive ("),
-        (ES, "estado: completa", "hooks: inactiva ("),
+        (EN, "state: MCP only", "hooks: inactive ("),
+        (ES, "estado: solo MCP", "hooks: inactiva ("),
     ] {
         let lines = status_lines(&s, tr);
         assert_eq!(lines[0], state, "{lines:#?}");
-        let at = lines
-            .iter()
-            .position(|l| l.starts_with(inactive))
-            .unwrap_or_else(|| panic!("no diagnostic: {lines:#?}"));
-        assert!(at <= 2, "the diagnostic goes next to the state: {lines:#?}");
+        assert!(lines[1].starts_with(inactive), "{lines:#?}");
+        assert!(
+            lines.iter().any(|l| l.contains("raptor guard install")),
+            "the recovery action: {lines:#?}"
+        );
     }
 }
 
