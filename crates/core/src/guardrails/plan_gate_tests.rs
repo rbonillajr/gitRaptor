@@ -277,3 +277,83 @@ fn the_commit_message_never_reaches_the_log_or_the_fingerprint() {
     assert_eq!(entries.len(), 1);
     assert!(!format!("{entries:?}").contains(SECRET));
 }
+
+/// `decide_all` with the plan's known operations (BR-CALC-001): their permission joins the
+/// maximum with its reasons, enabling them never turns a denial into `allow`, and a commit is
+/// decided by `known_ops` alone, its reason named once.
+#[test]
+fn decide_all_applies_the_permissions_of_the_known_operations() {
+    use gitraptor_policy::guard::plan::normalize;
+    use gitraptor_policy::settings::model::Operation as Op;
+    let tmp = tempfile::tempdir().unwrap();
+    let common = repo(tmp.path());
+    let dirs = ProfileDirs::under_root(tmp.path().join("profile"));
+    std::fs::create_dir_all(&dirs.config).unwrap();
+    std::fs::write(
+        dirs.config.join("settings.json"),
+        r#"{"permissions":{"deny":["merge","commit"],"ask":["rebase"]}}"#,
+    )
+    .unwrap();
+    let registry = GuardRegistry::for_profile(dirs);
+    let worktree = common.parent().unwrap().to_owned();
+    let input = DecideInput {
+        common_dir: &common,
+        repo_id: "repo-1",
+        // The person: an agent's movement is denied here anyway, since this hand-written repo
+        // has no readable team level (SEC-GRD-17).
+        actor: None,
+        worktree: Some(&worktree),
+        layer: LogLayer::Cockpit,
+        rules: RuleSet::all(),
+        authorship: None,
+        unregistered_bases: Some(&[]),
+    };
+    let decide = |shape: &PlanShape, known: &[Op]| {
+        let n = normalize(shape);
+        decide_all(&registry, &input, &n.evaluated, &n.preset, known).decision
+    };
+    let rules = |d: &Decision| d.reasons.iter().map(|r| r.rule).collect::<Vec<_>>();
+    let free = PlanShape::Merge {
+        base: FREE.into(),
+        old: oid('a'),
+        integrated: oid('b'),
+    };
+    // Without known operations the plan is decided as before: a merge into a free branch goes.
+    assert_eq!(decide(&free, &[]).effect, Effect::Allow);
+    // The maximum keeps only its reasons: `deny` of merge wins over `ask` of rebase.
+    let both = decide(&free, &[Op::Merge, Op::Rebase]);
+    assert_eq!((both.effect, both.applied_effect), (Effect::Deny, Effect::Deny));
+    assert_eq!(rules(&both), [Rule::PermissionMerge], "{both:?}");
+    assert_eq!(both.reasons[0].level, Level::Profile);
+    // An `ask` alone follows the actor: the person goes ahead with a notice (Q-GRD-46).
+    let asked = decide(&free, &[Op::Rebase]);
+    assert_eq!((asked.effect, asked.applied_effect), (Effect::Ask, Effect::Allow));
+    // A permission in `allow` (none set for worktree-add) never relaxes a denial: the merge into
+    // the protected `main` stays denied with its own reasons.
+    let main = PlanShape::Merge {
+        base: MAIN.into(),
+        old: oid('a'),
+        integrated: oid('b'),
+    };
+    let before = decide(&main, &[]);
+    let after = decide(&main, &[Op::WorktreeAdd]);
+    assert_eq!(before.effect, Effect::Deny);
+    assert_eq!(
+        (after.effect, after.applied_effect, rules(&after)),
+        (before.effect, before.applied_effect, rules(&before))
+    );
+    // A commit applies its permission through `known_ops`, once.
+    let commit = PlanShape::Commit {
+        branch: FREE.into(),
+        old: oid('a'),
+        paths: vec!["src/a.rs".into()],
+        authorship: commit_facts(&common, "message"),
+    };
+    let d = decide(&commit, &[Op::Commit]);
+    assert_eq!(d.effect, Effect::Deny, "{d:?}");
+    assert_eq!(
+        rules(&d).iter().filter(|r| **r == Rule::PermissionCommit).count(),
+        1,
+        "{d:?}"
+    );
+}

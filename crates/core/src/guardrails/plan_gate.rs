@@ -290,7 +290,13 @@ impl GuardrailsEngine {
             // D12: `main` and the main branch, for everyone, while the repo is unregistered.
             unregistered_bases: Some(&[]),
         };
-        let served = decide_all(&attached.registry, &input, &normalized.evaluated, &preset);
+        let served = decide_all(
+            &attached.registry,
+            &input,
+            &normalized.evaluated,
+            &preset,
+            shape.catalog_operations(),
+        );
         Decided {
             decision: served.decision,
             first: normalized.evaluated.into_iter().next(),

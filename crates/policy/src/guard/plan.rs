@@ -43,6 +43,24 @@ pub enum PlanShape {
     },
 }
 
+impl PlanShape {
+    /// The operations of the catalog (BR-VAL-002) the plan certainly performs, read from its
+    /// shape and never from a process chain.
+    ///
+    /// Deleting a worktree also deletes its branch, so it carries both permissions: with only
+    /// `WorktreeRemove`, a team denying `branch-delete` would lose the branch with no denial.
+    pub fn catalog_operations(&self) -> &'static [crate::settings::model::Operation] {
+        use crate::settings::model::Operation as Op;
+        match self {
+            Self::Merge { .. } => &[Op::Merge],
+            Self::Rebase { .. } => &[Op::Rebase],
+            Self::CreateWorktree { .. } => &[Op::WorktreeAdd],
+            Self::DeleteWorktree { .. } => &[Op::WorktreeRemove, Op::BranchDelete],
+            Self::Commit { .. } => &[Op::Commit],
+        }
+    }
+}
+
 /// A transition a child `git` of the plan is expected to make.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Expected {

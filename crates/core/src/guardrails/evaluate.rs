@@ -423,7 +423,9 @@ impl RuleSet {
     }
 
     /// Every rule a plan of the executor applies, and a transition its child was not registered
-    /// for. The permissions per operation reach the executor with its own story (US-GRD-016).
+    /// for. The permissions per operation stay off: a plan applies those of the operations it
+    /// knows it performs (`decide_all`'s `known_ops`), never a classification of a process
+    /// chain the executor does not have.
     pub fn all() -> Self {
         Self {
             authorship: true,
@@ -491,40 +493,23 @@ pub fn decide(registry: &GuardRegistry, input: &DecideInput<'_>, operation: &Ope
 /// The decision of a plan: every operation decided with its preloaded facts, combined as the
 /// maximum with the reasons of that maximum (BR-CALC-001). The warnings travel only when the
 /// result allows. `preset` is aligned with `ops` (missing entries preload nothing).
+///
+/// `known_ops` are the operations of the catalog the executor knows the plan performs: their
+/// permission is applied directly, with no process chain (whose absence would classify a
+/// legitimate plan as `unverifiable`). With any of them, an `ask` follows the actor the daemon
+/// resolved, as in the hooks (Q-GRD-46).
 pub fn decide_all(
     registry: &GuardRegistry,
     input: &DecideInput<'_>,
     ops: &[Operation],
     preset: &[Preset],
+    known_ops: &[gitraptor_policy::settings::model::Operation],
 ) -> Served {
     let mut total = Evaluation::allow();
     let mut notices = Vec::new();
     let mut authorship_policy = None;
     let mut ignored = Vec::new();
     for (i, op) in ops.iter().enumerate() {
-        // The `pre-commit` stage of a commit plan applies the permission of `commit`, as the
-        // hook's `pre-commit` does: the decision that counts is the plan's, and the hooks under
-        // it reuse the bound decision without evaluating again.
-        let commit_permission = input.rules.authorship
-            && matches!(
-                op,
-                Operation::Commit {
-                    stage: CommitStage::PreCommit
-                }
-            );
-        let staged;
-        let input = if commit_permission && !input.rules.permissions {
-            staged = DecideInput {
-                rules: RuleSet {
-                    permissions: true,
-                    ..input.rules
-                },
-                ..input.clone()
-            };
-            &staged
-        } else {
-            input
-        };
         let (evaluation, policy, relaxed) =
             evaluate_op(registry, input, op, preset.get(i), &Chain::default());
         let Some(evaluation) = evaluation else {
@@ -542,8 +527,21 @@ pub fn decide_all(
         authorship_policy = authorship_policy.or(policy);
         ignored.extend(relaxed);
     }
+    if !known_ops.is_empty() {
+        let Some(effective) = plan_permissions(registry, input) else {
+            return plain(system_deny(Rule::InternalError));
+        };
+        for op in known_ops {
+            // `apply` keeps the maximum and only its reasons (BR-CALC-001), one per level.
+            gitraptor_policy::guard::permissions::apply(&mut total, *op, false, &effective, &[]);
+        }
+    }
     total.notices = notices;
-    let mut out = decision(total);
+    let mut out = if known_ops.is_empty() {
+        decision(total)
+    } else {
+        decision_for(total, AskedBy::of(input.actor))
+    };
     if !input.rules.authorship {
         out.notices.clear();
     }
@@ -552,6 +550,34 @@ pub fn decide_all(
         authorship_policy,
         ignored,
     }
+}
+
+/// The permissions in force for a plan, read as `evaluate_op` reads them; `None` when the repo
+/// cannot be opened.
+fn plan_permissions(registry: &GuardRegistry, input: &DecideInput<'_>) -> Option<EffectivePermissions> {
+    let reader = open(input.common_dir)?;
+    let common_text = input.common_dir.to_string_lossy();
+    let entry = registry
+        .get(input.repo_id)
+        .filter(|e| e.common_dir == common_text);
+    let repo_id = entry.is_some().then_some(input.repo_id);
+    let confirmed = entry.and_then(|e| e.confirmed);
+    let worktree = input
+        .worktree
+        .and_then(|cwd| super::authorship::worktree_reader(cwd, input.common_dir));
+    // A team level the full read cannot load falls back to what the hook client would apply on
+    // its own: never less than the minimum plus the readable floor.
+    Some(
+        match super::layers::load(
+            worktree.as_ref().unwrap_or(&reader),
+            confirmed.as_ref(),
+            registry.profile().as_ref(),
+            repo_id,
+        ) {
+            Ok(layers) => layers.permissions(),
+            Err(_) => super::permissions::team_only(&reader, input.worktree),
+        },
+    )
 }
 
 fn decide_op(
