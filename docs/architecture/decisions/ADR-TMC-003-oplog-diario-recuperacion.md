@@ -67,6 +67,7 @@ La inmutabilidad se impone en el esquema: los triggers rechazan `UPDATE` y `DELE
 - El undo deja el ámbito como estaba antes de la operación, incluidas las ediciones posteriores del mismo actor; esas ediciones quedan en el snapshot previo del undo y se recuperan con redo. Las de otro actor activan el solape (ADR-TMC-005).
 - **Redo, `undo --since` y ediciones del mismo agente** (Enmienda 2026-10-27, US-TMC-012, US-TMC-003 y US-TMC-010): cuándo hay redo y qué se informa si no, `undo --since` como una sola operación, y el límite del MVP para las ediciones de un agente; ver esa sección.
 - **`undo --agent`** (Enmienda 2026-10-28, US-TMC-011): deshace, como una sola operación selectiva, las operaciones del worktree con atribución vigente al agente en el periodo; el destino es por ruta y por rama (D-TMC-31). Un undo selectivo activo es una barrera para `undo` y `--since` (D-TMC-35).
+- **Ventana del previo garantizado** (Enmienda 2026-10-28, fix/nfr01-uncommitted-capture-window): el ancla de una operación cierra la ventana de su previo garantizado solo si registra `echo_settled`; ver esa sección.
 
 ### 5. Atribución: congelada frente a vigente
 
@@ -327,3 +328,20 @@ Aplicada desde la [Dev Spec de US-TMC-004](../../requirements/features/time-mach
 **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO** (Q-CKP-60, cerrada). Origen: [DS-US-CKP-021](../../requirements/features/cockpit/dev-specs/US-CKP-021-historial-aviso-purga.md) H3. Precisa la "Forma del evento" de la Enmienda (2026-10-04, Cockpit); no cambia el oplog, sus entidades ni la recuperación. El `status` sigue en `accepted`.
 
 - DEP-CKP-5 se cierra en el MVP sin evento propio (Q-CKP-60, cerrada): la TUI refresca el timeline con `git.event`, `operation.finished` y `attribution.changed` del repo, y cada 60 s con la vista abierta, y vuelve a consultar (DS-US-CKP-021 H3). El evento propio queda para después del MVP.
+
+## Enmienda (2026-10-28, fix/nfr01-uncommitted-capture-window)
+
+**Decisión del orquestador (2026-10-04), validada por Arquitecto**. Origen: el [Brief de tm-prior-point-binding](../../dev-briefs/tm-prior-point-binding.md), Enmienda 2026-10-28 (NFR-01: una edición captada tras un `raptor restore` o `raptor undo` se perdía si seguía un `git reset --hard` crudo que no mueve `HEAD`). No cambia el esquema del oplog ni su cadena: no hay migración y los hashes no cambian. El `status` sigue en `accepted`.
+
+| Cambio | Dónde |
+|---|---|
+| **`echo_settled` en el `detail` de la entrada `complete`** (booleano, opcional): lo registra el ancla de una operación. `true` cuando todas las ramas que movió la operación quedaron confirmadas antes del límite de calma del ancla, también si no movió ninguna. El ancla del ejecutor (MCP, Cockpit) registra `false`. Ausente en filas anteriores: se lee como sin certificar | § 2, § 4 |
+| **Ventana del previo garantizado**: un punto registrado después de la primera ancla de su operación con `echo_settled = true` no queda ensombrecido por ese previo, aunque su marca sea menor que `f_P`. El ancla sigue ensombrecida. Sin certificar (`false` o ausente), la ventana sigue hasta `f_P`. El previo de hook no cambia | § 4 |
+
+**Límites abiertos de NFR-01**:
+
+- **Ventana de la captura continua** (≈ 1 s más el tiempo de captura): una edición seguida de un `reset --hard` crudo antes de ese plazo se pierde. Ningún hook de Git corre antes de que un `reset --hard` sin movimiento sobrescriba el worktree (verificado con git 2.50.1).
+- **Operaciones del ejecutor**: conservan la ventana hasta `f_P` hasta que su ancla espere las ramas movidas.
+- **Previo de hook de un comando sin efecto**: sin cambios (Enmienda 2026-10-21, "Enlace por ventana, no por proceso").
+
+**Validación añadida**: `prior_point_tests.rs` y `timeline_prior_point_tests.rs` (C9 del brief) y `apps/cli/tests/restore_process.rs::an_edit_after_a_restore_survives_a_raw_reset_hard` (binario `raptor` real y daemon).

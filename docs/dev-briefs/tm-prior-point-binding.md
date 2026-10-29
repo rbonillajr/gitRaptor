@@ -18,7 +18,7 @@ Todas las D: «Decisión del orquestador (2026-10-04), validada por Arquitecto»
   - El timeline y el undo parten del mismo conjunto sin filtrar (`OplogRead.all_snapshots` / `oplog.snapshots`).
   - Un previo perdido sigue ensombreciendo. Si no queda nadie, gana un punto más antiguo o `TargetUnavailable`.
 - **D2. Enlace por ventana de eventos del worktree, no por proceso.**
-  - **Ventana:** para cada previo `P` (`HookPrior` o `GuaranteedPrior`) de la clave `k`, `f_P` es el primer evento crudo de `k` con `seq > P.mark` (∞ si no hay).
+  - **Ventana:** para cada previo `P` (`HookPrior` o `GuaranteedPrior`) de la clave `k`, `f_P` es el primer evento crudo de `k` con `seq > P.mark` (∞ si no hay). Para un `GuaranteedPrior`, la ventana termina también en su ancla con `echo_settled` (Enmienda 2026-10-28, más abajo).
   - **Sombra (enmienda 2026-10-21, regresión de `tm_chaos::hostile_half_done_merge_rejects_until_aborted`):** un punto `Q` de `k` queda **ensombrecido por `P`** si `Q.seq > P.seq` y se cumple (a) o (b).
     - **(a) Marca atrasada:** `Q.mark < f_P`. Se registró después del previo, pero antes de que el motor persistiera el primer evento de ese comando, así que su foto puede contener ya el efecto del comando con una marca atrasada.
     - **(b) Tramo a mitad de operación tras el previo:** `Q.mid_operation` y no existe ningún punto limpio `R` de `k` con `P.seq < R.seq < Q.seq`. "Limpio" es un previo, o un punto con `mid_operation != Some(true)` que `P` no ensombrece por (a) (`R.mark >= f_P`). `R` puede estar o no disponible, como en D1.
@@ -46,6 +46,28 @@ Todas las D: «Decisión del orquestador (2026-10-04), validada por Arquitecto»
   - **`us-tmc-005-pre-hook-snapshot.md`:** D10 se marca **sustituida** por `tm-prior-point-binding` D1/D5. Se anota en D9 que sigue vigente: un previo nunca se descarta por `mid_operation`.
 
 **Cierra el bug de us_tmc_009 (`a_restore_can_be_undone_back_to_the_exact_prior_state`)? No.** Ese fallo está en la **pila**: el evento tardío 3 cae fuera del eco del restore (`external_events_in`, el ancla con una marca anterior a la del evento), y `last_operation` es `GitEvent(3)`. Este fix no cambia el eco. Solo arregla el **estado** al que lleva ese undo: con D2, el ancla queda ensombrecida por el previo garantizado del restore, y deshacer el evento 3 restaura el estado exacto anterior al restore, no el ancla. La aserción `undone_operation_id == restore.operation_id` puede seguir fallando.
+
+## Enmienda 2026-10-28 (NFR-01: edición tras restore)
+
+**Decisión del orquestador (2026-10-04), validada por Arquitecto.** Rama `fix/nfr01-uncommitted-capture-window`. Enmienda la ventana de D2 para el `GuaranteedPrior`.
+
+**Bug.** Tras un `raptor restore` o `raptor undo` (previo garantizado y ancla con el mismo `cause_operation`), la observación continua capta una edición ~1 s después. Si sigue un `git reset --hard` crudo que no mueve `HEAD`, `f_P` es ese reset (el restore no movió ningún ref): la observación de la edición queda ensombrecida por (a), y el timeline y el undo ofrecen el previo del restore, sin la edición. Reproducido en un repo temporal; evidencia de Rene: se ofreció el previo `aea6241b`/`5d254fb9` en vez de la edición.
+
+**Cambio.**
+- `CompleteInfo.echo_settled: Option<bool>` en el ancla de una operación, con `serde(default)` y sin migración (como `mid_operation`, D4). Vale `true` cuando `await_moved_branches` (ahora devuelve `bool`) confirmó todas las ramas que movió la operación antes de `ANCHOR_SETTLE_LIMIT`, también si no movió ninguna. Lo escriben `restore.rs` y `undo.rs`. El ancla del ejecutor (`channel/conn.rs`, `after_step`) escribe `false`: no espera las ramas movidas.
+- `prior_point::settled_anchors` liga cada operación a su primera ancla de observación con `echo_settled == Some(true)`, y `PointFacts.anchor_seq` la lleva para un `GuaranteedPrior`.
+- En `before_event`, un punto registrado después de esa ancla (`seq > anchor_seq`) no queda ensombrecido por ese previo: el eco de la operación ya está bajo la marca del ancla, así que la ventana de su comando terminó. El ancla sigue ensombrecida (C2 sin cambios).
+- `None` (filas anteriores) y `Some(false)` mantienen la ventana hasta `f_P`. `HookPrior` sin cambios: el fin de su comando no se conoce (`TRADEOFF` de Not Built).
+
+**C9 — edición tras un restore.**
+- `prior_point_tests.rs`: `an_edit_captured_after_a_restore_is_the_point_before_a_raw_reset`, `a_restore_with_a_late_git_event_still_shadows_its_anchor` y `a_hook_prior_window_still_runs_until_its_first_event`.
+- `timeline_prior_point_tests.rs`: `timeline_and_undo_pick_an_edit_made_after_a_restore_for_a_raw_reset` y `an_anchor_that_does_not_certify_its_echo_keeps_the_prior` (`Some(false)` y `None`).
+- `apps/cli/tests/restore_process.rs`: `an_edit_after_a_restore_survives_a_raw_reset_hard` (binario `raptor` real y daemon).
+
+**Límites residuales.**
+- **Ventana de la captura continua** ≈ Q (1 s) + tiempo de captura: una edición seguida de un `reset --hard` crudo antes de ~1 s se pierde. Ningún hook de Git corre antes de que un `reset --hard` sin movimiento sobrescriba el worktree (verificado con git 2.50.1: solo `post-index-change` y `reference-transaction` de `ORIG_HEAD` y de la rama con el mismo valor viejo y nuevo, los dos después de sobrescribir).
+- **Operaciones del ejecutor** (MCP, Cockpit): conservan el comportamiento anterior hasta que su ancla espere las ramas movidas (seguimiento).
+- **Previo de hook de un comando sin efecto**: `TRADEOFF` existente de Not Built.
 
 ## Contratos
 
