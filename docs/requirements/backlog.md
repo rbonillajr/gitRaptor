@@ -205,6 +205,33 @@ flowchart LR
 | Estado de M1 al 2026-10-08: "En curso — en validación (dogfooding)"; criterios 4 y 6 cumplidos, 3 y 5 en parte, 1 en curso y 2 sin cumplir; hace falta un registro diario de dogfooding como evidencia de los criterios 1, 2, 3 y 5 | Evaluación del orquestador (2026-10-08), validada por el PO. El PO pidió no llamarlo "construcción completa" mientras INF-GRP-001 e INF-GRP-002 estén en parte |
 | La auditoría dinámica de `exec` (INF-GRP-001), RES-03, RES-04, RES-05 y RES-07 (INF-GRP-002) y N8 a N11 de TS-GRP-004 pasan a M2; siguen en el MVP | Propuesta del PO (2026-10-08), aceptada por el orquestador: ningún criterio de salida los exige |
 
+## Hito EA — Acceso anticipado (alpha semanal)
+
+**Status**: Propuesto (2026-10-28), con el pipeline y la guía en el PR `chore/weekly-alpha` | **Valor**: High
+> Plan, criterio de cada alpha y procedimiento del viernes: [release-plan.md § EA](release-plan.md#ea-acceso-anticipado-alpha-semanal). Decisión de Rene (2026-10-28).
+
+**Objetivo.** Un grupo pequeño usa GitRaptor en su Mac con un tag `v0.1.0-alpha.N` cada viernes desde `main` (la primera, el 2026-11-06), solo macOS y sin firmar. Corre en paralelo a M2 y no bloquea su cierre.
+
+**Criterio de cada alpha.**
+
+1. CI en verde en el commit que se etiqueta.
+2. Pruebas de humo del orquestador con el binario instalado por `install.sh` (instalar, `raptor repo add`, `raptor guard install`, TUI, `raptor mcp`, `raptor undo` y `restore`, desinstalar).
+3. Ninguna regresión de NFR-01 abierta de severidad alta en macOS.
+4. Notas de la versión en es y en, con [`docs/releases/alpha-template.md`](../releases/alpha-template.md).
+
+**Alcance.** Sin fichas nuevas: el pipeline extiende INF-GRP-003 e INF-GRP-004 (que siguen en M4 para la release firmada) y se documenta en la enmienda del 2026-10-28 de ADR-GRP-014. La experiencia mínima está en [`docs/guia/primeros-pasos.md`](../guia/primeros-pasos.md) y su [versión en inglés](../guia/primeros-pasos.en.md).
+
+**Recorte de Shoulds de M2 (propuesto, pendiente de Rene).** Para absorber la app de escritorio y las alphas sin mover la fecha de M2, el PO y el Scrum Master proponen aplazar a después de v0.1.0 la tanda A (US-GRD-015, US-CKP-023, US-MCP-014, US-GRD-013, US-CKP-011, US-TMC-008, US-TMC-014 y US-TMC-022, unos 9,3 días centrales) y, solo si hace falta, la tanda B (US-CKP-004, US-CKP-013 y US-GRP-006, unos 3,5 días). Ninguna ficha sale del plan hasta que Rene decida; el detalle y el impacto en días están en [release-plan.md](release-plan.md#propuesta-de-recorte-de-shoulds-de-m2-pendiente-de-rene).
+
+### Decisiones registradas
+
+| Decisión | Quién |
+|---|---|
+| Alpha semanal cada viernes desde 2026-11-06, solo macOS sin firmar, con notas en es y en | Rene Bonilla (2026-10-28) |
+| Versionado del alpha por PR `chore(release)` con `bump-version.sh`; el tag va sobre el commit mergeado; `main` lleva la versión del último alpha | Decisión del orquestador (2026-10-28), validada por el Arquitecto |
+| Canal primario: `install.sh` con versión fija; la fórmula de Homebrew queda para cuando exista el tap | Decisión del orquestador (2026-10-28), validada por el Arquitecto |
+| Hito EA sin fichas, en paralelo a M2; recorte propuesto de tandas A y B, no aplicado | Propuesta del PO, validada por el Scrum Master (2026-10-28); pendiente de Rene |
+
 ---
 
 ## Epic: E-002 - Fase 2: Revisión e integración con la plataforma de código
