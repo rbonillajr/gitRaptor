@@ -5,7 +5,7 @@ type: us
 status: implemented
 priority: high
 created: 2026-10-03
-updated: 2026-10-09
+updated: 2026-10-28
 feature: motor-local
 related:
   context:
@@ -109,13 +109,29 @@ Cuando se crea un commit en "feat-login"
 Entonces el evento queda "sin atribuir" con la pista "inferido: Claude Code"
   Y `raptor events` y `raptor timeline` muestran esa pista
 
+**Escenario: Un commit del agente se atribuye aunque el desarrollador esté consultando el mismo worktree**
+
+Dado una sola sesión de "Claude Code" activa en "feat-login"
+  Y el desarrollador consultando "feat-login" con Git sin modificarlo (un historial abierto, el estado que refresca su editor)
+Cuando Claude Code hace un commit en "feat-login"
+Entonces el evento del commit tiene como actor "Claude Code" con origen "detectado"
+
+**Escenario: Con Git ajeno que no se puede reconocer, el commit queda sin atribuir**
+
+Dado una sesión de "Claude Code" activa en "feat-login"
+  Y un `git` ajeno en "feat-login" del que no se puede saber si escribe
+Cuando se crea un commit en "feat-login"
+Entonces el evento del commit queda "sin atribuir"
+
+> **Nota (2026-10-28, dogfooding)**: escenarios añadidos tras el dogfooding de Rene del 2026-10-28. Un commit que Claude Code hizo desde su propia terminal salió "you or other", porque S3 contaba como ajeno el `git` de solo lectura del desarrollador abierto en el mismo worktree; los hooks de Guardrails (S4) se instalaron después del commit. **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO.** La regla está en la Enmienda (2026-10-28, `git` ajeno que no puede producir un evento) de ADR-GRP-012. La lista de `git` que no pueden producir un evento es cerrada: ampliarla vuelve a pasar por el PO. Lo que no se puede leer cuenta como ajeno (falla cerrado). En Windows no hay lector del argv: el caso sigue saliendo "sin atribuir" sin Guardrails ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
 > **Nota (2026-10-09, TS-GRP-008)**: escenarios añadidos tras el dogfooding del 2026-10-09: los commits del agente salían "(no agent)" porque S3 contaba como ajeno cualquier `git` de **otro** worktree. **Decisión del orquestador (2026-10-09), validada por Arquitecto/PO.** El ámbito del `git` ajeno está en la Enmienda (2026-10-09) de ADR-GRP-012.
 
 > **Nota (2026-10-05, INF-GRP-002)**: el coste de resolver el actor de un evento (ADR-GRP-013) se mide en el banco de INF-GRP-002 (`cargo bench -p gitraptor-cli --bench engine`) cuando esta historia detecte sesiones reales. Hoy el banco fija el detector de agentes en un nombre ficticio y no lo mide (Dev Spec de INF-GRP-002, § 8).
 
 ## Estado de la implementación (2026-10-08)
 
-Implementado en: PR #80, #119, #124, #155, #169, #228 (TS-GRP-008: ámbito del `git` ajeno en S3, 2026-10-09).
+Implementado en: PR #80, #119, #124, #155, #169, #228 (TS-GRP-008: ámbito del `git` ajeno en S3, 2026-10-09), PR #PRNUM (`git` ajeno que no puede producir un evento, 2026-10-28).
 
 Notas (fuera del alcance de esta ficha o sin bloquearla):
 - La medición en el dogfooding real es de SPIKE-GRP-001 (criterio 2 de M1).
