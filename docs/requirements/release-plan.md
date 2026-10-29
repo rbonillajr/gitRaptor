@@ -218,7 +218,7 @@ Estados (al 2026-10-28, sacados de [release-status.md](release-status.md)): **I*
 |---|---|---|---|---|
 | US-GRP-020, US-GRP-022 | Repos descubiertos | Should | I | — |
 | US-GRP-003, US-GRP-005, US-GRP-010 | Estado especial; lo que no se vio; corregir la atribución | Must | I (PR #274; PR #280 y #285; PR #300) | Windows (XP-60 para US-GRP-010) |
-| US-GRP-008 | El editor nunca se atribuye | Must | Pend | — |
+| US-GRP-008 | El editor nunca se atribuye | Must | P (PR #PRNUM: T003, S3 solo cuenta un `git` de la sesión que escribe) | — |
 | US-GRP-006, US-GRP-011, US-GRP-013, US-GRP-016 | Historial de un repo retirado; sesiones compartidas; umbral por repo; rama base del equipo | Should | Pend | **Propuesto para recorte (pendiente de Rene): US-GRP-006, solo tanda B (el cuerpo de la ficha dice Must, ver Huecos)** |
 | TS-GRP-003, TS-GRP-006 | Daemon, niveles | Must | I | — |
 | TS-GRP-001, TS-GRP-002 | Almacén, lectura | Must | D (done) | — |

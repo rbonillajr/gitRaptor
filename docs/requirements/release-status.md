@@ -25,7 +25,7 @@
 | [cockpit](#cockpit) | 8 | 0 | 6 | 0 | 18 | 1 | 33 |
 | [guardrails](#guardrails) | 14 | 0 | 7 | 1 | 3 | 0 | 25 |
 | [mcp](#mcp) | 6 | 0 | 4 | 0 | 10 | 0 | 20 |
-| [motor-local](#motor-local) | 16 | 2 | 9 | 2 | 12 | 0 | 41 |
+| [motor-local](#motor-local) | 16 | 2 | 10 | 2 | 11 | 0 | 41 |
 | [time-machine](#time-machine) | 13 | 1 | 1 | 0 | 16 | 0 | 31 |
 
 ### cockpit
@@ -129,7 +129,7 @@
 
 ### motor-local
 
-41 fichas: 16 implementado, 2 hecho, 9 implementado en parte, 2 listo, 12 borrador.
+41 fichas: 16 implementado, 2 hecho, 10 implementado en parte, 2 listo, 11 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -160,12 +160,12 @@
 | [TD-GRP-001](features/motor-local/technical-stories/TD-GRP-001-acl-windows.md) | Verificación de ACL en Windows: git.exe (SEC-10) y perfil (SEC-06) | Implementado en parte (`partially-implemented`) | #72 | 2 |
 | [TS-GRP-004](features/motor-local/technical-stories/TS-GRP-004-canal-clientes.md) | Canal local de clientes y contrato de mensajes | Implementado en parte (`partially-implemented`) | #36, #87, #123, #133, #158 | 3 |
 | [TS-GRP-005](features/motor-local/technical-stories/TS-GRP-005-clases-trabajo-ahorro-energia.md) | Clases de trabajo del daemon y mecanismo de ahorro de energía | Implementado en parte (`partially-implemented`) | #298 | — |
+| [US-GRP-008](features/motor-local/user-stories/US-GRP-008-editor-humano-sin-atribuir.md) | El trabajo que el desarrollador hace en su editor nunca se atribuye a Claude Code | Implementado en parte (`partially-implemented`) | — | — |
 | [TD-GRP-002](features/motor-local/technical-stories/TD-GRP-002-motor-bajo-rafaga.md) | Frescura y memoria del motor bajo una ráfaga de archivos | Listo (`ready`) | — | — |
 | [TD-GRP-003](features/motor-local/technical-stories/TD-GRP-003-nfr04-maquina-referencia.md) | Presupuesto de NFR-04 sin gate automático: medirlo en una máquina de referencia | Listo (`ready`) | — | — |
 | [TD-GRP-004](features/motor-local/technical-stories/TD-GRP-004-corroborar-ambito-worktree-s3.md) | Corroborar con el reflog de HEAD el ámbito worktree de S3 y blindar la lectura de la redirección | Borrador (`draft`) | — | — |
 | [TS-GRP-007](features/motor-local/technical-stories/TS-GRP-007-factor-so-reservados-windows.md) | Factor del SO (Windows Hello) para los comandos reservados de alto riesgo en Windows | Borrador (`draft`) | — | — |
 | [US-GRP-006](features/motor-local/user-stories/US-GRP-006-retirar-y-volver-a-anadir.md) | El desarrollador recupera el historial de un repo que retiró y volvió a añadir | Borrador (`draft`) | — | — |
-| [US-GRP-008](features/motor-local/user-stories/US-GRP-008-editor-humano-sin-atribuir.md) | El trabajo que el desarrollador hace en su editor nunca se atribuye a Claude Code | Borrador (`draft`) | — | — |
 | [US-GRP-011](features/motor-local/user-stories/US-GRP-011-worktree-compartido.md) | El desarrollador ve todas las sesiones de un worktree compartido | Borrador (`draft`) | — | — |
 | [US-GRP-013](features/motor-local/user-stories/US-GRP-013-umbral-inactividad-por-repo.md) | El desarrollador ajusta para un repo cuándo una sesión pasa a inactiva | Borrador (`draft`) | — | — |
 | [US-GRP-014](features/motor-local/user-stories/US-GRP-014-git-ausente-o-antiguo.md) | El desarrollador sabe qué Git le falta y el motor empieza solo cuando lo instala | Borrador (`draft`) | — | — |
@@ -304,6 +304,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-GRD-010](features/guardrails/user-stories/US-GRD-010-endurecer-sin-relajar.md) | El desarrollador endurece las reglas en su máquina sin poder relajar las del equipo | Implementado en parte (`partially-implemented`) | #217 | — |
 | [US-GRD-016](features/guardrails/user-stories/US-GRD-016-misma-decision-por-mcp.md) | Un agente que usa las herramientas MCP recibe la misma decisión que con Git directo | Implementado en parte (`partially-implemented`) | #313 | — |
 | [US-GRD-018](features/guardrails/user-stories/US-GRD-018-autoria-commits-persona-y-agente.md) | Cada commit entra a nombre de la persona y deja constancia del agente que lo hizo, con la exigencia que fija el equipo | Implementado en parte (`partially-implemented`) | #137, #141, #150, #152, #153, #154 | 3 |
+| [US-GRP-008](features/motor-local/user-stories/US-GRP-008-editor-humano-sin-atribuir.md) | El trabajo que el desarrollador hace en su editor nunca se atribuye a Claude Code | Implementado en parte (`partially-implemented`) | — | — |
 | [US-MCP-009](features/mcp/user-stories/US-MCP-009-safe-commit.md) | Un agente commitea por MCP con las reglas del repo y con un punto de recuperación previo | Implementado en parte (`partially-implemented`) | #289 | — |
 | [US-MCP-010](features/mcp/user-stories/US-MCP-010-safe-commit-rutas.md) | Un agente commitea solo los archivos que nombra y nunca fuera de su worktree | Implementado en parte (`partially-implemented`) | #289 | — |
 | [US-MCP-013](features/mcp/user-stories/US-MCP-013-confirmacion-sin-cola.md) | Un agente sabe que una acción necesita al desarrollador y a quién acudir | Implementado en parte (`partially-implemented`) | #267 | — |
@@ -333,7 +334,6 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-GRD-013](features/guardrails/user-stories/US-GRD-013-comando-edicion-configuracion.md) | El desarrollador cambia la configuración con un comando sin perder lo que editó a mano | Borrador (`draft`) | — | — |
 | [US-GRD-015](features/guardrails/user-stories/US-GRD-015-cola-de-confirmacion.md) | El desarrollador aprueba o rechaza las acciones de riesgo que un agente deja en espera | Borrador (`draft`) | — | — |
 | [US-GRP-006](features/motor-local/user-stories/US-GRP-006-retirar-y-volver-a-anadir.md) | El desarrollador recupera el historial de un repo que retiró y volvió a añadir | Borrador (`draft`) | — | — |
-| [US-GRP-008](features/motor-local/user-stories/US-GRP-008-editor-humano-sin-atribuir.md) | El trabajo que el desarrollador hace en su editor nunca se atribuye a Claude Code | Borrador (`draft`) | — | — |
 | [US-GRP-011](features/motor-local/user-stories/US-GRP-011-worktree-compartido.md) | El desarrollador ve todas las sesiones de un worktree compartido | Borrador (`draft`) | — | — |
 | [US-GRP-013](features/motor-local/user-stories/US-GRP-013-umbral-inactividad-por-repo.md) | El desarrollador ajusta para un repo cuándo una sesión pasa a inactiva | Borrador (`draft`) | — | — |
 | [US-GRP-016](features/motor-local/user-stories/US-GRP-016-rama-base-configuracion-equipo.md) | La rama base la define la configuración del equipo | Borrador (`draft`) | — | — |
@@ -566,6 +566,12 @@ Canal local de clientes y contrato de mensajes
 ### [TS-GRP-005](features/motor-local/technical-stories/TS-GRP-005-clases-trabajo-ahorro-energia.md) — #298
 
 Clases de trabajo del daemon y mecanismo de ahorro de energía
+
+- *La ficha no lista los pendientes en "Estado de la implementación".*
+
+### [US-GRP-008](features/motor-local/user-stories/US-GRP-008-editor-humano-sin-atribuir.md)
+
+El trabajo que el desarrollador hace en su editor nunca se atribuye a Claude Code
 
 - *La ficha no lista los pendientes en "Estado de la implementación".*
 

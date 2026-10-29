@@ -2,7 +2,7 @@
 id: US-GRP-008
 title: "El trabajo que el desarrollador hace en su editor nunca se atribuye a Claude Code"
 type: us
-status: draft
+status: partially-implemented
 priority: high
 created: 2026-10-03
 updated: 2026-10-28
@@ -70,3 +70,11 @@ Entonces el cambio de "README.md" figura como "sin atribuir"
 Dado una sesión de "Claude Code" activa en "feat-login"
 Cuando el desarrollador hace un commit en "feat-login" desde su editor, un proceso distinto de la sesión de Claude Code
 Entonces el evento del commit figura como "sin atribuir"
+
+## Estado de la implementación (2026-10-28)
+
+Implementado en: PR #PRNUM, en parte (T003 de [DS-US-GRP-008](../dev-specs/US-GRP-008-dev-spec.md): un `git` de la sesión solo es evidencia de S3 si su subcomando puede mover una ref o el `HEAD` y no redirige su destino, D4).
+
+Queda pendiente: T001, T002 y T004 (el actor de los cambios sin commitear en `raptor status`), y T005 y T006 (la prueba de los tres escenarios y el cierre de la ficha). El escenario "Un commit del desarrollador junto a Claude Code no se atribuye a Claude Code" ya tiene su prueba de S3 con un `git` de lectura de la sesión vivo: `a_session_reader_does_not_take_the_developers_commit` en `apps/cli/tests/events_s4_hook_attribution.rs`.
+
+> **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO**: T003 entra en el PR de `fix/attribution-detected-session`, junto con la Enmienda (2026-10-28) de ADR-GRP-012 sobre el `git` ajeno que no puede producir un evento. El criterio 2 de M1 necesita las dos reglas a la vez (condición del PO).
