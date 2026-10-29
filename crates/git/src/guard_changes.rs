@@ -172,8 +172,9 @@ impl RepoReader {
     }
 }
 
-/// The first line, whether the second is blank and whether the body has the revert line.
-fn message_facts(message: &[u8]) -> (Vec<u8>, bool, bool) {
+/// The first line (empty when it is too long to conform), whether the second is blank and
+/// whether the body has the revert line, of a message as Git stores it.
+pub fn message_facts(message: &[u8]) -> (Vec<u8>, bool, bool) {
     let (first, rest) = match message.iter().position(|b| *b == b'\n') {
         Some(at) => (&message[..at], Some(&message[at + 1..])),
         None => (message, None),
