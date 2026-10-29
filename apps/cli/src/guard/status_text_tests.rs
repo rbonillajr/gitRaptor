@@ -156,7 +156,7 @@ fn mcp_only_with_inactive_hooks_shows_both() {
     };
     for (tr, state, inactive) in [
         (EN, "state: MCP only", "hooks: inactive ("),
-        (ES, "estado: solo MCP", "hooks: inactiva ("),
+        (ES, "estado: solo MCP", "hooks: inactivos ("),
     ] {
         let lines = status_lines(&s, tr);
         assert_eq!(lines[0], state, "{lines:#?}");
@@ -188,4 +188,17 @@ fn an_mcp_only_repo_is_not_offered_as_unprotected() {
             "{lines:#?}"
         );
     }
+}
+
+/// Without a known cause the diagnostic has no empty parentheses.
+#[test]
+fn an_inactive_hooks_line_without_a_cause_has_no_parentheses() {
+    let mut hooks = HooksLayer::lost(LossCause::DispatcherMissing);
+    hooks.cause = None;
+    let s = GuardStatus {
+        state: ProtectionState::McpOnly,
+        ..status(true, &["main"], hooks)
+    };
+    assert_eq!(status_lines(&s, EN)[1], "hooks: inactive");
+    assert_eq!(status_lines(&s, ES)[1], "hooks: inactivos");
 }
