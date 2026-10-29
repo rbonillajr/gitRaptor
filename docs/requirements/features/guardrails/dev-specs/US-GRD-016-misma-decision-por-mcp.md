@@ -318,7 +318,7 @@ graph LR
 - `apps/mcp/src/safe_commit_tests.rs` (**MODIFY**)
 
 **Reglas**
-- En `denied()` (`engine.rs:430`) construye `reasons` a partir de `GuardrailsDenial.reasons`: un objeto `{"rule": <código>, "level": <nivel kebab>}` por par distinto, en el orden de la decisión, como mucho `MAX_DENIED_RULES` (4) pares. `rules` sigue igual.
+- En `denied()` (`engine.rs:430`) construye `reasons` a partir de `GuardrailsDenial.reasons`: un objeto `{"rule": <código>, "level": <nivel kebab>}` por regla, con el primer nivel que la decisión le da (los niveles vienen por precedencia), en el orden de la decisión, como mucho `MAX_DENIED_RULES` (4) pares. Así una regla con varios niveles no llena los cuatro huecos (revisión de seguridad I-01, 2026-10-28). `rules` sigue igual.
 - En `tool_params` (`messages.rs:100`) reconstruye `reasons` validando cada campo como hoy `denied_rules` valida las reglas: solo ASCII `[a-z.-]`, como mucho 64 bytes; `level` solo de `minimum`, `floor`, `worktree`, `profile`, `local`, `system`.
 - El texto (`messages.rs:483`) añade el nivel de la primera regla con las palabras de la CLI (`guard.level.*` de `apps/cli/i18n/{en,es}/guard.txt`): `floor` → «team configuration» / «configuración del equipo», `worktree` → «team configuration on this branch» / «configuración del equipo en esta rama», `profile`, `local`, `system` como allí.
 - `policy-denied` sigue sin recortar reglas, `reasons` ni `decision_id` (RES-MCP-04). Decisión del orquestador (2026-10-28), validada por el Arquitecto: `MCP_POLICY_REFUSAL_TOKENS` sube de 125 a 221 (peor caso medido con cuatro `reasons`: 658 B en es, más uno); el caso típico (una regla, en es) sigue ≤ 125 y lo fija una prueba.
@@ -665,7 +665,7 @@ pub const CAP_GUARD_PROTECTION_LAYERS: Capability = Capability::new("guard.prote
 }
 ```
 
-`rules` no cambia (los agentes que ya lo leen siguen igual). `reasons` repite cada regla con su nivel, una vez por par distinto. Un `level` fuera de la lista de T003 descarta el par, no la respuesta.
+`rules` no cambia (los agentes que ya lo leen siguen igual). `reasons` repite cada regla con su nivel, una vez por regla. Un `level` fuera de la lista de T003 descarta el par, no la respuesta.
 
 ### Forma de la configuración
 
@@ -761,6 +761,7 @@ Sin umbral numérico en el repo (`AGENTS.md`: tests obligatorios para todo cambi
 |---|---|---|
 | Un agente no detectado cuenta como persona y por el Cockpit pasaría un `ask` con aviso | R-GRD-2, declarado en BR-VAL-002 (Q-GRD-46) | Sin cambio en esta entrega |
 | `reset --hard` y borrar worktree no los impide ninguna capa con Git directo | BR-EDGE-003, Q-GRD-42 | El MCP no los ofrece; publicado en `notPreventable` |
+| Con `known_ops`, todo plan del ejecutor pasa por `decision_for(total, AskedBy::of(actor))`: la persona por el Cockpit pasa con aviso cualquier `ask` del plan (no solo el de los permisos) | Es lo que hacen los hooks (`decide_op`) y R-GRD-2 (Q-GRD-46); revisión de seguridad L-01 (2026-10-28) | Por MCP el actor es siempre un agente (`crates/core/src/executor/mod.rs:187`), así que un `ask` se deniega (`confirmation-required`) |
 
 ---
 
