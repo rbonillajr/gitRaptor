@@ -2,13 +2,13 @@
 id: TS-CKP-001
 title: "Predictor de conflictos en el daemon: solape y conflicto previsto publicados para todos los clientes"
 type: ts
-status: partially-implemented
+status: implemented
 feature: cockpit
 domain: GRP
 priority: critical
 complexity: high
 created: 2026-10-04
-updated: 2026-10-27
+updated: 2026-10-28
 related:
   adrs: [ADR-CKP-001, ADR-GRP-005, ADR-GRP-009, ADR-GRP-010, ADR-GRP-011, ADR-GRP-013]
   stories: [US-CKP-006, US-CKP-007, US-CKP-008, US-CKP-009, US-CKP-011, SPIKE-CKP-001, TS-GRP-002, TS-GRP-003, TS-GRP-004, TS-GRP-005, INF-GRP-001, INF-GRP-002, TS-GRD-001]
@@ -75,10 +75,11 @@ tags: [cockpit, prediccion-conflictos, merge-en-seco, solape, daemon, nfr-01, se
 - Reproducir la demo del BRD § 13 en un repo temporal con 4 sesiones, dos de ellas tocando el mismo archivo: aparece ⚡ con archivo y hunk antes del merge, y el merge real produce el conflicto previsto.
 - Linux y Windows (prioridad baja del SO, auditoría de `exec`): **Pendiente: etapa de validación multiplataforma**.
 
-## Estado de la implementación (2026-10-21)
+## Estado de la implementación (2026-10-28)
 
-Implementado en: PR #275 (en parte, PR-A: T001 a T005 y T011 de DS-TS-CKP-001, más la excepción G9 de `static_check.rs`).
+Implementado en: PR #275 (PR-A: T001 a T005 y T011 de DS-TS-CKP-001, más la excepción G9 de `static_check.rs`) y PR #PRB (PR-B: T006, T007, T009, T010, T012 y T013).
 
 - **Hecho:** las rutas sin commitear de cada worktree se retienen en memoria y llegan al predictor (`worktree_recomputed`, `repo_tier_changed`). El módulo `predict` del daemon calcula los pares, el trabajo propio y el solape, con los estados, la caché por triple y la cola coalescente. El merge en seco en memoria (`gitraptor_git::dry_merge`) usa `gix_merge::commit` sin drivers, filtros ni atributos, con extractores de conflictos y de hunks y la marca `has_merge_rule` (D14). El corpus R-SYN se compara contra `git merge-tree`.
-- **Falta:** T006, el proceso trabajador, y T007, el pool `utility`, bloqueados por G5 (TS-GRP-005 sin implementar). T009, la publicación, bloqueada por G2 (forma del contrato). T010 (salvo G9), T012 y T013 van por arrastre, igual que ejecutar a mano R-REAL (`real_git_corpus`, que aún no está escrito). Mientras falten T006 y T007, el módulo encola los merges en seco pero ninguno se ejecuta, y no se publica nada.
+- **Hecho en el PR-B:** el merge en seco corre en un proceso trabajador (el propio binario, subcomando oculto `predict-worker`) con plazo de 2 s, cota de memoria vigilada desde el daemon, comprobación de versión y escalado de renombrados; un pool `utility` que se pausa en ahorro de energía; la publicación por el canal (`prediction.pairs`, `prediction.list`, `prediction.changed`, `RepoView.prediction`, `attention.conflicts` híbrido y `repo.attention`); la suite `repo_intact` del predictor, sus fronteras y el escenario `prediction` del banco.
+- **Pendiente fuera del PR:** medir el escenario `prediction` del banco con la máquina en reposo (G11 de la Dev Spec; si E9 sale en regresión, una TD reabre la historia); ejecutar a mano R-REAL (`real_git_corpus`); Linux y Windows en la etapa de validación multiplataforma (en Windows el trabajador no tiene cota de memoria: *Job Object* pendiente).
 

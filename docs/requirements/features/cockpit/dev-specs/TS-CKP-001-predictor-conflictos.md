@@ -2,7 +2,7 @@
 id: DS-TS-CKP-001
 title: "Dev Spec — Predictor de conflictos en el daemon: solape y conflicto previsto por par"
 type: dev-spec
-status: partially-implemented
+status: implemented
 created: 2026-10-09
 updated: 2026-10-28
 story: TS-CKP-001
@@ -61,7 +61,7 @@ tags: [cockpit, prediccion-conflictos, merge-en-seco, solape, daemon, proceso-tr
 
 # DS-TS-CKP-001 · Predictor de conflictos en el daemon
 
-Implementado en parte en: PR #275 (T001 a T005, T011 y la excepción G9 de T010). Faltan T006, T007, T009, T010, T012 y T013, que construye el PR-B (G2 cerrado el 2026-10-27 por #283; G5 cerrado el 2026-10-28 por #298).
+Implementado en: PR #275 (PR-A: T001 a T005, T011 y la excepción G9 de T010) y PR #PRB (PR-B: T006, T007, T009, T010, T012 y T013; G2 cerrado el 2026-10-27 por #283 y G5 el 2026-10-28 por #298). Pendiente fuera del PR: la medición del banco en reposo (G11).
 
 ## Contexto rápido
 
@@ -122,6 +122,8 @@ Las ramas R-A2, R-B y R-SOLAPE quedan descartadas y se borraron con sus tareas (
 **Decisión del Arquitecto como autor de la Dev Spec (2026-10-27)**, huecos que A2 no cubre:
 
 - **D17**: `prediction.changed` lleva también `repo_id` en `data`, porque un evento de ámbito repo se enruta por él (`scope_of`, `crates/api/src/event.rs:93`). El valor `none` de `level` y de `merge_base` se escribe en Rust como `PairLevel::Clean` y `MergeBaseKind::Absent` con `#[serde(rename = "none")]`, para no chocar con `Option::None`; el cable es el de A2. El test de aptitud del marco usa 55 pares (10 worktrees, § Valores numéricos), porque el motor no tiene un tope de worktrees.
+
+- **D18**: decisión del orquestador (2026-10-28), validada por Arquitecto: sin `RLIMIT_AS`. La cota de memoria del trabajador es la RSS que el daemon lee cada `WORKER_RSS_POLL` contra `JOB_MEMORY_CAP` (D12). Motivo: `RLIMIT_AS` limita el espacio virtual y `gix` mapea los packs enteros, así que cualquier tope fijo rompe en Linux todos los pares de un repo con packs grandes (fallo de `mmap`), mientras en macOS funciona. Origen: hallazgo M3 de la revisión de código del PR-B.
 
 **Decisiones del Arquitecto como autor de la Dev Spec (2026-10-09), aceptadas por el orquestador al revisar el borrador (2026-10-09):**
 
@@ -451,7 +453,7 @@ graph LR
 
 **Reglas — cotas** (D12, Brief § 6)
 - **Plazo**: un temporizador del daemon de `PAIR_DEADLINE` (2 s, reloj de pared) por trabajo. Vencido → mata el trabajador (SIGKILL; en Windows, `TerminateProcess`), espera su salida y lo relanza con el siguiente trabajo.
-- **Memoria**: el daemon lee la memoria residente del hijo cada `WORKER_RSS_POLL` (20 ms): `proc_pidinfo` en macOS y `/proc/<pid>/statm` en Linux, más `RLIMIT_AS` en Linux. Por encima de `JOB_MEMORY_CAP` → lo mata y relanza. Con 20 ms de muestreo puede pasarse hasta unos 130 MiB antes de morir (Brief § 6).
+- **Memoria**: el daemon lee la memoria residente del hijo cada `WORKER_RSS_POLL` (20 ms): `proc_pidinfo` en macOS y `/proc/<pid>/status` (`VmRSS`) en Linux, sin `RLIMIT_AS` (D18). Por encima de `JOB_MEMORY_CAP` → lo mata y relanza. Con 20 ms de muestreo puede pasarse hasta unos 130 MiB antes de morir (Brief § 6).
 - **Sin `RLIMIT_CPU` como cota por par**: en un proceso de vida larga es acumulativo y acabaría matando un trabajador sano. El tiempo por par lo da el temporizador.
 - Par cortado por plazo o memoria → `no calculable (límite excedido)`, sin reintento hasta que cambie su triple. Un `DryMergeError::LimitExceeded` del propio trabajador (tope de bytes escritos) da el mismo estado sin relanzar.
 
@@ -459,7 +461,7 @@ graph LR
 - Primer trabajo con `rewrites_limit` = `REWRITES_LIMIT` (1.000). Si su resultado tiene algún archivo `ModifyDelete` o `Rename`, se envía un segundo trabajo del mismo par con `REWRITES_LIMIT_ESCALATED` (100.000), con su propio plazo de 2 s.
 - Si el segundo trabajo termina, se publica su resultado. Si lo corta un límite, se publica el **del primero**, como `actual`, con el límite declarado 2 (renombrados no detectados); nunca `no calculable`.
 
-> **Nota técnica.** En macOS `RLIMIT_AS`/`RLIMIT_RSS` no se imponen (confirmado por E10), por eso la vigilancia desde el padre. Windows: un *Job Object* da el tope de memoria y de CPU (pendiente de la etapa multiplataforma). Referencia: `spikes/conflict-prediction/src/worker.rs`, que usa JSON por líneas; aquí las tramas llevan prefijo de longitud.
+> **Nota técnica.** En macOS `RLIMIT_AS`/`RLIMIT_RSS` no se imponen (confirmado por E10), por eso la vigilancia desde el padre. En Linux tampoco se usa `RLIMIT_AS` (D18). Windows: un *Job Object* da el tope de memoria y de CPU (pendiente de la etapa multiplataforma). Referencia: `spikes/conflict-prediction/src/worker.rs`, que usa JSON por líneas; aquí las tramas llevan prefijo de longitud.
 
 - **Depende:** T005, T007
 - **Refs:** ADR-CKP-001 § 1 y § 5, y Enmienda 2026-10-20; ADR-GRP-009, Enmienda 2026-10-20 (Validación 5); ADR-GRP-015 § 1 y § 3; D12
@@ -963,7 +965,7 @@ _No aplica — el predictor no persiste nada y el trabajador no escribe en disco
 | Plataforma | Cómo se verifica | Pendiente |
 |---|---|---|
 | macOS | CI `repo-intact.yml` (macOS) y máquina de dogfooding | — |
-| Linux | CI `ubuntu-latest` | Clase `utility` (nice 5), RSS del trabajador por `/proc/<pid>/statm` y `RLIMIT_AS` |
+| Linux | CI `ubuntu-latest` | Clase `utility` (nice 5), RSS del trabajador por `/proc/<pid>/status` (`VmRSS`); medir si en un repo grande las páginas de pack leídas inflan la RSS hasta `JOB_MEMORY_CAP` y, si es así, contar solo la memoria anónima (`RssAnon`) (D18) |
 | Windows | — | Pendiente: etapa de validación multiplataforma (`xplat-pendientes.md`): prioridad del hilo, `config.system = false` (F9), *Job Object* para el trabajador y auditoría de `exec` |
 
 ---
