@@ -426,8 +426,8 @@ fn cursors_belong_to_their_table_and_are_bounded() {
 /// same state by both, and one outside it has no MCP view.
 #[test]
 fn mcp_view_and_guard_status_agree() {
-    use gitraptor_api::guard::ProtectionState;
     use super::McpProtectionState;
+    use gitraptor_api::guard::ProtectionState;
     for hooks in [false, true] {
         for mcp in [false, true] {
             let state = ProtectionState::of(hooks, mcp);
@@ -437,7 +437,10 @@ fn mcp_view_and_guard_status_agree() {
             let view = super::mcp_protection(state);
             let wire = serde_json::to_value(view).unwrap();
             assert_eq!(wire, serde_json::to_value(state).unwrap(), "{state:?}");
-            assert_eq!(view == McpProtectionState::Full, state == ProtectionState::Full);
+            assert_eq!(
+                view == McpProtectionState::Full,
+                state == ProtectionState::Full
+            );
         }
     }
 }

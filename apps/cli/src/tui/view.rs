@@ -905,6 +905,36 @@ mod tests {
         }
     }
 
+    /// A `full` repo whose hooks were replaced still tells that the protection was lost: the bar
+    /// reads the hooks half (`GuardStatus.hooks`), never the four-valued state.
+    #[test]
+    fn full_with_inactive_hooks_keeps_the_protection_lost_text() {
+        use gitraptor_api::guard::{GuardStatus, HooksLayer, LossCause, ProtectionState};
+        let wire = serde_json::json!({
+            "repo_id": "r1",
+            "state": "full",
+            "permission": "granted",
+            "offer": false,
+            "protected_bases": [],
+            "base_confirmed": true,
+            "not_preventable": [],
+            "last_refusal": [],
+            "hooks": HooksLayer::lost(LossCause::DispatcherMissing),
+        });
+        let status: GuardStatus = serde_json::from_value(wire).expect("a full status");
+        assert_eq!(status.state, ProtectionState::Full);
+        let mut model = shop_model(Lang::En);
+        update(
+            &mut model,
+            engine(EngineMsg::Protection {
+                repo_id: "r1".into(),
+                hooks: status.hooks,
+            }),
+        );
+        let shown = screen(&model, 120, 30);
+        assert!(shown.contains("protection lost: a hook is gone"), "{shown}");
+    }
+
     /// Scenario 1: one row per worktree, the main one first and the agent first in the row.
     #[test]
     fn one_row_per_worktree_with_the_agent_first() {

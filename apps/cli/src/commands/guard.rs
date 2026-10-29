@@ -74,6 +74,9 @@ enum GuardAction {
         /// Most recent entries to show (at most 500).
         #[arg(long, default_value_t = 50)]
         limit: u32,
+        /// Only the entries of this layer: `hooks` (Git directly), `mcp` or `cockpit`.
+        #[arg(long, value_parser = ["hooks", "mcp", "cockpit"])]
+        layer: Option<String>,
         /// Print JSON instead of text.
         #[arg(long)]
         json: bool,
@@ -93,8 +96,9 @@ impl Cmd {
                 path,
                 days,
                 limit,
+                layer,
                 json,
-            } => guard::log(path, days, limit, json),
+            } => guard::log(path, days, limit, layer.as_deref(), json),
         }
     }
 }
