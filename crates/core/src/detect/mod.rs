@@ -45,7 +45,7 @@ use crate::watch::ObserverHooks;
 
 pub use hook::{HookClaims, RefMove};
 pub use procs::{
-    GitCall, ProcEntry, ProcLister, SystemProcLister, detection_supported, git_call,
+    GitCall, GitFacts, ProcEntry, ProcLister, SystemProcLister, detection_supported, git_call,
     git_redirect_into,
 };
 
@@ -55,9 +55,10 @@ const MAX_DEPTH: usize = 64;
 /// Samples kept per repo; older ones can no longer match a batch.
 const MAX_SIGHTINGS: usize = 256;
 
-/// Most foreign `git`s whose argv and environment are read per sample; past
-/// it a `git` is unreadable (`None`), so it counts as foreign in the whole
-/// repo: a flood of `git`s costs no more than this, and gains nothing.
+/// Most `git`s whose argv and environment are read per sample (foreign ones
+/// and those of a session alike); past it a `git` is unreadable (`None`): a
+/// foreign one counts in the whole repo and one of a session is no evidence,
+/// so a flood of `git`s costs no more than this, and gains nothing.
 const MAX_REDIRECT_READS: usize = 32;
 
 /// Id of the session of the Claude Code process `(pid, start)`. The same
@@ -232,6 +233,12 @@ pub struct S3Counts {
     /// Foreign `git`s in the repo that redirect their target, or whose argv
     /// or environment could not be read.
     pub foreign_redirected: u32,
+    /// Foreign `git`s in the repo that cannot make a Git event (`log`, `status`…): not foreign
+    /// (ADR-GRP-012, amendment 2026-10-28).
+    pub foreign_harmless: u32,
+    /// `git`s of a session in the event's worktree that cannot move a ref, redirect their
+    /// target or could not be read: no evidence (DS-US-GRP-008 D4).
+    pub sessions_not_writing: u32,
     /// `git`s that started after the write: not evidence and not foreign.
     pub gits_after_notice: u32,
 }
@@ -366,10 +373,16 @@ fn classify<'g, 'c>(
         return (Class::Ignored, Some(&mut counts.gits_after_notice));
     }
     match (&git.owner, &git.cwd) {
+        // Only a `git` that can move a ref or `HEAD`, where it stands, is evidence; one that
+        // reads, redirects or could not be read made nothing (DS-US-GRP-008 D4).
         (Owner::Session(id), Some(cwd))
             if !repo.in_common(cwd) && repo.worktree_of(cwd).is_some_and(|w| w == worktree) =>
         {
-            (Class::Evidence(id), Some(&mut counts.sessions_wt))
+            if git.writes == Some(true) && git.redirect == Some(false) {
+                (Class::Evidence(id), Some(&mut counts.sessions_wt))
+            } else {
+                (Class::Ignored, Some(&mut counts.sessions_not_writing))
+            }
         }
         // A `git` of the session in another worktree, in the common dir, or
         // exiting, is no evidence and not foreign.
@@ -387,6 +400,11 @@ fn classify<'g, 'c>(
         // gap of SPIKE-GRP-001).
         (Owner::Other, None) => (Class::Ignored, None),
         (Owner::Other, Some(cwd)) if !repo.contains(cwd) => (Class::Ignored, None),
+        // A `git` that cannot make a Git event made none, wherever it stands and whatever it
+        // targets (ADR-GRP-012, amendment 2026-10-28). The daemon's own count above, always.
+        (Owner::Other, Some(_)) if git.harmless == Some(true) => {
+            (Class::Ignored, Some(&mut counts.foreign_harmless))
+        }
         (Owner::Other, Some(cwd)) if repo.in_common(cwd) => {
             (Class::Foreign, Some(&mut counts.foreign_gitdir))
         }
@@ -427,9 +445,16 @@ struct GitSeen {
     /// `cwd` is the folder of the nearest live ancestor, not its own.
     placed_by_ancestor: bool,
     /// For a foreign `git` with its own readable folder in the repo, outside
-    /// the common dir: whether it redirects its target (`None`: its argv or
-    /// environment could not be read). `None` for every other `git`.
+    /// the common dir, and for a `git` of a session in the repo: whether it
+    /// redirects its target (`None`: its argv or environment could not be
+    /// read). `None` for every other `git`.
     redirect: Option<bool>,
+    /// For a `git` of a session in the repo: whether its subcommand can move
+    /// a ref or `HEAD` (`None`: unreadable). `None` for every other `git`.
+    writes: Option<bool>,
+    /// For a foreign `git` placed in the repo: whether it cannot make a Git
+    /// event (`None`: unreadable). `None` for every other `git`.
+    harmless: Option<bool>,
 }
 
 /// Whose a `git` is, by its ancestry.
@@ -1068,20 +1093,20 @@ impl Inner {
                 })
                 .collect()
         };
-        // Whether each foreign `git` redirects its target: one boolean per
-        // pid, never a value of its argv or environment (SEC-04), and at most
+        // What S3 reads of a `git`: three booleans per pid from one read,
+        // never a value of its argv or environment (SEC-04), and at most
         // [`MAX_REDIRECT_READS`] reads.
-        let mut redirects: HashMap<u32, Option<bool>> = HashMap::new();
-        let mut redirect_of = |pid: u32| -> Option<bool> {
-            if let Some(known) = redirects.get(&pid) {
+        let mut facts: HashMap<u32, Option<GitFacts>> = HashMap::new();
+        let mut facts_of = |pid: u32| -> Option<GitFacts> {
+            if let Some(known) = facts.get(&pid) {
                 return *known;
             }
-            let read = if redirects.len() < MAX_REDIRECT_READS {
-                self.procs.git_redirect(pid)
+            let read = if facts.len() < MAX_REDIRECT_READS {
+                self.procs.git_facts(pid)
             } else {
                 None
             };
-            redirects.insert(pid, read);
+            facts.insert(pid, read);
             read
         };
         let mut sightings = Vec::with_capacity(notices.len());
@@ -1094,27 +1119,44 @@ impl Inner {
                     let mut cwd = cwds.get(&g.pid).cloned().flatten();
                     let mut placed_by_ancestor = false;
                     let mut redirect = None;
-                    if owner == Owner::Other {
-                        match &cwd {
-                            None => {
+                    let mut writes = None;
+                    let mut harmless = None;
+                    // Only where the answer can change the outcome, and
+                    // read once per sample. A `git` whose folder is
+                    // outside the repo is not read and never counts here,
+                    // even if `-C` points it into the repo: a declared gap.
+                    match &owner {
+                        Owner::Other => {
+                            if cwd.is_none() {
                                 cwd = self.launched_from(g, &by_pid);
                                 if cwd.is_some() {
                                     placed_by_ancestor = true;
                                     self.placed_by_ancestor.fetch_add(1, Ordering::Relaxed);
                                 }
                             }
-                            // Only where the answer can change the outcome:
-                            // its own folder, in the repo, outside the
-                            // common dir. Read once per sample. A foreign
-                            // `git` whose own folder is outside the repo is
-                            // not read and never counts here, even if `-C`
-                            // points it into the repo: a declared gap.
-                            Some(own) => {
-                                if repo.is_some_and(|r| r.contains(own) && !r.in_common(own)) {
-                                    redirect = redirect_of(g.pid);
+                            if let Some(at) = cwd
+                                .as_deref()
+                                .filter(|c| repo.is_some_and(|r| r.contains(c)))
+                            {
+                                let read = facts_of(g.pid);
+                                harmless = read.map(|f| f.harmless);
+                                // Its own folder outside the common dir: the
+                                // only place where its target matters.
+                                if !placed_by_ancestor && repo.is_some_and(|r| !r.in_common(at)) {
+                                    redirect = read.map(|f| f.redirect);
                                 }
                             }
                         }
+                        Owner::Session(_) => {
+                            if cwd.as_deref().is_some_and(|c| {
+                                repo.is_some_and(|r| r.contains(c) && !r.in_common(c))
+                            }) {
+                                let read = facts_of(g.pid);
+                                redirect = read.map(|f| f.redirect);
+                                writes = read.map(|f| f.writes);
+                            }
+                        }
+                        Owner::Daemon => {}
                     }
                     GitSeen {
                         owner,
@@ -1122,6 +1164,8 @@ impl Inner {
                         started_before: g.start_us <= notice.wall_us.saturating_add(tolerance),
                         placed_by_ancestor,
                         redirect,
+                        writes,
+                        harmless,
                     }
                 })
                 .collect();

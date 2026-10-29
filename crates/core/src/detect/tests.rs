@@ -19,6 +19,9 @@ struct Table {
     exe_reads: Mutex<Vec<(u32, u64)>>,
     /// What `git_redirect` answers per pid; `Some(false)` when absent.
     redirects: Mutex<HashMap<u32, Option<bool>>>,
+    /// The command line of each `git` after the program name (`None`: unreadable); a `git`
+    /// absent here runs `commit`, which writes.
+    calls: Mutex<HashMap<u32, Option<String>>>,
     /// Pids whose working folder was deleted (`cwd_gone`).
     gone_cwds: Mutex<HashSet<u32>>,
 }
@@ -39,6 +42,14 @@ impl Table {
     /// Whether the `git` `pid` redirects its target; `None`: unreadable.
     fn redirect(&self, pid: u32, redirect: Option<bool>) {
         self.redirects.lock().unwrap().insert(pid, redirect);
+    }
+
+    /// The command line of the `git` `pid` after the program name; `None`: unreadable.
+    fn call(&self, pid: u32, line: Option<&str>) {
+        self.calls
+            .lock()
+            .unwrap()
+            .insert(pid, line.map(str::to_owned));
     }
 
     /// The working folder of `pid` was deleted.
@@ -89,6 +100,17 @@ impl ProcLister for Arc<Table> {
             .get(&pid)
             .copied()
             .unwrap_or(Some(false))
+    }
+    fn git_call(&self, pid: u32) -> Option<GitCall> {
+        let line = self
+            .calls
+            .lock()
+            .unwrap()
+            .get(&pid)
+            .cloned()
+            .unwrap_or_else(|| Some("commit -q -m x".into()))?;
+        let args: Vec<std::ffi::OsString> = line.split_whitespace().map(Into::into).collect();
+        Some(git_call(&args))
     }
 }
 
@@ -508,9 +530,9 @@ fn s3_ignores_a_git_of_the_session_that_started_after_the_write() {
     assert_eq!(rig.evidence("/wt/feat-login", 1_000), S3Outcome::NoSighting);
 }
 
-/// The developer commits while Claude Code runs a `git status` in the same
-/// worktree: both `git`s are alive, so the commit stays unattributed
-/// (BR-EDGE-004).
+/// The developer commits while Claude Code runs a `git commit` in the same
+/// worktree: both `git`s are alive and either may have made the event, so it
+/// stays unattributed (BR-EDGE-004).
 #[test]
 fn s3_with_a_git_outside_every_session_is_ambiguous() {
     let rig = Rig::new();
@@ -570,8 +592,8 @@ fn s3_ignores_exiting_gits_launched_outside_the_repo() {
 }
 
 /// A flood of foreign `git`s costs at most `MAX_REDIRECT_READS` reads of
-/// argv and environment per sample: the ones past it are unreadable, so they
-/// count in the whole repo.
+/// argv and environment per sample, the session's own `git` included: the
+/// ones past it are unreadable, so they count in the whole repo.
 #[test]
 fn s3_reads_at_most_the_capped_number_of_redirects_per_sample() {
     let rig = Rig::new();
@@ -589,11 +611,153 @@ fn s3_reads_at_most_the_capped_number_of_redirects_per_sample() {
         e.counts,
         S3Counts {
             sessions_wt: 1,
-            foreign_other_wt: flood - 1,
-            foreign_redirected: 1,
+            foreign_other_wt: flood - 2,
+            foreign_redirected: 2,
             ..S3Counts::default()
         }
     );
+}
+
+/// Dogfooding 2026-10-28: Claude Code commits while the developer has `git`s
+/// open in the same worktree that cannot make a Git event (a pager's `log`,
+/// an editor's `status` or `cat-file --batch`, its `fsmonitor--daemon`). They
+/// are not foreign, wherever they stand and whatever they target, so the
+/// commit is the session's (ADR-GRP-012, amendment 2026-10-28).
+#[test]
+fn s3_does_not_count_a_foreign_git_that_cannot_make_an_event() {
+    let rig = Rig::new();
+    rig.claude(20, 2_000, "/wt/feat-login");
+    rig.scan();
+    git(&rig, 31, 20, Some("/wt/feat-login"));
+    for (pid, line) in [
+        (41, "log --oneline"),
+        (42, "--no-optional-locks status --porcelain"),
+        (43, "cat-file --batch"),
+        (44, "fsmonitor--daemon run"),
+        (45, "-C /r rev-parse HEAD"),
+    ] {
+        git(&rig, pid, 10, Some("/wt/feat-login"));
+        rig.table.call(pid, Some(line));
+    }
+    rig.table.redirect(45, Some(true));
+    git(&rig, 46, 10, Some("/r/.git"));
+    rig.table.call(46, Some("config --get core.bare"));
+    rig.detector.sample_now("r", 1_000);
+    let e = rig.evidence_in("/wt/feat-login", S3Scope::Repo, 1_000);
+    assert!(matches!(e.outcome, S3Outcome::Attributed(_)), "{e:?}");
+    assert_eq!(
+        e.counts,
+        S3Counts {
+            sessions_wt: 1,
+            foreign_harmless: 6,
+            ..S3Counts::default()
+        }
+    );
+}
+
+/// The inverse: a foreign `git` that can make the event, or that could not be
+/// read, or an alias, still counts, and the developer's commit next to the
+/// session stays unattributed (BR-EDGE-004).
+#[test]
+fn s3_still_counts_a_foreign_git_that_may_make_the_event() {
+    for line in [Some("commit -m x"), None, Some("st"), Some("stat.us")] {
+        let rig = Rig::new();
+        rig.claude(20, 2_000, "/wt/feat-login");
+        rig.scan();
+        git(&rig, 31, 20, Some("/wt/feat-login"));
+        git(&rig, 41, 10, Some("/wt/feat-login"));
+        rig.table.call(41, line);
+        rig.detector.sample_now("r", 1_000);
+        assert_eq!(
+            rig.evidence("/wt/feat-login", 1_000),
+            S3Outcome::Ambiguous,
+            "{line:?}"
+        );
+    }
+    // The daemon's own `git` counts whatever it runs: a restore is never a session's.
+    let rig = Rig::new();
+    rig.claude(20, 2_000, "/wt/feat-login");
+    rig.scan();
+    git(&rig, 31, 20, Some("/wt/feat-login"));
+    let me = std::process::id();
+    rig.table.add(me, 10, 1_000, "/opt/raptor", Some("/"));
+    git(&rig, 50, me, Some("/r"));
+    rig.table.call(50, Some("rev-parse HEAD"));
+    rig.detector.sample_now("r", 1_000);
+    assert_eq!(rig.evidence("/wt/feat-login", 1_000), S3Outcome::Ambiguous);
+}
+
+/// DS-US-GRP-008 D4: a `git` of the session that only reads made no event.
+/// The developer's commit without a visible `git` (an editor writing in
+/// process) while Claude Code runs `git log` is not Claude Code's: `NoSighting`,
+/// so at most the single-session hint, never an attribution.
+#[test]
+fn a_session_git_that_only_reads_is_no_evidence() {
+    let rig = Rig::new();
+    rig.claude(20, 2_000, "/wt/feat-login");
+    rig.scan();
+    git(&rig, 31, 20, Some("/wt/feat-login"));
+    rig.table.call(31, Some("log -p"));
+    rig.detector.sample_now("r", 1_000);
+    let e = rig.evidence_in("/wt/feat-login", S3Scope::Worktree, 1_000);
+    assert_eq!(e.outcome, S3Outcome::NoSighting);
+    assert_eq!(e.counts.sessions_not_writing, 1);
+    assert_eq!(e.counts.sessions_wt, 0);
+}
+
+#[test]
+fn a_session_git_that_redirects_is_no_evidence() {
+    let rig = Rig::new();
+    rig.claude(20, 2_000, "/wt/feat-login");
+    rig.scan();
+    git(&rig, 31, 20, Some("/wt/feat-login"));
+    rig.table.redirect(31, Some(true));
+    rig.detector.sample_now("r", 1_000);
+    assert_eq!(rig.evidence("/wt/feat-login", 1_000), S3Outcome::NoSighting);
+}
+
+#[test]
+fn an_unreadable_session_git_is_no_evidence() {
+    for (redirect, line) in [(None, Some("commit -m x")), (Some(false), None)] {
+        let rig = Rig::new();
+        rig.claude(20, 2_000, "/wt/feat-login");
+        rig.scan();
+        git(&rig, 31, 20, Some("/wt/feat-login"));
+        rig.table.redirect(31, redirect);
+        rig.table.call(31, line);
+        rig.detector.sample_now("r", 1_000);
+        assert_eq!(
+            rig.evidence("/wt/feat-login", 1_000),
+            S3Outcome::NoSighting,
+            "{redirect:?} {line:?}"
+        );
+    }
+}
+
+#[test]
+fn a_writing_session_git_is_still_evidence() {
+    for line in [
+        "-c core.hooksPath=/h commit -q -m x",
+        "reset --hard",
+        "checkout main",
+        "push origin x",
+    ] {
+        let rig = Rig::new();
+        rig.claude(20, 2_000, "/wt/feat-login");
+        rig.scan();
+        git(&rig, 31, 20, Some("/wt/feat-login"));
+        rig.table.call(31, Some(line));
+        // A reader of the same session does not hide it.
+        git(&rig, 32, 20, Some("/wt/feat-login"));
+        rig.table.call(32, Some("status"));
+        rig.detector.sample_now("r", 1_000);
+        let e = rig.evidence_in("/wt/feat-login", S3Scope::Worktree, 1_000);
+        assert!(matches!(e.outcome, S3Outcome::Attributed(_)), "{line}");
+        assert_eq!(
+            (e.counts.sessions_wt, e.counts.sessions_not_writing),
+            (1, 1)
+        );
+    }
 }
 
 #[test]

@@ -71,7 +71,7 @@ fn s3_scope_follows_the_event_kind() {
     }
 }
 
-const COUNTERS: [&str; 8] = [
+const COUNTERS: [&str; 10] = [
     "sessions_wt",
     "foreign_wt",
     "foreign_other_wt",
@@ -79,6 +79,8 @@ const COUNTERS: [&str; 8] = [
     "foreign_by_ancestor",
     "foreign_gitdir",
     "foreign_redirected",
+    "foreign_harmless",
+    "sessions_not_writing",
     "gits_after_notice",
 ];
 
@@ -100,7 +102,9 @@ fn the_s3_log_line_carries_only_counters() {
         foreign_by_ancestor: 5,
         foreign_gitdir: 6,
         foreign_redirected: 7,
-        gits_after_notice: 8,
+        foreign_harmless: 8,
+        sessions_not_writing: 9,
+        gits_after_notice: 10,
     };
     // A repo id that is a path: the canary must never reach the line.
     let fields = s3_log_fields(
