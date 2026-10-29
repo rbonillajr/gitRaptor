@@ -50,10 +50,11 @@ session's repo and only if the developer enabled it for MCP. Fields shaped \
 pub const STATUS_TOOL: &str = "status";
 
 /// Every tool that writes, with the catalog operation the daemon's executor decides it as
-/// (ADR-MCP-001 § 4.1): a write tool is a catalog operation or does not exist.
+/// (ADR-MCP-001 § 4.1): a write tool is a catalog operation or does not exist. In the order
+/// `tools/list` publishes them.
 pub(crate) const WRITE_TOOLS: &[(&str, OperationId)] = &[
-    (SAFE_COMMIT_TOOL, OperationId::Commit),
     (SNAPSHOT_TOOL, OperationId::Snapshot),
+    (SAFE_COMMIT_TOOL, OperationId::Commit),
 ];
 
 /// The tools `tools/list` announces: `status`, the only read-only one, and [`WRITE_TOOLS`].
