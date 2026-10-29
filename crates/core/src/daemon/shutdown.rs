@@ -380,6 +380,8 @@ pub(crate) enum Control {
         limit: u32,
         /// The connection cannot see the notices of the configuration.
         hide_relax_ignored: bool,
+        /// Only the entries of this layer, filtered before the page is cut.
+        layer: Option<gitraptor_api::guard::LogLayer>,
         reply: SyncSender<GuardLogReply>,
     },
     /// One page of a repo's Git events (US-GRP-002).
@@ -583,6 +585,7 @@ impl ShutdownHandle {
         since_ms: Option<i64>,
         limit: u32,
         hide_relax_ignored: bool,
+        layer: Option<gitraptor_api::guard::LogLayer>,
     ) -> GuardLogReply {
         let (reply, rx) = sync_channel(1);
         if self
@@ -592,6 +595,7 @@ impl ShutdownHandle {
                 since_ms,
                 limit,
                 hide_relax_ignored,
+                layer,
                 reply,
             })
             .is_err()

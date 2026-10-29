@@ -923,6 +923,7 @@ impl Daemon {
                     since_ms,
                     limit,
                     hide_relax_ignored,
+                    layer,
                     reply,
                 }) => {
                     self.wake_for_common_dir(&common_dir);
@@ -931,6 +932,7 @@ impl Daemon {
                         since_ms,
                         limit,
                         hide_relax_ignored,
+                        layer,
                     ));
                 }
                 Ok(Control::RawEvents {

@@ -151,8 +151,22 @@ impl RepoStore {
         now_ms: i64,
         hide_relax_ignored: bool,
     ) -> Result<GuardLogResult> {
+        self.guard_log_of(since_ms, limit, now_ms, hide_relax_ignored, None)
+    }
+
+    /// [`Self::guard_log`] with only the entries of `layer` in the page, filtered in the query so
+    /// the page still fills to `limit`. The summary counts every layer.
+    pub fn guard_log_of(
+        &self,
+        since_ms: i64,
+        limit: u32,
+        now_ms: i64,
+        hide_relax_ignored: bool,
+        layer: Option<LogLayer>,
+    ) -> Result<GuardLogResult> {
         let since = since_ms.max(retention_floor(now_ms));
         let hide = i64::from(hide_relax_ignored);
+        let layer = layer.map(|l| code(&l));
         let entries = self
             .conn
             .prepare(
@@ -160,9 +174,10 @@ impl RepoStore {
                      kind, detail, effect, applied_effect, reasons, decision_id, authorship, layer
                  FROM guardrails_decisions
                  WHERE last_ms >= ?1 AND (?3 = 0 OR NOT EXISTS (SELECT 1 FROM json_each(reasons) WHERE json_extract(value, '$.rule') = 'config.relax-ignored'))
+                     AND (?4 IS NULL OR layer = ?4)
                  ORDER BY last_ms DESC, id DESC LIMIT ?2",
             )?
-            .query_map(params![since, limit, hide], entry_row)?
+            .query_map(params![since, limit, hide, layer], entry_row)?
             .collect::<rusqlite::Result<Vec<_>>>()?;
         let summary = self.conn.query_row(
             "SELECT

@@ -798,6 +798,7 @@ impl Daemon {
         since_ms: Option<i64>,
         limit: u32,
         hide_relax_ignored: bool,
+        layer: Option<gitraptor_api::guard::LogLayer>,
     ) -> GuardLogReply {
         self.flush_guard_overflow();
         let entry = match self.profile.repo_by_common_dir(common_dir) {
@@ -809,7 +810,8 @@ impl Daemon {
             return GuardLogReply::Failed;
         };
         let now = now_ms();
-        let Ok(mut log) = store.guard_log(since_ms.unwrap_or(0), limit, now, hide_relax_ignored)
+        let Ok(mut log) =
+            store.guard_log_of(since_ms.unwrap_or(0), limit, now, hide_relax_ignored, layer)
         else {
             return GuardLogReply::Failed;
         };
