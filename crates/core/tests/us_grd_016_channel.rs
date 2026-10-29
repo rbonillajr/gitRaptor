@@ -405,7 +405,7 @@ fn the_layer_filter_fills_the_page() {
         }
     }
     let r = Running::start(tp.dirs());
-    let mut seeing = r.raw(&TODAY.to_vec());
+    let mut seeing = r.raw(TODAY.as_ref());
     let answer = seeing.call(
         methods::GUARD_LOG,
         json!({ "path": repo, "layer": "mcp", "limit": 2 }),
