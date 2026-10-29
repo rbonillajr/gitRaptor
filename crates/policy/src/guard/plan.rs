@@ -6,6 +6,7 @@ use gitraptor_api::Untrusted;
 use gitraptor_api::guard::{AuthorshipFacts, CommitStage, Operation, RefUpdate, RefValue};
 use serde::Serialize;
 
+use super::commit_format::Header;
 use super::config::RootMatcher;
 use super::glob::Budget;
 use super::policies::Touched;
@@ -40,6 +41,9 @@ pub enum PlanShape {
         old: String,
         paths: Vec<String>,
         authorship: AuthorshipFacts,
+        /// The first line of the message as Git will store it, already judged: the gate never
+        /// receives the message text.
+        header: Header,
     },
 }
 
@@ -109,6 +113,19 @@ pub struct Normalized {
 pub struct Preset {
     pub touched: Option<Touched>,
     pub config_touched: Option<Touched>,
+    /// The commit a plan is about to make, for the commit policies of its branch update: the
+    /// sentinel `old -> old` brings no commit to read.
+    pub commit: Option<PlannedCommit>,
+}
+
+/// What a commit plan knows of the commit it will make, before it exists.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlannedCommit {
+    pub header: Header,
+    /// 0 for the first commit of a branch, else 1.
+    pub parents: usize,
+    /// The prepared paths.
+    pub paths: Vec<String>,
 }
 
 /// What the I/O side read to match a child's operation against its registered transitions.
@@ -148,6 +165,7 @@ fn prepared(paths: &[String]) -> Preset {
         return Preset {
             touched: Some(unverifiable()),
             config_touched: Some(unverifiable()),
+            commit: None,
         };
     }
     let touched = Touched {
@@ -158,6 +176,7 @@ fn prepared(paths: &[String]) -> Preset {
         return Preset {
             touched: Some(touched),
             config_touched: Some(unverifiable()),
+            commit: None,
         };
     };
     let mut budget = Budget::default();
@@ -172,6 +191,7 @@ fn prepared(paths: &[String]) -> Preset {
                 return Preset {
                     touched: Some(touched),
                     config_touched: Some(unverifiable()),
+                    commit: None,
                 };
             }
         }
@@ -182,6 +202,7 @@ fn prepared(paths: &[String]) -> Preset {
             paths: config,
             unverifiable: false,
         }),
+        commit: None,
     }
 }
 
@@ -252,6 +273,7 @@ pub fn normalize(shape: &PlanShape) -> Normalized {
             old,
             paths,
             authorship,
+            header,
         } => Normalized {
             // The new oid does not exist yet: the branch is evaluated with the sentinel
             // `old -> old` (the protected branch acts on the name, the paths are preloaded).
@@ -266,7 +288,19 @@ pub fn normalize(shape: &PlanShape) -> Normalized {
                     stage: CommitStage::PreCommit,
                 },
             ],
-            preset: vec![Preset::default(), prepared(paths), Preset::default()],
+            preset: vec![
+                Preset::default(),
+                Preset {
+                    commit: Some(PlannedCommit {
+                        header: header.clone(),
+                        // A branch with no commit yet has the all-zero old value.
+                        parents: usize::from(!old.bytes().all(|b| b == b'0')),
+                        paths: paths.clone(),
+                    }),
+                    ..prepared(paths)
+                },
+                Preset::default(),
+            ],
             registered: vec![
                 Expected::CommitStages {
                     authorship: authorship.clone(),

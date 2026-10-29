@@ -20,7 +20,7 @@ use gitraptor_core::channel::marks::ChildLink;
 use gitraptor_core::executor::{GateDecision, GateRequest, GuardrailsGate, PlanClose};
 use gitraptor_core::guardrails::link::serve_child;
 use gitraptor_core::guardrails::log::LogEntry;
-use gitraptor_core::guardrails::plan_gate::{GuardrailsEngine, commit_facts};
+use gitraptor_core::guardrails::plan_gate::{GuardrailsEngine, commit_facts, commit_header};
 use gitraptor_core::guardrails::{GuardEntry, GuardRegistry};
 use gitraptor_policy::guard::plan::PlanShape;
 use gitraptor_policy::team::{Confirmed, ConfirmedFloor};
@@ -111,6 +111,7 @@ impl Rig {
                 old: head.trim().to_owned(),
                 paths: vec!["src/a.rs".into()],
                 authorship: commit_facts(&self.common, MESSAGE),
+                header: commit_header(&self.common, MESSAGE),
             }),
         }
     }

@@ -21,7 +21,7 @@ use gitraptor_api::{Actor, AgentKind, AgentOrigin, Untrusted};
 use gitraptor_core::executor::{GateDecision, GateRequest, GuardrailsGate};
 use gitraptor_core::guardrails::evaluate::{Caller, DecideInput, RuleSet, decide, serve_audited};
 use gitraptor_core::guardrails::log::LogEntry;
-use gitraptor_core::guardrails::plan_gate::{GuardrailsEngine, commit_facts};
+use gitraptor_core::guardrails::plan_gate::{GuardrailsEngine, commit_facts, commit_header};
 use gitraptor_core::guardrails::{GuardEntry, GuardRegistry};
 use gitraptor_policy::guard::git_command::GitCommand;
 use gitraptor_policy::guard::permissions::Chain;
@@ -173,6 +173,7 @@ fn commit_shape(r: &Rig) -> PlanShape {
         old: r.tip.clone(),
         paths: vec!["src/a.rs".into()],
         authorship: commit_facts(&r.common, MESSAGE),
+        header: commit_header(&r.common, MESSAGE),
     }
 }
 

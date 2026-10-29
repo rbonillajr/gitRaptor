@@ -21,6 +21,7 @@ fn a_commit_plan_evaluates_commit_msg_branch_and_pre_commit_in_order() {
         old: OLD.into(),
         paths: paths.clone(),
         authorship: facts.clone(),
+        header: crate::guard::commit_format::parse(b"feat: x", true, 1),
     });
     assert_eq!(
         n.evaluated,
@@ -37,7 +38,18 @@ fn a_commit_plan_evaluates_commit_msg_branch_and_pre_commit_in_order() {
     );
     assert_eq!(
         n.preset,
-        [Preset::default(), prepared(&paths), Preset::default()],
+        [
+            Preset::default(),
+            Preset {
+                commit: Some(PlannedCommit {
+                    header: crate::guard::commit_format::parse(b"feat: x", true, 1),
+                    parents: 1,
+                    paths: paths.clone(),
+                }),
+                ..prepared(&paths)
+            },
+            Preset::default()
+        ],
         "the presets must be aligned by index with the evaluated operations"
     );
     assert_eq!(

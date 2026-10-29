@@ -172,8 +172,20 @@ fn evaluate_preset(
     };
     // The commits of the movement are read for the two commit policies only when a rule governs
     // the actor, and their trees only when a size rule does.
-    facts.commits =
-        super::commit_policies::changes(reader, op, &ctx.commit_policies, ctx.actor, &commit.chain);
+    // A plan's commit does not exist yet: its sentinel `old -> old` brings nothing to read, so
+    // the commit the plan is about to make is judged instead.
+    facts.commits = match preset.and_then(|p| p.commit.as_ref()) {
+        Some(planned) => {
+            super::commit_policies::prospective(planned, &ctx.commit_policies, ctx.actor)
+        }
+        None => super::commit_policies::changes(
+            reader,
+            op,
+            &ctx.commit_policies,
+            ctx.actor,
+            &commit.chain,
+        ),
+    };
     policy::evaluate(op, &facts, &ctx)
 }
 
