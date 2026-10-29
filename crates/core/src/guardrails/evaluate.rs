@@ -554,7 +554,10 @@ pub fn decide_all(
 
 /// The permissions in force for a plan, read as `evaluate_op` reads them; `None` when the repo
 /// cannot be opened.
-fn plan_permissions(registry: &GuardRegistry, input: &DecideInput<'_>) -> Option<EffectivePermissions> {
+fn plan_permissions(
+    registry: &GuardRegistry,
+    input: &DecideInput<'_>,
+) -> Option<EffectivePermissions> {
     let reader = open(input.common_dir)?;
     let common_text = input.common_dir.to_string_lossy();
     let entry = registry

@@ -322,12 +322,18 @@ fn decide_all_applies_the_permissions_of_the_known_operations() {
     assert_eq!(decide(&free, &[]).effect, Effect::Allow);
     // The maximum keeps only its reasons: `deny` of merge wins over `ask` of rebase.
     let both = decide(&free, &[Op::Merge, Op::Rebase]);
-    assert_eq!((both.effect, both.applied_effect), (Effect::Deny, Effect::Deny));
+    assert_eq!(
+        (both.effect, both.applied_effect),
+        (Effect::Deny, Effect::Deny)
+    );
     assert_eq!(rules(&both), [Rule::PermissionMerge], "{both:?}");
     assert_eq!(both.reasons[0].level, Level::Profile);
     // An `ask` alone follows the actor: the person goes ahead with a notice (Q-GRD-46).
     let asked = decide(&free, &[Op::Rebase]);
-    assert_eq!((asked.effect, asked.applied_effect), (Effect::Ask, Effect::Allow));
+    assert_eq!(
+        (asked.effect, asked.applied_effect),
+        (Effect::Ask, Effect::Allow)
+    );
     // A permission in `allow` (none set for worktree-add) never relaxes a denial: the merge into
     // the protected `main` stays denied with its own reasons.
     let main = PlanShape::Merge {
@@ -352,7 +358,10 @@ fn decide_all_applies_the_permissions_of_the_known_operations() {
     let d = decide(&commit, &[Op::Commit]);
     assert_eq!(d.effect, Effect::Deny, "{d:?}");
     assert_eq!(
-        rules(&d).iter().filter(|r| **r == Rule::PermissionCommit).count(),
+        rules(&d)
+            .iter()
+            .filter(|r| **r == Rule::PermissionCommit)
+            .count(),
         1,
         "{d:?}"
     );

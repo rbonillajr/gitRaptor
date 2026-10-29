@@ -117,8 +117,10 @@ impl Daemon {
             .ok()?;
         let mut guard = guard_install::status(repo_id, entry.canonical_path.as_path(), store);
         // The same function as `guard.status`: the MCP view and the CLI never disagree.
-        guard.state =
-            ProtectionState::of(guard.state.hooks_installed(), self.mcp_repos.contains(repo_id));
+        guard.state = ProtectionState::of(
+            guard.state.hooks_installed(),
+            self.mcp_repos.contains(repo_id),
+        );
         Some(McpContext {
             detection_available,
             sessions,

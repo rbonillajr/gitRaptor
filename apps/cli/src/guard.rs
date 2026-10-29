@@ -636,8 +636,15 @@ fn ask(question: &str) -> Answer {
 /// dispatcher) never read as protected; a daemon that predates the hook layer is trusted with its
 /// state.
 fn state_line(status: &GuardStatus, tr: Tr) -> String {
-    if status.state == ProtectionState::Unprotected {
-        return tr.t("guard.state.unprotected", &[]);
+    if !status.state.hooks_installed() {
+        return tr.t(
+            if status.state.mcp_enabled() {
+                "guard.state.mcp-only"
+            } else {
+                "guard.state.unprotected"
+            },
+            &[],
+        );
     }
     if status
         .hooks
@@ -655,11 +662,34 @@ fn state_line(status: &GuardStatus, tr: Tr) -> String {
 }
 
 fn status_lines(status: &GuardStatus, tr: Tr) -> Vec<String> {
-    let mut out = vec![state_line(status, tr)];
+    let mut out = Vec::new();
+    // Both layers: the state first, then what the hooks half says, with its diagnostic next to
+    // it (a `full` repo whose hooks were replaced is still `full`, and says so).
+    if status.state == ProtectionState::Full {
+        out.push(tr.t("guard.state.full", &[]));
+    }
+    out.push(state_line(status, tr));
+    if status.state.hooks_installed()
+        && let Some(hooks) = status
+            .hooks
+            .as_ref()
+            .filter(|h| h.status == HooksStatus::Inactive)
+    {
+        let cause = hooks
+            .cause
+            .map_or_else(String::new, |c| cause_text_in(c, tr));
+        out.push(tr.t(
+            "guard.state.hooks-inactive",
+            &[
+                ("status", &tr.t("guard.hooks.inactive", &[])),
+                ("cause", &cause),
+            ],
+        ));
+    }
     out.extend(protection_lines(status, tr));
     // Granted but unprotected reads as a contradiction: the permission only
     // matters once there is a protection to apply.
-    let unprotected = status.state == ProtectionState::Unprotected;
+    let unprotected = !status.state.hooks_installed();
     match status.permission {
         Permission::NotAsked => out.push(tr.t("guard.permission.not-asked", &[])),
         Permission::Granted if unprotected => {}
@@ -704,7 +734,7 @@ fn protection_lines(status: &GuardStatus, tr: Tr) -> Vec<String> {
     {
         // Nothing is denied until the hooks are installed: say what install will do.
         out.push(tr.t(
-            if status.state == ProtectionState::Unprotected {
+            if !status.state.hooks_installed() {
                 "guard.status.minimum-on-install"
             } else {
                 "guard.status.minimum-active"
@@ -967,7 +997,7 @@ pub fn status(path: Option<PathBuf>, json: bool) -> ExitCode {
                 println!("{line}");
             }
             // Where to see what was blocked (US-GRD-005, D1): only from an engine that has it.
-            if status.state == ProtectionState::HooksOnly
+            if status.state.hooks_installed()
                 && crate::offers(&client, methods::GUARD_LOG)
                 && let Ok(log) = client.call::<_, GuardLogResult>(
                     methods::GUARD_LOG,
@@ -1049,7 +1079,7 @@ pub fn uninstall(path: Option<PathBuf>, yes: bool) -> ExitCode {
         .as_ref()
         .is_some_and(|h| h.status == HooksStatus::Orphaned)
         || status.diagnostics.contains(&Diagnostic::LeftoverFolder);
-    if status.state != ProtectionState::HooksOnly && !inactive && !left {
+    if !status.state.hooks_installed() && !inactive && !left {
         eprintln!("{CMD}: {}", t("guard.uninstall.not-installed", &[]));
         return ExitCode::FAILURE;
     }
@@ -1318,7 +1348,26 @@ fn operation_text(op: &LoggedOperation) -> String {
                 (false, None) => t("guard.log.op.protection", &args),
             }
         }
+        LoggedOperation::McpAllowlist { from, to } => t(
+            "guard.log.op.mcp-allowlist",
+            &[
+                ("from", &protection_state_text(*from)),
+                ("to", &protection_state_text(*to)),
+            ],
+        ),
     }
+}
+
+fn protection_state_text(state: ProtectionState) -> String {
+    t(
+        match state {
+            ProtectionState::Unprotected => "guard.protection.unprotected",
+            ProtectionState::HooksOnly => "guard.protection.hooks-only",
+            ProtectionState::McpOnly => "guard.protection.mcp-only",
+            ProtectionState::Full => "guard.protection.full",
+        },
+        &[],
+    )
 }
 
 fn agent_text(agent: Option<AgentKind>) -> String {
@@ -1513,11 +1562,19 @@ fn log_params(path: &std::path::Path, days: u32, limit: Option<u32>) -> GuardLog
         path: path.to_string_lossy().into_owned(),
         since_ms: Some(now_ms() - i64::from(days) * DAY_MS),
         limit,
+        layer: None,
     }
 }
 
-/// `raptor guard log [path] [--days N] [--limit N] [--json]` (US-GRD-005).
-pub fn log(path: Option<PathBuf>, days: u32, limit: u32, json: bool) -> ExitCode {
+/// `raptor guard log [path] [--days N] [--limit N] [--layer L] [--json]` (US-GRD-005). `layer`
+/// is one of the names clap already checked; anything else is refused before the call.
+pub fn log(
+    path: Option<PathBuf>,
+    days: u32,
+    limit: u32,
+    layer: Option<&str>,
+    json: bool,
+) -> ExitCode {
     const CMD: &str = "raptor guard log";
     let path = command_path(path);
     let days = days.clamp(1, gitraptor_api::guard::LOG_RETENTION_DAYS as u32);
@@ -1529,7 +1586,13 @@ pub fn log(path: Option<PathBuf>, days: u32, limit: u32, json: bool) -> ExitCode
         eprintln!("{CMD}: {}", t("guard.restart-engine", &[]));
         return ExitCode::FAILURE;
     }
-    let params = log_params(&path, days, Some(limit.clamp(1, MAX_LOG_PAGE)));
+    let mut params = log_params(&path, days, Some(limit.clamp(1, MAX_LOG_PAGE)));
+    if let Some(layer) = layer {
+        match serde_json::from_value(serde_json::Value::from(layer)) {
+            Ok(layer) => params.layer = Some(layer),
+            Err(_) => return ExitCode::FAILURE,
+        }
+    }
     match client.call::<_, GuardLogResult>(methods::GUARD_LOG, &params) {
         Ok(log) if json => {
             println!("{}", serde_json::to_string(&log).unwrap_or_default());

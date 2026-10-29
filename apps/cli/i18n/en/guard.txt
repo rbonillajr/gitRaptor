@@ -69,6 +69,9 @@ guard.install.already = already protected: {path}
 guard.install.refused = not installed:
 guard.state.unprotected = state: unprotected
 guard.state.hooks-only = state: hooks only
+guard.state.mcp-only = state: MCP only
+guard.state.full = state: full
+guard.state.hooks-inactive = hooks: {status} ({cause})
 guard.status.base-confirmed = protected base branch: {bases} (confirmed)
 guard.status.base-unconfirmed = protected base branches: {bases} (not confirmed)
 guard.permission.not-asked = permission: not asked
@@ -187,6 +190,11 @@ guard.log.protection = protection changed
 guard.log.op.protection = protection: {from} → {to}
 guard.log.op.protection-cause = protection: {from} → {to} ({cause})
 guard.log.op.protection-own = protection: {from} → {to} (done by GitRaptor)
+guard.log.op.mcp-allowlist = MCP allowlist: {from} → {to}
+guard.protection.unprotected = unprotected
+guard.protection.hooks-only = hooks only
+guard.protection.mcp-only = MCP only
+guard.protection.full = full
 
 # Installing again over a protection that stopped being active (US-GRD-004, D9).
 guard.repair.header = Repair the protection of {repo}

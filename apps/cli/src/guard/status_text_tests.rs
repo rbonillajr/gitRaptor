@@ -106,3 +106,85 @@ fn inactive_hooks_read_partly_protected_never_protected() {
         "{es:?}"
     );
 }
+
+/// The four states in both languages: `mcp-only` and `full` name themselves; a `full` repo keeps
+/// the base line of its hooks half.
+#[test]
+fn the_four_states_read_in_both_languages() {
+    let with = |state| GuardStatus {
+        state,
+        ..status(true, &["main"], active())
+    };
+    for (state, en, es) in [
+        (
+            ProtectionState::Unprotected,
+            "state: unprotected",
+            "estado: sin protección",
+        ),
+        (
+            ProtectionState::HooksOnly,
+            "state: protected, base branch main",
+            "estado: protegido, rama base main",
+        ),
+        (
+            ProtectionState::McpOnly,
+            "state: MCP only",
+            "estado: solo MCP",
+        ),
+        (ProtectionState::Full, "state: full", "estado: completa"),
+    ] {
+        assert_eq!(status_lines(&with(state), EN)[0], en, "{state:?}");
+        assert_eq!(status_lines(&with(state), ES)[0], es, "{state:?}");
+    }
+    assert_eq!(
+        status_lines(&with(ProtectionState::Full), EN)[1],
+        "state: protected, base branch main"
+    );
+}
+
+/// A `full` repo with replaced hooks shows the state and the diagnostic together.
+#[test]
+fn full_with_inactive_hooks_shows_both() {
+    let s = GuardStatus {
+        state: ProtectionState::Full,
+        ..status(
+            true,
+            &["main"],
+            HooksLayer::lost(LossCause::DispatcherMissing),
+        )
+    };
+    for (tr, state, inactive) in [
+        (EN, "state: full", "hooks: inactive ("),
+        (ES, "estado: completa", "hooks: inactiva ("),
+    ] {
+        let lines = status_lines(&s, tr);
+        assert_eq!(lines[0], state, "{lines:#?}");
+        let at = lines
+            .iter()
+            .position(|l| l.starts_with(inactive))
+            .unwrap_or_else(|| panic!("no diagnostic: {lines:#?}"));
+        assert!(at <= 2, "the diagnostic goes next to the state: {lines:#?}");
+    }
+}
+
+/// An `mcp-only` repo is covered by the MCP: it never reads as unprotected, and the permission
+/// line is the one of a repo without hooks.
+#[test]
+fn an_mcp_only_repo_is_not_offered_as_unprotected() {
+    let s = GuardStatus {
+        state: ProtectionState::McpOnly,
+        hooks: None,
+        ..status(true, &["main"], active())
+    };
+    for tr in [EN, ES] {
+        let lines = status_lines(&s, tr);
+        let unprotected = tr.t("guard.state.unprotected", &[]);
+        assert!(lines.iter().all(|l| *l != unprotected), "{lines:#?}");
+        assert!(
+            lines
+                .iter()
+                .all(|l| *l != tr.t("guard.permission.granted", &[])),
+            "{lines:#?}"
+        );
+    }
+}
