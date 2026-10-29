@@ -449,6 +449,10 @@ mod cuts {
                     format!("{point}: unprotected but differs (config same: {same_config}): {changes:#?}")
                 })
             }
+            // The repo is never in the MCP allowlist here: an MCP half is not an end state.
+            state @ (ProtectionState::McpOnly | ProtectionState::Full) => {
+                Some(format!("{point}: unexpected state {state:?}"))
+            }
         }
     }
 }
