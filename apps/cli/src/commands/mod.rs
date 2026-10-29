@@ -47,5 +47,7 @@ commands! {
     Mcp(mcp),
     #[command(hide = true)]
     Ui(ui),
+    #[command(name = "predict-worker", hide = true)]
+    PredictWorker(predict_worker),
     Guard(guard),
 }

@@ -41,6 +41,12 @@ impl PairQueue {
         Some((key, triple))
     }
 
+    /// Drops every job of `repo_id` (a dormant or retired repo).
+    pub fn forget_repo(&mut self, repo_id: &str) {
+        self.jobs.retain(|key, _| key.repo_id != repo_id);
+        self.order.retain(|(_, _, key)| key.repo_id != repo_id);
+    }
+
     pub fn len(&self) -> usize {
         self.jobs.len()
     }

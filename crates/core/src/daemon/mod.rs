@@ -235,7 +235,7 @@ impl DaemonConfig {
             protected: None,
             operations: Some(OperationsWiring::production()),
             tm_prior_layer: None,
-            predict: Default::default(),
+            predict: crate::predict::PredictConfig::for_daemon(),
             tm_capture: TmCapture {
                 no_free_space_floor: env::tm_no_free_space_floor(),
                 ..TmCapture::default()
@@ -1411,7 +1411,12 @@ fn outcome_field(outcome: RepoAddOutcome) -> &'static str {
 /// Entry point of `raptor daemon`: starts the daemon, installs the
 /// process-wide hooks (redacting panic hook, termination signals), moves the
 /// working folder into the profile and runs until stopped.
-pub fn run_process(config: DaemonConfig) -> Result<StopReport, DaemonError> {
+pub fn run_process(mut config: DaemonConfig) -> Result<StopReport, DaemonError> {
+    // A real daemon process predicts: a caller that built its configuration by hand (the bench)
+    // gets the worker of this binary, as `for_current_user` does.
+    if config.predict.merger == crate::predict::PredictMerger::Off {
+        config.predict = crate::predict::PredictConfig::for_daemon();
+    }
     // Leave the launcher's session and process group: a client (possibly an
     // MCP server under an agent) that started it on demand must not take it
     // down when it exits. Fails harmlessly when run as a group leader in a
