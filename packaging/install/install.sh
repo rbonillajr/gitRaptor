@@ -1,25 +1,40 @@
 #!/bin/sh
-# GitRaptor installer for macOS and Linux (INF-GRP-004, ADR-GRP-014 § 5).
+# GitRaptor installer for macOS and Linux (INF-GRP-004, ADR-GRP-014 § 5 and the 2026-10-28 amendment).
 #
-#   curl -fsSL https://github.com/rbonillajr/gitRaptor/releases/latest/download/install.sh | sh
-#   sh install.sh --version 0.1.0
+#   curl -fsSL https://github.com/rbonillajr/gitRaptor/releases/download/v0.1.0-alpha.1/install.sh | sh
+#   sh install.sh --version 0.1.0-alpha.1
+#   sh install.sh --system            # /usr/local/bin, uses sudo only to copy the 3 files
+#   sh install.sh --uninstall         # removes only raptor, raptor-mcp and raptor-hook
 #
 # Downloads the archive for this machine and SHA256SUMS from the GitHub Release, verifies the
-# checksum and only then installs `raptor` and `raptor-mcp` into ~/.local/bin. It never edits
-# PATH or shell profiles, never registers autostart and never touches GitRaptor's data.
+# checksum and the archive layout and only then installs `raptor`, `raptor-mcp` and `raptor-hook`
+# into ~/.local/bin. It never edits PATH or shell profiles, never registers autostart and never
+# touches GitRaptor's data (the profile and the Time Machine store).
+#
+# macOS: the early-access builds are not notarized. A download made by a browser carries the
+# com.apple.quarantine attribute and Gatekeeper blocks it; when (and only when) that attribute is
+# present on the 3 installed files, the installer removes it and says so.
 #
 # Environment:
-#   RAPTOR_VERSION        version to install (default: the latest release)
+#   RAPTOR_VERSION        version to install (default: the one this script was published with,
+#                         else the latest stable release; prereleases need an explicit version)
 #   RAPTOR_INSTALL_DIR    destination directory (default: $HOME/.local/bin)
-#   RAPTOR_DOWNLOAD_BASE  base URL that holds the archives and SHA256SUMS (default: the release)
+#   RAPTOR_DOWNLOAD_BASE  base URL that holds the archives and SHA256SUMS (default: the release);
+#                         a file:// URL is accepted only here, for tests
 #
 # SHA256SUMS comes from the same origin as the archive: it proves integrity, not authenticity.
 # For authenticity, verify the archive with `gh attestation verify <archive> --repo rbonillajr/gitRaptor`.
 set -eu
+umask 022
 
 REPO="rbonillajr/gitRaptor"
+# Stamped by the release pipeline for prereleases; empty in the repository.
+default_version=""
 version="${RAPTOR_VERSION:-}"
 install_dir="${RAPTOR_INSTALL_DIR:-${HOME}/.local/bin}"
+system=0
+uninstall=0
+BINS="raptor raptor-mcp raptor-hook"
 
 say() { printf 'raptor-install: %s\n' "$*"; }
 fail() { printf 'raptor-install: error: %s\n' "$*" >&2; exit 1; }
@@ -29,10 +44,43 @@ while [ $# -gt 0 ]; do
     --version) [ $# -ge 2 ] || fail "--version needs a value"; version="$2"; shift 2 ;;
     --version=*) version="${1#--version=}"; shift ;;
     --install-dir) [ $# -ge 2 ] || fail "--install-dir needs a value"; install_dir="$2"; shift 2 ;;
-    -h|--help) sed -n '2,18p' "$0" 2>/dev/null || true; exit 0 ;;
+    --system) system=1; install_dir="/usr/local/bin"; shift ;;
+    --uninstall) uninstall=1; shift ;;
+    -h|--help) awk 'NR > 1 { if ($0 ~ /^set -eu/) exit; print }' "$0" 2>/dev/null || true; exit 0 ;;
     *) fail "unknown argument: $1" ;;
   esac
 done
+
+case "$install_dir" in
+  /*) ;;
+  *) fail "the install directory must be an absolute path: $install_dir" ;;
+esac
+
+# Copy and replace one file next to its destination, with sudo only when --system asks for it.
+priv() { if [ "$system" = 1 ] && [ "$(id -u)" != 0 ]; then sudo "$@"; else "$@"; fi; }
+
+if [ "$uninstall" = 1 ]; then
+  # Only the 3 files this installer puts there, and only when they are regular files that are
+  # GitRaptor's. Never `rm -r`, never the profile, never the Time Machine store (NFR-01).
+  if [ -f "$HOME/Library/LaunchAgents/dev.gitraptor.plist" ] || [ -f "$HOME/.config/systemd/user/gitraptor.service" ]; then
+    fail "the login autostart is still registered; run 'raptor daemon disable' first, then uninstall"
+  fi
+  if [ -x "$install_dir/raptor" ] && [ ! -L "$install_dir/raptor" ]; then
+    case "$("$install_dir/raptor" --version 2>/dev/null || true)" in
+      "raptor "*) ;;
+      *) fail "$install_dir/raptor is not GitRaptor's; nothing was removed" ;;
+    esac
+  fi
+  removed=0
+  for bin in $BINS; do
+    if [ -f "$install_dir/$bin" ] && [ ! -L "$install_dir/$bin" ]; then
+      priv rm -f "$install_dir/$bin"; removed=$((removed + 1)); say "removed $install_dir/$bin"
+    fi
+  done
+  [ "$removed" -gt 0 ] || say "nothing to remove in $install_dir"
+  say "your data was not touched (macOS: ~/Library/Application Support/gitraptor). Forget it only if you want to lose the history."
+  exit 0
+fi
 
 command -v curl >/dev/null 2>&1 || fail "curl is required"
 command -v tar >/dev/null 2>&1 || fail "tar is required"
@@ -64,25 +112,36 @@ case "$arch" in
 esac
 target="${cpu}-${suffix}"
 
+[ -n "$version" ] || version="$default_version"
 if [ -z "$version" ]; then
   # The latest release redirects to .../releases/tag/v<version>; no API token or jq needed.
-  location=$(curl -fsSI "https://github.com/${REPO}/releases/latest" | tr -d '\r' \
+  # It skips prereleases and drafts: while only alphas exist, pass --version.
+  location=$(curl -fsSI --proto '=https' --tlsv1.2 "https://github.com/${REPO}/releases/latest" | tr -d '\r' \
     | sed -n 's#^[Ll]ocation: .*/releases/tag/v\(.*\)$#\1#p' | tail -1)
-  [ -n "$location" ] || fail "could not resolve the latest release; pass --version"
+  [ -n "$location" ] || fail "could not resolve the latest stable release; pass --version (for example 0.1.0-alpha.1)"
   version="$location"
 fi
 version="${version#v}"
+# The version goes into a URL and a path: nothing but a SemVer string gets through.
+printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$' \
+  || fail "invalid version: $version"
 
-base="${RAPTOR_DOWNLOAD_BASE:-https://github.com/${REPO}/releases/download/v${version}}"
+if [ -n "${RAPTOR_DOWNLOAD_BASE:-}" ]; then
+  base="$RAPTOR_DOWNLOAD_BASE"
+  proto='=https,file'
+else
+  base="https://github.com/${REPO}/releases/download/v${version}"
+  proto='=https'
+fi
 archive="raptor-${version}-${target}.tar.gz"
 
 tmp=$(mktemp -d 2>/dev/null || mktemp -d -t raptor-install)
 trap 'rm -rf "$tmp"' EXIT INT TERM
 
 say "downloading ${archive}"
-curl -fsSL --proto '=https,file' --tlsv1.2 -o "$tmp/$archive" "$base/$archive" \
+curl -fsSL --proto "$proto" --tlsv1.2 -o "$tmp/$archive" "$base/$archive" \
   || fail "download failed: $base/$archive"
-curl -fsSL --proto '=https,file' --tlsv1.2 -o "$tmp/SHA256SUMS" "$base/SHA256SUMS" \
+curl -fsSL --proto "$proto" --tlsv1.2 -o "$tmp/SHA256SUMS" "$base/SHA256SUMS" \
   || fail "download failed: $base/SHA256SUMS"
 
 expected=$(awk -v f="$archive" '$2 == f || $2 == "*" f { print $1 }' "$tmp/SHA256SUMS")
@@ -91,19 +150,58 @@ actual=$(sha256 "$tmp/$archive")
 [ "$expected" = "$actual" ] || fail "checksum mismatch for $archive (expected $expected, got $actual); nothing was installed"
 say "checksum verified (sha256 $actual)"
 
-tar -xzf "$tmp/$archive" -C "$tmp"
-src="$tmp/raptor-${version}-${target}"
-[ -f "$src/raptor" ] && [ -f "$src/raptor-mcp" ] && [ -f "$src/raptor-hook" ] || fail "unexpected archive layout"
+# Before extracting anything: the archive holds exactly the expected folder and files, with no
+# absolute path, no `..` and no link.
+dir="raptor-${version}-${target}"
+tar -tzf "$tmp/$archive" > "$tmp/list" || fail "unreadable archive"
+while IFS= read -r entry; do
+  case "$entry" in
+    "$dir"|"$dir/"|"$dir/raptor"|"$dir/raptor-mcp"|"$dir/raptor-hook"|"$dir/README.md"|"$dir/LICENSE") ;;
+    *) fail "unexpected entry in the archive: $entry; nothing was installed" ;;
+  esac
+done < "$tmp/list"
+tar -tvzf "$tmp/$archive" | cut -c1 | grep -Eq '^[lh]' && fail "the archive contains a link; nothing was installed"
+mkdir "$tmp/x"
+tar -xzf "$tmp/$archive" -C "$tmp/x"
+src="$tmp/x/$dir"
+for bin in $BINS; do
+  [ -f "$src/$bin" ] && [ ! -L "$src/$bin" ] || fail "unexpected archive layout: $bin"
+done
 
-mkdir -p "$install_dir"
+# A writable-by-everyone directory would let anyone swap the binaries after the install.
+if [ -d "$install_dir" ]; then
+  # shellcheck disable=SC2012 # only the mode string is read, never a file name
+  case "$(ls -ld "$install_dir" | cut -c1-10)" in
+    ????????w*) fail "$install_dir is writable by everyone; refusing to install there" ;;
+  esac
+fi
+
+priv mkdir -p "$install_dir"
 # raptor-hook is the Guardrails dispatcher: it must sit next to raptor (US-GRD-001).
-for bin in raptor raptor-mcp raptor-hook; do
+for bin in $BINS; do
   # Copy next to the destination, then rename: a running binary is never half-written.
-  cp "$src/$bin" "$install_dir/.$bin.tmp.$$"
-  chmod 755 "$install_dir/.$bin.tmp.$$"
-  mv -f "$install_dir/.$bin.tmp.$$" "$install_dir/$bin"
+  priv cp "$src/$bin" "$install_dir/.$bin.tmp.$$"
+  priv chmod 755 "$install_dir/.$bin.tmp.$$"
+  priv mv -f "$install_dir/.$bin.tmp.$$" "$install_dir/$bin"
 done
 say "installed raptor ${version} (${target}) into ${install_dir}"
+
+if [ "$os" = Darwin ]; then
+  # Only the 3 exact files, only when the attribute is there, never `xattr -c` or `-r`.
+  for bin in $BINS; do
+    if xattr -p com.apple.quarantine "$install_dir/$bin" >/dev/null 2>&1; then
+      priv xattr -d com.apple.quarantine "$install_dir/$bin"
+      say "notice: removed the macOS quarantine from $install_dir/$bin. This build is NOT notarized (early access); its integrity was verified by SHA256."
+    fi
+  done
+  for bin in $BINS; do
+    codesign --verify "$install_dir/$bin" >/dev/null 2>&1 || say "warning: codesign could not verify $install_dir/$bin"
+  done
+fi
+
+out=$("$install_dir/raptor" --version 2>/dev/null || true)
+[ "$out" = "raptor $version" ] || fail "the installed binary reports '$out', expected 'raptor $version'"
+say "ok: $out"
 
 case ":${PATH}:" in
   *":${install_dir}:"*) ;;
