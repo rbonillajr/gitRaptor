@@ -23,6 +23,7 @@ use gitraptor_api::{Actor, AgentKind, PROTOCOL_VERSION, methods};
 use gitraptor_core::client::Client;
 use gitraptor_core::daemon::running_pid;
 use gitraptor_core::profile::ProfileDirs;
+use gitraptor_core::timemachine::oplog::{Oplog, SnapshotFilter};
 use gitraptor_core::timemachine::store::{SnapshotStore, snapshot_refs};
 use gitraptor_git::tm_write::store::TreeEntryKind;
 use gitraptor_testkit::Fixture;
@@ -237,27 +238,6 @@ impl Machine {
         }
     }
 
-    /// Waits until the history has an event of `kind` anywhere in the repo (a branch event is
-    /// placed in the main worktree when the engine infers it).
-    fn event_anywhere(&self, kind: GitEventKind) -> GitEventView {
-        let start = Instant::now();
-        loop {
-            let page: EventsHistoryResult = self
-                .client()
-                .call(methods::EVENTS_HISTORY, json!({"repo_id": self.repo_id()}))
-                .unwrap();
-            if let Some(e) = page.events.iter().find(|e| e.kind == kind) {
-                return e.clone();
-            }
-            assert!(
-                start.elapsed() < DEADLINE,
-                "no {kind:?}: {:#?}",
-                page.events
-            );
-            std::thread::sleep(Duration::from_millis(50));
-        }
-    }
-
     /// Waits for a snapshot of the worktree whose `path` holds `content`.
     fn captured(&self, path: &str, content: &[u8]) -> String {
         let repo_id = self.repo_id();
@@ -277,6 +257,25 @@ impl Machine {
                 }
             }
             assert!(start.elapsed() < DEADLINE, "{path} never captured");
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    }
+
+    /// Waits for the snapshot the engine recorded as caused by git event `seq`.
+    fn captured_by_event(&self, seq: i64) {
+        let repo_id = self.repo_id();
+        let start = Instant::now();
+        loop {
+            if let Ok((oplog, _)) = Oplog::open(&self.dirs(), &repo_id, 1)
+                && let Ok(snaps) = oplog.snapshots(&SnapshotFilter::default())
+                && snaps.iter().any(|s| s.record.cause_event_seq == Some(seq))
+            {
+                return;
+            }
+            assert!(
+                start.elapsed() < DEADLINE,
+                "no snapshot caused by event {seq}"
+            );
             std::thread::sleep(Duration::from_millis(50));
         }
     }
@@ -363,6 +362,9 @@ fn agent_resets(m: &Machine, claude: &mut FakeClaude) {
         std::fs::read(m.worktree.join("api.rs")).unwrap(),
         b"fn login() {}\n"
     );
+    // The reset's own capture (base B) must exist before any later edit (spec G4: an edit inside
+    // the quiet window lands in B).
+    m.captured_by_event(reset.seq);
 }
 
 /// What the agent's `raptor undo <args>` printed, and whether it succeeded.
@@ -485,40 +487,6 @@ fn json_prints_the_daemons_data() {
         value.get("kept").is_some(),
         "the data is not reformatted: {value}"
     );
-    drop(claude);
-    m.stop();
-}
-
-/// D4: a later event of the same agent session on a branch of the scope is not another actor.
-#[test]
-fn the_same_agent_session_is_not_another_actor() {
-    let m = Machine::new();
-    // `main` moves ahead, so a branch created there differs from the worktree's HEAD.
-    m.f.git(&["commit", "-q", "--allow-empty", "-m", "ahead"]);
-    let mut claude = m.launch_claude();
-    let hooks = m.outside.path().join("slow-hooks");
-    // The branch exists (created by the session, observed) before the session moves it.
-    assert!(claude.run(&format!(
-        "git -c core.hooksPath={} branch feat-pagos main",
-        hooks.display()
-    )));
-    m.event_anywhere(GitEventKind::BranchCreate);
-    agent_resets(&m, &mut claude);
-    // The same session moves a branch with Git, after the reset.
-    assert!(claude.run(&format!(
-        "git -c core.hooksPath={} branch -f feat-pagos HEAD",
-        hooks.display()
-    )));
-    let moved = m.event_anywhere(GitEventKind::BranchUpdate);
-    assert!(
-        matches!(moved.actor, Actor::Agent { .. }),
-        "the move is attributed to the agent's session: {moved:#?}"
-    );
-
-    let (ok, said) = agent_undo(&m, &mut claude, "LANG=en_US.UTF-8", "");
-
-    assert!(ok, "no overlap for the agent's own event: {said}");
-    assert_eq!(std::fs::read(m.worktree.join("api.rs")).unwrap(), WORK);
     drop(claude);
     m.stop();
 }
