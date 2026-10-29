@@ -11,8 +11,8 @@ Todo lo que viene del plan, del contrato o del crítico va dentro de bloques de 
 
 - Tipo: `plan`
 - Excepción del crítico: no
-- Generada: `2026-10-28T23:45:45.615Z`
-- Sha de aprobación: `4853db82b30258fab7aad8a6137ca78d7e4e8dc9f8200433a334a03bed99ba86:69d598cf27a9d070716bb640a8170ada70bc194bcd311258310c4bfaad0854d8:4ff7aacb5302cf2f3aee59ced12dc31fda9534d9d8e4e0fe45d8566c93d0285c`
+- Generada: `2026-10-29T02:10:23.853Z`
+- Sha de aprobación: `4853db82b30258fab7aad8a6137ca78d7e4e8dc9f8200433a334a03bed99ba86:d1b5ad5fb67d14caf51684503fa925ed8d76bbba7e875a102bc6cdf8b9b7cbbd:4ff7aacb5302cf2f3aee59ced12dc31fda9534d9d8e4e0fe45d8566c93d0285c`
 
 ## Plan (contexto, no se firma)
 
@@ -687,13 +687,13 @@ Aplicada el 2026-10-27 en [US-TMC-012](../user-stories/US-TMC-012-solape-otro-ac
 
 Fichero:
 
-<<<DATOS-NO-CONFIABLES 548498643649>>>
+<<<DATOS-NO-CONFIABLES 7a1ee17badf0>>>
 ```text
-docs/dev-briefs/us-tmc-012-overlap.contract.json
+docs/dev-briefs/us-tmc-012-overlap-v2.contract.json
 ```
-<<<FIN-DATOS-NO-CONFIABLES 548498643649>>>
+<<<FIN-DATOS-NO-CONFIABLES 7a1ee17badf0>>>
 
-contractSha: `69d598cf27a9d070716bb640a8170ada70bc194bcd311258310c4bfaad0854d8`
+contractSha: `d1b5ad5fb67d14caf51684503fa925ed8d76bbba7e875a102bc6cdf8b9b7cbbd`
 
 Criterios (id, statement, verify, tests):
 
@@ -854,8 +854,8 @@ Ninguno: el crítico dio el plan por aprobable.
 ## Firmas
 
 - planSha (contexto, no firmado): `4853db82b30258fab7aad8a6137ca78d7e4e8dc9f8200433a334a03bed99ba86`
-- contractSha: `69d598cf27a9d070716bb640a8170ada70bc194bcd311258310c4bfaad0854d8`
+- contractSha: `d1b5ad5fb67d14caf51684503fa925ed8d76bbba7e875a102bc6cdf8b9b7cbbd`
 - testsSha: `4ff7aacb5302cf2f3aee59ced12dc31fda9534d9d8e4e0fe45d8566c93d0285c`
-- approvalSha: `4853db82b30258fab7aad8a6137ca78d7e4e8dc9f8200433a334a03bed99ba86:69d598cf27a9d070716bb640a8170ada70bc194bcd311258310c4bfaad0854d8:4ff7aacb5302cf2f3aee59ced12dc31fda9534d9d8e4e0fe45d8566c93d0285c`
+- approvalSha: `4853db82b30258fab7aad8a6137ca78d7e4e8dc9f8200433a334a03bed99ba86:d1b5ad5fb67d14caf51684503fa925ed8d76bbba7e875a102bc6cdf8b9b7cbbd:4ff7aacb5302cf2f3aee59ced12dc31fda9534d9d8e4e0fe45d8566c93d0285c`
 
 Para aprobar en la fábrica: `factory-control approve --run <id> --package <pkg> --sha <approvalSha>`; para devolverlo, `adjust` con `--notes`. Atendido, lo aprueba la persona con sus palabras.
