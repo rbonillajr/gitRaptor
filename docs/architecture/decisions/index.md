@@ -2,17 +2,17 @@
 mode: draft
 status: accepted
 generated: 2026-10-03
-updated: 2026-10-07
+updated: 2026-10-28
 generator: architect
 domain: GRP
 feature: motor-local
-total_artifacts: 34
-expanded: 34
+total_artifacts: 35
+expanded: 35
 approved: 32
 related:
   context: [CTX-GRP-001]
   rules: [BR-GRP-001]
-  adrs: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-003, ADR-GRP-004, ADR-GRP-005, ADR-GRP-006, ADR-GRP-007, ADR-GRP-008, ADR-GRP-009, ADR-GRP-010, ADR-GRP-011, ADR-GRP-012, ADR-GRP-013, ADR-GRP-014, ADR-GRP-015, ADR-GRP-016, ADR-TMC-001, ADR-TMC-002, ADR-TMC-003, ADR-TMC-004, ADR-TMC-005, ADR-TMC-006, ADR-TMC-007, ADR-GRD-001, ADR-GRD-002, ADR-GRD-003, ADR-GRD-004, ADR-GRD-005, ADR-GRD-006, ADR-GRD-007, ADR-GRD-008, ADR-CKP-001, ADR-CKP-002, ADR-CKP-003]
+  adrs: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-003, ADR-GRP-004, ADR-GRP-005, ADR-GRP-006, ADR-GRP-007, ADR-GRP-008, ADR-GRP-009, ADR-GRP-010, ADR-GRP-011, ADR-GRP-012, ADR-GRP-013, ADR-GRP-014, ADR-GRP-015, ADR-GRP-016, ADR-GRP-017, ADR-TMC-001, ADR-TMC-002, ADR-TMC-003, ADR-TMC-004, ADR-TMC-005, ADR-TMC-006, ADR-TMC-007, ADR-GRD-001, ADR-GRD-002, ADR-GRD-003, ADR-GRD-004, ADR-GRD-005, ADR-GRD-006, ADR-GRD-007, ADR-GRD-008, ADR-CKP-001, ADR-CKP-002, ADR-CKP-003]
   stories: [US-GRP-001, US-GRP-002, US-GRP-003, US-GRP-004, US-GRP-005, US-GRP-006, US-GRP-007, US-GRP-008, US-GRP-009, US-GRP-010, US-GRP-011, US-GRP-012, US-GRP-013, US-GRP-014, US-GRP-015, US-GRP-016]
 ---
 
@@ -50,10 +50,10 @@ El formato "JSON estricto con `$schema`" no es una PQ: es la propuesta base del 
 
 | ID | Título | Decisión (1 línea) | Status |
 |----|--------|--------------------|--------|
-| [ADR-GRP-001](./ADR-GRP-001-stack-tecnologico.md) | Stack tecnológico | Motor, CLI/TUI y MCP en Rust; Tauri + React solo en la Fase 3 | accepted |
-| [ADR-GRP-002](./ADR-GRP-002-monorepo-nx.md) | Monorepo Nx package-based | pnpm + Cargo workspaces con `@monodon/rust`, crates y apps por fase | accepted |
-| [ADR-GRP-003](./ADR-GRP-003-design-system.md) | Design system | Tokens, UI kit y patrones; en el MVP solo tokens y tema de TUI | accepted |
-| [ADR-GRP-004](./ADR-GRP-004-estado-frontend-ux.md) | Estado del frontend y UX | Estado React de la Fase 3; en el MVP solo los patrones de UX | accepted |
+| [ADR-GRP-001](./ADR-GRP-001-stack-tecnologico.md) | Stack tecnológico | Motor, CLI/TUI y MCP en Rust; app de escritorio Tauri + React en el MVP desde la enmienda del 2026-10-28 (D7), como cliente del canal del daemon | accepted |
+| [ADR-GRP-002](./ADR-GRP-002-monorepo-nx.md) | Monorepo Nx package-based | pnpm + Cargo workspaces con `@monodon/rust`, crates y apps por fase; `apps/desktop` ya (D7), paquetes web al entrar Storybook o un segundo consumidor, job `desktop` en ubuntu filtrado por ruta | accepted |
+| [ADR-GRP-003](./ADR-GRP-003-design-system.md) | Design system | Tokens, UI kit y patrones; la app de escritorio los usa ya (D7) con la paleta A clara y oscura; Storybook con UI-2 | accepted |
+| [ADR-GRP-004](./ADR-GRP-004-estado-frontend-ux.md) | Estado del frontend y UX | Estado React (TanStack Query + Zustand) ya en la app de escritorio (D7), con eventos del daemon por `Channel` de Tauri; XState y formularios con UI-2 | accepted |
 | [ADR-GRP-005](./ADR-GRP-005-forma-motor-proceso-segundo-plano.md) | Forma del motor: proceso por usuario y canal local | Subcomando `raptor daemon` (PQ-5) con autoarranque registrado solo por instalador o comando del desarrollador (PQ-1), IPC local JSON-RPC y comandos reservados (incluida la parada del daemon) autorizados por el daemon según la ascendencia del llamante (PQ-6); la confirmación en terminal es solo UX | accepted |
 | [ADR-GRP-006](./ADR-GRP-006-perfil-ubicacion-almacenamiento.md) | Perfil: ubicación por SO, clave de repo y almacenamiento | Carpetas estándar por SO (PQ-4), Windows siempre en `%LOCALAPPDATA%` (PQ-7), UUID por directorio Git común y un SQLite por repo | accepted |
 | [ADR-GRP-007](./ADR-GRP-007-configuracion-tres-niveles-formato.md) | Configuración en tres niveles: formato y precedencia | JSON estricto con `$schema` (propuesta base del BRD v0.4), nombres de archivos y sección `engine` (PQ-4), niveles admitidos por clave, JSON o schema inválido ignora el nivel entero (PQ-8); equipo leído de lo commiteado con suelo en la rama principal y rama base confirmada (decisión 1 de Guardrails, sustituye a PQ-9); `permissions`/`policies` y estado por fuente (enmienda 2026-10-04) | accepted |
@@ -66,6 +66,7 @@ El formato "JSON estricto con `$schema`" no es una PQ: es la propuesta base del 
 | [ADR-GRP-014](./ADR-GRP-014-pipeline-release-distribucion.md) | Pipeline de release y canales de distribución | Workflow propio (no cargo-dist) disparado por tag, 6 targets nativos con Linux musl estático, checksums, SBOM y borrador de release que publica un humano; firma de macOS y Windows y attestations preparadas tras secretos y variables; canales Homebrew (tap propio), winget, npm (paquetes por plataforma) y scripts verificados, publicados solo con `RELEASE_PUBLISH_CHANNELS`; nombre `gitraptor` en los canales y licencia FSL-1.1-ALv2 comprobada en CI | accepted |
 | [ADR-GRP-015](./ADR-GRP-015-consumo-recursos.md) | Consumo de recursos: clases de trabajo, ahorro de energía y presupuesto de huella | Cuatro clases de trabajo (`user-initiated`, `default`, `utility`, `background`) con prioridad del SO por hilo y heredada por los `git` hijos; el snapshot previo y Guardrails nunca bajan; `engine.powerSaving` (reconciliación cada 15 min y predictor en pausa con batería); HUELLA dividida en RES-01 a RES-05 con gate en INF-GRP-002; `engine.resources` para `raptor status --resources` | proposed |
 | [ADR-GRP-016](./ADR-GRP-016-extension-registro-capacidades.md) | Extensión por registro y negociación de capacidades | Protocolo congelado en 9 para cambios aditivos: métodos descubiertos en `hello.methods` y cambios de forma como capacidades con nombre (`connection.accept`); registro de métodos, capacidades y bloques de 20 códigos de error en un archivo por módulo del contrato; i18n por feature; subcomandos de la CLI y módulos del daemon registrables; test de arquitectura contra declaraciones en archivos centrales | accepted |
+| [ADR-GRP-017](./ADR-GRP-017-app-escritorio-cliente-daemon.md) | App de escritorio como cliente del daemon | Backend Tauri = cliente del canal sin motor ni Git; webview solo con comandos IPC de lista cerrada, CSP estricta y sin red; lectura completa con identidad de app verificada; escritura con el factor del SO invocado por el daemon (presencia de sesión para `cockpit`, factor por acción para lo reservado); sin factor, solo lectura con el comando de terminal; `raptor` incluido en el bundle | proposed |
 | [ADR-TMC-001](./ADR-TMC-001-almacen-snapshots-perfil.md) | Almacén de snapshots en el perfil | Repo Git bare privado por repo en `tm/<id-repo>/` con objetos propios, contenido en bruto sin filtros y exclusiones declaradas; nunca en el repo del usuario | accepted |
 | [ADR-TMC-002](./ADR-TMC-002-escritor-time-machine.md) | Escritor de la Time Machine | Escrituras internas en el módulo `timemachine` del daemon con capa de escritura propia en `crates/git`, sin hooks, filtros, firma ni red; las operaciones de usuario las ejecuta el ejecutor del daemon | accepted |
 | [ADR-TMC-003](./ADR-TMC-003-oplog-diario-recuperacion.md) | Oplog, diario y recuperación | Oplog SQLite propio por repo, solo por anexión y encadenado por hash; solicitante congelado; recuperación sin escrituras propias salvo liberar su `index.lock` | accepted |
@@ -101,6 +102,7 @@ El formato "JSON estricto con `$schema`" no es una PQ: es la propuesta base del 
 | ADR-GRP-013 | 005 (único escritor), 006 (almacén), 010 (reconciliación), 012 (señales y evidencia) | 005 (huecos y auditoría), 011 |
 | ADR-GRP-015 | 005 (autoarranque), 007 (`engine.powerSaving`), 010 (reconciliación), 011 (NFR-04); CKP-001 (predictor); TMC-004, 006, 007 | — (lo implementan TS-GRP-005, US-GRP-017 y INF-GRP-002) |
 | ADR-GRP-016 | 002 (monorepo), 005 (§ 4 y § 5, protocolo y reemplazo); CKP-003 (§ 4 N7, § 10) | 005, CKP-003 (enmiendas del 2026-10-06) |
+| ADR-GRP-017 | 001, 002, 003, 004 (enmiendas del 2026-10-28), 005 (§ 3, § 5 y § 6), 009, 014, 016; MCP-001 (§ 2); CKP-002 (§ 4), CKP-003 (cliente del canal, V5); GRD-007 (§ 2), GRD-008 (§ 3 a § 6); TMC-005 (§ 3); SPIKE-GRD-002, TS-GRP-007 | Enmiendas pendientes de 005 § 6, CKP-002 § 4, MCP-001 § 2, GRD-008 § 5 y 014 (§ "Enmiendas requeridas") |
 | ADR-TMC-001 | ADR-GRP-006 (perfil), 009 (lectura sin escrituras), 010 (filtros de ignorados y eventos) | TMC-002, 003, 004, 006, 007 |
 | ADR-TMC-002 | ADR-GRP-001, 002, 005 (daemon y canal), 006 (único escritor), 009 (reglas de invocación); TMC-001 | TMC-003, 004, 005 |
 | ADR-TMC-003 | ADR-GRP-006, 013 (atribución vigente); TMC-001, 002 | TMC-004, 005, 007 |
@@ -241,6 +243,13 @@ Los ADR-CKP-001 a 003 (aceptados el 2026-10-04) son de la feature `cockpit` (F-0
 - **Decisión**: `release.yml` propio, fijado por SHA y disparado por tag; 6 targets nativos; checksums, SBOM y un borrador de release que solo publica un humano. La firma (Apple, Azure) y las attestations quedan preparadas tras secretos y variables. Los canales se generan en cada release y `release-channels.yml` solo los publica cuando el borrador se publica, con `RELEASE_PUBLISH_CHANNELS` activa y la licencia declarada en todos los manifiestos. Nombre `gitraptor` en los canales (comando `raptor`) y licencia FSL-1.1-ALv2 (§ 6), comprobada por `license.yml`.
 - **Decisión de producto**: el nombre y la licencia son decisión de Rene Bonilla (2026-10-05, D4 y D5 del documento de negocio), que cierran la pregunta abierta 2. El resto es decisión del orquestador (2026-10-05), validada por el Arquitecto y el PO. Aceptado el 2026-10-05.
 - **Impacta**: INF-GRP-003, INF-GRP-004, TS-GRP-003 (SEC-14 con el canal npm), INF-GRP-002 (medir el binario musl).
+
+### ADR-GRP-017 — App de escritorio como cliente del daemon
+
+- **Pregunta**: con la app de escritorio en el MVP (D7, Rene Bonilla, 2026-10-28), ¿qué perfil y qué capa recibe una app sin terminal, y cómo prueba la presencia humana sin debilitar ADR-GRP-005 § 6, NFR-02 ni BR-AUTH?
+- **Decisión**: la app es un cliente más del canal local. Para escribir, el control 3 se sustituye por el factor del SO de ADR-GRD-008, invocado por el daemon: una presencia de sesión para la capa `cockpit` y un factor por acción para lo reservado. Sin factor, la app es de solo lectura y muestra el comando de terminal. Las alphas incluyen un `.dmg` sin firmar.
+- **Estado**: `proposed`. Decisión del orquestador (2026-10-28), validada por Arquitecto. Pasa a `accepted` tras la revisión del security-expert. Lo que depende de Rene (cuenta de Apple, updater, prioridad de SPIKE-GRD-002, cask) está en su sección "Pendiente de Rene".
+- **Impacta**: UI-1 y UI-2 (BR-27), SPIKE-GRD-002, TS-GRP-007, INF-GRP-002 (V3), ADR-GRP-014.
 
 ## Pendientes fuera de los ADRs
 
