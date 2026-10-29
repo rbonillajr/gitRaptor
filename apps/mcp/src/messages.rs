@@ -774,6 +774,33 @@ mod tests {
         }
     }
 
+    /// RES-MCP-03: the usual `policy-denied` (one rule with its level, in Spanish, the longer
+    /// language) stays within the budget it had before the reasons, so the worst case is the
+    /// only one paying for them.
+    #[test]
+    fn a_typical_denial_stays_within_the_former_budget() {
+        use gitraptor_api::mcp_view::check_token_budget;
+        let body = refusal(
+            ToolRefusal {
+                code: McpToolError::PolicyDenied,
+                params: Some(json!({
+                    "rules": ["permission.commit"],
+                    "reasons": [{"rule": "permission.commit", "level": "floor"}],
+                    "decision_id": "f".repeat(32),
+                })),
+            },
+            Lang::Es,
+        );
+        assert!(body["params"]["reasons"].is_array(), "{body}");
+        check_token_budget(
+            "RES-MCP-03",
+            "policy-denied typical",
+            &body.to_string(),
+            125,
+        )
+        .unwrap();
+    }
+
     /// RES-MCP-03 and RES-MCP-04: the worst `policy-denied` (4 rules at the longest codes, a
     /// 32-hex decision id) keeps every rule and the id, within its own budget; every other code
     /// keeps the common one.
@@ -788,16 +815,26 @@ mod tests {
             "permission.worktree-remove",
             "minimum.base-branch-delete"
         ]);
+        // Four pairs, each at the longest level name.
+        let reasons: Vec<Value> = rules
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|rule| json!({"rule": rule, "level": "worktree"}))
+            .collect();
         let decision = "f".repeat(32);
         for lang in [Lang::En, Lang::Es] {
             let body = refusal(
                 ToolRefusal {
                     code: McpToolError::PolicyDenied,
-                    params: Some(json!({"rules": rules, "decision_id": decision})),
+                    params: Some(
+                        json!({"rules": rules, "reasons": reasons, "decision_id": decision}),
+                    ),
                 },
                 lang,
             );
             assert_eq!(body["params"]["rules"], rules, "{body}");
+            assert_eq!(body["params"]["reasons"], json!(reasons), "{body}");
             assert_eq!(body["params"]["decision_id"], decision.as_str(), "{body}");
             let text = body.to_string();
             check_token_budget(

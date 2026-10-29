@@ -254,10 +254,12 @@ pub const MCP_STATUS_TOKENS: usize = 300;
 pub const MCP_REFUSAL_TOKENS: usize = 80;
 
 /// Most estimated tokens of a `policy-denied` refusal, the only code over
-/// [`MCP_REFUSAL_TOKENS`]: its rules and decision id are never cut (RES-MCP-04). Measured worst
-/// case: 4 rules at the longest codes of `guard::Rule` (28, 27, 26 and 26 bytes), a 32-hex
-/// decision id and the literal texts, 348 B (~116 tokens) in en and 374 B (~125 tokens) in es.
-pub const MCP_POLICY_REFUSAL_TOKENS: usize = 125;
+/// [`MCP_REFUSAL_TOKENS`]: its rules, its `(rule, level)` reasons and its decision id are never
+/// cut (RES-MCP-04). Measured worst case: 4 rules at the longest codes of `guard::Rule` (28, 27,
+/// 26 and 26 bytes), their 4 reasons at the longest level, a 32-hex decision id and the literal
+/// texts, 658 B (~220 tokens) in es. Sized for at most 4 pairs: raising the number of pairs
+/// needs a new budget.
+pub const MCP_POLICY_REFUSAL_TOKENS: usize = 221;
 
 /// Most estimated tokens of each part of a page of `status`; a target, the
 /// figure is fixed after measuring (RES-MCP-02, amended).
