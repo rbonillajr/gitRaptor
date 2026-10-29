@@ -457,6 +457,14 @@ pub struct UndoResult {
     /// most `MAX_KEPT_PATHS`, only with `CAP_TM_OVERLAP`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub kept: Vec<KeptPath>,
+    /// How many paths were kept in all, when `kept` is cut at `MAX_KEPT_PATHS`; 0 (omitted)
+    /// otherwise. Only with `CAP_TM_OVERLAP`.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub kept_total: u64,
+}
+
+fn is_zero(n: &u64) -> bool {
+    *n == 0
 }
 
 /// `timemachine.undo` result for an MCP connection: no paths (SEC-12).
@@ -482,7 +490,7 @@ impl UndoResult {
             undone_operation_id: self.undone_operation_id.clone(),
             actor: cap_actor(&self.requester.actor),
             not_restored: self.not_restored.len() as u64,
-            kept: 0,
+            kept: self.kept_total.max(self.kept.len() as u64),
         }
     }
 }

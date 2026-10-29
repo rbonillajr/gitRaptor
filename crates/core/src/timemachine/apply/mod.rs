@@ -884,11 +884,14 @@ impl<'a> Applier<'a> {
                 path: path.clone(),
             });
         }
+        for path in &w.kept {
+            report.kept.push((w.key.clone(), path.clone()));
+        }
 
         let mut removals: Vec<(&String, &(Kind, gitraptor_git::Oid))> = w
             .prior_files
             .iter()
-            .filter(|(p, _)| !w.target_files.contains_key(*p) && !w.is_excluded(p))
+            .filter(|(p, _)| !w.target_files.contains_key(*p) && !w.is_excluded(p) && !w.is_kept(p))
             .collect();
         removals.sort_by(|a, b| depth(b.0).cmp(&depth(a.0)).then(a.0.cmp(b.0)));
         let mut emptied = BTreeSet::new();
@@ -920,7 +923,9 @@ impl<'a> Applier<'a> {
         let mut writes: Vec<(&String, &(Kind, gitraptor_git::Oid))> = w
             .target_files
             .iter()
-            .filter(|(p, t)| w.prior_files.get(*p) != Some(*t) && !w.is_excluded(p))
+            .filter(|(p, t)| {
+                w.prior_files.get(*p) != Some(*t) && !w.is_excluded(p) && !w.is_kept(p)
+            })
             .collect();
         writes.sort_by(|a, b| depth(a.0).cmp(&depth(b.0)).then(a.0.cmp(b.0)));
         let before = |rel: &[u8]| {

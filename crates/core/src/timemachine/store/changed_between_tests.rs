@@ -41,6 +41,7 @@ impl Env {
     fn capture(&self) -> String {
         let req = CaptureRequest {
             level: SnapshotLevel::Observation,
+            echo_settled: None,
             common_dir: crate::observe::locate(&self.f.repo).unwrap(),
             worktrees: vec![WorktreeScope {
                 key: KEY.into(),

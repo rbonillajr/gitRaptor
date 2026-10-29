@@ -313,11 +313,57 @@ impl Running {
         ] {
             log.advance_operation(&id, step, 2).unwrap();
         }
+        drop(log);
+        self.anchor(&id);
         AgentWork {
             operation_id: id,
             prior_snapshot_id: real.prior_snapshot_id,
             dirty,
         }
+    }
+
+    /// The anchor of `operation_id`, as the continuous capture takes it: an observation of the
+    /// worktree caused by the operation, with a mark after every point there is (the agent's
+    /// operations are recorded at `i64::MAX / 2`).
+    pub fn anchor(&self, operation_id: &str) -> String {
+        use gitraptor_core::timemachine::oplog::{SnapshotFilter, SnapshotLevel};
+        use gitraptor_core::timemachine::store::{CaptureRequest, SnapshotStore, WorktreeScope};
+        let (repo_id, key, mark) = {
+            let log = self.oplog.lock().unwrap();
+            let all = log.snapshots(&SnapshotFilter::default()).unwrap();
+            let key = all
+                .iter()
+                .find_map(|s| s.record.worktrees.first().cloned())
+                .expect("the operation's real prior names the worktree");
+            let mark = all
+                .iter()
+                .filter_map(|s| s.record.engine_mark)
+                .max()
+                .unwrap_or(0)
+                .max(i64::MAX / 2)
+                + 1;
+            (log.repo_id().to_owned(), key, mark)
+        };
+        let store = SnapshotStore::open_existing(&self.tp.dirs(), &repo_id)
+            .unwrap()
+            .expect("the daemon's store");
+        let req = CaptureRequest {
+            level: SnapshotLevel::Observation,
+            echo_settled: None,
+            common_dir: gitraptor_core::observe::locate(&self.fx.repo).unwrap(),
+            worktrees: vec![WorktreeScope {
+                key,
+                path: self.worktree.clone(),
+                hint: None,
+            }],
+            engine_mark: Some(mark),
+            cause_operation: Some(operation_id.to_owned()),
+            cause_event_seq: None,
+            include_credentials: false,
+            still_valid: None,
+            give_way: None,
+        };
+        store.capture(&self.oplog, &req).unwrap().snapshot_id
     }
 
     /// Every operation of the oplog, oldest first, with the reason of the rejected ones.

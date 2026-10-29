@@ -115,6 +115,7 @@ fn capture_now(r: &Running, cause: Option<&str>) -> String {
     let (store, _) = SnapshotStore::open_or_create(&r.tp.dirs(), &repo_id).unwrap();
     let req = CaptureRequest {
         level: SnapshotLevel::Observation,
+        echo_settled: None,
         common_dir: gitraptor_core::observe::locate(&r.fx.repo).unwrap(),
         worktrees: vec![WorktreeScope {
             key,

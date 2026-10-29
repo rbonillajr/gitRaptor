@@ -43,11 +43,12 @@ use gitraptor_api::scope::{
 };
 use gitraptor_api::timemachine::EntryOrigin;
 use gitraptor_api::timemachine::{
-    ConfirmationToken, Invalid as TmInvalid, MAX_REPORTED_PATHS, MAX_REPORTED_REFS,
-    McpRequesterView, NotRestored, NotRestoredReason, NoticesParams, NoticesResult,
-    OperationRunResult, PriorFailedData, RedoParams, RequestChannel, RequesterView, ResolveParams,
+    ConfirmationToken, Invalid as TmInvalid, KeptPath, MAX_KEPT_PATHS, MAX_OVERLAP_CONFLICTS,
+    MAX_REPORTED_PATHS, MAX_REPORTED_REFS, McpRequesterView, NotRestored, NotRestoredReason,
+    NoticesParams, NoticesResult, OperationRunResult, OverlapConflict, OverlapSubject,
+    OverlapUndone, PriorFailedData, RedoParams, RequestChannel, RequesterView, ResolveParams,
     RestoreParams, RestoreResult, SnapshotParams, Surface, TIMELINE_DEFAULT_LIMIT, TimelineParams,
-    TmConfirmData, TmRejectReason, TmRejectedData, UndoParams, UndoResult, parse_since,
+    TmConfirmData, TmOverlap, TmRejectReason, TmRejectedData, UndoParams, UndoResult, parse_since,
 };
 use gitraptor_git::{ReaderOptions, RepoReader};
 
@@ -92,8 +93,12 @@ use crate::timemachine::timeline::{
 };
 mod exception;
 
+use crate::timemachine::overlap::{OverlapReport, Subject as OverlapSubjectCore};
+use crate::timemachine::timeline::recorded_actor;
 use crate::timemachine::undo::TmRepoHandle;
-use crate::timemachine::undo::{RawSide, UndoDone, UndoEnv, UndoError, tm_scope_for, undo_last};
+use crate::timemachine::undo::{
+    RawSide, UndoDone, UndoEnv, UndoError, Undone, tm_scope_for, undo_last,
+};
 
 /// Longest audit page.
 const MAX_AUDIT_PAGE: u32 = 500;
@@ -3193,8 +3198,42 @@ fn rejection_data(
     value.unwrap_or_else(|_| serde_json::json!({ "reason": reason }))
 }
 
-/// An undo's failures as contract errors.
-fn undo_error(e: UndoError, confirm: &Confirmation<'_>) -> ErrorObject {
+/// The wire detail of an overlap: the undone change and the first `MAX_OVERLAP_CONFLICTS`
+/// conflicts with their real total. Paths and branch names travel as untrusted text.
+fn overlap_detail(report: &OverlapReport, undone: &Undone) -> TmOverlap {
+    let conflicts = report
+        .conflicts
+        .iter()
+        .take(MAX_OVERLAP_CONFLICTS)
+        .map(|c| OverlapConflict {
+            subject: match &c.subject {
+                OverlapSubjectCore::Path { worktree_key, path } => OverlapSubject::Path {
+                    worktree: Untrusted::new(worktree_key.clone()),
+                    path: Untrusted::new(path.clone()),
+                },
+                OverlapSubjectCore::Ref(full) => OverlapSubject::Ref {
+                    name: Untrusted::new(full.strip_prefix("refs/heads/").unwrap_or(full)),
+                },
+            },
+            actor: recorded_actor(&c.actor),
+            seen_utc_ms: c.seen_ms,
+        })
+        .collect();
+    TmOverlap {
+        undone: OverlapUndone {
+            id: undone.id.clone(),
+            subtype: undone.subtype.clone().map(Untrusted::new),
+            actor: recorded_actor(&undone.requester),
+            at_utc_ms: undone.at_ms,
+        },
+        conflicts,
+        total: u32::try_from(report.conflicts.len()).unwrap_or(u32::MAX),
+    }
+}
+
+/// An undo's failures as contract errors. `with_detail` is whether the connection gets the
+/// overlap's detail (`CAP_TM_OVERLAP`, never over MCP).
+fn undo_error(e: UndoError, confirm: &Confirmation<'_>, with_detail: bool) -> ErrorObject {
     match e {
         UndoError::Rejected {
             reason,
@@ -3218,20 +3257,29 @@ fn undo_error(e: UndoError, confirm: &Confirmation<'_>) -> ErrorObject {
                 .with_data(serde_json::json!({ "operation_id": operation_id }))
         }
         UndoError::Internal(_) => ErrorObject::new(code::INTERNAL, "time machine unavailable"),
-        // Only the code until the detail is served (`CAP_TM_OVERLAP`).
+        // The detail only to a connection with `CAP_TM_OVERLAP`; anyone else (MCP included,
+        // SEC-12) gets the code alone, never a path or a branch name.
         UndoError::Overlap {
             operation_id,
             report,
+            undone,
         } => {
-            let reason = if report.unverified {
-                TmRejectReason::OverlapUnverified
+            let error = ErrorObject::new(code::OPERATION_REJECTED, "undo rejected");
+            if report.unverified {
+                error.with_data(TmRejectedData {
+                    reason: TmRejectReason::OverlapUnverified,
+                    operation_id,
+                })
+            } else if with_detail {
+                let mut data = TmConfirmData::rejected(TmRejectReason::Overlap, operation_id);
+                data.overlap = Some(overlap_detail(&report, &undone));
+                error.with_data(data)
             } else {
-                TmRejectReason::Overlap
-            };
-            ErrorObject::new(code::OPERATION_REJECTED, "undo rejected").with_data(TmRejectedData {
-                reason,
-                operation_id,
-            })
+                error.with_data(TmRejectedData {
+                    reason: TmRejectReason::Overlap,
+                    operation_id,
+                })
+            }
         }
     }
 }
@@ -3323,9 +3371,29 @@ fn not_restored_of(report: &ApplyReport) -> Vec<NotRestored> {
         .collect()
 }
 
-/// What the client sees of a finished undo. Paths are untrusted text.
-fn undo_result(done: UndoDone, requester: RequesterView) -> UndoResult {
+/// What the client sees of a finished undo. Paths are untrusted text; the kept ones only when
+/// `with_kept` (at most `MAX_KEPT_PATHS`).
+fn undo_result(done: UndoDone, requester: RequesterView, with_kept: bool) -> UndoResult {
     let not_restored = not_restored_of(&done.report);
+    let all_kept = done.report.kept.len();
+    let kept_total = if with_kept && all_kept > MAX_KEPT_PATHS {
+        all_kept as u64
+    } else {
+        0
+    };
+    let kept = if with_kept {
+        done.report
+            .kept
+            .iter()
+            .take(MAX_KEPT_PATHS)
+            .map(|(key, path)| KeptPath {
+                worktree: Untrusted::new(key.clone()),
+                path: Untrusted::new(path.clone()),
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
     UndoResult {
         operation_id: done.operation_id,
         prior_snapshot_id: done.prior_snapshot_id,
@@ -3343,7 +3411,8 @@ fn undo_result(done: UndoDone, requester: RequesterView) -> UndoResult {
             .map(warning_code)
             .chain(done.warnings)
             .collect(),
-        kept: Vec::new(),
+        kept,
+        kept_total,
     }
 }
 
@@ -3969,9 +4038,15 @@ impl Connection<'_> {
             p.confirmation.as_ref().map(ConfirmationToken::as_str),
             &eligibility,
         );
+        let with_detail = !self.is_mcp() && self.has(methods::CAP_TM_OVERLAP.name);
         let done = undo_last(&repo, &r.who, oplog_channel(channel), &confirm, &env)
-            .map_err(|e| undo_error(e, &confirm))?;
-        let result = undo_result(done, self.requester_view(&r, channel));
+            .map_err(|e| undo_error(e, &confirm, with_detail))?;
+        // Over MCP only the count of kept paths travels (`for_mcp`).
+        let result = undo_result(
+            done,
+            self.requester_view(&r, channel),
+            with_detail || self.is_mcp(),
+        );
         let value = if self.is_mcp() {
             serde_json::to_value(result.for_mcp())
         } else {
@@ -4483,6 +4558,10 @@ fn shape_special_states(accepted: bool, repos: &mut [gitraptor_api::messages::Re
             .for_each(gitraptor_api::messages::RepoView::without_special_states);
     }
 }
+
+#[cfg(test)]
+#[path = "conn_kept_total_tests.rs"]
+mod kept_total_tests;
 
 #[cfg(test)]
 mod tests {

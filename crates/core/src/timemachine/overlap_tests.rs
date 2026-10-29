@@ -79,6 +79,7 @@ impl World {
     fn capture(&self, level: SnapshotLevel, mark: i64, cause: Option<&str>) -> String {
         let req = CaptureRequest {
             level,
+            echo_settled: None,
             common_dir: crate::observe::locate(&self.f.repo).unwrap(),
             worktrees: vec![WorktreeScope {
                 key: KEY.into(),
