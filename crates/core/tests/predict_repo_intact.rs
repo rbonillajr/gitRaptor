@@ -37,7 +37,8 @@ use gitraptor_core::daemon::{
 };
 use gitraptor_core::predict::worker::{WorkerConfig, WorkerLimits};
 use gitraptor_core::predict::{PredictConfig, PredictMerger};
-use gitraptor_git::resolve::ResolveConfig;
+use gitraptor_git::RefName;
+use gitraptor_policy::team::{Confirmed, ConfirmedFloor};
 use gitraptor_testkit::canary::{self, Canary};
 use gitraptor_testkit::fingerprint::{self, Snapshot};
 use gitraptor_testkit::fixture::git_from_path;
@@ -52,16 +53,6 @@ const WAIT: Duration = Duration::from_secs(20);
 static CENSUS: RwLock<()> = RwLock::new(());
 
 // ----- The daemon --------------------------------------------------------------------------
-
-fn no_git() -> ResolveConfig {
-    ResolveConfig {
-        configured_path: None,
-        path_env: None,
-        known_locations: Vec::new(),
-        shim_paths: Vec::new(),
-        toolchain_gits: Vec::new(),
-    }
-}
 
 /// `raptor`, the worker's program: built next to this test binary if it is not there.
 fn raptor() -> PathBuf {
@@ -87,12 +78,25 @@ impl Rig {
         let repo_id = {
             let mut profile = tp.open();
             let common_dir = repo.join(".git").canonicalize().unwrap();
-            profile.add_repo(&common_dir, None, 1).unwrap().0.repo_id
+            let (entry, _) = profile.add_repo(&common_dir, None, 1).unwrap();
+            // `main` confirmed as the base: an unconfirmed base leaves the pairs against it
+            // pending(base-unconfirmed) (DS-TS-CKP-001 § Forma del error).
+            let (mut store, _) = profile.open_store(&entry.repo_id).unwrap();
+            store
+                .set_confirmed_team_baseline(&Confirmed {
+                    base_branch: RefName::new("main").unwrap(),
+                    floor: ConfirmedFloor::Absent,
+                })
+                .unwrap();
+            entry.repo_id
         };
+        // The real Git, as the daemon resolves it: without it the base is never reconciled and
+        // stays unconfirmed.
+        let env = DaemonEnv::from_vars(std::env::vars_os());
         let config = DaemonConfig {
             dirs: tp.dirs(),
-            env: DaemonEnv::from_vars(Vec::new()),
-            git: no_git(),
+            git: env.git_resolve_config(None),
+            env,
             heartbeat: Duration::from_secs(3600),
             log: LogLimits::default(),
             stop_deadline: None,
@@ -707,10 +711,10 @@ mod repo_intact {
         }
 
         let rig = Rig::start(&canary.f.repo, WorkerLimits::default());
-        // 3 worktrees (3 pairs) and the base, which the main worktree has checked out and so is
-        // paired with `alpha` and `beta` only.
-        let pairs = rig.wait("the 5 pairs of the canary repo as current", |p| {
-            all_current(p, 5)
+        // `alpha` and `beta` against each other and against the base. The main worktree has the
+        // base checked out and no work of its own, so it forms no pairs (T002).
+        let pairs = rig.wait("the 3 pairs of the canary repo as current", |p| {
+            all_current(p, 3)
         });
         assert_eq!(
             between(&pairs, &roots[1], &roots[2]).and_then(|p| p.summary.level),
@@ -730,6 +734,8 @@ mod repo_intact {
         let _alone = CENSUS.write().unwrap_or_else(|e| e.into_inner());
         let f = fixture();
         let roots = ten_worktrees(&f);
+        // Brought up to date before sampling: its `cargo build` is the test's, not the daemon's.
+        raptor();
         let sampler = Sampler::start();
         let rig = Rig::start(&f.repo, WorkerLimits::default());
         rig.wait("the 55 pairs as current", |p| all_current(p, 55));
@@ -744,6 +750,9 @@ mod repo_intact {
             })
         });
         let (kids, grandchildren) = sampler.finish();
+        // The daemon's own Git CLI (ADR-GRP-009: reconciling the base) is not the predictor's:
+        // `predict` imports no `invoke` (predict_boundary), so its only child is the worker.
+        let kids: Vec<_> = kids.into_iter().filter(|p| p.name != "git").collect();
         let names: BTreeSet<_> = kids.iter().map(|p| p.name.as_str()).collect();
         assert_eq!(
             names,
