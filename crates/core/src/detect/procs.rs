@@ -77,6 +77,28 @@ pub trait ProcLister: Send + Sync {
         let _ = pid;
         None
     }
+    /// What S3 reads of the `git` `pid`; `None` when its arguments or environment cannot be
+    /// read. The default reads them apart; a platform that can reads them once.
+    fn git_facts(&self, pid: u32) -> Option<GitFacts> {
+        let call = self.git_call(pid)?;
+        Some(GitFacts {
+            redirect: self.git_redirect(pid)?,
+            writes: call.writes,
+            harmless: call.harmless,
+        })
+    }
+}
+
+/// What S3 reads of a running `git` (ADR-GRP-012, amendments 2026-10-28): three booleans, never
+/// an argument nor a variable's value (SEC-04).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GitFacts {
+    /// It redirects its target ([`git_redirects`]).
+    pub redirect: bool,
+    /// [`GitCall::writes`]: as a `git` of a session, it is evidence only then.
+    pub writes: bool,
+    /// [`GitCall::harmless`]: as a foreign `git`, it does not count then.
+    pub harmless: bool,
 }
 
 /// A path from the bytes of an argument: as they are on Unix; on Windows, where an argument is
@@ -166,7 +188,19 @@ pub struct GitCall {
     /// pager or a long read does not hold the engine's calm. One that only reads the index may
     /// refresh it, under `index.lock`, which the calm checks on its own.
     pub read_only: bool,
+    /// A subcommand that cannot produce a Git event the engine observes: it never moves a ref,
+    /// `HEAD` or the list of worktrees. `read_only`, `status` (it may refresh the index) or
+    /// `fsmonitor--daemon`. S3 does not count such a foreign `git` (ADR-GRP-012, amendment
+    /// 2026-10-28); the calm keeps the stricter `read_only`.
+    pub harmless: bool,
+    /// A subcommand that can move a ref or `HEAD`
+    /// ([`gitraptor_macsys::process::git_subcommand_writes`]): a `git` of a session is evidence
+    /// of a Git event only then (DS-US-GRP-008 D4).
+    pub writes: bool,
 }
+
+/// Subcommands that cannot produce a Git event although they are not [`READ_ONLY_SUBCOMMANDS`].
+const HARMLESS_SUBCOMMANDS: &[&str] = &["status", "fsmonitor--daemon"];
 
 /// Subcommands that never write a worktree or a ref, whatever their options. `config` is
 /// read-only only in its reading forms ([`config_reads`]).
@@ -244,6 +278,8 @@ pub fn git_call(args: &[OsString]) -> GitCall {
             Some(s) => READ_ONLY_SUBCOMMANDS.contains(&s),
             None => false,
         };
+    // On the subcommand as `git` reads it, never the sanitized one: `stat.us` may be an alias.
+    let harmless = read_only || subcommand.is_some_and(|s| HARMLESS_SUBCOMMANDS.contains(&s));
     let clean: String = subcommand
         .unwrap_or_default()
         .chars()
@@ -258,6 +294,10 @@ pub fn git_call(args: &[OsString]) -> GitCall {
         },
         long_lived,
         read_only,
+        harmless,
+        writes: gitraptor_macsys::process::git_subcommand_writes(
+            args.iter().map(|a| a.as_encoded_bytes()),
+        ),
     }
 }
 
@@ -559,6 +599,16 @@ impl ProcLister for SystemProcLister {
         Some(git_call(args.get(1..).unwrap_or_default()))
     }
 
+    fn git_facts(&self, pid: u32) -> Option<GitFacts> {
+        let (args, redirect) = gitraptor_macsys::process::process_git_args_and_redirect(pid)?;
+        let call = git_call(args.get(1..).unwrap_or_default());
+        Some(GitFacts {
+            redirect,
+            writes: call.writes,
+            harmless: call.harmless,
+        })
+    }
+
     fn git_redirect_into(&self, pid: u32, in_repo: &dyn Fn(&Path) -> bool) -> Option<bool> {
         let (args, env) = gitraptor_macsys::process::process_git_target(pid, &GIT_TARGET_ENV)?;
         let cwd = crate::channel::peer::process_cwd(pid)?;
@@ -671,6 +721,10 @@ impl ProcLister for SystemProcLister {
 #[cfg(test)]
 #[path = "procs_redirect_tests.rs"]
 mod redirect_tests;
+
+#[cfg(test)]
+#[path = "procs_s3_tests.rs"]
+mod s3_tests;
 
 #[cfg(all(test, any(target_os = "macos", target_os = "linux")))]
 mod tests {
