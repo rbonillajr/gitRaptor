@@ -131,10 +131,10 @@ pub fn changes(
 }
 
 /// What the commit a plan is about to make brings, aligned with the single update of its
-/// sentinel transaction: the same gates as [`changes`], with the header the plan already judged.
-/// The commit does not exist yet, so its size cannot be counted: when a size rule governs
-/// `actor`, nothing can be said and the movement is `unverifiable` (stricter than Git direct,
-/// whose hook counts the stored commit).
+/// sentinel transaction: the same gates as [`changes`], with the header the plan already judged,
+/// so the format is decided exactly. The commit does not exist yet, so its lines are never
+/// counted (`files: None`): a size rule that governs `actor` denies it as unverifiable (stricter
+/// than Git direct, whose hook counts the stored commit).
 pub fn prospective(
     planned: &PlannedCommit,
     rules: &CommitPolicies,
@@ -142,12 +142,6 @@ pub fn prospective(
 ) -> Vec<Option<NewCommits>> {
     if !rules.needs_commit_facts(actor) {
         return Vec::new();
-    }
-    if rules.needs_lines(actor) {
-        return vec![Some(NewCommits {
-            commits: Vec::new(),
-            unverifiable: true,
-        })];
     }
     vec![Some(NewCommits {
         commits: vec![CommitFacts {
