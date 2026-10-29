@@ -294,6 +294,11 @@ fn real_git_of_launcher(launcher: &Path, invoker: &Invoker) -> Option<PathBuf> {
         return None;
     }
     let real = check_executable(&mingw.join("bin").join("git.exe")).ok()?;
+    // What runs is the resolved file: a junction in the root must not take it elsewhere. Both
+    // sides in `std`'s canonical form, the one `check_executable` returns.
+    if !real.starts_with(std::fs::canonicalize(root).ok()?) {
+        return None;
+    }
     (version_text(launcher, invoker)? == version_text(&real, invoker)?).then_some(real)
 }
 
