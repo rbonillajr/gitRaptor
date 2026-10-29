@@ -29,7 +29,9 @@ const MAX_VIRTUAL_BASES: usize = 64;
 pub fn serve(input: &mut impl Read, output: &mut impl Write) -> std::io::Result<()> {
     // Before any job: the worker never runs above `utility`.
     work_class::set_current(WorkClass::Utility);
-    limit_address_space();
+    // No `RLIMIT_AS`: `gix` maps whole packs, so any fixed address-space cap breaks big repos
+    // while bounding nothing the resident memory does not. The daemon's reading of the worker's
+    // resident memory against `JOB_MEMORY_CAP` is the kill threshold, on every platform.
     let hello = serde_json::to_vec(&Hello {
         version: announced_version(),
     })?;
@@ -60,32 +62,6 @@ fn run(job: WireJob) -> Result<DryMergeOutcome, DryMergeError> {
     // The daemon owns the deadline: it kills this process when the job runs past it.
     InProcessMerger.merge(Path::new(&job.repo), &input, &limits, Instant::now())
 }
-
-/// Address space of the worker on Linux: well above [`super::JOB_MEMORY_CAP`] of resident
-/// memory, because it also counts the packs `gix` maps and reserved, untouched pages.
-#[cfg(target_os = "linux")]
-const WORKER_ADDRESS_SPACE: u64 = 8 * 1024 * 1024 * 1024;
-
-/// Caps the worker's address space on Linux, where the kernel enforces it, so a job that runs
-/// away fails in the worker before the daemon's next memory reading. Only ever lowers the limit.
-#[cfg(target_os = "linux")]
-fn limit_address_space() {
-    use nix::sys::resource::{Resource, getrlimit, setrlimit};
-    let Ok((soft, hard)) = getrlimit(Resource::RLIMIT_AS) else {
-        return;
-    };
-    let cap = WORKER_ADDRESS_SPACE.min(hard);
-    if cap < soft {
-        // Best effort: the daemon's reading of the resident memory is the cap that counts.
-        let _ = setrlimit(Resource::RLIMIT_AS, cap, hard);
-    }
-}
-
-/// macOS does not enforce `RLIMIT_AS` and Windows has no such limit: the daemon's reading of the
-/// resident memory is the only cap there (Windows: pendiente de la etapa de validación
-/// multiplataforma, a Job Object).
-#[cfg(not(target_os = "linux"))]
-fn limit_address_space() {}
 
 /// Reads one frame of at most `max` bytes; `None` on a clean EOF before it.
 ///
