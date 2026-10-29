@@ -3,8 +3,8 @@ id: BRD-GRP-001
 title: GitRaptor — Documento de Negocio
 type: business-requirements
 status: draft
-version: 0.8
-date: 2026-10-06
+version: 0.9
+date: 2026-10-28
 author: Rene Bonilla
 tags: [git, ai-agents, worktrees, mcp, tui, cli, agent-cockpit, safety-net, guardrails, azure-devops, brd]
 changelog:
@@ -16,6 +16,7 @@ changelog:
   - 0.6 (2026-10-05): D4 y D5 (decisiones de Rene Bonilla): modelo **open core**, con el núcleo gratuito bajo FSL-1.1-ALv2 y una edición de equipo comercial (BR-23 y BR-25); nombre `gitraptor` en los canales y comando `raptor`. Se cierra la pregunta abierta 2.
   - 0.7 (2026-10-05): Research de mercado actualizado ([RES-GRP-COMP-2026-10](research/competitive-2026-10.md)). GitKraken Desktop (desde la 12.0, abr-2026) y GitLens 19 ya tienen vista de agentes con estado en vivo, así que "ver la flota" deja de ser diferencial. Se actualizan § 1, § 2 (P1 y P7), § 3, § 4, § 10 y los anexos. La propuesta de valor pone **"proteger y deshacer" por encima de "ver"** (hipótesis). No cambia ninguna prioridad de BR: los ajustes al backlog quedan como propuesta en el documento de research.
   - 0.8 (2026-10-06): D6 (decisión de Rene Bonilla): el autor de un commit es la persona y el agente va como trailer `Co-Authored-By`. Nueva **BR-26** (Should, Guardrails del MVP): política de autoría por repo (`agents-commit` por defecto, `human-author`, `flexible`), que separa quién ejecutó el commit de a nombre de quién entra. La pregunta abierta 5 anota que la auditoría local de autoría va en el núcleo y su exportación sigue a BR-24.
+  - 0.9 (2026-10-28): D7 (decisión de Rene Bonilla): la **app de escritorio** (Tauri + React) entra en el MVP, en paralelo, porque hay muchos usuarios inexpertos; referencia de experiencia: GitKraken. BR-22 se parte: la app de escritorio pasa a la Fase 1 como **BR-27** (feature [desktop](../requirements/features/desktop/context.md)) y la extensión de VS Code/Cursor sigue en la Fase 3. La fecha de M2 no se mueve: el PO propone recortar Shoulds (pendiente de Rene).
 ---
 
 # GitRaptor — Documento de Negocio
@@ -41,7 +42,8 @@ En 2026 programar dejó de ser "un dev, una rama, un editor". Hoy es común tene
 |---|---|---|
 | **CLI + TUI** (`raptor`) | El dev en la terminal, al lado de Claude Code o Codex | MVP |
 | **Servidor MCP** | Los agentes mismos (Cursor, Claude Code, Copilot, Codex) | MVP |
-| **Vista visual** (extensión VS Code/Cursor y/o app de escritorio) | Quien prefiere UI gráfica, demos y tech leads | Fase 3 |
+| **App de escritorio** (Tauri + React, D7) | Novatos, quien prefiere UI gráfica, demos y tech leads | MVP (Fase 1), en paralelo |
+| **Extensión VS Code/Cursor** | Quien vive en el editor | Fase 3 |
 
 Tiene tres pilares de producto:
 
@@ -230,6 +232,12 @@ Prioridad MoSCoW. Los IDs (`BR-xx`) se descomponen en historias de usuario en la
 | BR-15 | **Instalación en un paso** para Claude Code, Cursor, VS Code/Copilot y Codex (`raptor mcp install`). | Must |
 | BR-16 | **Endurecimiento de seguridad:** allowlist de repos, protección contra path traversal, validación de refs, argv fijo (sin shell) y límites de salida, aprendiendo de los CVEs de `mcp-server-git`. | Must |
 
+**🖥️ App de escritorio (D7)**
+
+| ID | Capacidad | Prioridad |
+|---|---|---|
+| BR-27 | **App de escritorio para novatos** (Tauri + React; referencia de experiencia: GitKraken): añadir y proteger un repo sin terminal, la flota en vivo, el grafo con carriles por agente, el historial con "Deshacer" de un botón, los bloqueos de Guardrails explicados con su excepción consciente y los conflictos previstos (**UI-1**). Después, lo que hace falta para sentirse como GitKraken: diff, staging, commit, merge y conflictos visuales, ramas y PRs (**UI-2** y siguientes). Es un cliente más del motor: no añade ninguna vía de escritura ni de autorización propia (NFR-01, NFR-02). Feature [desktop](../requirements/features/desktop/context.md). | Must para UI-1, Should para UI-2 (propuesta del orquestador; **pendiente de Rene**) |
+
 ### 6.2 Fase 2: "Revisión e integración"
 
 | ID | Capacidad | Prioridad |
@@ -244,7 +252,7 @@ Prioridad MoSCoW. Los IDs (`BR-xx`) se descomponen en historias de usuario en la
 
 | ID | Capacidad | Prioridad |
 |---|---|---|
-| BR-22 | **Vista visual:** extensión de VS Code/Cursor (Marketplace + Open VSX) y/o app de escritorio (Tauri) con un grafo animado en vivo de agentes. Consume el mismo motor. | Should |
+| BR-22 | **Vista visual:** extensión de VS Code/Cursor (Marketplace + Open VSX) con un grafo animado en vivo de agentes. Consume el mismo motor. **Desde D7 (2026-10-28), la app de escritorio sale de este BR y entra en el MVP como BR-27** (§ 6.1 y feature [desktop](../requirements/features/desktop/context.md)); aquí queda solo la extensión. | Should |
 | BR-23 | **Políticas centralizadas** para la organización: herencia de políticas y distribución desde un repo central. **Edición de equipo** (D4). | Should |
 | BR-24 | **Auditoría:** exportar el log de acciones de agentes y de violaciones de política (JSON y SIEM). | Should |
 | BR-25 | **Dashboard de equipo** (opcional, self-hosted): actividad de agentes por repo y métricas. **Edición de equipo** (D4). | Could |
@@ -358,7 +366,7 @@ Como el producto arranca como **herramienta interna**, los KPIs miden uso y valo
 
 ## 12. Decisiones y preguntas abiertas
 
-### 12.1 Decisiones tomadas (v0.3; D4 y D5 en v0.6; D6 en v0.8)
+### 12.1 Decisiones tomadas (v0.3; D4 y D5 en v0.6; D6 en v0.8; D7 en v0.9)
 
 | # | Pregunta | Decisión |
 |---|---|---|
@@ -368,6 +376,7 @@ Como el producto arranca como **herramienta interna**, los KPIs miden uso y valo
 | D4 | ¿Modelo de licencia y monetización? | **Open core** (decisión de Rene Bonilla, 2026-10-05). Núcleo gratuito para cualquier usuario bajo **FSL-1.1-ALv2**; más adelante, una **edición de equipo** de pago con licencia comercial (grupos de usuarios, BR-23 y BR-25). Ver sección 8. |
 | D5 | ¿Nombre y comando? | **GitRaptor**, publicado como `gitraptor` en los canales (tap propio de Homebrew, winget y npm); el comando sigue siendo `raptor` (decisión de Rene Bonilla, 2026-10-05; ADR-GRP-014 § 6). |
 | D6 | ¿A nombre de quién entra un commit que hace un agente? | **El autor es la persona y el agente va como trailer `Co-Authored-By`** (decisión de Rene Bonilla, 2026-10-06), porque los permisos y las credenciales de Git son del usuario y el agente actúa con ellos. Cada empresa puede ser más estricta o más flexible, porque su harness puede dejar o no que el agente haga commits: por eso la política es configurable por repo en Guardrails (BR-26: `agents-commit`, `human-author`, `flexible`). |
+| D7 | ¿Entra la app de escritorio en el MVP? | **Sí, ya y en paralelo con el MVP** (decisión de Rene Bonilla, 2026-10-28), porque hoy hay muchos usuarios inexpertos que no van a usar una TUI. Referencia de experiencia: **GitKraken** ([benchmark](../requirements/features/desktop/research/benchmark-2026-10.md)). La app (Tauri + React) es un cliente más del motor, por el mismo canal que la TUI y la CLI, sin debilitar NFR-02 ni la autorización (ADR-GRP-001 a 004 enmendadas). Se entrega en dos niveles: **UI-1**, la primera versión útil para un novato (unas 3 semanas), y **UI-2** y siguientes, lo que hace falta para sentirse como GitKraken. La fecha de M2 (2027-01-14) no se mueve: el PO propone recortar Shoulds de M2 y el alcance final de UI-1 y UI-2 lo cierra Rene ([context.md](../requirements/features/desktop/context.md), "Decisiones de alcance para Rene"). La extensión de VS Code/Cursor sigue en la Fase 3 (BR-22). |
 
 ### 12.2 Preguntas abiertas
 

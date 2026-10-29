@@ -5,9 +5,11 @@ type: adr
 status: accepted
 date: 2026-10-01
 created: 2026-10-01
-updated: 2026-10-01
+updated: 2026-10-28
 deciders: [Rene Bonilla]
-related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-004]
+related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-004, ADR-GRP-017]
+changelog:
+  - 2026-10-28: enmienda de alcance D7 (la UI web de la app de escritorio entra en el MVP); Storybook y el paquete del UI kit, con UI-2.
 tags: [design-system, ui-kit, react, radix, tailwind, cva, design-tokens, motion, animations, storybook, vscode-webview]
 ---
 
@@ -30,7 +32,7 @@ Queremos:
 ## Alcance por fase
 
 - **MVP (Fase 1, CLI/TUI + MCP):** solo los **fundamentos** (principios, tokens de color y símbolos en DTCG JSON), el **tema y los componentes de la TUI**, las convenciones de la CLI, el contenido y la accesibilidad en terminal. El detalle está en [`docs/design-system/README.md`](../../design-system/README.md) v0.2. Los tokens se compilan a Rust (`crates/theme`).
-- **Fase 3 (app de escritorio y extensión):** todo lo que describe este ADR sobre la UI web (UI kit React, temas web, Storybook, Motion, Figma). **No se implementa antes** de que esa fase arranque.
+- **Fase 3 (app de escritorio y extensión):** todo lo que describe este ADR sobre la UI web (UI kit React, temas web, Storybook, Motion, Figma). **No se implementa antes** de que esa fase arranque. **(Enmienda 2026-10-28, D7)**: la parte de la app de escritorio entra ya; la extensión sigue en la Fase 3. Ver la sección final.
 
 ## Decisión
 
@@ -126,3 +128,20 @@ Objetivo: que la UI se sienta fluida y profesional sin costo de rendimiento.
 ## Referencias
 
 - [BRD-GRP-001 — Documento de negocio de GitRaptor](../../business/gitraptor-documento-de-negocio.md)
+
+## Enmienda 2026-10-28 (app de escritorio en el MVP, D7)
+
+**Decisión de Rene Bonilla (2026-10-28, D7)**: la app de escritorio entra en el MVP. Lo que este ADR describe para la UI web se aplica ya **a la app**. La extensión, el tema `vscode` y la CSP de los webviews de VS Code siguen en Fase 3. Las piezas (Radix, Tailwind v4, CVA, Motion, Lucide, Vitest + Testing Library) no cambian. Lo demás es **Decisión del orquestador (2026-10-28), validada por Arquitecto**.
+
+| Cambio | Dónde |
+|---|---|
+| "Alcance por fase": la Fase 3 se parte en dos. **App de escritorio: ahora** (UI-1 y UI-2). **Extensión y tema `vscode`: Fase 3** | Alcance por fase |
+| **Tokens web**: `@gitraptor/tokens` genera, desde los mismos DTCG JSON, las variables CSS y los tipos TS, además de `crates/theme`. **Paleta A, «Grafito y teal»** (decisión de Rene, 2026-10-05), con las **variantes oscura y clara** de cada token semántico y los colores de agente Okabe-Ito (los carriles del grafo usan `agent.1..n`) | Decisión, punto 1 |
+| **Superficies propias**: la TUI hereda el fondo de la terminal (`bg.default`), pero la app pinta el suyo. Se añaden `surface`, `surface-raised` y `border` por variante. ⚠️ **ASSUMPTION**: las superficies de referencia del gate de contraste, `#1e1e1e` en la oscura y `#ffffff` en la clara, son el fondo de la app. El gate WCAG AA de `tokens` se extiende a esas superficies | Decisión, punto 1 |
+| **Tema**: `auto` sigue `prefers-color-scheme` del SO, con selección manual en las preferencias de la app. `high-contrast` web: UI-2 | Decisión, punto 1 |
+| **UI kit en UI-1**: los componentes viven en `apps/desktop/src/ui` (ADR-GRP-002, Enmienda 2026-10-28) y cumplen la "Definición de diseño de componentes" **salvo** la fila Documentación (Storybook) y la regresión visual, que entran con Storybook. La accesibilidad se comprueba con axe en los tests de Vitest | Decisión, punto 2; Definición de diseño |
+| **Storybook: con UI-2**, no en UI-1. Entra cuando llegan DiffViewer, staging y merge visual, y en ese momento se extrae `packages/ui-kit` (`@gitraptor/ui`). Motivo: en UI-1 el catálogo es pequeño y tiene un solo consumidor, y caben 3 semanas | Decisión, punto 2 (Catálogo y pruebas) |
+| **Catálogo de UI-1**: Button, IconButton, Tooltip, Badge, Kbd, Spinner, Panel, SplitPane, Sidebar, StatusBar, Dialog, ConfirmDialog, Toast, VirtualList, EmptyState, AgentCard, BranchPill, CommitRow, ConflictBadge, TimelineItem y PolicyViolationBanner. DiffViewer, CommandPalette y los formularios, en UI-2 | Catálogo inicial |
+| **Grafo**: en UI-1 vive en `apps/desktop/src/graph` (Canvas/WebGL, fuera de React) con la regla de este ADR. Se extrae a `@gitraptor/graph` con el segundo consumidor | Catálogo inicial (nota del grafo) |
+| **Sin red**: fuentes e íconos embebidos en el build, sin CDN. Lo exige la CSP de ADR-GRP-017 § 2 (`font-src 'self'`) | Consecuencias (CSP) |
+| **Figma**: opcional en UI-1. Si la fase de diseño lo usa, sus variables llevan los nombres de los tokens | Decisión (Librería de diseño) |

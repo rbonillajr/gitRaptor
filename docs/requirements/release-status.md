@@ -14,15 +14,16 @@
 | Hecho (`done`) | 3 |
 | Implementado en parte (`partially-implemented`) | 26 |
 | Listo (`ready`) | 3 |
-| Borrador (`draft`) | 60 |
+| Borrador (`draft`) | 78 |
 | Bloqueado (`blocked`) | 1 |
-| **Total** | **150** |
+| **Total** | **168** |
 
 ## Por feature
 
 | Feature | Implementado | Hecho | Implementado en parte | Listo | Borrador | Bloqueado | Total |
 |---|---|---|---|---|---|---|---|
 | [cockpit](#cockpit) | 8 | 0 | 6 | 0 | 18 | 1 | 33 |
+| [desktop](#desktop) | 0 | 0 | 0 | 0 | 18 | 0 | 18 |
 | [guardrails](#guardrails) | 14 | 0 | 6 | 1 | 4 | 0 | 25 |
 | [mcp](#mcp) | 6 | 0 | 4 | 0 | 10 | 0 | 20 |
 | [motor-local](#motor-local) | 16 | 2 | 9 | 2 | 12 | 0 | 41 |
@@ -67,6 +68,31 @@
 | [US-CKP-022](features/cockpit/user-stories/US-CKP-022-grafo-carriles.md) | El desarrollador ve crecer la rama de cada agente sobre la base | Borrador (`draft`) | — | — |
 | [US-CKP-024](features/cockpit/user-stories/US-CKP-024-integrar-casos-limite.md) | Integrar sigue siendo seguro cuando el estado cambia, choca o la base no está sacada | Borrador (`draft`) | — | — |
 | [US-CKP-023](features/cockpit/user-stories/US-CKP-023-cola-confirmacion.md) | El desarrollador aprueba o rechaza desde la TUI las acciones que un agente deja en espera | Bloqueado (`blocked`) | — | — |
+
+### desktop
+
+18 fichas: 18 borrador.
+
+| Id | Título | Estado | Implementado en | Pendientes |
+|---|---|---|---|---|
+| [US-DSK-001](features/desktop/user-stories/US-DSK-001-anadir-repo-sin-terminal.md) | El novato añade su repo a GitRaptor desde la app sin abrir una terminal | Borrador (`draft`) | — | — |
+| [US-DSK-002](features/desktop/user-stories/US-DSK-002-proteger-repo-con-un-clic.md) | El novato protege su repo con un clic, sabe qué se instaló y puede quitarlo | Borrador (`draft`) | — | — |
+| [US-DSK-003](features/desktop/user-stories/US-DSK-003-estado-del-motor.md) | El usuario sabe si GitRaptor está funcionando y qué hacer cuando no | Borrador (`draft`) | — | — |
+| [US-DSK-004](features/desktop/user-stories/US-DSK-004-flota-en-vivo.md) | El usuario ve en vivo qué agente trabaja en cada copia de su repo y cuál pide atención | Borrador (`draft`) | — | — |
+| [US-DSK-005](features/desktop/user-stories/US-DSK-005-grafo-de-carriles.md) | El usuario ve crecer la rama de cada agente como un carril sobre la rama base | Borrador (`draft`) | — | — |
+| [US-DSK-006](features/desktop/user-stories/US-DSK-006-deshacer-de-un-boton.md) | El usuario deshace con un botón lo que hizo un agente o él mismo, y puede rehacerlo | Borrador (`draft`) | — | — |
+| [US-DSK-007](features/desktop/user-stories/US-DSK-007-bloqueo-explicado.md) | El usuario entiende por qué GitRaptor frenó una operación y cómo hacerla a conciencia | Borrador (`draft`) | — | — |
+| [US-DSK-008](features/desktop/user-stories/US-DSK-008-conflictos-previstos.md) | El usuario ve qué agentes van a chocar antes de que choquen y en qué archivos | Borrador (`draft`) | — | — |
+| [US-DSK-009](features/desktop/user-stories/US-DSK-009-diff-visual.md) | El usuario revisa en la app qué cambió en una copia de trabajo o en un commit | Borrador (`draft`) | — | — |
+| [US-DSK-010](features/desktop/user-stories/US-DSK-010-commit-desde-la-app.md) | El usuario guarda sus cambios en un commit desde la app y puede deshacerlo | Borrador (`draft`) | — | — |
+| [US-DSK-011](features/desktop/user-stories/US-DSK-011-staging-por-fragmento.md) | El usuario elige qué fragmentos o líneas de un archivo entran en el commit | Borrador (`draft`) | — | — |
+| [US-DSK-012](features/desktop/user-stories/US-DSK-012-ramas-crear-cambiar-borrar.md) | El usuario crea, cambia y borra ramas desde la app sin perder trabajo | Borrador (`draft`) | — | — |
+| [US-DSK-013](features/desktop/user-stories/US-DSK-013-integrar-y-poner-al-dia.md) | El usuario integra o pone al día la rama de un agente desde la app y puede deshacerlo | Borrador (`draft`) | — | — |
+| [US-DSK-014](features/desktop/user-stories/US-DSK-014-resolver-conflictos.md) | El usuario resuelve un conflicto de merge dentro de la app y termina la integración | Borrador (`draft`) | — | — |
+| [US-DSK-015](features/desktop/user-stories/US-DSK-015-sincronizar-con-el-remoto.md) | El usuario sube y trae los cambios del remoto desde la app con la protección del repo | Borrador (`draft`) | — | — |
+| [US-DSK-016](features/desktop/user-stories/US-DSK-016-worktree-para-agente.md) | El usuario prepara una copia de trabajo para un agente nuevo y descarta la de uno que terminó | Borrador (`draft`) | — | — |
+| [US-DSK-017](features/desktop/user-stories/US-DSK-017-busqueda.md) | El usuario encuentra un commit, una rama o un archivo escribiendo lo que busca | Borrador (`draft`) | — | — |
+| [US-DSK-018](features/desktop/user-stories/US-DSK-018-atajos-de-teclado.md) | El usuario hace las acciones frecuentes con el teclado y las descubre en una paleta de comandos | Borrador (`draft`) | — | — |
 
 ### guardrails
 
@@ -385,7 +411,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### Sin hito
 
-12 fichas sin hito asignado.
+30 fichas sin hito asignado.
 
 ## Implementadas en parte: lo que falta
 
