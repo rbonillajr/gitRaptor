@@ -62,6 +62,7 @@ fn a_commit_plan_evaluates_commit_msg_branch_and_pre_commit_in_order() {
                 refname: FEAT.into(),
                 old: OLD.into(),
                 paths,
+                header: crate::guard::commit_format::parse(b"feat: x", true, 1),
             },
         ],
         "registered must not change"

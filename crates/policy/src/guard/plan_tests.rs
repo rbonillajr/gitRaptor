@@ -255,7 +255,8 @@ fn a_commit_is_the_commit_plus_the_old_to_old_sentinel_with_the_prepared_paths()
             Expected::NewCommitOn {
                 refname: FEAT.into(),
                 old: A.into(),
-                paths: vec!["src/a.rs".into(), ".gitraptor/settings.json".into()]
+                paths: vec!["src/a.rs".into(), ".gitraptor/settings.json".into()],
+                header: crate::guard::commit_format::parse(b"feat: x", true, 1),
             },
         ]
     );
@@ -474,11 +475,13 @@ fn a_new_commit_matches_its_parent_and_a_subset_of_the_prepared_paths() {
         refname: FEAT.into(),
         old: A.into(),
         paths: vec!["src/a.rs".into(), "src/b.rs".into()],
+        header: crate::guard::commit_format::parse(b"feat: x", true, 1),
     }];
     let with = |parents: Vec<String>, new_paths: Option<Vec<&str>>| MatchFacts {
         parents,
         descends_from_onto: false,
         new_paths: new_paths.map(|p| p.into_iter().map(str::to_owned).collect()),
+        new_header: Some(crate::guard::commit_format::parse(b"feat: x", true, 1)),
     };
     let new = tx(FEAT, oid(A), oid(C));
     assert!(matches(
@@ -525,6 +528,17 @@ fn a_new_commit_matches_its_parent_and_a_subset_of_the_prepared_paths() {
     assert!(!matches(&reg, &tx(FEAT, oid(B), oid(C)), None, &ok));
     assert!(!matches(&reg, &tx(FEAT, RefValue::Zero, oid(C)), None, &ok));
     assert!(!matches(&reg, &tx(FEAT, oid(A), RefValue::Zero), None, &ok));
+    // A stored message whose header is not the planned one, or that nobody read.
+    let rewritten = MatchFacts {
+        new_header: Some(crate::guard::commit_format::parse(b"wip", true, 1)),
+        ..ok.clone()
+    };
+    assert!(!matches(&reg, &new, None, &rewritten));
+    let unread = MatchFacts {
+        new_header: None,
+        ..ok
+    };
+    assert!(!matches(&reg, &new, None, &unread));
 }
 
 #[test]
