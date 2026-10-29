@@ -62,8 +62,10 @@ fn force_push(m: &Machine) -> Running {
 }
 
 /// Waits (bounded) until `guard.status` shows the pending exception: the announcement is in.
+/// The bound is generous: on a loaded runner, `raptor guard exec` and each `guard.status` may
+/// take seconds to start.
 fn wait_pending(m: &Machine) -> Value {
-    let deadline = Instant::now() + Duration::from_secs(8);
+    let deadline = Instant::now() + Duration::from_secs(60);
     loop {
         let status = m.status_json(&m.f.repo);
         if status["pending"]["action"] == "exception" {
@@ -192,7 +194,9 @@ fn same_decision_for_every_actor() {
 
 #[test]
 fn exception_is_announced_waits_and_runs_once() {
-    let m = machine(2_500);
+    // The window must outlast what is checked while it is open (the status, the stream and
+    // `raptor guard status`), which takes seconds on a loaded runner.
+    let m = machine(20_000);
     let mut other = Client::connect(&m.dirs(), ClientKind::Cli, PROTOCOL_VERSION).unwrap();
     let _: Value = other.call(methods::EVENTS_SUBSCRIBE, json!({})).unwrap();
     let local = m.git_ok(&m.f.repo, &["rev-parse", "feat-x"]);
