@@ -441,27 +441,32 @@ pub fn commit_facts(common: &Path, message: &str) -> AuthorshipFacts {
     authorship::facts(message.as_bytes(), &options)
 }
 
-/// The header of a commit `message` as `git commit -F -` stores it on a branch that already has
-/// commits: cleaned the way Git cleans a message without an editor (`commit.cleanup`,
-/// `core.commentChar` of the repo under `common`), then judged like the hook judges the stored
-/// commit. The text of the message never leaves this function.
-pub fn commit_header(common: &Path, message: &str) -> Header {
+/// The header of a commit `message` as `git commit -F -` stores it on a branch whose new commit
+/// has `parents` parents: cleaned the way Git cleans a message without an editor
+/// (`commit.cleanup`, `core.commentString` or `core.commentChar` of the repo under `common`),
+/// then judged like the hook judges the stored commit. Only the repo's own configuration is
+/// read: what the global one, or a hook, changes is caught when the child's transition is
+/// matched against the stored message. The text of the message never leaves this function.
+pub fn commit_header(common: &Path, message: &str, parents: usize) -> Header {
     let (cleanup, comment) = super::evaluate::open(common)
         .map(|reader| reader.commit_message_config())
         .unwrap_or_default();
     let stored = stored_message(message, cleanup.as_deref(), comment.as_deref());
     let (head, body_separated, reverts) = gitraptor_git::message_facts(&stored);
-    // A plan's commit never has two parents: `Merge …` is never Git's own message here.
-    parse_with(&head, body_separated, 1, reverts)
+    parse_with(&head, body_separated, parents, reverts)
 }
 
 /// The message Git stores for `git commit -F -` (no editor): `verbatim` keeps it, `strip` drops
 /// the comment lines and the blank space, any other mode (the default, `whitespace`, and
 /// `scissors`, which only cuts with an editor) drops the blank space alone.
 fn stored_message(message: &str, cleanup: Option<&str>, comment: Option<&str>) -> Vec<u8> {
+    let auto;
     let comment = match comment {
-        // `auto` only picks another character with an editor.
-        Some("auto") | Some("") | None => "#",
+        Some("auto") => {
+            auto = auto_comment(message);
+            auto.as_str()
+        }
+        Some("") | None => "#",
         Some(c) => c,
     };
     match cleanup {
@@ -469,6 +474,28 @@ fn stored_message(message: &str, cleanup: Option<&str>, comment: Option<&str>) -
         Some("strip") => stripspace(message, Some(comment)),
         _ => stripspace(message, None),
     }
+}
+
+/// `core.commentChar=auto` as Git resolves it (`adjust_comment_line_char`): `#` when the message
+/// has none, else the first of `#;@!$%^&|:` that starts no line. When every one does, Git refuses
+/// the commit; `#` is returned and the commit never lands.
+fn auto_comment(message: &str) -> String {
+    const CANDIDATES: &str = "#;@!$%^&|:";
+    if !message.contains('#') {
+        return "#".to_owned();
+    }
+    let bytes = message.as_bytes();
+    let mut starts = vec![bytes.first().copied()];
+    for (i, b) in bytes.iter().enumerate() {
+        if (*b == b'\n' || *b == b'\r') && i + 1 < bytes.len() {
+            starts.push(Some(bytes[i + 1]));
+        }
+    }
+    CANDIDATES
+        .chars()
+        .find(|c| !starts.contains(&Some(*c as u8)))
+        .unwrap_or('#')
+        .to_string()
 }
 
 /// Git's `strbuf_stripspace`: trailing whitespace of every line goes, comment lines go when a

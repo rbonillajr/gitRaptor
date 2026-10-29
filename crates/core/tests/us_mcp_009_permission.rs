@@ -111,7 +111,7 @@ impl Rig {
                 old: head.trim().to_owned(),
                 paths: vec!["src/a.rs".into()],
                 authorship: commit_facts(&self.common, MESSAGE),
-                header: commit_header(&self.common, MESSAGE),
+                header: commit_header(&self.common, MESSAGE, 1),
             }),
         }
     }

@@ -114,7 +114,7 @@ impl Rig {
                 old: oid('a'),
                 paths: vec!["src/a.rs".into()],
                 authorship: commit_facts(&self.common, message),
-                header: commit_header(&self.common, message),
+                header: commit_header(&self.common, message, 1),
             }),
         )
     }
@@ -355,7 +355,7 @@ fn decide_all_applies_the_permissions_of_the_known_operations() {
         old: oid('a'),
         paths: vec!["src/a.rs".into()],
         authorship: commit_facts(&common, "message"),
-        header: commit_header(&common, "message"),
+        header: commit_header(&common, "message", 1),
     };
     let d = decide(&commit, &[Op::Commit]);
     assert_eq!(d.effect, Effect::Deny, "{d:?}");
@@ -391,4 +391,21 @@ fn the_planned_header_is_judged_on_the_message_git_stores() {
         "# note\nfeat: x\n"
     );
     assert_eq!(stored(" feat: x \n", Some("verbatim"), None), " feat: x \n");
+    // `auto`: `#` starts a line, so `;` is the comment and `# note` stays.
+    assert_eq!(
+        stored("# note\nfeat: x", Some("strip"), Some("auto")),
+        "# note\nfeat: x\n"
+    );
+    assert_eq!(
+        stored("; a\n# b\nfeat: x", Some("strip"), Some("auto")),
+        "; a\n# b\nfeat: x\n"
+    );
+    assert_eq!(
+        stored("feat: x\n#c", Some("strip"), Some("auto")),
+        "feat: x\n#c\n"
+    );
+    assert_eq!(
+        stored("feat: x\n# c", Some("strip"), Some("#")),
+        "feat: x\n"
+    );
 }

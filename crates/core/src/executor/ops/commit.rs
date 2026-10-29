@@ -83,6 +83,8 @@ pub(super) fn plan_op(
     } else {
         selection.paths.clone()
     };
+    // The first commit of a branch has no parent.
+    let parents = usize::from(old != ZERO_OID);
     Ok(OpPlan {
         expected: serde_json::json!({ "old": old, "branch": branch, "selection": selection }),
         warnings: Vec::new(),
@@ -94,7 +96,11 @@ pub(super) fn plan_op(
             old,
             paths,
             authorship: crate::guardrails::plan_gate::commit_facts(&repo.common_dir, &a.message),
-            header: crate::guardrails::plan_gate::commit_header(&repo.common_dir, &a.message),
+            header: crate::guardrails::plan_gate::commit_header(
+                &repo.common_dir,
+                &a.message,
+                parents,
+            ),
         }),
     })
 }

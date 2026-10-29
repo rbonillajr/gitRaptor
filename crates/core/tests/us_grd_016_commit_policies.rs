@@ -183,7 +183,7 @@ fn plan(r: &Rig, actor: &Actor, message: &str) -> Decision {
             old: r.tip.clone(),
             paths: vec!["a.txt".into()],
             authorship: commit_facts(&r.common, message),
-            header: commit_header(&r.common, message),
+            header: commit_header(&r.common, message, 1),
         }),
     };
     r.engine
@@ -356,4 +356,67 @@ fn hook_format_cause(d: &Decision) -> Option<Cause> {
         .iter()
         .find(|x| x.rule == Rule::CommitFormat)
         .and_then(|x| x.cause)
+}
+
+/// A commit made by `git commit -F` with the repo's configuration, then the branch put back: the
+/// hook reads it as the new commit of the transaction, stored exactly as Git stores it.
+fn committed_by_git(r: &Rig, message: &str) -> String {
+    let p = r.repo.path();
+    std::fs::write(p.join("a.txt"), "one\ntwo\n").unwrap();
+    git(p, &["add", "a.txt"]);
+    let file = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(file.path(), message).unwrap();
+    git(p, &["commit", "-q", "-F", file.path().to_str().unwrap()]);
+    let new = git(p, &["rev-parse", "HEAD"]).trim().to_owned();
+    git(p, &["update-ref", "refs/heads/feat-x", &r.tip]);
+    new
+}
+
+/// Git direct denies the stored message and so does the plan, with the same format reason.
+fn plan_denies_like_git(r: &Rig, message: &str) {
+    let from_hook = hook(r, &agent(), &committed_by_git(r, message));
+    let expected = commit_policy_reasons(&from_hook);
+    assert!(
+        expected.iter().any(|x| x.starts_with("CommitFormat/")),
+        "fixture: Git direct must deny the format: {from_hook:?}"
+    );
+    let from_plan = plan(r, &agent(), message);
+    assert_eq!(from_plan.applied_effect, Effect::Deny, "{from_plan:?}");
+    assert_eq!(commit_policy_reasons(&from_plan), expected, "{from_plan:?}");
+}
+
+/// `commit.cleanup=strip` with `core.commentChar=auto`: Git picks `;` because `#` starts a line,
+/// so `# note` stays as the first line and the format is broken.
+#[test]
+fn auto_comment_char_keeps_a_hash_line_like_git() {
+    let r = rig(FORMAT);
+    git(r.repo.path(), &["config", "commit.cleanup", "strip"]);
+    git(r.repo.path(), &["config", "core.commentChar", "auto"]);
+    plan_denies_like_git(&r, &with_trailer("# note\nfeat: x"));
+}
+
+/// Whether the system Git reads `core.commentString` (2.45 or later).
+fn git_reads_comment_string(r: &Rig) -> bool {
+    let version = git(r.repo.path(), &["--version"]);
+    let mut parts = version
+        .split_whitespace()
+        .nth(2)
+        .unwrap_or_default()
+        .split('.')
+        .map(|n| n.parse::<u32>().unwrap_or(0));
+    let (major, minor) = (parts.next().unwrap_or(0), parts.next().unwrap_or(0));
+    (major, minor) >= (2, 45)
+}
+
+/// `core.commentString=;` with `strip`: a `#` line is not a comment and stays first.
+#[test]
+fn comment_string_is_read_like_git() {
+    let r = rig(FORMAT);
+    if !git_reads_comment_string(&r) {
+        eprintln!("skipped: the system Git predates core.commentString");
+        return;
+    }
+    git(r.repo.path(), &["config", "commit.cleanup", "strip"]);
+    git(r.repo.path(), &["config", "core.commentString", ";"]);
+    plan_denies_like_git(&r, &with_trailer("# x\nfeat: ok"));
 }
