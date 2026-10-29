@@ -287,13 +287,54 @@ fn to_hash(bytes: &[u8]) -> Hash {
 
 const HEAD_MAGIC: &str = "gitraptor-oplog-head";
 
-/// Writes the head file atomically: private temporary file, fsync, rename.
+/// Removes its temporary file on drop unless the file was renamed into place, so a failed write
+/// leaves nothing behind. It only ever names this write's own file.
+struct TempFile<'a> {
+    path: &'a Path,
+    armed: bool,
+}
+
+impl Drop for TempFile<'_> {
+    fn drop(&mut self) {
+        if self.armed {
+            // Best effort: the write already failed or was superseded, and the name is unique to
+            // this write, so a leftover is harmless and a removal error has nowhere to go.
+            let _ = fs::remove_file(self.path);
+        }
+    }
+}
+
+/// Opens (creating it if needed) the lock file that serializes head replacements across
+/// processes. Private like the head, and never through a symlink.
+fn open_head_lock(path: &Path) -> io::Result<fs::File> {
+    let mut lock_path = path.as_os_str().to_owned();
+    lock_path.push(".lock");
+    let mut options = fs::OpenOptions::new();
+    options.read(true).write(true).create(true).truncate(false);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options
+            .mode(0o600)
+            .custom_flags(rustix::fs::OFlags::NOFOLLOW.bits() as i32);
+    }
+    options.open(std::path::PathBuf::from(lock_path))
+}
+
+/// Writes the head file atomically and monotonically: private temporary file, fsync, then, under
+/// an exclusive lock on `<head>.lock`, rename only if the head on disk is not already at or past
+/// `tip`.
 ///
 /// Every oplog handle of the repo (the daemon's, a hook process's) writes the head after its own
-/// commit, outside SQLite's lock, so the temporary file is unique to each write: with a shared
-/// name one writer removes or renames the other's file, and that writer then fails after its rows
-/// were committed. Concurrent renames leave the head of one of them, at most a batch behind,
-/// which `check_head` tolerates and the next batch corrects.
+/// commit, outside SQLite's lock, so the temporary file is unique to each write (a shared name
+/// lets one writer remove or rename the other's file after its rows were committed), and the
+/// rename is serialized and never moves the head backwards: unserialized renames could leave an
+/// older tip several batches behind, which `check_head` reports as a break. A head on disk that is
+/// missing, unreadable, behind `tip`, or at the same seq with another hash is replaced.
+///
+/// # Errors
+///
+/// Any I/O error creating, writing, locking or renaming; the temporary file is removed on error.
 pub(crate) fn write_head(path: &Path, tip: &Tip) -> io::Result<()> {
     static WRITES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let n = WRITES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -312,6 +353,10 @@ pub(crate) fn write_head(path: &Path, tip: &Tip) -> io::Result<()> {
         Err(err) => return Err(err),
     }
     let mut file = create_private_file(&tmp)?;
+    let mut guard = TempFile {
+        path: &tmp,
+        armed: true,
+    };
     let line = [
         HEAD_MAGIC,
         " ",
@@ -328,7 +373,20 @@ pub(crate) fn write_head(path: &Path, tip: &Tip) -> io::Result<()> {
     file.write_all(line.as_bytes())?;
     file.sync_all()?;
     drop(file);
+
+    let lock = open_head_lock(path)?;
+    lock.lock()?;
+    let current_is_newer = match read_head(path)? {
+        Head::At { seq, hash } => seq > tip.seq || (seq == tip.seq && hash == tip.hash),
+        Head::Missing | Head::Unreadable => false,
+    };
+    if current_is_newer {
+        // The guard removes the temporary file; the lock is released when `lock` drops.
+        return Ok(());
+    }
     fs::rename(&tmp, path)?;
+    guard.armed = false;
+    drop(lock);
     // The folder gets a plain fsync, not `sync_all` (`F_FULLFSYNC` on macOS, ~4 ms): the file
     // above is already durable before the rename, and the rename is persisted by the full flush
     // of the next batch's SQLite commit, which comes after this fsync. Until then the head can
@@ -526,7 +584,7 @@ mod tests {
     }
 
     /// Two oplog handles write the head after their own commits, outside SQLite's lock: neither
-    /// write may fail because of the other, and the head is always one of theirs.
+    /// write may fail because of the other, and the head ends at the highest tip written.
     #[test]
     fn concurrent_head_writes_never_fail() {
         let dir = tempfile::tempdir().unwrap();
@@ -538,24 +596,98 @@ mod tests {
                 scope.spawn(move || {
                     barrier.wait();
                     for i in 0..50 {
-                        let seq = t * 1000 + i;
-                        let tip = Tip {
-                            seq,
-                            batch: seq,
-                            hash: genesis(&seq.to_string()),
-                        };
-                        write_head(path, &tip).unwrap();
+                        write_head(path, &tip_at(t * 1000 + i)).unwrap();
                     }
                 });
             }
         });
-        assert!(matches!(read_head(&path).unwrap(), Head::At { .. }));
-        let left: Vec<_> = fs::read_dir(dir.path())
+        let last = tip_at(3049);
+        assert_eq!(
+            read_head(&path).unwrap(),
+            Head::At {
+                seq: last.seq,
+                hash: last.hash
+            }
+        );
+        assert_no_temporary_files(dir.path());
+    }
+
+    fn tip_at(seq: i64) -> Tip {
+        Tip {
+            seq,
+            batch: seq,
+            hash: genesis(&seq.to_string()),
+        }
+    }
+
+    fn assert_no_temporary_files(dir: &Path) {
+        let left: Vec<_> = fs::read_dir(dir)
             .unwrap()
             .filter_map(|e| e.ok())
             .map(|e| e.file_name())
-            .filter(|n| n != "oplog.head")
+            .filter(|n| n != "oplog.head" && n != "oplog.head.lock")
             .collect();
         assert!(left.is_empty(), "temporary files left: {left:?}");
+    }
+
+    /// A writer that commits first but writes its head last must not move the head back.
+    #[test]
+    fn an_older_tip_never_replaces_a_newer_head() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("oplog.head");
+        let (older, newer) = (tip_at(5), tip_at(9));
+        write_head(&path, &newer).unwrap();
+        write_head(&path, &older).unwrap();
+        assert_eq!(
+            read_head(&path).unwrap(),
+            Head::At {
+                seq: newer.seq,
+                hash: newer.hash
+            }
+        );
+        assert_no_temporary_files(dir.path());
+    }
+
+    /// Only a valid head at or past the tip is kept: a corrupt one, or another chain's head at
+    /// the same seq, is replaced.
+    #[test]
+    fn a_corrupt_or_foreign_head_is_replaced() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("oplog.head");
+        fs::write(&path, "garbage 99\n").unwrap();
+        write_head(&path, &tip_at(3)).unwrap();
+        assert_eq!(
+            read_head(&path).unwrap(),
+            Head::At {
+                seq: 3,
+                hash: tip_at(3).hash
+            }
+        );
+        let foreign = Tip {
+            seq: 3,
+            batch: 3,
+            hash: genesis("other"),
+        };
+        write_head(&path, &foreign).unwrap();
+        assert_eq!(
+            read_head(&path).unwrap(),
+            Head::At {
+                seq: 3,
+                hash: foreign.hash
+            }
+        );
+        assert_no_temporary_files(dir.path());
+    }
+
+    /// A write that fails after creating its temporary file removes it.
+    #[test]
+    fn a_failed_write_leaves_no_temporary_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("oplog.head");
+        // A non-empty folder where the head should be: neither readable nor replaceable.
+        fs::create_dir(&path).unwrap();
+        fs::write(path.join("x"), "x").unwrap();
+        assert!(write_head(&path, &tip_at(1)).is_err());
+        assert_no_temporary_files(dir.path());
     }
 }
