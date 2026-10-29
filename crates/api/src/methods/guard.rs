@@ -122,6 +122,9 @@ pub const GUARD_EXCEPTION_END: &str = "guard.exception-end";
 /// The conscious exception: its methods, `EvaluateParams.exception_token`,
 /// `PendingAction.exception` and the exception counters of `guard.log`.
 pub const CAP_GUARD_EXCEPTION: Capability = Capability::new("guard.exception");
+/// The four protection states of `guard.status` (`mcp-only` and `full`) and the
+/// `mcp-allowlist` entries of `guard.log`; without it a connection reads the hooks half only.
+pub const CAP_GUARD_PROTECTION_LAYERS: Capability = Capability::new("guard.protection-layers");
 /// `guard.exception`, `guard.exception-child` or `guard.exception-end` did nothing: `data` is
 /// [`crate::guard::GuardExceptionRefusedData`]. Joins `GROUP.errors` with its messages.
 pub const GUARD_EXCEPTION_REFUSED: ErrorSpec = ErrorSpec::new(BLOCK - 2, "guard-exception-refused");
@@ -163,6 +166,7 @@ pub(super) const GROUP: Group = Group {
         CAP_GUARD_PERMISSIONS,
         CAP_GUARD_TEAM_CONFIRMATION,
         CAP_GUARD_EXCEPTION,
+        CAP_GUARD_PROTECTION_LAYERS,
     ],
     error_block: Some(BLOCK),
     errors: &[
