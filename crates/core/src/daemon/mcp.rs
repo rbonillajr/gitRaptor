@@ -4,7 +4,6 @@
 
 use std::path::Path;
 
-use gitraptor_api::guard::ProtectionState;
 use gitraptor_api::messages::SessionsListParams;
 use gitraptor_api::methods::McpRepoResult;
 
@@ -81,16 +80,14 @@ impl Daemon {
                 .error("guard_mcp_log_failed", &[("repo", Field::id(repo_id))]);
             return;
         };
-        let hooks = guard_install::status(repo_id, common, store)
-            .state
-            .hooks_installed();
+        let status = guard_install::status(repo_id, common, store);
         let (now, offset) = crate::watch::wall_now();
         let entry = crate::guardrails::log::mcp_allowlist_entry(
             &common.to_string_lossy(),
             now,
             offset,
-            ProtectionState::of(hooks, !enabled),
-            ProtectionState::of(hooks, enabled),
+            super::guard::protection_of(&status, !enabled),
+            super::guard::protection_of(&status, enabled),
         );
         if store.record_guard_decision(&entry).is_err() {
             self.logger
@@ -117,10 +114,7 @@ impl Daemon {
             .ok()?;
         let mut guard = guard_install::status(repo_id, entry.canonical_path.as_path(), store);
         // The same function as `guard.status`: the MCP view and the CLI never disagree.
-        guard.state = ProtectionState::of(
-            guard.state.hooks_installed(),
-            self.mcp_repos.contains(repo_id),
-        );
+        guard.state = super::guard::protection_of(&guard, self.mcp_repos.contains(repo_id));
         Some(McpContext {
             detection_available,
             sessions,

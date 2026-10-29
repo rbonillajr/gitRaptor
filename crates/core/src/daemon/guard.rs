@@ -870,7 +870,25 @@ fn with_mcp_half(reply: &mut GuardReply, mcp_enabled: bool) {
         GuardReply::Uninstall(result) => &mut result.status,
         _ => return,
     };
-    status.state = ProtectionState::of(status.state.hooks_installed(), mcp_enabled);
+    status.state = protection_of(status, mcp_enabled);
+}
+
+/// The protection state of a repo from its hooks half, as the install reports it, and its mark
+/// in the MCP allowlist. A repo the MCP covers keeps its confirmed hooks while they are inactive
+/// (`full` with the diagnostic in `hooks`); without the mark, inactive hooks read `unprotected`
+/// as they always did.
+pub(super) fn protection_of(
+    status: &gitraptor_api::guard::GuardStatus,
+    mcp_enabled: bool,
+) -> ProtectionState {
+    let inactive = status
+        .hooks
+        .as_ref()
+        .is_some_and(|h| h.status == HooksStatus::Inactive);
+    ProtectionState::of(
+        status.state.hooks_installed() || (mcp_enabled && inactive),
+        mcp_enabled,
+    )
 }
 
 #[cfg(test)]
