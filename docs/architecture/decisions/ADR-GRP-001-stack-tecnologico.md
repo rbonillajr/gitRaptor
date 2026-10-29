@@ -5,9 +5,12 @@ type: adr
 status: accepted
 date: 2026-10-01
 created: 2026-10-01
-updated: 2026-10-05
+updated: 2026-10-28
 deciders: [Rene Bonilla]
-related: [ADR-GRP-002, ADR-GRP-003, ADR-GRP-004]
+related: [ADR-GRP-002, ADR-GRP-003, ADR-GRP-004, ADR-GRP-017]
+changelog:
+  - 2026-10-05: enmienda MCP (rmcp sin transporte de red).
+  - 2026-10-28: enmienda de alcance D7 (la app de escritorio entra en el MVP); el stack no cambia.
 tags: [rust, tauri, react, vite, typescript, ratatui, gitoxide, rmcp, stack]
 ---
 
@@ -30,7 +33,7 @@ GitRaptor (BRD-GRP-001) es una herramienta local que cada desarrollador instala 
 | `gitraptor-core` (motor: oplog/snapshots, políticas, watcher, conflictos) | **Rust**, con **gitoxide** para leer y el **Git CLI** del sistema para escribir (respeta hooks, config y credenciales) |
 | `raptor` CLI / TUI | **Rust**, con `clap` y `ratatui` |
 | `raptor-mcp` | **Rust**, con `rmcp` (SDK oficial de MCP) |
-| App de escritorio (Fase 3) | **Tauri** (backend Rust que llama directo al core) + **React + Vite** (SPA, sin Next.js) en el frontend; grafo en **Canvas/WebGL** con listas virtualizadas. Manejo de estado y patrones de UX según ADR-GRP-004. Componentes del design system y su UI kit (ADR-GRP-003). |
+| App de escritorio (Fase 3; **MVP desde la Enmienda 2026-10-28, D7**) | **Tauri** (backend Rust que llama directo al core) + **React + Vite** (SPA, sin Next.js) en el frontend; grafo en **Canvas/WebGL** con listas virtualizadas. Manejo de estado y patrones de UX según ADR-GRP-004. Componentes del design system y su UI kit (ADR-GRP-003). |
 | Extensión VS Code / Cursor (Fase 3) | **TypeScript**, como cliente liviano del motor vía API local (JSON-RPC) |
 
 Principios de rendimiento de la UI:
@@ -75,3 +78,18 @@ Decisión del orquestador (2026-10-05), validada por Arquitecto y security-exper
 | `rmcp` se usa con `default-features = false` y solo las features de servidor, macros y transporte stdio. `cargo-deny` prohíbe en `apps/mcp` las features y crates de transporte de red (NFR-03, SEC-07). La versión la fija `Cargo.lock` en US-MCP-003 | Decisión, fila `raptor-mcp` |
 | `raptor-mcp` solo ofrece la capability `tools` (Q-MCP-13) y solo depende de `crates/api` y de la biblioteca cliente del canal; nunca de `crates/policy`, `crates/git` ni del motor | Decisión, fila `raptor-mcp` |
 | El punto 3 del spike ("prototipo de `rmcp` con una política que bloquee el force-push") queda sustituido por la demo del BRD § 13 en dos partes (Q-MCP-18): el MCP no tiene herramienta de push; la decisión por MCP se prueba con `safe_commit` o `safe_rebase` | Validación (spike), punto 3 |
+
+## Enmienda 2026-10-28 (app de escritorio en el MVP, D7)
+
+**Decisión de Rene Bonilla (2026-10-28, D7 y BR-27 del documento de negocio)**: la app de escritorio deja de ser Fase 3 y entra ya, en paralelo con el MVP, porque hoy hay muchos usuarios inexpertos (referencia de experiencia: GitKraken). UI-1 (unas 3 semanas, macOS primero) y UI-2 (diff, staging, commit, merge visual, PRs) están en el documento de negocio. La extensión de VS Code/Cursor sigue en Fase 3.
+
+Es una enmienda de **alcance**. **El stack no se reabre**: Tauri (backend Rust) + React + Vite (SPA, sin Next.js), grafo en Canvas/WebGL con listas virtualizadas y Electron descartado. Lo demás es **Decisión del orquestador (2026-10-28), validada por Arquitecto**.
+
+| Cambio | Dónde |
+|---|---|
+| La fila "App de escritorio (Fase 3)" pasa a **"App de escritorio (MVP, UI-1 y UI-2)"**. Versiones de referencia: **Tauri 2.x** (capabilities de v2) y **React 19**. Las versiones exactas las fijan `Cargo.lock` y `pnpm-lock.yaml` | Decisión |
+| **Precisión de "llama directo al core"**: el backend Tauri enlaza la biblioteca cliente del canal (hoy `gitraptor_core::client`; con la enmienda E3 de ADR-CKP-003, en `crates/api`) y habla con el daemon por el mismo canal local que la TUI y la CLI (ADR-GRP-005 § 5). No embebe el motor, no abre el perfil y no lanza `git`. El grafo y el diff los lee el daemon con gitoxide; las escrituras pasan por el ejecutor (ADR-CKP-002) con snapshot de la Time Machine (NFR-01). Leer el grafo en el proceso de la app con `crates/git` queda descartado para UI-1 y se reabre solo si no se cumple NFR-05 (ADR-GRP-017, V3) | Decisión, fila de la app |
+| La frontera de seguridad entre la app y el daemon (perfil, capa, presencia humana sin terminal, capabilities y CSP de Tauri, empaquetado con el daemon) está en [ADR-GRP-017](./ADR-GRP-017-app-escritorio-cliente-daemon.md) | Decisión |
+| Contexto: "una UI visual rápida y liviana en la Fase 3" pasa a "una app de escritorio rápida y liviana en paralelo con el MVP (D7)" | Contexto |
+| WebKitGTK en Linux: la matriz de pruebas de la app empieza en macOS. Linux y Windows: **Pendiente: etapa de validación multiplataforma** | Consecuencias |
+| El texto original de la tabla se conserva arriba. La fila de la app lleva una marca que remite a esta enmienda | Decisión |

@@ -5,9 +5,14 @@ type: adr
 status: accepted
 date: 2026-10-01
 created: 2026-10-01
-updated: 2026-10-07
+updated: 2026-10-28
 deciders: [Rene Bonilla]
-related: [BRD-GRP-001, ADR-GRP-001, ADR-GRP-003, ADR-GRP-007, ADR-GRP-009, INF-GRP-001]
+related: [BRD-GRP-001, ADR-GRP-001, ADR-GRP-003, ADR-GRP-007, ADR-GRP-009, ADR-GRP-017, INF-GRP-001]
+changelog:
+  - 2026-10-04: crates/testkit (INF-GRP-001).
+  - 2026-10-05: crates/winsys.
+  - 2026-10-07: crates/macsys; nx sobre cargo y CI con affected.
+  - 2026-10-28: apps/desktop entra en el MVP (D7); paquetes web y CI de la app.
 tags: [nx, monorepo, package-based, pnpm, cargo, rust, monodon, tauri, ci]
 ---
 
@@ -68,7 +73,7 @@ gitraptor/
 
 **Creación por fase:**
 - **MVP (Fase 1):** `apps/cli`, `apps/mcp`, `crates/{core,policy,git,api,theme}`, `packages/design-tokens` y el crate de soporte de pruebas `crates/testkit` (enmienda 2026-10-04).
-- **Fase 3:** `apps/desktop`, `apps/vscode-extension`, `packages/{ui-kit,graph-renderer,core-client}`. No se crean antes para no cargar el monorepo con paquetes vacíos.
+- **Fase 3:** `apps/desktop`, `apps/vscode-extension`, `packages/{ui-kit,graph-renderer,core-client}`. No se crean antes para no cargar el monorepo con paquetes vacíos. **(Enmienda 2026-10-28, D7)**: `apps/desktop` se crea ya; los paquetes web se extraen según la sección final.
 
 ## Alternativas consideradas
 
@@ -144,3 +149,22 @@ Decisión del orquestador (2026-10-04), validada por el Arquitecto (`nassa-archi
 - **El grafo declara los binarios que lanzan los tests.** `gitraptor-cli` tiene `implicitDependencies: ["gitraptor-mcp"]` porque sus tests lanzan `raptor-mcp` (`gitraptor_testkit::sibling_bin`) sin depender del crate. Función de fitness: `tools/ci/affected-tests.mjs` falla `lint and test (ubuntu-latest)` si un test lanza el binario de un paquete que su proyecto no alcanza en el grafo.
 - **CI: Nx decide qué corre y cargo lo corre en una sola invocación.** En un PR con cambios de Rust, `nx show projects --affected` da los paquetes afectados (y sus dependientes), y los tests generales corren con `cargo test --workspace --exclude <no afectados>`. No se usa `nx affected -t lint test` por proyecto: cargo unifica las features sobre los paquetes seleccionados, y `cargo test -p gitraptor-cli` tras el build del workspace recompila unas 100 unidades (de serde a gix y todos los crates del workspace). La selección suma los paquetes cuyos binarios lanzan los tests afectados (`implicitDependencies`), y si aun así cambiara las features, corre el workspace entero. `fmt` y `clippy` siguen sobre todo el workspace: son baratos con caché, y `clippy` con `--exclude` también recompila. En `push` a `main` siempre se ejecuta todo.
 - **D9 de INF-GRP-001 no cambia:** el gate de CI del arnés ejecuta siempre todo el workspace (`cargo test --workspace -- repo_intact`), nunca `nx affected`.
+
+## Enmienda 2026-10-28 (app de escritorio en el MVP, D7)
+
+**Decisión de Rene Bonilla (2026-10-28, D7)**: `apps/desktop` deja de ser Fase 3. La forma de Tauri en el monorepo (frontend como paquete de pnpm y `src-tauri` como miembro del Cargo workspace) no cambia. Lo demás es **Decisión del orquestador (2026-10-28), validada por Arquitecto**. La frontera con el daemon está en [ADR-GRP-017](./ADR-GRP-017-app-escritorio-cliente-daemon.md).
+
+- **Se crea ahora `apps/desktop`**: el paquete de pnpm `@gitraptor/desktop` (Vite + React + TypeScript; scripts `dev`, `build`, `lint`, `typecheck`, `test`, más `tauri dev` y `tauri build`) y `apps/desktop/src-tauri`, el crate `gitraptor-desktop` (`publish = false`, `[lints] workspace = true`, etiquetas Nx `scope:desktop` y `type:app`). `Cargo.toml` añade `apps/desktop/src-tauri` a `members`. `pnpm-workspace.yaml` ya cubre `apps/*`.
+- **Dependencias de `gitraptor-desktop`**: solo la biblioteca cliente del canal y, si hace falta, `gitraptor-theme`. Nunca `gitraptor-git` ni `gitraptor-policy`, y de `gitraptor-core` solo el módulo `client` hasta la enmienda E3 de ADR-CKP-003. Lo comprueba V1 de ADR-GRP-017.
+- ⚠️ **ASSUMPTION**: las macros de Tauri (`generate_context!`, `generate_handler!`) compilan con `unsafe_code = "forbid"`. Si no es así, la excepción sigue el patrón de `winsys` y `macsys` (enmienda de este ADR, lista `EXCEPTIONS` de `unsafe_boundary.rs` y revisión de seguridad), nunca un `allow` suelto.
+- **Paquetes web: todavía no.** `packages/ui-kit`, `packages/graph-renderer` y `packages/core-client` no se crean en UI-1. Su código vive en `apps/desktop/src/{ui,graph,client}` con las mismas reglas: `src/ui` no importa `@tauri-apps/api` ni `src/client` (regla de ESLint dentro de la app, el equivalente de `type:ui`). **Se extraen** a su paquete cuando ocurra lo primero de esto:
+  - entra Storybook (UI-2, ADR-GRP-003) → `packages/ui-kit`;
+  - aparece un segundo consumidor (la extensión, Fase 3) → `packages/ui-kit`, `graph-renderer` y `core-client`.
+- **Tipos del contrato en TypeScript**: se generan desde `crates/api` (ts-rs o specta, a elegir en la Dev Spec) y se commitean en `apps/desktop/src/client/generated`, con una comprobación de "generado al día" en CI, como el workflow `tokens`.
+- **`packages/design-tokens`** añade la salida web (variables CSS y tipos TS) a su build de Style Dictionary (ADR-GRP-003, Enmienda 2026-10-28).
+- **CI sin cargar al resto**:
+  - `src-tauri` arrastra wry, tao y WebKitGTK en Linux. El workspace lo excluye de `default-members`, y los jobs generales (`cargo test --workspace`, `clippy` y el gate `repo_intact` de D9) pasan `--exclude gitraptor-desktop`, para que no exijan las librerías de WebKitGTK ni compilen Tauri en cada historia.
+  - Un job nuevo, `desktop`, en `ubuntu-latest` y filtrado por ruta (`apps/desktop/**`, `packages/design-tokens/**`, `crates/api/**`, `crates/core/src/client/**`, `Cargo.lock`, `pnpm-lock.yaml`), corre `pnpm lint`, `typecheck` y `vitest`, más `cargo clippy` y `cargo test -p gitraptor-desktop` con `libwebkit2gtk-4.1-dev`. Siempre reporta el check (en éxito si no aplica), como `repo-intact.yml`.
+  - **Sin runners de macOS en PR**: la app de macOS solo se compila en `release.yml` (alphas y releases, ADR-GRP-014).
+  - E2E: `tauri-driver` no soporta macOS. En UI-1 se prueba el frontend con el IPC simulado (`mockIPC`) y el backend con tests de Rust. El E2E con WebDriver en Linux queda para UI-2.
+- **Pendiente para el orquestador**: actualizar AGENTS.md (Alcance y la regla "`cargo test --workspace` debe pasar", que ahora lleva `--exclude gitraptor-desktop` fuera del job `desktop`).
