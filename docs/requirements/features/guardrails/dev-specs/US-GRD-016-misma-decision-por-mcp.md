@@ -793,6 +793,9 @@ Decisiones del orquestador (2026-10-28), validadas por el Arquitecto y el PO. D5
 | D8 | **Ninguna herramienta relaja ni decide**: prueba de nombres de `tools/list`, prueba de métodos `guard.*` sin marca MCP y la de reservados que ya existe | BR-AUTH-004 y SEC-GRD-05; la cola no existe y sus métodos serán reservados |
 | D9 | **Filtro `layer` en `guard.log`** | Pendiente que ADR-GRD-006 ata a esta historia |
 | D10 | **US-GRD-009 no se adelanta**: la suite de T001 es una tabla y la historia que entre después añade sus filas | Las reglas `policy.diff-size` y `policy.commit-format` no existen en el código; DS-US-GRD-009 D17 traspasa aquí la obligación |
+
+> **Enmienda (2026-10-28)**: D10 se corrige. Las reglas `policy.diff-size` y `policy.commit-format` existen desde el PR #296. La parte A ya está hecha ([brief](../../../../dev-briefs/us-grd-016-commit-policies.brief.md)): el plan de commit aplica `policy.commit-format` exacto y `policy.diff-size` falla cerrado (`unverifiable`, remite a Git directo). La parte B (`diff-size` exacto y la comprobación del commit real frente al previsto) sigue pendiente en US-GRD-016.
+
 | D11 | **Plataformas**: macOS aquí; Linux y Windows, Pendiente: etapa de validación multiplataforma | Memoria del proyecto: validación multiplataforma posterior en máquinas reales |
 
 **Preguntas cerradas** (aceptadas por el PO el 2026-10-28; figuran en `business-rules.md` y `context.md`):
