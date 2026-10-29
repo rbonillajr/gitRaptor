@@ -905,14 +905,15 @@ mod tests {
         }
     }
 
-    /// A `full` repo whose hooks were replaced still tells that the protection was lost: the bar
-    /// reads the hooks half (`GuardStatus.hooks`), never the four-valued state.
+    /// A repo the MCP covers whose hooks were replaced (`mcp-only`) still tells that the
+    /// protection was lost: the bar reads the hooks half (`GuardStatus.hooks`), never the
+    /// four-valued state.
     #[test]
-    fn full_with_inactive_hooks_keeps_the_protection_lost_text() {
+    fn mcp_only_with_inactive_hooks_keeps_the_protection_lost_text() {
         use gitraptor_api::guard::{GuardStatus, HooksLayer, LossCause, ProtectionState};
         let wire = serde_json::json!({
             "repo_id": "r1",
-            "state": "full",
+            "state": "mcp-only",
             "permission": "granted",
             "offer": false,
             "protected_bases": [],
@@ -921,8 +922,8 @@ mod tests {
             "last_refusal": [],
             "hooks": HooksLayer::lost(LossCause::DispatcherMissing),
         });
-        let status: GuardStatus = serde_json::from_value(wire).expect("a full status");
-        assert_eq!(status.state, ProtectionState::Full);
+        let status: GuardStatus = serde_json::from_value(wire).expect("an mcp-only status");
+        assert_eq!(status.state, ProtectionState::McpOnly);
         let mut model = shop_model(Lang::En);
         update(
             &mut model,

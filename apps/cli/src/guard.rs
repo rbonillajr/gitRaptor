@@ -663,13 +663,13 @@ fn state_line(status: &GuardStatus, tr: Tr) -> String {
 
 fn status_lines(status: &GuardStatus, tr: Tr) -> Vec<String> {
     let mut out = Vec::new();
-    // Both layers: the state first, then what the hooks half says, with its diagnostic next to
-    // it (a `full` repo whose hooks were replaced is still `full`, and says so).
+    // With the MCP layer, the state first, then what the hooks half says, with the diagnostic of
+    // inactive hooks next to it (they leave the repo `mcp-only`; the recovery follows).
     if status.state == ProtectionState::Full {
         out.push(tr.t("guard.state.full", &[]));
     }
     out.push(state_line(status, tr));
-    if status.state.hooks_installed()
+    if status.state.mcp_enabled()
         && let Some(hooks) = status
             .hooks
             .as_ref()

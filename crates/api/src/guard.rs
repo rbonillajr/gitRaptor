@@ -466,9 +466,9 @@ pub struct EvaluateParams {
     pub exception_token: Option<ExceptionToken>,
 }
 
-/// Protection state of a repo (BR-WF-002, ADR-GRD-005 § 3): the hooks half is "installed" (a
-/// confirmed install in the journal), its activity is `GuardStatus.hooks`; the MCP half is the
-/// repo's mark in the MCP allowlist.
+/// Protection state of a repo (BR-WF-002, ADR-GRD-005 § 3): the hooks half is the active install
+/// (confirmed in the journal and healthy; why it is not is `GuardStatus.hooks`); the MCP half is
+/// the repo's mark in the MCP allowlist.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum ProtectionState {
@@ -489,7 +489,7 @@ impl ProtectionState {
         }
     }
 
-    /// Whether the hooks are installed: `HooksOnly` or `Full`.
+    /// Whether the hooks half is on (installed and active): `HooksOnly` or `Full`.
     pub const fn hooks_installed(self) -> bool {
         matches!(self, Self::HooksOnly | Self::Full)
     }
