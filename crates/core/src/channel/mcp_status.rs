@@ -10,7 +10,7 @@
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 
-use gitraptor_api::guard::{Diagnostic, HooksStatus, ProtectionState};
+use gitraptor_api::guard::{Diagnostic, HooksStatus};
 use gitraptor_api::mcp_view::{
     MCP_CURSOR_PLACEHOLDER, MCP_GAP_WINDOW, MCP_MAX_CURSORS, MCP_MAX_GAPS, MCP_MAX_SESSIONS,
     MCP_PATHS_PAGE, MCP_WORKTREES_PAGE,
@@ -328,10 +328,7 @@ pub(crate) fn default_status(
                 BaseStatusView::Invalid => McpBaseState::Invalid,
             },
         },
-        protection: match ctx.guard.state {
-            ProtectionState::HooksOnly => McpProtectionState::Full,
-            ProtectionState::Unprotected => McpProtectionState::McpOnly,
-        },
+        protection: mcp_protection(ctx.guard.state),
         protection_lost: hooks
             .filter(|h| h.status == HooksStatus::Inactive)
             .and_then(|h| h.cause),
@@ -520,3 +517,13 @@ mod tests;
 #[cfg(test)]
 #[path = "mcp_status_more_tests.rs"]
 mod more_tests;
+
+/// The protection of the MCP view from the daemon's own `ProtectionState::of`. The view exists
+/// only for a repo in the allowlist, whose MCP half is on: only the hooks half is read.
+pub(crate) fn mcp_protection(state: gitraptor_api::guard::ProtectionState) -> McpProtectionState {
+    if state.hooks_installed() {
+        McpProtectionState::Full
+    } else {
+        McpProtectionState::McpOnly
+    }
+}

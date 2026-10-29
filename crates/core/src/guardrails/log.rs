@@ -166,7 +166,38 @@ fn stripped(op: &LoggedOperation) -> LoggedOperation {
         },
         LoggedOperation::Commit { stage } => LoggedOperation::Commit { stage: *stage },
         // Nothing in it is a ref, a remote or an oid.
-        LoggedOperation::ProtectionState { .. } => op.clone(),
+        LoggedOperation::ProtectionState { .. } | LoggedOperation::McpAllowlist { .. } => {
+            op.clone()
+        }
+    }
+}
+
+/// The entry of a repo entering or leaving the MCP allowlist (BR-WF-002): a change of the
+/// protection state with the layer `mcp`, no actor and no reason. Only an effective change of
+/// the mark writes one.
+pub fn mcp_allowlist_entry(
+    common_dir: &str,
+    at_ms: i64,
+    utc_offset_s: i32,
+    from: gitraptor_api::guard::ProtectionState,
+    to: gitraptor_api::guard::ProtectionState,
+) -> LogEntry {
+    LogEntry {
+        common_dir: common_dir.to_owned(),
+        at_ms,
+        utc_offset_s,
+        worktree: None,
+        branch: None,
+        actor: None,
+        operation: LoggedOperation::McpAllowlist { from, to },
+        kind: LogKind::ProtectionState,
+        effect: Effect::Allow,
+        applied_effect: Effect::Allow,
+        reasons: Vec::new(),
+        decision_id: super::evaluate::decision_id(),
+        authorship: None,
+        layer: LogLayer::Mcp,
+        action_id: None,
     }
 }
 

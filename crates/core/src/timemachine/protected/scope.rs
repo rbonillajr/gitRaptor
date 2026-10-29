@@ -91,12 +91,17 @@ impl McpRepos {
         let ids = self.0.read().unwrap_or_else(|e| e.into_inner());
         ids.iter().cloned().collect()
     }
+
+    /// Whether `repo_id` is in the MCP allowlist: the MCP half of its protection state.
+    pub fn contains(&self, repo_id: &str) -> bool {
+        let ids = self.0.read().unwrap_or_else(|e| e.into_inner());
+        ids.contains(repo_id)
+    }
 }
 
 impl McpAllowlist for McpRepos {
     fn allows(&self, repo_id: &str) -> bool {
-        let ids = self.0.read().unwrap_or_else(|e| e.into_inner());
-        ids.contains(repo_id)
+        self.contains(repo_id)
     }
 }
 

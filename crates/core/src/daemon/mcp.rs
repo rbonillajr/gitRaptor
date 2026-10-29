@@ -4,6 +4,7 @@
 
 use std::path::Path;
 
+use gitraptor_api::guard::ProtectionState;
 use gitraptor_api::messages::SessionsListParams;
 use gitraptor_api::methods::McpRepoResult;
 
@@ -52,6 +53,7 @@ impl Daemon {
             .ok_or(McpMarkError::NotObserved)?;
         self.mcp_repos.set(&entry.repo_id, enabled);
         if changed {
+            self.log_allowlist_change(&entry.repo_id, &entry.canonical_path, enabled);
             self.logger.info(
                 if enabled {
                     "mcp_enabled"
@@ -66,6 +68,34 @@ impl Daemon {
             enabled,
             changed,
         })
+    }
+
+    /// Records the change of the mark as a transition of the protection state (BR-WF-002): the
+    /// hooks half is read from the repo's install, the MCP half is the mark before and after. A
+    /// failure to write is logged and never undoes the mark. The developer made the change with a
+    /// reserved command, so there is no alert.
+    fn log_allowlist_change(&mut self, repo_id: &str, common: &Path, enabled: bool) {
+        self.wake_for_request(repo_id);
+        let Some((_, store)) = self.stores.iter_mut().find(|(id, _)| id == repo_id) else {
+            self.logger
+                .error("guard_mcp_log_failed", &[("repo", Field::id(repo_id))]);
+            return;
+        };
+        let hooks = guard_install::status(repo_id, common, store)
+            .state
+            .hooks_installed();
+        let (now, offset) = crate::watch::wall_now();
+        let entry = crate::guardrails::log::mcp_allowlist_entry(
+            &common.to_string_lossy(),
+            now,
+            offset,
+            ProtectionState::of(hooks, !enabled),
+            ProtectionState::of(hooks, enabled),
+        );
+        if store.record_guard_decision(&entry).is_err() {
+            self.logger
+                .error("guard_mcp_log_failed", &[("repo", Field::id(repo_id))]);
+        }
     }
 
     /// What the full `mcp.status` reads of an observed repo: its present sessions, its gaps and
@@ -85,11 +115,15 @@ impl Daemon {
                 limit: None,
             })
             .ok()?;
+        let mut guard = guard_install::status(repo_id, entry.canonical_path.as_path(), store);
+        // The same function as `guard.status`: the MCP view and the CLI never disagree.
+        guard.state =
+            ProtectionState::of(guard.state.hooks_installed(), self.mcp_repos.contains(repo_id));
         Some(McpContext {
             detection_available,
             sessions,
             gaps: store.gaps().ok()?,
-            guard: guard_install::status(repo_id, entry.canonical_path.as_path(), store),
+            guard,
         })
     }
 }

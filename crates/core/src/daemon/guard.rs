@@ -1,7 +1,9 @@
 //! The Guardrails requests the daemon serves and the recovery of their
 //! installs at start (US-GRD-001).
 
-use gitraptor_api::guard::{HooksLayer, HooksStatus, ProtectionLostData, UnloggedPeriod};
+use gitraptor_api::guard::{
+    HooksLayer, HooksStatus, ProtectionLostData, ProtectionState, UnloggedPeriod,
+};
 use gitraptor_git::SystemGit;
 
 use super::{Daemon, DaemonConfig, Field, Logger, now_ms, raptor_path};
@@ -463,6 +465,8 @@ impl Daemon {
             );
         }
         self.protection_after(&entry.repo_id, &reply, own.then_some(before));
+        let mut reply = reply;
+        with_mcp_half(&mut reply, self.mcp_repos.contains(&entry.repo_id));
         reply
     }
 
@@ -866,4 +870,17 @@ mod tests {
     fn the_accepted_risk_keeps_the_prefix_the_audit_view_reads() {
         assert!(RISK_ACCEPTED.starts_with(RISK_ACCEPTED_PREFIX));
     }
+}
+
+/// Completes the protection state of a reply with the MCP half (ADR-GRD-005 § 3). Only on the
+/// way out: the install and the uninstall compare the hooks half alone, which is what keeps a
+/// reinstall on a `full` repo idempotent.
+fn with_mcp_half(reply: &mut GuardReply, mcp_enabled: bool) {
+    let status = match reply {
+        GuardReply::Status(status) => status.as_mut(),
+        GuardReply::Plan(plan) => &mut plan.status,
+        GuardReply::Uninstall(result) => &mut result.status,
+        _ => return,
+    };
+    status.state = ProtectionState::of(status.state.hooks_installed(), mcp_enabled);
 }
