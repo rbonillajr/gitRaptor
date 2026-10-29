@@ -58,6 +58,8 @@ pub struct Outbox {
     without_changed_outcome: std::sync::atomic::AtomicBool,
     /// Without `guard.exception` (see [`Outbox::set_without_used_outcome`]).
     without_used_outcome: std::sync::atomic::AtomicBool,
+    /// Without `prediction.pairs` (see [`Outbox::set_without_prediction`]).
+    without_prediction: std::sync::atomic::AtomicBool,
 }
 
 #[derive(Debug, Default)]
@@ -86,6 +88,7 @@ impl Outbox {
             without_audit_outcomes: std::sync::atomic::AtomicBool::new(true),
             without_changed_outcome: std::sync::atomic::AtomicBool::new(true),
             without_used_outcome: std::sync::atomic::AtomicBool::new(true),
+            without_prediction: std::sync::atomic::AtomicBool::new(true),
         })
     }
 
@@ -166,6 +169,13 @@ impl Outbox {
     /// the hint, so no names or emails (`raptor-mcp`).
     pub fn set_without_authorship(&self, without: bool) {
         self.without_authorship
+            .store(without, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// The connection lacks `prediction.pairs`: `prediction.changed` never reaches it, so its
+    /// wire does not change.
+    pub fn set_without_prediction(&self, without: bool) {
+        self.without_prediction
             .store(without, std::sync::atomic::Ordering::Relaxed);
     }
 
@@ -271,6 +281,11 @@ impl Outbox {
                     && outcome == Some(AuditOutcome::Changed))
                 || (self.without_used_outcome.load(relaxed)
                     && outcome == Some(AuditOutcome::Used));
+        }
+        if event.kind == gitraptor_api::methods::PREDICTION_CHANGED {
+            return self
+                .without_prediction
+                .load(std::sync::atomic::Ordering::Relaxed);
         }
         if event.kind == gitraptor_api::event::REPO_DISCOVERED {
             return self
@@ -495,6 +510,48 @@ impl EventBus {
     ) -> u64 {
         let mut inner = self.lock();
         let data = update(&mut inner.engine);
+        self.publish_locked(&mut inner, kind, timings, data).0
+    }
+
+    /// [`EventBus::publish_with`] for an event of `scope` whose data carries the `scope_seq` it
+    /// is published with: `update` gets that sequence, under the same lock that assigns it, so
+    /// whatever it records with it cannot diverge from the event. The event's data must route it
+    /// to `scope`.
+    pub fn publish_in_scope<D: Serialize>(
+        &self,
+        kind: &str,
+        scope: &Scope,
+        update: impl FnOnce(&mut EngineShared, u64) -> D,
+    ) -> u64 {
+        let mut inner = self.lock();
+        let next = inner.scope_seq(scope) + 1;
+        let data = update(&mut inner.engine, next);
+        let (seq, scope_seq) = self.publish_locked(&mut inner, kind, None, data);
+        debug_assert_eq!(scope_seq, next, "{kind} was not routed to its scope");
+        seq
+    }
+
+    /// Reads the engine view and the sequence of `scope` under the lock events are published
+    /// with; `None` if the scope names a repo not observed.
+    pub fn scope_read<R>(
+        &self,
+        scope: &Scope,
+        read: impl FnOnce(u64, &EngineShared) -> R,
+    ) -> Option<R> {
+        let inner = self.lock();
+        inner
+            .knows(scope)
+            .then(|| read(inner.scope_seq(scope), &inner.engine))
+    }
+
+    /// Stamps, delivers and buffers one event; its sequence and its scope sequence.
+    fn publish_locked<D: Serialize>(
+        &self,
+        inner: &mut BusInner,
+        kind: &str,
+        timings: Option<Timings>,
+        data: D,
+    ) -> (u64, u64) {
         inner.seq += 1;
         let version = gitraptor_api::event::kind(kind).map_or(0, |k| k.version);
         let timings = timings.map(|mut t| {
@@ -542,7 +599,7 @@ impl EventBus {
                 entry.floor = scope_seq;
             }
         }
-        inner.seq
+        (inner.seq, scope_seq)
     }
 
     /// Subscribes `outbox` as subscription `id`. With `from_seq`, replays the

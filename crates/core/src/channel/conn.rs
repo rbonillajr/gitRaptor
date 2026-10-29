@@ -1,5 +1,6 @@
 //! One client connection: accept checks, handshake, dispatch and output.
 
+use std::collections::HashMap;
 use std::io::{BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -32,6 +33,7 @@ use gitraptor_api::messages::{
     GitEventKind, MAX_HISTORY_PAGE, MAX_SESSIONS_PAGE, SessionsListParams,
 };
 use gitraptor_api::methods::{self, METHODS, McpUnavailable, McpUnavailableData, MethodSpec};
+use gitraptor_api::prediction::{self, ListPredictionParams, PredictionPage};
 use gitraptor_api::rpc::{
     ErrorObject, Id, InvalidData, InvalidReason, Request, Response, ScopeRefusal, ScopeRefusedData,
     code,
@@ -718,6 +720,31 @@ impl Connection<'_> {
         // (US-GRD-019): `raptor-mcp` never asks for it.
         self.outbox
             .set_without_authorship(!self.authorship_events());
+        // Nor the predictor's pairs without `prediction.pairs`: the wire does not change.
+        self.outbox.set_without_prediction(!self.prediction_pairs());
+    }
+
+    /// Whether the connection reads the predictor's pairs in its snapshot and stream. Never
+    /// `raptor-mcp`: it reads them through its own projection.
+    fn prediction_pairs(&self) -> bool {
+        self.profile == ConnectionProfile::Full && self.has(methods::CAP_PREDICTION_PAIRS.name)
+    }
+
+    /// `prediction.list`: the published pairs of a repo in detail, by page, with the `rev` of
+    /// their summaries. A repo the predictor has not published has none.
+    fn prediction_list(
+        &self,
+        params: &ListPredictionParams,
+    ) -> Result<PredictionPage, ErrorObject> {
+        prediction::validate_list(params)
+            .map_err(|_| ErrorObject::new(code::INVALID_PARAMS, "invalid params"))?;
+        let worktree = params.worktree.as_deref().map(Path::new);
+        let mut details =
+            crate::predict::store::predict_read(&self.ctx.prediction, &params.repo_id, worktree);
+        if let Some(ids) = &params.pair_ids {
+            details.retain(|d| ids.contains(&d.summary.pair_id));
+        }
+        Ok(prediction::page(details, params.cursor.as_deref()))
     }
 
     /// `connection.accept` (protocol 9): the client's capabilities, once and
@@ -904,6 +931,12 @@ impl Connection<'_> {
             }
             methods::SCOPE_SUBSCRIBE => {
                 let result = request.params().and_then(|p| self.scope_subscribe(p));
+                self.reply(&request.id, result);
+            }
+            methods::PREDICTION_LIST => {
+                let result = request
+                    .params::<ListPredictionParams>()
+                    .and_then(|p| self.prediction_list(&p));
                 self.reply(&request.id, result);
             }
             methods::REPO_LOCATE => {
@@ -2455,10 +2488,29 @@ impl Connection<'_> {
     fn scope_snapshot(&self, params: ScopeSnapshotParams) -> Result<ScopeSnapshot, ErrorObject> {
         valid_scope(&params.scope)?;
         self.wake_scope(&params.scope);
-        let (scope_seq, shared) = self
+        // The predictor's part is read under the same lock as the rest, so its `rev`s and
+        // attention never run ahead of the scope sequence (S9).
+        let store = &self.ctx.prediction;
+        let with_pairs = self.prediction_pairs() && store.active();
+        let (scope_seq, shared, mut attention, pairs) = self
             .ctx
             .bus
-            .scope_snapshot(&params.scope)
+            .scope_read(&params.scope, |seq, engine| {
+                let (attention, pairs) = match &params.scope {
+                    Scope::Global => (
+                        engine
+                            .repos
+                            .iter()
+                            .map(|r| (r.repo_id.clone(), store.attention(&r.repo_id)))
+                            .collect::<HashMap<_, _>>(),
+                        None,
+                    ),
+                    Scope::Repo { repo_id } => {
+                        (HashMap::new(), with_pairs.then(|| store.summaries(repo_id)))
+                    }
+                };
+                (seq, engine.clone(), attention, pairs)
+            })
             .ok_or_else(not_found_id)?;
         let run_id = self.ctx.bus.run_id().to_owned();
         let tiers = self.has(methods::CAP_OBSERVATION_TIERS.name);
@@ -2477,12 +2529,14 @@ impl Connection<'_> {
                     .repos
                     .into_iter()
                     .map(|r| RepoSummaryView {
+                        // The predictor publishes the conflicts; Guardrails and
+                        // US-GRP-005 the rest: until then "not available".
+                        attention: attention
+                            .remove(&r.repo_id)
+                            .unwrap_or_else(AttentionView::unpublished),
                         repo_id: r.repo_id,
                         state: r.state,
                         path: r.path,
-                        // Published by the predictor, Guardrails and
-                        // US-GRP-005: until then "not available".
-                        attention: AttentionView::unpublished(),
                         tier: r.tier.filter(|_| tiers),
                     })
                     .collect(),
@@ -2512,6 +2566,12 @@ impl Connection<'_> {
                 self.kept_temps(std::slice::from_mut(&mut repo));
                 if serde_json::to_vec(&repo).map_or(0, |v| v.len()) > CHANGE_LIST_BUDGET {
                     crate::observe::without_change_lists(&mut repo.worktrees);
+                }
+                if let Some(pairs) = pairs {
+                    // What the rest of the view leaves of the frame, with room for the envelope.
+                    let used = serde_json::to_vec(&repo).map_or(usize::MAX, |v| v.len());
+                    let budget = MAX_MESSAGE_BYTES.saturating_sub(used.saturating_add(4096));
+                    repo.prediction = Some(prediction::fit_summary(pairs, budget));
                 }
                 ScopeSnapshot::Repo(RepoSnapshot {
                     run_id,
