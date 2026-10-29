@@ -2,10 +2,10 @@
 id: US-GRD-016
 title: "Un agente que usa las herramientas MCP recibe la misma decisión que con Git directo"
 type: us
-status: draft
+status: partially-implemented
 priority: high
 created: 2026-10-04
-updated: 2026-10-28
+updated: 2026-10-29
 feature: guardrails
 related:
   context:
@@ -22,7 +22,6 @@ tags:
   - guardrails
   - capa-mcp
   - estado-proteccion
-  - bloqueada
 ---
 
 # US-GRD-016: Un agente que usa las herramientas MCP recibe la misma decisión que con Git directo
@@ -109,4 +108,11 @@ Entonces no existe ninguna
 ## Diseño y Dev Spec
 
 - **Diseño:** no aplica.
-- **Dev Spec:** [DS-US-GRD-016](../dev-specs/US-GRD-016-misma-decision-por-mcp.md) (draft, 2026-10-28).
+- **Dev Spec:** [DS-US-GRD-016](../dev-specs/US-GRD-016-misma-decision-por-mcp.md) (2026-10-28).
+
+## Estado de la implementación (2026-10-29)
+
+Implementado en: PR #313 (parcial). Dev Spec: [DS-US-GRD-016](../dev-specs/US-GRD-016-misma-decision-por-mcp.md). Verificado en macOS; Linux lo cubre el CI. **Sin certificar**: la corrida de `/nassa-core:implement` se abortó en la línea base por la carga de la máquina (decisión del coordinador).
+
+- Hecho: permisos de las operaciones conocidas en todos los planes del ejecutor (capas `mcp` y `cockpit`); `policy-denied` con `reasons: [{rule, level}]`; los cuatro estados de protección servidos con `guard.protection-layers`; filtro `layer` en `guard.log`; ninguna herramienta MCP relaja ni decide; parte A de las políticas de commit por MCP (`policy.commit-format` exacto, `policy.diff-size` falla cerrado).
+- Pendiente: `policy.diff-size` exacto por MCP y la comprobación del commit real frente al previsto (parte B); la prueba de daemon de T007; Linux y Windows reales (**Pendiente: etapa de validación multiplataforma**, XP-64).

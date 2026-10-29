@@ -172,7 +172,7 @@ Estados (al 2026-10-28, sacados de [release-status.md](release-status.md)): **I*
 | US-GRD-003, US-GRD-010 | Retirar sin rastro; endurecer sin relajar | Must | P (PR #193, #201, #264; PR #217) | La ficha no lista pendientes |
 | US-GRD-011 | Fail-safe | Must | Pend | — |
 | US-GRD-006 | Excepción consciente | Must | I (PR #295, PR #301) | Windows en la validación multiplataforma; el escenario de D5 de rebase sin test (US-GRD-009) |
-| US-GRD-016 | La misma decisión por MCP y por hooks | Must | Pend | Las escrituras del MCP |
+| US-GRD-016 | La misma decisión por MCP y por hooks | Must | P (PR #313) | `diff-size` exacto por MCP (parte B); prueba de daemon de T007; Linux y Windows |
 | US-GRD-017 | Destructiva permitida con punto previo | Must | I (PR #260, PR #301) | TD-TMC-001 |
 | US-GRD-004 | Aviso de protección caída | Should | P (PR #201) | Escenario 3 (repo retirado de la observación, con US-GRP-006); vigilante de `config` para el ≤ 5 s de los repos observados; H2 por worktree (`config.worktree`) |
 | US-GRD-009, US-GRD-014 | Tamaño de diff y formato; rama base del equipo | Should | I (PR #296; PR #277) | — |
