@@ -18,7 +18,7 @@ pub(crate) mod confirm;
 pub(crate) mod notices;
 mod overlap;
 
-use crate::i18n::t;
+use crate::i18n::{Tr, t};
 use crate::{engine, error_text, shown};
 
 const CMD: &str = "raptor undo";
@@ -73,7 +73,24 @@ pub fn run(json_out: bool) -> ExitCode {
             }
         }
         Err(err) => {
-            eprintln!("{CMD}: {}", failure_text(err, &worktree));
+            // `--json` prints an overlap's data as the daemon sent it.
+            if json_out
+                && let ClientError::Rpc(e) = &err
+                && e.code == code::OPERATION_REJECTED
+                && let Some(data) = &e.data
+                && serde_json::from_value::<TmConfirmData>(data.clone()).is_ok_and(|d| {
+                    matches!(
+                        d.reason,
+                        TmRejectReason::Overlap | TmRejectReason::OverlapUnverified
+                    )
+                })
+            {
+                println!("{data}");
+                return ExitCode::FAILURE;
+            }
+            for line in failure_text(err, &worktree).lines() {
+                eprintln!("{CMD}: {line}");
+            }
             ExitCode::FAILURE
         }
     }
@@ -133,6 +150,10 @@ fn print_done(result: &UndoResult, worktree: &Path) {
     }) {
         println!("{CMD}: {}", t("undo.kept-ref", &[("ref", &sanitize(kept))]));
     }
+    let kept_total = usize::try_from(result.kept_total).unwrap_or(usize::MAX);
+    for line in overlap::kept_lines_of(Tr::current(), &result.kept, kept_total) {
+        println!("{CMD}: {line}");
+    }
     for path in &result.not_restored {
         let reason = t(path_reason_key(path.reason), &[]);
         println!(
@@ -156,6 +177,14 @@ fn failure_text(err: ClientError, worktree: &Path) -> String {
             match data {
                 Some(d) if d.reason == TmRejectReason::ConfirmationRequired => {
                     t(&confirm::required_key("undo", Some(&d)), &[])
+                }
+                Some(d)
+                    if matches!(
+                        d.reason,
+                        TmRejectReason::Overlap | TmRejectReason::OverlapUnverified
+                    ) =>
+                {
+                    overlap::rejection_lines(Tr::current(), d.reason, d.overlap.as_ref()).join("\n")
                 }
                 Some(d) => t(reason_key(d.reason), &[]),
                 None => t("undo.reason.unsupported", &[]),

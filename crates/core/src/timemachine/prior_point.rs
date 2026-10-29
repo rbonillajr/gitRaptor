@@ -100,6 +100,34 @@ pub(crate) fn before_event(
     seq: i64,
     floor: i64,
 ) -> Vec<usize> {
+    let windows = prior_windows(points, event_seqs);
+    let mut eligible: Vec<usize> = points
+        .iter()
+        .enumerate()
+        .filter(|(_, q)| q.mark < seq && clean_in(&windows, q, floor))
+        .map(|(i, _)| i)
+        .collect();
+    eligible.sort_by_key(|i| std::cmp::Reverse((points[*i].mark, points[*i].seq)));
+    eligible
+}
+
+/// Whether each point is clean: of the current generation (`seq >= floor`) and not shadowed by
+/// any prior of `points`, available or not (availability is left to the caller). The rule
+/// [`before_event`] applies, for every point at once.
+pub(crate) fn clean_mask(points: &[PointFacts], event_seqs: &[i64], floor: i64) -> Vec<bool> {
+    let windows = prior_windows(points, event_seqs);
+    points
+        .iter()
+        .map(|q| clean_in(&windows, q, floor))
+        .collect()
+}
+
+/// The command window of each prior of `points`: the prior, the first event of the key after its
+/// mark and the seq of the point that ends it (`None` is "not yet").
+fn prior_windows<'a>(
+    points: &'a [PointFacts],
+    event_seqs: &[i64],
+) -> Vec<(&'a PointFacts, Option<i64>, Option<i64>)> {
     // Each prior with the first event of the key after its mark (`None` is "no event yet").
     let windows: Vec<(&PointFacts, Option<i64>)> = points
         .iter()
@@ -113,7 +141,7 @@ pub(crate) fn before_event(
     // mid-operation after it: it ends at the first clean point the prior does not shadow by
     // mark (another prior, or a point not mid-operation whose mark reaches that event),
     // available or not. `None` is "not ended yet".
-    let windows: Vec<(&PointFacts, Option<i64>, Option<i64>)> = windows
+    windows
         .into_iter()
         .map(|(p, first)| {
             let end = first.and_then(|f| {
@@ -125,30 +153,28 @@ pub(crate) fn before_event(
             });
             (p, first, end)
         })
-        .collect();
-    let shadowed = |q: &PointFacts| {
-        windows.iter().any(|(p, first, end)| {
-            // A prior of an older generation has marks of another numbering: it does not
-            // shadow the current one.
-            let other_generation = p.seq < floor && q.seq >= floor;
-            // A mid-operation photo before the command ended is the command's (a prior never
-            // is one).
-            let in_command = first.is_none_or(|f| q.mark < f)
-                || (q.mid_operation && !q.prior && end.is_none_or(|e| q.seq < e));
-            // Recorded after the operation's anchor: the operation had ended (the anchor itself
-            // stays its own).
-            let after_anchor = p.anchor_seq.is_some_and(|a| q.seq > a);
-            q.seq > p.seq && in_command && !other_generation && !after_anchor
-        })
-    };
-    let mut eligible: Vec<usize> = points
-        .iter()
-        .enumerate()
-        .filter(|(_, q)| q.mark < seq && q.seq >= floor && !shadowed(q))
-        .map(|(i, _)| i)
-        .collect();
-    eligible.sort_by_key(|i| std::cmp::Reverse((points[*i].mark, points[*i].seq)));
-    eligible
+        .collect()
+}
+
+fn clean_in(
+    windows: &[(&PointFacts, Option<i64>, Option<i64>)],
+    q: &PointFacts,
+    floor: i64,
+) -> bool {
+    let shadowed = windows.iter().any(|(p, first, end)| {
+        // A prior of an older generation has marks of another numbering: it does not
+        // shadow the current one.
+        let other_generation = p.seq < floor && q.seq >= floor;
+        // A mid-operation photo before the command ended is the command's (a prior never
+        // is one).
+        let in_command = first.is_none_or(|f| q.mark < f)
+            || (q.mid_operation && !q.prior && end.is_none_or(|e| q.seq < e));
+        // Recorded after the operation's anchor: the operation had ended (the anchor itself
+        // stays its own).
+        let after_anchor = p.anchor_seq.is_some_and(|a| q.seq > a);
+        q.seq > p.seq && in_command && !other_generation && !after_anchor
+    });
+    q.seq >= floor && !shadowed
 }
 
 /// Whether a capture is a mid-operation photo: an operation was in progress when it started or

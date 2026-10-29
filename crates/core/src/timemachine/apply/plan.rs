@@ -31,11 +31,18 @@ pub(super) struct LoadedWorktree {
     pub intent_to_add: Vec<String>,
     /// Paths left out of either snapshot: never written or removed.
     pub excluded: BTreeSet<String>,
+    /// Paths another actor changed afterwards (`PlanWorktree::keep`): neither written nor
+    /// removed, and their index entry is the prior's.
+    pub kept: BTreeSet<String>,
     pub prior_head: Option<HeadValue>,
     pub target_head: Option<HeadValue>,
 }
 
 impl LoadedWorktree {
+    pub fn is_kept(&self, path: &str) -> bool {
+        self.kept.contains(path)
+    }
+
     pub fn is_excluded(&self, path: &str) -> bool {
         self.excluded.iter().any(|e| {
             path == e
@@ -202,6 +209,44 @@ pub(super) fn load(
                 stage: c.stage,
             });
         }
+        if !plan.keep.is_empty() {
+            // A kept path keeps the index entry it has now: the prior's, never the target's.
+            index.retain(|e| std::str::from_utf8(&e.path).map_or(true, |p| !plan.keep.contains(p)));
+            if let Some(m) = p_meta {
+                // A kept path in conflict now keeps its stages 1–3 too. Their objects are not
+                // taken from the store (a capture records a conflict's ids, not its blobs): the
+                // prior is the worktree's index as it is now, so they are in the user's repo.
+                for c in m.conflicts.iter().filter(|c| plan.keep.contains(&c.path)) {
+                    let mode = mode_of_name(&c.kind)
+                        .ok_or_else(|| invalid(prior)(format!("conflict kind {:?}", c.kind)))?;
+                    let id = oid(&c.id, "conflict").map_err(invalid(prior))?;
+                    index.push(IndexEntry {
+                        path: c.path.clone().into_bytes(),
+                        mode,
+                        id,
+                        stage: c.stage,
+                    });
+                }
+                for (path, kind, id) in store
+                    .staged(prior, &plan.key)
+                    .map_err(|e| invalid(prior)(e.to_string()))?
+                {
+                    if !plan.keep.contains(&path) {
+                        continue;
+                    }
+                    let Some(mode) = mode_of(kind) else { continue };
+                    if kind != TreeEntryKind::Gitlink {
+                        wants.insert(id);
+                    }
+                    index.push(IndexEntry {
+                        path: path.into_bytes(),
+                        mode,
+                        id,
+                        stage: 0,
+                    });
+                }
+            }
+        }
         index.sort_by(|a, b| a.path.cmp(&b.path).then(a.stage.cmp(&b.stage)));
 
         // Exclusions are `<key>:<path>`; history gaps have no path.
@@ -239,6 +284,7 @@ pub(super) fn load(
                 .collect(),
             intent_to_add: t_meta.intent_to_add.clone(),
             excluded,
+            kept: plan.keep.clone(),
             prior_head,
             target_head,
         });

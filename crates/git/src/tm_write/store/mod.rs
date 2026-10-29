@@ -20,6 +20,10 @@ mod verify;
 #[path = "diff_trees_tests.rs"]
 mod diff_trees_tests;
 
+#[cfg(test)]
+#[path = "diff_trees_bounds_tests.rs"]
+mod diff_trees_bounds_tests;
+
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
@@ -606,8 +610,103 @@ impl StoreHandle {
     /// [`StoreError::Corrupt`] when an object that must be read is missing or unreadable; never a
     /// partial list.
     pub fn diff_trees(&self, a: Oid, b: Oid) -> Result<Vec<String>> {
-        let _ = (a, b);
-        Err(StoreError::Corrupt("diff_trees: not implemented".into()))
+        self.diff_trees_until(a, b, None, MAX_DIFF_PATHS)
+    }
+
+    /// [`Self::diff_trees`] bounded in time and size: past `deadline`, or with more than
+    /// `max_paths` differing paths, an `Err` (never a partial list).
+    ///
+    /// # Errors
+    /// [`StoreError::Corrupt`] for a missing or unreadable object, the deadline passed or the
+    /// cap exceeded.
+    pub fn diff_trees_until(
+        &self,
+        a: Oid,
+        b: Oid,
+        deadline: Option<std::time::Instant>,
+        max_paths: usize,
+    ) -> Result<Vec<String>> {
+        let mut out = Vec::new();
+        let mut stack = vec![(String::new(), Some(a), Some(b))];
+        while let Some((prefix, left, right)) = stack.pop() {
+            if deadline.is_some_and(|d| std::time::Instant::now() >= d) {
+                return Err(StoreError::Corrupt("diff_trees: deadline passed".into()));
+            }
+            if out.len() > max_paths {
+                return Err(StoreError::Corrupt(format!(
+                    "diff_trees: more than {max_paths} paths differ"
+                )));
+            }
+            if left == right {
+                continue;
+            }
+            let left = match left {
+                Some(id) => self.tree_entries(id)?,
+                None => std::collections::BTreeMap::new(),
+            };
+            let right = match right {
+                Some(id) => self.tree_entries(id)?,
+                None => std::collections::BTreeMap::new(),
+            };
+            let names: std::collections::BTreeSet<&String> =
+                left.keys().chain(right.keys()).collect();
+            for name in names {
+                let l = left.get(name).copied();
+                let r = right.get(name).copied();
+                if l == r {
+                    continue;
+                }
+                let path = if prefix.is_empty() {
+                    name.clone()
+                } else {
+                    format!("{prefix}/{name}")
+                };
+                let sub = |e: Option<(TreeEntryKind, Oid)>| match e {
+                    Some((TreeEntryKind::Tree, id)) => Some(id),
+                    _ => None,
+                };
+                let leaf = |e: Option<(TreeEntryKind, Oid)>| matches!(e, Some((kind, _)) if kind != TreeEntryKind::Tree);
+                if leaf(l) || leaf(r) {
+                    out.push(path.clone());
+                }
+                let (sl, sr) = (sub(l), sub(r));
+                if sl.is_some() || sr.is_some() {
+                    stack.push((path, sl, sr));
+                }
+            }
+        }
+        if out.len() > max_paths {
+            return Err(StoreError::Corrupt(format!(
+                "diff_trees: more than {max_paths} paths differ"
+            )));
+        }
+        out.sort();
+        out.dedup();
+        Ok(out)
+    }
+
+    /// The direct entries of tree `id`, by name.
+    fn tree_entries(
+        &self,
+        id: Oid,
+    ) -> Result<std::collections::BTreeMap<String, (TreeEntryKind, Oid)>> {
+        let t = self
+            .repo
+            .find_tree(id.0)
+            .map_err(|e| StoreError::Corrupt(format!("tree {id}: {e}")))?;
+        let decoded = t
+            .decode()
+            .map_err(|e| StoreError::Corrupt(format!("tree {id}: {e}")))?;
+        Ok(decoded
+            .entries
+            .iter()
+            .map(|e| {
+                (
+                    e.filename.to_str_lossy().into_owned(),
+                    (TreeEntryKind::from_mode(e.mode), Oid(e.oid.to_owned())),
+                )
+            })
+            .collect())
     }
 
     /// Content of a blob of the store.
@@ -619,6 +718,9 @@ impl StoreHandle {
         Ok(blob.data.clone())
     }
 }
+
+/// Most differing paths [`StoreHandle::diff_trees`] lists before it gives up with an `Err`.
+pub const MAX_DIFF_PATHS: usize = 100_000;
 
 /// Kind of a tree entry of the store.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]

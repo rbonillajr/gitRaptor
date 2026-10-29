@@ -616,10 +616,54 @@ impl SnapshotStore {
         key: &str,
         deadline: Instant,
     ) -> Result<PointChanges, CaptureError> {
-        let _ = (from, to, key, deadline);
-        Err(CaptureError::InvalidInput(
-            "changed_between: not implemented".into(),
-        ))
+        let expired = || {
+            if Instant::now() >= deadline {
+                Err(CaptureError::InvalidInput(
+                    "changed_between: deadline passed".into(),
+                ))
+            } else {
+                Ok(())
+            }
+        };
+        expired()?;
+        let handle = self.store.handle();
+        let root = |id: &str| -> Result<(Oid, Oid), CaptureError> {
+            let commit = handle
+                .snapshot_commit(id)?
+                .ok_or_else(|| CaptureError::InvalidInput("no such snapshot".into()))?;
+            Ok((commit, handle.commit_tree(commit)?))
+        };
+        let (from_commit, from_root) = root(from)?;
+        let (to_commit, to_root) = root(to)?;
+        let mut paths = BTreeSet::new();
+        for part in ["files", "index"] {
+            expired()?;
+            let at = format!("wt/{key}/{part}");
+            let sub = |tree: Oid| -> Result<Oid, CaptureError> {
+                Ok(match handle.tree_entry(tree, at.as_str().into())? {
+                    Some((_, id)) => id,
+                    None => Oid::empty_tree(),
+                })
+            };
+            let (a, b) = (sub(from_root)?, sub(to_root)?);
+            paths.extend(handle.diff_trees_until(
+                a,
+                b,
+                Some(deadline),
+                gitraptor_git::tm_write::store::MAX_DIFF_PATHS,
+            )?);
+        }
+        expired()?;
+        let a = self.read_meta_with(&handle, from_commit)?.branches;
+        let b = self.read_meta_with(&handle, to_commit)?.branches;
+        let refs = a
+            .iter()
+            .filter(|(name, tip)| b.get(*name) != Some(*tip))
+            .map(|(name, _)| name.clone())
+            .chain(b.keys().filter(|name| !a.contains_key(*name)).cloned())
+            .collect();
+        expired()?;
+        Ok(PointChanges { paths, refs })
     }
 
     /// Forgets what the previous captures read, as after a daemon restart: the next capture of

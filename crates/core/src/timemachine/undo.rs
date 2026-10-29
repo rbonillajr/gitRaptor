@@ -16,11 +16,11 @@
 //! and Guardrails (US-TMC-021) plug in at the marked points; the confirmation of US-TMC-013 is
 //! the gate right after the base rule.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use gitraptor_api::catalog::MAX_QUEUED_PER_REPO;
 use gitraptor_api::timemachine::{PriorFailure, TmRejectReason};
@@ -38,7 +38,7 @@ use super::oplog::{
     Channel, NewOperation, OpRef, OperationKind, OperationTransition, OperationView, Oplog,
     Requester, Scope, SnapshotView, StackScope, Target,
 };
-use super::overlap::OverlapReport;
+use super::overlap::{self, OverlapInput, OverlapReport};
 use super::protected::{
     McpAllowlist, ProtectedError, ProtectedOperation, ProtectedRequest, ProtectedStep, RepoHandle,
     ScopeError, StepCtx, StepError, StepOutput, StepScope, registered_worktrees,
@@ -162,8 +162,24 @@ pub enum UndoError {
         operation_id: Option<String>,
         // Boxed: the report would make every `Result<_, UndoError>` large.
         report: Box<OverlapReport>,
+        /// The change the undo was asked to take back.
+        undone: Box<Undone>,
     },
 }
+
+/// How long the two phases of the overlap check may take together; past it the undo is
+/// refused as `overlap-unverified`.
+const OVERLAP_BUDGET: Duration = Duration::from_millis(1500);
+
+/// The overlap part of a refused plan.
+struct OverlapRefusal {
+    report: Box<OverlapReport>,
+    undone: Box<Undone>,
+}
+
+/// Why `plan` refused: the reason, the scope and target to record it under, and the overlap
+/// detail when that is the reason.
+type PlanRefusal = (TmRejectReason, Scope, Vec<OpRef>, Option<OverlapRefusal>);
 
 /// The base permission rule (ADR-TMC-005 § 2) for undoing work of `owner`.
 /// The actor of a GitRaptor operation is its frozen requester. An agent
@@ -236,6 +252,8 @@ pub struct Undone {
     /// Whose work it is: the operation's frozen requester, or the session
     /// the engine attributed the event to.
     pub requester: Requester,
+    /// When the operation was recorded (ms since the epoch); `None` for a raw event.
+    pub at_ms: Option<i64>,
 }
 
 /// What an undo is about to do.
@@ -248,6 +266,8 @@ struct Planned {
     warnings: Vec<String>,
     /// A confirmation challenge of this very plan was redeemed.
     confirmed: bool,
+    /// Phase 1 of the overlap check: where the tail starts.
+    overlap: OverlapReport,
 }
 
 /// The engine's side of an undo's plan (US-TMC-004): the worktree's raw Git
@@ -339,6 +359,51 @@ pub fn external_events_in(
         .collect()
 }
 
+/// The raw events of every registered worktree, by root (a branch is moved from any of them),
+/// and whether that is all of them: `false` without an engine, when the worktrees cannot be
+/// listed or the events of one cannot be read.
+fn raw_of_all(
+    engine: Option<&CaptureDeps>,
+    repo_id: &str,
+    common_dir: &Path,
+    worktree: &Path,
+) -> (HashMap<PathBuf, RawSide>, bool) {
+    let mut out: HashMap<PathBuf, RawSide> = HashMap::new();
+    let Some(deps) = engine else {
+        out.insert(worktree.to_path_buf(), RawSide::default());
+        return (out, false);
+    };
+    let floor = deps.engine.generation_floor(repo_id);
+    let (mut roots, mut complete) = match registered_worktrees(common_dir) {
+        Ok(r) => (
+            r.into_iter().map(|(root, _)| root).collect::<Vec<_>>(),
+            true,
+        ),
+        Err(_) => (Vec::new(), false),
+    };
+    if !roots.iter().any(|r| r == worktree) {
+        roots.push(worktree.to_path_buf());
+    }
+    for root in roots {
+        match deps.engine.raw_events(repo_id, &root) {
+            Some(events) => {
+                out.insert(root, RawSide { events, floor });
+            }
+            None => {
+                complete = false;
+                out.insert(
+                    root,
+                    RawSide {
+                        events: Vec::new(),
+                        floor,
+                    },
+                );
+            }
+        }
+    }
+    (out, complete)
+}
+
 /// The candidate targets of a raw Git event, best first (ADR-TMC-003 § 4): the points of
 /// `wt_key` the one rule picks, over every point of the key (an unavailable prior still
 /// shadows), then only those still available and not tampered.
@@ -394,7 +459,10 @@ fn plan(
     channel: Channel,
     confirm: &Confirmation<'_>,
     raw: &RawSide,
-) -> Result<Planned, (TmRejectReason, Scope, Vec<OpRef>)> {
+    raw_all: &HashMap<PathBuf, RawSide>,
+    events_complete: bool,
+    deadline: Instant,
+) -> Result<Planned, PlanRefusal> {
     // The oplog is held while the stack and the target are read, and released before the
     // confirmation gate: that walks the caller's process tree. The repo's write lock (held by
     // the caller) is what keeps the plan from changing under it.
@@ -406,7 +474,7 @@ fn plan(
         worktrees: vec![key.clone()],
         refs: Vec::new(),
     };
-    let reject = |reason, scope: &Scope, target: Vec<OpRef>| (reason, scope.clone(), target);
+    let reject = |reason, scope: &Scope, target: Vec<OpRef>| (reason, scope.clone(), target, None);
     let wt_key = super::protected::worktree_key(
         &registered_worktrees(common_dir).unwrap_or_default(),
         worktree,
@@ -454,6 +522,7 @@ fn plan(
                 id: format!("git-event-{seq}"),
                 subtype: Some(event.kind.as_str().to_owned()),
                 requester: event.actor.clone(),
+                at_ms: None,
             };
             (undone, scope, target)
         }
@@ -491,6 +560,7 @@ fn plan(
                 id: view.record.operation_id.clone(),
                 subtype: view.record.subtype.clone(),
                 requester: view.record.requester.clone(),
+                at_ms: Some(view.record.recorded_ms),
             };
             (undone, scope, target)
         }
@@ -533,7 +603,8 @@ fn plan(
             &facts,
         )
         .map_err(refuse)?;
-    // Next, in this order: Guardrails (US-TMC-021) and overlap (US-TMC-012).
+    // Next: Guardrails (US-TMC-021). The overlap (US-TMC-012) needs the worktrees and branches
+    // of the plan: it runs right after they are known.
 
     // Each worktree of the scope by its canonical root, as the daemon
     // recorded it, and still a worktree of this repo (the oplog is
@@ -566,6 +637,60 @@ fn plan(
             keep: BTreeSet::new(),
         });
     }
+    // Phase 1 of the overlap check (ADR-TMC-005 § 5), before `ref-in-use`: a branch another
+    // actor moved is kept, so it never moves and cannot make the undo `ref-in-use`.
+    let report = {
+        let log = lock(oplog_lock);
+        let ops = log.operations(&Default::default());
+        let snaps = log.snapshots(&super::oplog::SnapshotFilter::default());
+        drop(log);
+        match (ops, snaps) {
+            (Ok(ops), Ok(snaps)) => overlap::check_with(
+                store,
+                &OverlapInput {
+                    reference: std::slice::from_ref(&undone.requester),
+                    undone: std::slice::from_ref(&undone.op),
+                    target: &target,
+                    worktrees: &worktrees,
+                    refs: &refs,
+                    ops: &ops,
+                    snaps: &snaps,
+                    raw: raw_all,
+                    deadline,
+                },
+                events_complete,
+            ),
+            _ => OverlapReport {
+                unverified: true,
+                ..OverlapReport::default()
+            },
+        }
+    };
+    if report.stops() {
+        let reason = if report.unverified {
+            TmRejectReason::OverlapUnverified
+        } else {
+            TmRejectReason::Overlap
+        };
+        return Err((
+            reason,
+            scope.clone(),
+            target_ref.clone(),
+            Some(OverlapRefusal {
+                report: Box::new(report),
+                undone: Box::new(undone),
+            }),
+        ));
+    }
+    for full in &report.kept_refs {
+        refs.remove(full);
+    }
+    for w in &mut worktrees {
+        if let Some(paths) = report.kept.get(&w.key) {
+            w.keep.extend(paths.iter().cloned());
+        }
+    }
+
     // A branch checked out in a worktree outside the scope never moves: it
     // would change that worktree's history under its files. Undoing a
     // restore keeps, instead, a branch only a worktree it recreated has out:
@@ -609,6 +734,7 @@ fn plan(
         refs,
         warnings,
         confirmed,
+        overlap: report,
     })
 }
 
@@ -671,6 +797,107 @@ pub(super) struct UndoStep<'a> {
     pub(super) plan: ApplyPlan,
     pub(super) declared: StepScope,
     pub(super) result: Option<Result<ApplyReport, ApplyError>>,
+    /// Phase 2 of the overlap check, run before the applier; `None` skips it.
+    pub(super) tail: Option<Tail<'a>>,
+    /// What phase 2 found, once it ran.
+    pub(super) overlap: Option<OverlapReport>,
+}
+
+/// What phase 2 of the overlap check needs besides the step's plan.
+pub(super) struct Tail<'a> {
+    pub(super) reference: Requester,
+    pub(super) undone: OpRef,
+    pub(super) phase1: OverlapReport,
+    /// The engine, to read the events again with the repo held; `None`: no events.
+    pub(super) engine: Option<&'a CaptureDeps>,
+    pub(super) repo_id: String,
+    pub(super) worktree: PathBuf,
+    /// What phase 1 left of the budget; phase 2's clock starts when it runs, so the prior
+    /// capture in between does not eat it.
+    pub(super) budget: Duration,
+    /// The mark of the undo's request: the tail's events end there.
+    pub(super) intent_mark: i64,
+}
+
+impl UndoStep<'_> {
+    /// Phase 2 (ADR-TMC-005 § 5): the tail from the last point of phase 1 to the undo's prior,
+    /// with the repo held. On a conflict, or when it cannot be checked, the operation goes
+    /// `ready → rejected` and nothing is applied; otherwise the tail's kept paths and branches
+    /// join the plan.
+    fn check_tail(&mut self, ctx: &StepCtx<'_>) -> Result<(), StepError> {
+        let Some(tail) = &self.tail else {
+            return Ok(());
+        };
+        let refs: BTreeSet<String> = match &self.plan.refs {
+            RefScope::Only(names) => names.clone(),
+            _ => BTreeSet::new(),
+        };
+        // The events again, now that the repo is held: what ran since phase 1 counts.
+        let (raw, events_complete) =
+            raw_of_all(tail.engine, &tail.repo_id, &self.common_dir, &tail.worktree);
+        let read = {
+            let log = lock(ctx.oplog());
+            (
+                log.operations(&Default::default()),
+                log.snapshots(&super::oplog::SnapshotFilter::default()),
+            )
+        };
+        let report = match read {
+            (Ok(ops), Ok(snaps)) => overlap::check_tail_with(
+                self.store,
+                &OverlapInput {
+                    reference: std::slice::from_ref(&tail.reference),
+                    undone: std::slice::from_ref(&tail.undone),
+                    target: &self.plan.target_snapshot,
+                    worktrees: &self.plan.worktrees,
+                    refs: &refs,
+                    ops: &ops,
+                    snaps: &snaps,
+                    raw: &raw,
+                    deadline: Instant::now() + tail.budget,
+                },
+                &tail.phase1,
+                ctx.prior_snapshot_id(),
+                tail.intent_mark,
+                events_complete,
+            ),
+            _ => OverlapReport {
+                unverified: true,
+                ..OverlapReport::default()
+            },
+        };
+        if report.stops() {
+            let reason = if report.unverified {
+                TmRejectReason::OverlapUnverified
+            } else {
+                TmRejectReason::Overlap
+            };
+            let annotated = lock(ctx.oplog()).advance_operation(
+                ctx.operation_id(),
+                OperationTransition::Rejected {
+                    reason: &reason_code(reason),
+                },
+                now_ms(),
+            );
+            self.overlap = Some(report);
+            return Err(StepError::new(match annotated {
+                Ok(_) => "overlap",
+                Err(_) => "overlap: the rejection could not be recorded",
+            }));
+        }
+        for w in &mut self.plan.worktrees {
+            if let Some(paths) = report.kept.get(&w.key) {
+                w.keep.extend(paths.iter().cloned());
+            }
+        }
+        if let RefScope::Only(names) = &mut self.plan.refs {
+            for full in &report.kept_refs {
+                names.remove(full);
+            }
+        }
+        self.overlap = Some(report);
+        Ok(())
+    }
 }
 
 impl ProtectedStep for UndoStep<'_> {
@@ -688,6 +915,7 @@ impl ProtectedStep for UndoStep<'_> {
 
     fn run(&mut self, ctx: &mut StepCtx<'_>) -> Result<StepOutput, StepError> {
         self.plan.prior_snapshot = ctx.prior_snapshot_id().to_owned();
+        self.check_tail(ctx)?;
         let applier = Applier::new(
             self.store,
             self.write,
@@ -751,7 +979,13 @@ pub fn undo_last(
     // busy.
     let mut raw = RawSide::default();
     if let Some(deps) = env.engine {
-        let wt = [worktree.to_path_buf()];
+        // Every registered worktree is settled: the overlap reads the events of all of them.
+        let mut wt: Vec<PathBuf> = registered_worktrees(&repo.repo.common_dir)
+            .map(|r| r.into_iter().map(|(root, _)| root).collect())
+            .unwrap_or_default();
+        if !wt.iter().any(|r| r == worktree) {
+            wt.push(worktree.to_path_buf());
+        }
         match deps.engine.settle(repo_id, &wt, ANCHOR_SETTLE_LIMIT) {
             Some(mark) => engine_mark = mark,
             None => {
@@ -781,6 +1015,9 @@ pub fn undo_last(
     let rejected = |scope, target, reason| {
         record_rejection(oplog, scope, target, who, channel, engine_mark, reason)
     };
+    let (raw_all, events_complete) =
+        raw_of_all(env.engine, repo_id, &repo.repo.common_dir, worktree);
+    let overlap_started = Instant::now();
 
     let planned = plan(
         oplog,
@@ -791,11 +1028,27 @@ pub fn undo_last(
         channel,
         confirm,
         &raw,
+        &raw_all,
+        events_complete,
+        overlap_started + OVERLAP_BUDGET,
     );
     let planned = match planned {
         Ok(p) => p,
-        Err((reason, scope, target)) => return Err(rejected(scope, target, reason)),
+        Err((reason, scope, target, None)) => return Err(rejected(scope, target, reason)),
+        Err((reason, scope, target, Some(refusal))) => {
+            let operation_id = match rejected(scope, target, reason) {
+                UndoError::Rejected { operation_id, .. } => operation_id,
+                _ => None,
+            };
+            return Err(UndoError::Overlap {
+                operation_id,
+                report: refusal.report,
+                undone: refusal.undone,
+            });
+        }
     };
+    // Phase 2 gets what phase 1 left of the budget.
+    let tail_budget = OVERLAP_BUDGET.saturating_sub(overlap_started.elapsed());
     let target_ref = vec![planned.undone.op.clone()];
     let (Some(store), Some(main_root)) = (repo.store.as_deref(), repo.main_root.clone()) else {
         return Err(rejected(
@@ -863,6 +1116,17 @@ pub fn undo_last(
         plan: apply_plan,
         declared,
         result: None,
+        tail: Some(Tail {
+            reference: planned.undone.requester.clone(),
+            undone: planned.undone.op.clone(),
+            phase1: planned.overlap.clone(),
+            engine: env.engine,
+            repo_id: repo_id.to_owned(),
+            worktree: worktree.to_path_buf(),
+            budget: tail_budget,
+            intent_mark: engine_mark,
+        }),
+        overlap: None,
     };
     let protected = ProtectedOperation {
         oplog,
@@ -918,6 +1182,18 @@ pub fn undo_last(
             operation_id,
             message,
             ..
+        }) if step.overlap.as_ref().is_some_and(OverlapReport::stops) => {
+            let _ = message;
+            Err(UndoError::Overlap {
+                operation_id: Some(operation_id),
+                report: Box::new(step.overlap.take().unwrap_or_default()),
+                undone: Box::new(planned.undone),
+            })
+        }
+        Err(ProtectedError::Step {
+            operation_id,
+            message,
+            ..
         }) => match step.result {
             Some(Err(ApplyError::Rejected(refusals))) => Err(UndoError::Rejected {
                 reason: refusals
@@ -932,6 +1208,10 @@ pub fn undo_last(
         },
     }
 }
+
+#[cfg(test)]
+#[path = "undo_raw_events_tests.rs"]
+mod raw_events_tests;
 
 #[cfg(test)]
 mod tests {
