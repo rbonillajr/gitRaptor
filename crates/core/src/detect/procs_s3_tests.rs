@@ -44,6 +44,12 @@ fn a_git_that_may_write_or_is_unknown_is_not_harmless() {
         "stat.us",
         "Status",
         "",
+        // A global option the fail-closed parser does not know, or that takes the next argument:
+        // `git --shallow-file status commit` commits.
+        "--shallow-file status commit -m x",
+        "--unknown-global log",
+        "-- log",
+        "--help log",
     ] {
         assert!(!call(line).harmless, "{line}");
     }

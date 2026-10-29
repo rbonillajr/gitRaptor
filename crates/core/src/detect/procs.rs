@@ -278,8 +278,14 @@ pub fn git_call(args: &[OsString]) -> GitCall {
             Some(s) => READ_ONLY_SUBCOMMANDS.contains(&s),
             None => false,
         };
-    // On the subcommand as `git` reads it, never the sanitized one: `stat.us` may be an alias.
-    let harmless = read_only || subcommand.is_some_and(|s| HARMLESS_SUBCOMMANDS.contains(&s));
+    // On the subcommand as `git` reads it, never the sanitized one (`stat.us` may be an alias),
+    // and only when the fail-closed parser of the global options finds the same one: an option
+    // it does not know may take the next argument (`--shallow-file status commit` commits).
+    let parsed =
+        gitraptor_macsys::process::git_subcommand(args.iter().map(|a| a.as_encoded_bytes()));
+    let harmless = subcommand.is_some_and(|s| {
+        parsed == Some(s.as_bytes()) && (read_only || HARMLESS_SUBCOMMANDS.contains(&s))
+    });
     let clean: String = subcommand
         .unwrap_or_default()
         .chars()

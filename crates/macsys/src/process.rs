@@ -204,23 +204,29 @@ struct GlobalOptions<'a> {
     /// One of them is an option this parser does not know (`--` included): what follows it
     /// cannot be told apart.
     unknown: bool,
-    /// The first argument that is not an option, unless an unknown option came first.
+    /// The first argument that is not an option, unless an unknown option or one that makes
+    /// `git` run `help` or `version` instead ([`GLOBAL_DIVERTING`]) came first.
     subcommand: Option<&'a [u8]>,
 }
 
+/// The global flags after which `git` runs `help` or `version`, not the subcommand that follows.
+const GLOBAL_DIVERTING: [&[u8]; 4] = [b"--version", b"-v", b"--help", b"-h"];
+
 fn global_options<'a>(mut args: impl Iterator<Item = &'a [u8]>) -> GlobalOptions<'a> {
     let mut redirect = false;
+    let mut diverted = false;
     while let Some(arg) = args.next() {
         if !arg.starts_with(b"-") {
             // The subcommand: what follows is its own.
             return GlobalOptions {
                 redirect,
                 unknown: false,
-                subcommand: Some(arg),
+                subcommand: (!diverted).then_some(arg),
             };
         }
         let name = before_equals(arg);
         redirect |= REDIRECT_OPTIONS.contains(&name);
+        diverted |= GLOBAL_DIVERTING.contains(&name);
         let known = if name.len() < arg.len() {
             // Only the long options take their value after `=`.
             name.starts_with(b"--")
@@ -279,14 +285,19 @@ const REF_WRITERS: [&[u8]; 18] = [
     b"worktree",
 ];
 
+/// The subcommand a `git` with these arguments (program name excluded) runs, as `git` reads its
+/// global options. Fails closed: `None` after an unknown global option or `--`, after `--help`,
+/// `-h`, `--version` or `-v`, or without one.
+pub fn git_subcommand<'a>(args: impl IntoIterator<Item = &'a [u8]>) -> Option<&'a [u8]> {
+    global_options(args.into_iter()).subcommand
+}
+
 /// Whether a `git` with these arguments (program name excluded) runs a subcommand that can move
 /// a ref or `HEAD` ([`REF_WRITERS`]). Fails closed: an unknown subcommand (an alias included), an
 /// unknown global option or `--` before it, or no subcommand, is `false`. Only the boolean leaves
 /// (SEC-04).
 pub fn git_subcommand_writes<'a>(args: impl IntoIterator<Item = &'a [u8]>) -> bool {
-    global_options(args.into_iter())
-        .subcommand
-        .is_some_and(|s| REF_WRITERS.contains(&s))
+    git_subcommand(args).is_some_and(|s| REF_WRITERS.contains(&s))
 }
 
 /// Splits a `KERN_PROCARGS2` area into its `argc` arguments and what follows them (the
@@ -594,6 +605,9 @@ mod tests {
             "--unknown-global commit",
             "-c",
             "",
+            // `git` runs `help` or `version`, not `commit`.
+            "--help commit",
+            "-v commit",
         ] {
             assert!(!writes(line), "{line}");
         }
