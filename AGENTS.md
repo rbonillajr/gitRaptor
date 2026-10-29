@@ -9,13 +9,13 @@ El copiloto de Git para equipos que programan con agentes de IA. Tiene tres pila
 - **Time Machine:** snapshots y undo universal.
 - **Guardrails:** políticas por repo.
 
-Se entrega como **CLI/TUI (`raptor`) + servidor MCP**. Estado actual: **pre-MVP** (definición + spike).
+Se entrega como **CLI/TUI (`raptor`) + servidor MCP**, y desde D7 (2026-10-28) también como **app de escritorio** (Tauri + React). Estado actual: **pre-MVP** (definición + spike).
 
 ## Fuente de verdad: lee esto antes de trabajar
 
 | Documento | Para qué |
 |---|---|
-| [`docs/business/gitraptor-documento-de-negocio.md`](docs/business/gitraptor-documento-de-negocio.md) | Alcance (BR-xx), NFRs, decisiones (D1–D3) y preguntas abiertas |
+| [`docs/business/gitraptor-documento-de-negocio.md`](docs/business/gitraptor-documento-de-negocio.md) | Alcance (BR-xx), NFRs, decisiones (D1–D7) y preguntas abiertas |
 | [`docs/architecture/decisions/`](docs/architecture/decisions/) | ADRs: stack (001), monorepo Nx (002), design system (003), estado del frontend y UX (004) |
 | [`docs/design-system/README.md`](docs/design-system/README.md) | Design system v0 (TUI, CLI, tokens, contenido) |
 | [`docs/requirements/release-plan.md`](docs/requirements/release-plan.md) | Plan de releases y control de estado: hitos (M1, M2, M3, v0.1.0), criterio de salida, avance y fecha estimada por velocidad real |
@@ -25,15 +25,16 @@ Si una tarea contradice estos documentos, **detente y pregunta**; no improvises 
 
 ## Alcance: qué se construye ahora
 
-- **MVP (Fase 1):** `apps/cli`, `apps/mcp`, `crates/{core,policy,git,api,theme}` y `packages/design-tokens`.
+- **MVP (Fase 1):** `apps/cli`, `apps/mcp`, `apps/desktop`, `crates/{core,policy,git,api,theme}` y `packages/design-tokens`.
 - **Agentes soportados en el MVP:** solo Claude Code. Después, uno por uno: Codex y luego Cursor (D2, revisada el 2026-10-03).
-- **No construir todavía (Fase 3):** app de escritorio (Tauri + React), extensión de VS Code/Cursor, UI kit React, Storybook ni Motion. Esas definiciones están en los ADRs **solo como referencia**.
+- **App de escritorio (en el MVP desde D7, 2026-10-28):** `apps/desktop` (Tauri + React), en paralelo con el MVP. Es un cliente más del motor por el mismo canal que la TUI y la CLI: sin lógica de Git en el frontend, escrituras solo por el ejecutor del motor y sin debilitar NFR-02 ni la autorización. Alcance por niveles (UI-1, UI-2…) en [`docs/requirements/features/desktop/`](docs/requirements/features/desktop/context.md); arquitectura en las ADR-GRP-001 a 004 enmendadas.
+- **No construir todavía (Fase 3):** extensión de VS Code/Cursor y Motion. El UI kit (`packages/ui`) y Storybook solo cuando lo indiquen las ADR enmendadas para la app de escritorio.
 
 ## Stack (ADR-GRP-001 / 002)
 
 - **Rust** para el motor, la CLI/TUI y el MCP: gitoxide para leer, Git CLI del sistema para escribir, `ratatui`, `clap` y `rmcp`.
 - **Monorepo Nx package-based:** pnpm workspaces + Cargo workspace, con `@monodon/rust`.
-- **TypeScript** solo donde se indique: tokens con Style Dictionary y, en la Fase 3, la UI.
+- **TypeScript** solo donde se indique: tokens con Style Dictionary y el frontend de la app de escritorio (React, D7).
 
 ## Flujo de trabajo con Git
 
