@@ -33,6 +33,7 @@ on:
     paths:
       - .github/workflows/release.yml
       - packaging/**
+      - tools/release/**
 
 permissions:
   contents: read
@@ -94,6 +95,21 @@ jobs:
         with:
           tool: cargo-audit
       - run: cargo audit
+
+  scripts:
+    name: release scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          sparse-checkout: |
+            packaging/install
+            tools/release
+      - name: Tests of the installer and of the asset selection
+        run: |
+          sh packaging/install/install.test.sh
+          sh tools/release/select-assets.test.sh
+          shellcheck packaging/install/*.sh tools/release/*.sh
 
   build:
     name: build (${{ matrix.target }})
@@ -334,7 +350,17 @@ jobs:
           cat SHA256SUMS
           sha256sum --check SHA256SUMS
       - name: Install scripts
-        run: cp packaging/install/install.sh packaging/install/install.ps1 dist/
+        env:
+          PRERELEASE: ${{ needs.plan.outputs.prerelease }}
+        run: |
+          cp packaging/install/install.sh packaging/install/install.ps1 dist/
+          # `releases/latest` skips prereleases, so a prerelease ships its install.sh pinned to its
+          # own version (the installer tests below run this very copy).
+          if [ "$PRERELEASE" = true ]; then
+            sed -i "s/^default_version=\"\"\$/default_version=\"$VERSION\"/" dist/install.sh
+            grep -q "^default_version=\"$VERSION\"\$" dist/install.sh \
+              || { echo "::error::could not pin install.sh to $VERSION"; exit 1; }
+          fi
       - name: Render channels (Homebrew, winget, npm)
         run: |
           node packaging/render-channels.mjs --version "$VERSION" --dist dist --out channels \
@@ -440,17 +466,42 @@ jobs:
         with:
           name: release-assets
           path: dist
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          sparse-checkout: |
+            tools/release
+            docs/releases
+      # An early-access alpha ships macOS only (ADR-GRP-014, 2026-10-28 amendment): the build
+      # covers the six targets as validation, but Windows and Linux are not offered yet.
+      - name: Select the assets
+        run: sh tools/release/select-assets.sh "$VERSION" dist assets
       # Always a draft: publishing it is a human decision (ADR-GRP-014 § 3).
       - run: |
           flags=(--draft)
           [ "$PRERELEASE" = true ] && flags+=(--prerelease)
+          # Notes: docs/releases/<tag>.md when the coordinator wrote it (es + en, from
+          # docs/releases/alpha-template.md); otherwise a short default that says "unsigned".
+          notes="docs/releases/$TAG.md"
+          if [ ! -f "$notes" ]; then
+            notes="$RUNNER_TEMP/notes.md"
+            {
+              echo "Draft built by $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID. Verify downloads with SHA256SUMS."
+              if [ "$PRERELEASE" = true ]; then
+                echo
+                echo "**Early access (alpha), macOS only. These binaries are NOT signed nor notarized.** The install script verifies the SHA256 and tells you when it removes the macOS quarantine."
+                echo
+                echo "    curl -fsSL $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$TAG/install.sh | sh"
+              fi
+            } > "$notes"
+          fi
           if gh release view "$TAG" >/dev/null 2>&1; then
             if [ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" != true ]; then
               echo "::error::release $TAG is already published; refusing to replace its assets"; exit 1
             fi
-            gh release upload "$TAG" dist/* --clobber
+            gh release upload "$TAG" assets/* --clobber
           else
-            gh release create "$TAG" dist/* "${flags[@]}" --verify-tag --title "GitRaptor $VERSION" \
-              --notes "Draft built by $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID. Verify downloads with SHA256SUMS."
+            gh release create "$TAG" assets/* "${flags[@]}" --verify-tag --title "GitRaptor $VERSION" \
+              --notes-file "$notes"
           fi
           gh release view "$TAG" --json url,isDraft,isPrerelease,assets --jq '{url, isDraft, isPrerelease, assets: [.assets[].name]}'
