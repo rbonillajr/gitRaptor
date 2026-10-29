@@ -860,18 +860,6 @@ impl Daemon {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::RISK_ACCEPTED;
-    use crate::channel::audit_view::RISK_ACCEPTED_PREFIX;
-
-    /// The audit view reads the risk text by its prefix: the text the daemon writes keeps it.
-    #[test]
-    fn the_accepted_risk_keeps_the_prefix_the_audit_view_reads() {
-        assert!(RISK_ACCEPTED.starts_with(RISK_ACCEPTED_PREFIX));
-    }
-}
-
 /// Completes the protection state of a reply with the MCP half (ADR-GRD-005 § 3). Only on the
 /// way out: the install and the uninstall compare the hooks half alone, which is what keeps a
 /// reinstall on a `full` repo idempotent.
@@ -883,4 +871,16 @@ fn with_mcp_half(reply: &mut GuardReply, mcp_enabled: bool) {
         _ => return,
     };
     status.state = ProtectionState::of(status.state.hooks_installed(), mcp_enabled);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::RISK_ACCEPTED;
+    use crate::channel::audit_view::RISK_ACCEPTED_PREFIX;
+
+    /// The audit view reads the risk text by its prefix: the text the daemon writes keeps it.
+    #[test]
+    fn the_accepted_risk_keeps_the_prefix_the_audit_view_reads() {
+        assert!(RISK_ACCEPTED.starts_with(RISK_ACCEPTED_PREFIX));
+    }
 }
