@@ -1830,10 +1830,17 @@ impl Connection<'_> {
         // Without `guard.config-protection` the notices of the configuration are left out in
         // the query, so the page fills to `limit` and the totals come from the same set.
         let legacy = !self.has(methods::CAP_GUARD_CONFIG_PROTECTION.name);
+        // The layer is filtered in the query, so the page fills to `limit`. A connection
+        // without `guard.log-layers` only sees the hooks' entries: asking for another layer
+        // reads an empty page, never the hooks' entries.
+        let blind = params
+            .layer
+            .is_some_and(|l| l != gitraptor_api::guard::LogLayer::Hooks)
+            && !self.has(methods::CAP_GUARD_LOG_LAYERS.name);
         match self
             .ctx
             .control
-            .guard_log(common_dir, params.since_ms, limit, legacy)
+            .guard_log(common_dir, params.since_ms, limit, legacy, params.layer)
         {
             GuardLogReply::Log(log) => {
                 let mut log = *log;
@@ -1860,11 +1867,8 @@ impl Connection<'_> {
                         )
                     });
                 }
-                // The layer the client asked for, after the capability filters: a connection
-                // without `guard.log-layers` asking for `mcp` or `cockpit` gets none. The
-                // summary does not change.
-                if let Some(layer) = params.layer {
-                    log.entries.retain(|e| e.layer == layer);
+                if blind {
+                    log.entries.clear();
                 }
                 // The denials of the configuration read as a path.
                 if legacy {

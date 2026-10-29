@@ -382,3 +382,46 @@ fn guard_log_filters_by_layer() {
         .unwrap_or_else(|| panic!("guard.log must take `layer: hooks`: {answer}"));
     assert_eq!(layers(log), ["hooks"], "{log:#}");
 }
+
+/// The `layer` filter runs in the query, before the page is cut: with more recent `hooks`
+/// entries than `limit`, an `mcp` page still holds the older `mcp` entry.
+#[test]
+fn the_layer_filter_fills_the_page() {
+    let tp = TempProfile::new();
+    let repos = tempfile::tempdir().unwrap();
+    let repo = init_repo(repos.path(), "demo", true);
+    {
+        let mut profile = tp.open();
+        let (entry, _) = profile.add_repo(&common_dir(&repo), None, 1).unwrap();
+        let (mut store, _) = profile.open_store(&entry.repo_id).unwrap();
+        // Recorded first: the oldest of the page order.
+        store
+            .record_guard_decision(&denial("m", LogLayer::Mcp))
+            .unwrap();
+        for branch in ["h1", "h2", "h3"] {
+            store
+                .record_guard_decision(&denial(branch, LogLayer::Hooks))
+                .unwrap();
+        }
+    }
+    let r = Running::start(tp.dirs());
+    let mut seeing = r.raw(&TODAY.to_vec());
+    let answer = seeing.call(
+        methods::GUARD_LOG,
+        json!({ "path": repo, "layer": "mcp", "limit": 2 }),
+    );
+    let log = answer
+        .get("result")
+        .unwrap_or_else(|| panic!("guard.log must answer: {answer}"));
+    assert_eq!(
+        layers(log),
+        ["mcp"],
+        "the mcp page must not be empty: {log:#}"
+    );
+    let answer = seeing.call(
+        methods::GUARD_LOG,
+        json!({ "path": repo, "layer": "hooks", "limit": 2 }),
+    );
+    let log = answer.get("result").unwrap();
+    assert_eq!(layers(log), ["hooks", "hooks"], "{log:#}");
+}
