@@ -29,12 +29,14 @@ case "$version" in
       cp "$f" "$out/"
     done
     cp "$dist/install.sh" "$out/"
-    # `grep -F` on the exact names: the version is dotted text, not a pattern.
+    # Exact file-name match: the version is dotted text, not a pattern.
     : > "$out/SHA256SUMS"
     for f in "$out"/raptor-*; do
       case "$f" in *.sha256) continue ;; esac
-      grep -F "$(basename "$f")" "$dist/SHA256SUMS" >> "$out/SHA256SUMS" \
-        || fail "$(basename "$f") is not in SHA256SUMS"
+      name=$(basename "$f")
+      line=$(awk -v f="$name" '$2 == f' "$dist/SHA256SUMS")
+      [ -n "$line" ] && [ "$(printf '%s\n' "$line" | wc -l | tr -d ' ')" = 1 ] || fail "$name is not exactly once in SHA256SUMS"
+      printf '%s\n' "$line" >> "$out/SHA256SUMS"
     done
     [ "$(wc -l < "$out/SHA256SUMS" | tr -d ' ')" -ge 4 ] || fail "SHA256SUMS lists fewer files than expected"
     ;;
