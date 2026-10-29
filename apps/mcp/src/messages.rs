@@ -100,6 +100,7 @@ fn tool_params(code: McpToolError, params: Option<&Value>) -> Option<Value> {
         McpToolError::PolicyDenied => {
             let rules: Vec<&str> = denied_rules(params).collect();
             let reasons: Vec<Value> = denied_reasons(params)
+                .into_iter()
                 .map(|(rule, level)| json!({"rule": rule, "level": level}))
                 .collect();
             let decision = field("decision_id").filter(|v| v.is_string())?;
@@ -192,21 +193,35 @@ fn denied_rules(params: Option<&Value>) -> impl Iterator<Item = &str> {
         .take(4)
 }
 
-/// The `(rule, level)` pairs of a denial, each field validated on its own: a rule code and one
-/// of [`DENIED_LEVELS`].
-fn denied_reasons(params: Option<&Value>) -> impl Iterator<Item = (&str, &'static str)> {
-    params
+/// The `(rule, level)` pairs of a denial, each field validated on its own (a rule code and one
+/// of [`DENIED_LEVELS`]), one per rule: the first valid one.
+fn denied_reasons(params: Option<&Value>) -> Vec<(&str, &'static str)> {
+    let mut out: Vec<(&str, &'static str)> = Vec::new();
+    let pairs = params
         .and_then(|p| p.get("reasons"))
         .and_then(Value::as_array)
         .into_iter()
-        .flatten()
-        .filter_map(|pair| {
-            let rule = pair.get("rule")?.as_str().filter(|r| is_rule_code(r))?;
-            let level = pair.get("level")?.as_str()?;
-            let level = DENIED_LEVELS.into_iter().find(|l| *l == level)?;
-            Some((rule, level))
-        })
-        .take(4)
+        .flatten();
+    for pair in pairs {
+        if out.len() == 4 {
+            break;
+        }
+        let Some(rule) = pair
+            .get("rule")
+            .and_then(Value::as_str)
+            .filter(|r| is_rule_code(r))
+        else {
+            continue;
+        };
+        let level = pair.get("level").and_then(Value::as_str);
+        let Some(level) = DENIED_LEVELS.into_iter().find(|l| Some(*l) == level) else {
+            continue;
+        };
+        if out.iter().all(|(r, _)| *r != rule) {
+            out.push((rule, level));
+        }
+    }
+    out
 }
 
 /// The level of a denial's rule as the CLI names it (`guard.level.*`); the safe minimum names
@@ -534,6 +549,7 @@ el commit."
             let es = lang == Lang::Es;
             let level = rule.and_then(|rule| {
                 denied_reasons(params)
+                    .into_iter()
                     .find(|(r, _)| *r == rule)
                     .and_then(|(_, level)| level_words(level, es))
             });

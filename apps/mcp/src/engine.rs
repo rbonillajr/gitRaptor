@@ -434,8 +434,9 @@ fn denied(denial: Option<&Value>) -> ToolRefusal {
         return McpToolError::PolicyDenied.into();
     };
     let mut rules: Vec<Value> = Vec::new();
-    // Each distinct `(rule, level)` in the decision's order; never `params`, which carry repo
-    // text (a branch, a pattern).
+    // One `(rule, level)` per rule, the first level the decision names for it (the levels come
+    // in precedence order), so one rule at many levels cannot fill the four slots; never
+    // `params`, which carry repo text (a branch, a pattern).
     let mut reasons: Vec<Value> = Vec::new();
     for reason in &denial.reasons {
         let rule = serde_json::to_value(reason.rule).unwrap_or(Value::Null);
@@ -446,9 +447,9 @@ fn denied(denial: Option<&Value>) -> ToolRefusal {
             rules.push(rule.clone());
         }
         let level = serde_json::to_value(reason.level).unwrap_or(Value::Null);
-        let pair = json!({"rule": rule, "level": level});
-        if level.is_string() && !reasons.contains(&pair) && reasons.len() < MAX_DENIED_RULES {
-            reasons.push(pair);
+        let named = reasons.iter().any(|p| p["rule"] == rule);
+        if level.is_string() && !named && reasons.len() < MAX_DENIED_RULES {
+            reasons.push(json!({"rule": rule, "level": level}));
         }
     }
     ToolRefusal {
