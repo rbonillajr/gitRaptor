@@ -291,12 +291,16 @@ fn base_point<'s>(input: &OverlapInput<'s>) -> Option<Point<'s>> {
     // generation has marks of another numbering, so its `cause_event_seq` names another event.
     let (views, clean) = facts(input);
     let floor = own_raw(input).map_or(0, |r| r.floor);
+    // The generation decides which snapshots are candidates at all, so it filters before the
+    // newest is chosen: a newer snapshot of an older generation must not hide this one's. Being
+    // usable and clean is checked on the chosen one: a newer anchor that is not is no reason to
+    // fall back to an older one, the base is then unknown.
+    let generation = |s: &&SnapshotView| s.record.seq >= floor;
     let current = |s: &&SnapshotView| {
-        s.record.seq >= floor
-            && views
-                .iter()
-                .zip(&clean)
-                .any(|(v, c)| *c && v.record.snapshot_id == s.record.snapshot_id)
+        views
+            .iter()
+            .zip(&clean)
+            .any(|(v, c)| *c && v.record.snapshot_id == s.record.snapshot_id)
     };
     let found = match input.undone.first()? {
         OpRef::Oplog(id) => input
@@ -307,30 +311,37 @@ fn base_point<'s>(input: &OverlapInput<'s>) -> Option<Point<'s>> {
                     && s.record.cause_operation.as_deref() == Some(id.as_str())
                     && s.record.engine_mark.is_some()
             })
+            .filter(generation)
             .max_by_key(|s| (s.record.engine_mark, s.record.seq))
             .filter(|s| usable(s))
             .filter(current)
             .and_then(as_point),
         OpRef::GitEvent(seq) => {
-            let caused = input
+            let caused: Vec<&SnapshotView> = input
                 .snaps
                 .iter()
                 .filter(|s| {
                     s.record.cause_event_seq == Some(*seq) && s.record.engine_mark.is_some()
                 })
-                .max_by_key(|s| (s.record.engine_mark, s.record.seq));
-            match caused {
-                Some(s) => Some(s)
-                    .filter(|s| usable(s))
-                    .filter(current)
-                    .and_then(as_point),
-                None => views
+                .collect();
+            if caused.is_empty() {
+                views
                     .iter()
                     .zip(clean.iter().copied())
                     .filter(|(s, c)| *c && usable(s))
                     .filter_map(|(s, _)| as_point(s))
                     .filter(|p| p.mark >= *seq)
-                    .min_by_key(|p| (p.mark, p.seq)),
+                    .min_by_key(|p| (p.mark, p.seq))
+            } else {
+                // A capture of another generation that names this seq makes the first point
+                // after it ambiguous: without one of the current generation there is no base.
+                caused
+                    .into_iter()
+                    .filter(generation)
+                    .max_by_key(|s| (s.record.engine_mark, s.record.seq))
+                    .filter(|s| usable(s))
+                    .filter(current)
+                    .and_then(as_point)
             }
         }
     };
