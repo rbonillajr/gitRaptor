@@ -46,6 +46,32 @@ pub fn process_git_redirect(pid: u32) -> Option<bool> {
     }
 }
 
+/// The arguments of `pid` (program name first) and whether it redirects its target
+/// ([`process_git_redirect`]), from one read of its area: what S3 reads of a `git`. `None` when
+/// the area cannot be read. macOS only; elsewhere always `None`.
+pub fn process_git_args_and_redirect(pid: u32) -> Option<(Vec<OsString>, bool)> {
+    #[cfg(target_os = "macos")]
+    {
+        parse_procargs2_git_args_and_redirect(&crate::ffi_procargs::procargs2(pid)?)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = pid;
+        None
+    }
+}
+
+/// [`process_git_args_and_redirect`] over a `KERN_PROCARGS2` area: its arguments and
+/// [`parse_procargs2_git_redirect`] of the same area. Anything malformed is `None`.
+pub fn parse_procargs2_git_args_and_redirect(area: &[u8]) -> Option<(Vec<OsString>, bool)> {
+    let (args, env) = split_procargs2(area)?;
+    let redirect = git_redirects(
+        args.get(1..).unwrap_or_default().iter().copied(),
+        env.split(|b| *b == 0),
+    );
+    Some((args.into_iter().map(os).collect(), redirect))
+}
+
 /// The arguments of a process (program name first) and some of its environment variables, by
 /// name and value.
 pub type ArgsAndEnv = (Vec<OsString>, Vec<(OsString, OsString)>);
@@ -170,18 +196,31 @@ fn before_equals(entry: &[u8]) -> &[u8] {
     entry.split(|b| *b == b'=').next().unwrap_or_default()
 }
 
-/// Whether the global options (the arguments before the subcommand, program name excluded)
-/// redirect the target, or cannot be told apart from options that might.
-fn global_options_redirect<'a>(mut args: impl Iterator<Item = &'a [u8]>) -> bool {
+/// What the global options of a `git` (the arguments before the subcommand, program name
+/// excluded) say.
+struct GlobalOptions<'a> {
+    /// One of them is a [`REDIRECT_OPTIONS`].
+    redirect: bool,
+    /// One of them is an option this parser does not know (`--` included): what follows it
+    /// cannot be told apart.
+    unknown: bool,
+    /// The first argument that is not an option, unless an unknown option came first.
+    subcommand: Option<&'a [u8]>,
+}
+
+fn global_options<'a>(mut args: impl Iterator<Item = &'a [u8]>) -> GlobalOptions<'a> {
+    let mut redirect = false;
     while let Some(arg) = args.next() {
         if !arg.starts_with(b"-") {
             // The subcommand: what follows is its own.
-            return false;
+            return GlobalOptions {
+                redirect,
+                unknown: false,
+                subcommand: Some(arg),
+            };
         }
         let name = before_equals(arg);
-        if REDIRECT_OPTIONS.contains(&name) {
-            return true;
-        }
+        redirect |= REDIRECT_OPTIONS.contains(&name);
         let known = if name.len() < arg.len() {
             // Only the long options take their value after `=`.
             name.starts_with(b"--")
@@ -194,12 +233,60 @@ fn global_options_redirect<'a>(mut args: impl Iterator<Item = &'a [u8]>) -> bool
             GLOBAL_FLAGS.contains(&name)
         };
         if !known {
-            // An option this parser does not know, `--` included: it might
-            // move the target, so it counts.
-            return true;
+            return GlobalOptions {
+                redirect,
+                unknown: true,
+                subcommand: None,
+            };
         }
     }
-    false
+    GlobalOptions {
+        redirect,
+        unknown: false,
+        subcommand: None,
+    }
+}
+
+/// Whether the global options (the arguments before the subcommand, program name excluded)
+/// redirect the target, or cannot be told apart from options that might: an unknown option,
+/// `--` included, counts.
+fn global_options_redirect<'a>(args: impl Iterator<Item = &'a [u8]>) -> bool {
+    let options = global_options(args);
+    options.redirect || options.unknown
+}
+
+/// The subcommands that can move a ref or `HEAD`, the only ones whose `git` can make the Git
+/// event of a session (DS-US-GRP-008 D4). `fetch` is not one: it only moves `refs/remotes/*`,
+/// which is no event. `bisect` is: it moves `HEAD`.
+const REF_WRITERS: [&[u8]; 18] = [
+    b"commit",
+    b"merge",
+    b"rebase",
+    b"cherry-pick",
+    b"revert",
+    b"am",
+    b"pull",
+    b"reset",
+    b"checkout",
+    b"switch",
+    b"bisect",
+    b"branch",
+    b"update-ref",
+    b"symbolic-ref",
+    b"stash",
+    b"tag",
+    b"push",
+    b"worktree",
+];
+
+/// Whether a `git` with these arguments (program name excluded) runs a subcommand that can move
+/// a ref or `HEAD` ([`REF_WRITERS`]). Fails closed: an unknown subcommand (an alias included), an
+/// unknown global option or `--` before it, or no subcommand, is `false`. Only the boolean leaves
+/// (SEC-04).
+pub fn git_subcommand_writes<'a>(args: impl IntoIterator<Item = &'a [u8]>) -> bool {
+    global_options(args.into_iter())
+        .subcommand
+        .is_some_and(|s| REF_WRITERS.contains(&s))
 }
 
 /// Splits a `KERN_PROCARGS2` area into its `argc` arguments and what follows them (the
@@ -474,6 +561,55 @@ mod tests {
         assert!(redirects("--list-cmds status"));
         // `--` before the subcommand: fail closed.
         assert!(redirects("-- status"));
+    }
+
+    fn writes(line: &str) -> bool {
+        git_subcommand_writes(line.split_whitespace().map(str::as_bytes))
+    }
+
+    #[test]
+    fn subcommand_writes_table() {
+        for line in [
+            "commit -q -m x",
+            "-c x=y commit",
+            "-C /r --no-pager merge x",
+            "--git-dir=/r/.git rebase main",
+            "bisect start",
+            "worktree add ../x",
+            "update-ref refs/heads/x HEAD",
+            "push origin x",
+        ] {
+            assert!(writes(line), "{line}");
+        }
+        for line in [
+            "log",
+            "status",
+            "cat-file --batch",
+            "-c core.pager=x log",
+            // It only moves `refs/remotes/*`: no event.
+            "fetch origin",
+            // An alias, even of `commit`: unknown, so it fails closed.
+            "ci -m x",
+            "-- commit",
+            "--unknown-global commit",
+            "-c",
+            "",
+        ] {
+            assert!(!writes(line), "{line}");
+        }
+    }
+
+    #[test]
+    fn the_args_and_the_redirect_come_from_one_read() {
+        let a = area(3, b"/usr/bin/git\0\0\0git\0-C\0commit\0HOME=/u\0\0");
+        let (args, redirect) = parse_procargs2_git_args_and_redirect(&a).unwrap();
+        assert_eq!(args, ["git", "-C", "commit"]);
+        assert!(redirect);
+        let a = area(2, b"/usr/bin/git\0git\0log\0GIT_DIR=/r\0");
+        assert!(parse_procargs2_git_args_and_redirect(&a).unwrap().1);
+        let a = area(2, b"/usr/bin/git\0git\0log\0HOME=/u\0");
+        assert!(!parse_procargs2_git_args_and_redirect(&a).unwrap().1);
+        assert_eq!(parse_procargs2_git_args_and_redirect(&[1, 2]), None);
     }
 
     #[test]
