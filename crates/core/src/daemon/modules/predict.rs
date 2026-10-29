@@ -92,7 +92,9 @@ pub(super) fn start(daemon: &Daemon) -> Option<Box<dyn DaemonModule>> {
             None
         }
         PredictMerger::InProcess => Some(Arc::new(InProcessMerger)),
-        PredictMerger::Worker(config) => Some(Arc::new(WorkerMerger::new(config.clone()))),
+        PredictMerger::Worker(config) => Some(Arc::new(
+            WorkerMerger::new(config.clone()).with_logger(daemon.logger.clone()),
+        )),
     };
     let mut bridge = None;
     let pool = merger.and_then(|merger| {

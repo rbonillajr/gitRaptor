@@ -24,6 +24,10 @@ struct Entry {
     pred: PairPrediction,
     /// The triple last queued or computed: an equal one queues nothing.
     cached: Option<Triple>,
+    /// The triple that produced the result `pred` carries, if any. A base move is judged against
+    /// it, not against the plan's last triple: a pair that went through `Pending` or
+    /// `NotComputable` with a new base must not republish the old base's result.
+    result: Option<Triple>,
     /// The results of the last [`KEPT_RESULTS`] computed triples, oldest first.
     done: Vec<Kept>,
 }
@@ -46,6 +50,7 @@ impl Entry {
         let kept = self.done.iter().find(|k| k.triple == *triple)?;
         self.pred.conflict.clone_from(&kept.conflict);
         self.pred.computed_at_utc_ms = Some(kept.computed_at_utc_ms);
+        self.result = Some(triple.clone());
         Some(kept.state)
     }
 }
@@ -88,11 +93,12 @@ impl RepoPairs {
                     ..p.clone()
                 },
                 cached: None,
+                result: None,
                 done: Vec::new(),
             });
             let base_moved = p.key.b == PairSide::Base
                 && matches!(
-                    (&entry.pred.triple, &p.triple),
+                    (&entry.result, &p.triple),
                     (Some(was), Some(now)) if was.tip_b != now.tip_b
                 );
             entry.pred.overlap = p.overlap;
@@ -108,6 +114,7 @@ impl RepoPairs {
                             // again, but kept in `done` should that base come back.
                             entry.pred.conflict = None;
                             entry.pred.computed_at_utc_ms = None;
+                            entry.result = None;
                         }
                         if entry.cached.as_ref() != Some(&triple) {
                             entry.cached = Some(triple.clone());
@@ -158,6 +165,7 @@ impl RepoPairs {
         });
         entry.pred.conflict = conflict;
         entry.pred.computed_at_utc_ms = Some(now_utc_ms);
+        entry.result = Some(triple.clone());
         if matches!(
             entry.pred.state,
             PairState::Calculating | PairState::Recalculating
@@ -309,6 +317,29 @@ mod tests {
         assert_eq!(
             (p.state, p.computed_at_utc_ms),
             (PairState::Recalculating, Some(1))
+        );
+    }
+
+    #[test]
+    fn a_base_move_while_pending_does_not_republish_the_old_result() {
+        let mut pairs = RepoPairs::new("r");
+        let queued = pairs.apply(vec![on_base("t", "b1")], 0);
+        let (key, t1) = queued[0].clone();
+        assert!(pairs.complete(&key, &t1, Ok(outcome()), 1));
+
+        let mut pending = on_base("t", "b2");
+        pending.state = PairState::Pending(PendingReason::OperationInProgress);
+        assert!(pairs.apply(vec![pending], 2).is_empty());
+
+        let queued = pairs.apply(vec![on_base("t", "b2")], 3);
+        assert_eq!(queued.len(), 1);
+        let p = pairs.get(&key).unwrap();
+        assert_eq!(p.state, PairState::Calculating);
+        assert_eq!((p.computed_at_utc_ms, p.conflict.is_none()), (None, true));
+        assert!(
+            !pairs
+                .pairs()
+                .any(|p| p.state == PairState::Current || p.state == PairState::Recalculating)
         );
     }
 

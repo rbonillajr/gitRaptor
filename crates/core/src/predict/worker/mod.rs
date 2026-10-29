@@ -12,7 +12,7 @@ use std::ffi::OsString;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::thread::JoinHandle;
@@ -27,6 +27,7 @@ use serde::{Deserialize, Serialize};
 
 use self::serve::{read_frame, validate_outcome, write_frame};
 use super::merger::DryMerger;
+use crate::daemon::Logger;
 use crate::work_class;
 
 /// The hidden subcommand of the daemon's binary that runs [`serve::serve`].
@@ -96,6 +97,12 @@ pub struct WorkerMerger {
     config: WorkerConfig,
     expected_version: String,
     launches: AtomicU64,
+    /// Calls to [`WorkerMerger::close`] so far: a merge that sees it move skips its second job.
+    close_requests: AtomicU64,
+    /// Set once a launch and its relaunch both announced another version: no worker is launched
+    /// again and every merge is `Unavailable`.
+    version_mismatch: AtomicBool,
+    logger: Option<Logger>,
     state: Mutex<Slot>,
 }
 
@@ -125,7 +132,9 @@ impl Worker {
         self.reap();
     }
 
-    /// EOF on its stdin; past [`CLOSE_GRACE`] without exiting, killed.
+    /// EOF on its stdin. Only a clean EOF on its stdout lets it be reaped without a kill: past
+    /// [`CLOSE_GRACE`], on a read error or with the reader gone, it is killed first, so the reap
+    /// can never block on a child that keeps running.
     fn close(mut self) {
         drop(self.stdin.take());
         let end = Instant::now() + CLOSE_GRACE;
@@ -134,8 +143,8 @@ impl Worker {
             match self.frames.recv_timeout(left) {
                 // A late frame of a job already given up: discarded.
                 Ok(Ok(Some(_))) => {}
-                Ok(Ok(None) | Err(_)) | Err(RecvTimeoutError::Disconnected) => break,
-                Err(RecvTimeoutError::Timeout) => {
+                Ok(Ok(None)) => break,
+                Ok(Err(_)) | Err(RecvTimeoutError::Disconnected | RecvTimeoutError::Timeout) => {
                     let _ = self.child.kill();
                     break;
                 }
@@ -162,6 +171,13 @@ enum Cut {
     Unavailable(String),
 }
 
+/// Why one launch gave no worker.
+enum Launch {
+    /// It announced another version than the one expected.
+    Mismatch,
+    Failed(Cut),
+}
+
 impl From<Cut> for DryMergeError {
     fn from(cut: Cut) -> Self {
         match cut {
@@ -183,11 +199,21 @@ impl WorkerMerger {
             config,
             expected_version: version.to_owned(),
             launches: AtomicU64::new(0),
+            close_requests: AtomicU64::new(0),
+            version_mismatch: AtomicBool::new(false),
+            logger: None,
             state: Mutex::new(Slot {
                 worker: None,
                 last_used: Instant::now(),
             }),
         }
+    }
+
+    /// Logs to `logger` what the merger decides on its own (a persistent version mismatch).
+    #[must_use]
+    pub fn with_logger(mut self, logger: Logger) -> Self {
+        self.logger = Some(logger);
+        self
     }
 
     fn slot(&self) -> MutexGuard<'_, Slot> {
@@ -219,8 +245,12 @@ impl WorkerMerger {
         true
     }
 
-    /// Closes the worker now (power saving, dormant repo, stop).
+    /// Closes the worker now (power saving, dormant repo, stop). It waits for the job in flight,
+    /// if any, but never for two: a merge that sees this request before its escalated second job
+    /// skips it and keeps the first outcome, so the wait is bounded by one job's deadline (its
+    /// launch and handshake aside).
     pub fn close(&self) {
+        self.close_requests.fetch_add(1, Ordering::AcqRel);
         let worker = self.slot().worker.take();
         if let Some(worker) = worker {
             worker.close();
@@ -228,19 +258,35 @@ impl WorkerMerger {
     }
 
     /// Launches a worker and checks its version; on a mismatch or a failed handshake, once more.
+    /// When the relaunch also announces another version, the mismatch is latched (and logged
+    /// once): from then on nothing is launched and this is `Unavailable` at once.
     fn launch(&self) -> Result<Worker, Cut> {
+        if self.version_mismatch.load(Ordering::Acquire) {
+            return Err(Cut::Unavailable("the worker is of another version".into()));
+        }
         match self.launch_once() {
             Ok(worker) => Ok(worker),
-            Err(_) => self.launch_once(),
+            Err(_) => match self.launch_once() {
+                Ok(worker) => Ok(worker),
+                Err(Launch::Mismatch) => {
+                    if !self.version_mismatch.swap(true, Ordering::AcqRel)
+                        && let Some(logger) = &self.logger
+                    {
+                        logger.warn("predict_worker_version_mismatch", &[]);
+                    }
+                    Err(Cut::Unavailable("the worker is of another version".into()))
+                }
+                Err(Launch::Failed(cut)) => Err(cut),
+            },
         }
     }
 
-    fn launch_once(&self) -> Result<Worker, Cut> {
+    fn launch_once(&self) -> Result<Worker, Launch> {
         let program = &self.config.program;
         if !program.is_absolute() {
-            return Err(Cut::Unavailable(
+            return Err(Launch::Failed(Cut::Unavailable(
                 "the worker program is not absolute".into(),
-            ));
+            )));
         }
         let mut command = Command::new(program);
         command
@@ -254,11 +300,13 @@ impl WorkerMerger {
         self.launches.fetch_add(1, Ordering::AcqRel);
         let mut child = command
             .spawn()
-            .map_err(|e| Cut::Unavailable(format!("launch the worker: {e}")))?;
+            .map_err(|e| Launch::Failed(Cut::Unavailable(format!("launch the worker: {e}"))))?;
         let (Some(stdin), Some(mut stdout)) = (child.stdin.take(), child.stdout.take()) else {
             let _ = child.kill();
             let _ = child.wait();
-            return Err(Cut::Unavailable("the worker has no pipes".into()));
+            return Err(Launch::Failed(Cut::Unavailable(
+                "the worker has no pipes".into(),
+            )));
         };
         let (tx, frames) = mpsc::channel();
         let reader =
@@ -281,7 +329,9 @@ impl WorkerMerger {
             Ok(reader) => worker.reader = Some(reader),
             Err(e) => {
                 worker.kill();
-                return Err(Cut::Unavailable(format!("start the worker's reader: {e}")));
+                return Err(Launch::Failed(Cut::Unavailable(format!(
+                    "start the worker's reader: {e}"
+                ))));
             }
         }
         let hello = match worker.frames.recv_timeout(HANDSHAKE_TIMEOUT) {
@@ -292,28 +342,31 @@ impl WorkerMerger {
             Some(hello) if hello.version == self.expected_version => Ok(worker),
             Some(_) => {
                 worker.kill();
-                Err(Cut::Unavailable("the worker is of another version".into()))
+                Err(Launch::Mismatch)
             }
             None => {
                 worker.kill();
-                Err(Cut::Unavailable(
+                Err(Launch::Failed(Cut::Unavailable(
                     "the worker did not announce its version".into(),
-                ))
+                )))
             }
         }
     }
 
-    /// Runs one job in the worker, launching it if needed, within `deadline` and the memory cap.
+    /// Runs one job in the worker, launching it if needed, within `budget` and the memory cap.
+    /// The budget starts once the job frame is written: a launch and its handshake (bounded by
+    /// their own timeout) never eat into it.
     fn job(
         &self,
         slot: &mut Slot,
         job: &WireJob,
         limits: &DryMergeLimits,
-        deadline: Instant,
+        budget: Duration,
     ) -> Result<Result<DryMergeOutcome, DryMergeError>, Cut> {
         let body = serde_json::to_vec(job)
             .map_err(|e| Cut::Unavailable(format!("encode the job: {e}")))?;
         let mut worker = self.send(slot.worker.take(), &body)?;
+        let deadline = Instant::now() + budget;
         let reply = self.await_reply(&mut worker, deadline);
         match reply {
             Ok(reply) => {
@@ -412,10 +465,15 @@ fn write_job(worker: &mut Worker, body: &[u8]) -> std::io::Result<()> {
 }
 
 impl DryMerger for WorkerMerger {
-    /// The first job runs with `limits` until the earlier of `deadline` and the configured
-    /// deadline. When its outcome has a conflict whose detection depends on the rename limit,
-    /// a second job with [`REWRITES_LIMIT_ESCALATED`] runs with its own `escalated_deadline`;
-    /// if a cap cuts it, the first outcome stands.
+    /// The first job runs with `limits` for the shorter of the configured deadline and what is
+    /// left of `deadline` when the call starts; that budget is counted from the moment the job
+    /// is written to the worker, so launching it does not shorten the job.
+    ///
+    /// When its outcome has a conflict whose detection depends on the rename limit, a second job
+    /// with [`REWRITES_LIMIT_ESCALATED`] runs with its own `escalated_deadline`, not bounded by
+    /// `deadline`: the spec gives the escalated job "su propio plazo de 2 s" (T006, "Reglas —
+    /// escalado"). If a cap cuts it, or [`WorkerMerger::close`] was called meanwhile, the first
+    /// outcome stands.
     fn merge(
         &self,
         repo: &Path,
@@ -423,11 +481,18 @@ impl DryMerger for WorkerMerger {
         limits: &DryMergeLimits,
         deadline: Instant,
     ) -> Result<DryMergeOutcome, DryMergeError> {
+        let closes = self.close_requests.load(Ordering::Acquire);
+        let first_budget = self
+            .config
+            .limits
+            .deadline
+            .min(deadline.saturating_duration_since(Instant::now()));
         let mut slot = self.slot();
-        let first_deadline = deadline.min(Instant::now() + self.config.limits.deadline);
         let job = WireJob::new(repo, input, limits)?;
-        let first = self.job(&mut slot, &job, limits, first_deadline)??;
-        if !first.has_kind_needing_escalation() {
+        let first = self.job(&mut slot, &job, limits, first_budget)??;
+        if !first.has_kind_needing_escalation()
+            || self.close_requests.load(Ordering::Acquire) != closes
+        {
             return Ok(first);
         }
         let escalated = DryMergeLimits {
@@ -435,8 +500,12 @@ impl DryMerger for WorkerMerger {
             ..limits.clone()
         };
         let job = WireJob::new(repo, input, &escalated)?;
-        let second_deadline = Instant::now() + self.config.limits.escalated_deadline;
-        match self.job(&mut slot, &job, &escalated, second_deadline) {
+        match self.job(
+            &mut slot,
+            &job,
+            &escalated,
+            self.config.limits.escalated_deadline,
+        ) {
             Ok(Ok(mut second)) => {
                 second.rewrites_escalated = true;
                 Ok(second)
