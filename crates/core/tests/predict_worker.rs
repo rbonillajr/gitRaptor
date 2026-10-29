@@ -173,6 +173,10 @@ fn a_pair_over_the_deadline_kills_and_relaunches_the_worker() {
 }
 
 #[test]
+#[cfg_attr(
+    not(any(target_os = "macos", target_os = "linux")),
+    ignore = "memory cap pending on Windows: Job Object, multi-platform stage"
+)]
 fn a_worker_over_the_memory_cap_is_killed() {
     let (f, pair) = content_conflict();
     let m = merger(WorkerLimits {
