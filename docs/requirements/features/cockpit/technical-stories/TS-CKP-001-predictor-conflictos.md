@@ -77,7 +77,7 @@ tags: [cockpit, prediccion-conflictos, merge-en-seco, solape, daemon, nfr-01, se
 
 ## Estado de la implementación (2026-10-28)
 
-Implementado en: PR #275 (PR-A: T001 a T005 y T011 de DS-TS-CKP-001, más la excepción G9 de `static_check.rs`) y PR #PRB (PR-B: T006, T007, T009, T010, T012 y T013).
+Implementado en: PR #275 (PR-A: T001 a T005 y T011 de DS-TS-CKP-001, más la excepción G9 de `static_check.rs`) y PR #314 (PR-B: T006, T007, T009, T010, T012 y T013).
 
 - **Hecho:** las rutas sin commitear de cada worktree se retienen en memoria y llegan al predictor (`worktree_recomputed`, `repo_tier_changed`). El módulo `predict` del daemon calcula los pares, el trabajo propio y el solape, con los estados, la caché por triple y la cola coalescente. El merge en seco en memoria (`gitraptor_git::dry_merge`) usa `gix_merge::commit` sin drivers, filtros ni atributos, con extractores de conflictos y de hunks y la marca `has_merge_rule` (D14). El corpus R-SYN se compara contra `git merge-tree`.
 - **Hecho en el PR-B:** el merge en seco corre en un proceso trabajador (el propio binario, subcomando oculto `predict-worker`) con plazo de 2 s, cota de memoria vigilada desde el daemon, comprobación de versión y escalado de renombrados; un pool `utility` que se pausa en ahorro de energía; la publicación por el canal (`prediction.pairs`, `prediction.list`, `prediction.changed`, `RepoView.prediction`, `attention.conflicts` híbrido y `repo.attention`); la suite `repo_intact` del predictor, sus fronteras y el escenario `prediction` del banco.

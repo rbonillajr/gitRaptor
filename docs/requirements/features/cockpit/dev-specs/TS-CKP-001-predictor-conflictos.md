@@ -61,7 +61,7 @@ tags: [cockpit, prediccion-conflictos, merge-en-seco, solape, daemon, proceso-tr
 
 # DS-TS-CKP-001 · Predictor de conflictos en el daemon
 
-Implementado en: PR #275 (PR-A: T001 a T005, T011 y la excepción G9 de T010) y PR #PRB (PR-B: T006, T007, T009, T010, T012 y T013; G2 cerrado el 2026-10-27 por #283 y G5 el 2026-10-28 por #298). Pendiente fuera del PR: la medición del banco en reposo (G11).
+Implementado en: PR #275 (PR-A: T001 a T005, T011 y la excepción G9 de T010) y PR #314 (PR-B: T006, T007, T009, T010, T012 y T013; G2 cerrado el 2026-10-27 por #283 y G5 el 2026-10-28 por #298). Pendiente fuera del PR: la medición del banco en reposo (G11).
 
 ## Contexto rápido
 
