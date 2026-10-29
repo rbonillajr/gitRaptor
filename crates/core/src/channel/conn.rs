@@ -1760,6 +1760,10 @@ impl Connection<'_> {
 
     /// The fields of `guard.status` a connection has the capability for.
     fn guard_shape_status(&self, status: &mut gitraptor_api::guard::GuardStatus) {
+        // An older client only knows the two states of the hooks half.
+        if !self.has(methods::CAP_GUARD_PROTECTION_LAYERS.name) {
+            status.state = status.state.downgraded();
+        }
         if !self.has(methods::CAP_GUARD_PENDING_ACTION.name) {
             status.pending = None;
         }
@@ -1846,6 +1850,21 @@ impl Connection<'_> {
                 if !self.has(methods::CAP_GUARD_LOG_LAYERS.name) {
                     log.entries
                         .retain(|e| e.layer == gitraptor_api::guard::LogLayer::Hooks);
+                }
+                // The allowlist's transitions need the four states to be read.
+                if !self.has(methods::CAP_GUARD_PROTECTION_LAYERS.name) {
+                    log.entries.retain(|e| {
+                        !matches!(
+                            e.operation,
+                            gitraptor_api::guard::LoggedOperation::McpAllowlist { .. }
+                        )
+                    });
+                }
+                // The layer the client asked for, after the capability filters: a connection
+                // without `guard.log-layers` asking for `mcp` or `cockpit` gets none. The
+                // summary does not change.
+                if let Some(layer) = params.layer {
+                    log.entries.retain(|e| e.layer == layer);
                 }
                 // The denials of the configuration read as a path.
                 if legacy {
