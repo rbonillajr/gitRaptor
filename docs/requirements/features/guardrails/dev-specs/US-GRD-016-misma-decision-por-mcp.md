@@ -144,7 +144,7 @@ Queda una sola entrada de decisión para las tres capas, con los permisos del eq
 ```mermaid
 classDiagram
     class PlanShape:::modificado { <<modificado T002>> }
-    class DecideInput:::modificado { <<modificado T002>> }
+    class decide_all:::modificado { <<modificado T002>> }
     class GuardrailsEngine:::modificado { <<modificado T002>> }
     class apply:::existente { <<existente>> }
     class denied:::modificado { <<modificado T003>> }
@@ -154,9 +154,9 @@ classDiagram
     class McpRepos:::modificado { <<modificado T006>> }
     class McpAllowlist:::nuevo { <<nuevo T007>> }
     class GuardLogParams:::modificado { <<modificado T009>> }
-    PlanShape ..> DecideInput : catalog_operations() pasa a known_ops
-    GuardrailsEngine --> DecideInput : layer mcp o cockpit
-    DecideInput ..> apply : un apply por operación conocida, sin cadena
+    PlanShape ..> decide_all : catalog_operations() pasa como known_ops
+    GuardrailsEngine --> decide_all : layer mcp o cockpit, known_ops del plan
+    decide_all ..> apply : un apply por operación conocida, sin cadena
     WRITE_TOOLS --> PlanShape : toda herramienta de escritura es una operación del catálogo
     denied ..> GuardrailsEngine : lee reasons de GuardrailsDenial
     GuardStatus --> McpRepos : contains(repo_id)
@@ -167,7 +167,7 @@ classDiagram
     classDef existente fill:#f1f5f9,stroke:#94a3b8,color:#334155
 ```
 
-🟩 nuevo · 🟨 modificado · ⬜ existente. La arista que decide la paridad es la de `DecideInput` a `apply`: el plan aplica el permiso de la operación que sabe que ejecuta con la misma función pura que usan los hooks (`gitraptor_policy::guard::permissions::apply`), sin la clasificación por procesos, que con la cadena vacía del ejecutor daría `unverifiable`.
+🟩 nuevo · 🟨 modificado · ⬜ existente. La arista que decide la paridad es la de `decide_all` a `apply` (`known_ops` es un parámetro de `decide_all`, no un campo de `DecideInput`: decisión del orquestador del 2026-10-28, validada por el Arquitecto): el plan aplica el permiso de la operación que sabe que ejecuta con la misma función pura que usan los hooks (`gitraptor_policy::guard::permissions::apply`), sin la clasificación por procesos, que con la cadena vacía del ejecutor daría `unverifiable`.
 
 **Cómo fluye:**
 
@@ -184,7 +184,7 @@ sequenceDiagram
     Ag->>Mcp: tools/call safe_commit (existente)
     Mcp->>Ex: operation.prepare y run, capa mcp (existente)
     Ex->>G: evaluate_detailed(GateRequest) (existente)
-    G->>D: operaciones normalizadas + known_ops del plan (T002)
+    G->>D: decide_all(operaciones normalizadas, known_ops = catalog_operations()) (T002)
     D-->>G: Decision con reasons (rule, level, cause)
     G->>L: una entrada, layer mcp (existente)
     G-->>Ex: Deny
@@ -525,7 +525,6 @@ crates/core/src/
 ├── guardrails/
 │   ├── evaluate.rs                  ← MODIFY (T002) known_ops
 │   ├── plan_gate.rs                 ← MODIFY (T002)
-│   ├── link.rs                      ← MODIFY (T002, una línea: known_ops: &[])
 │   └── log.rs                       ← MODIFY (T007)
 ├── daemon/
 │   ├── guard.rs                     ← MODIFY (T006)

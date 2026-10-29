@@ -79,7 +79,7 @@ La capa está **activa** solo si se cumplen todas estas condiciones:
 ### 2. Capa MCP (interfaz con F-001-05)
 
 - **Activa** si el repo está en la allowlist del MCP. Guardrails la **consulta** y nunca la escribe.
-- **Mientras F-001-05 no exista**, la capa es "no en allowlist", así que los únicos estados posibles son Sin protección y Solo hooks.
+- La marca la ponen y quitan `raptor mcp enable` y `disable` (US-MCP-002); el estado sale de `ProtectionState::of(hooks_installed, mcp_enabled)` (Enmienda 2026-10-28).
 
 ### 3. Estado expuesto (canal, `crates/api`)
 
@@ -197,3 +197,13 @@ Derivada de las Enmiendas de ADR-GRD-001 (E-01-2) y ADR-GRD-002 (E-02-4). **Deci
 - **H3**: el `dev/inode` de la carpeta deja de ser condición de salud. Ya lo era en el código (`health.rs`). La identidad se comprueba en cada operación que escribe o borra, y el diario la adopta solo cuando el contenido lo prueba (ADR-GRD-001, Enmienda 2026-10-17).
 - **`instalacion-huerfana` (J5) no se amplía**: sigue significando clave nuestra más manifiesto. Si no hay instalación confirmada, la clave no es la nuestra y queda una carpeta `gitraptor/` (una desinstalación cuya limpieza se detuvo tras la clave, o una carpeta que el perfil no conoce), el estado es `not-installed` con el diagnóstico nuevo **`leftover-folder`**. Así no se exagera la protección: con la clave fuera, nada protege el repo. Solo lo reciben las conexiones con `guard.recovery`.
 - **Retirar una huérfana** ya está disponible con `raptor guard uninstall`. Restaura el valor previo del manifiesto solo si era de nivel local y representable, y lo muestra antes de la ventana. **Adoptar** sigue pendiente (US-GRD-003).
+
+## Enmienda (2026-10-28, US-GRD-016)
+
+El `status` sigue en `accepted`. Aplica D4 y D5 de DS-US-GRD-016 (Q-GRD-54).
+
+- **Cuatro estados.** `ProtectionState` tiene `unprotected`, `hooks-only`, `mcp-only` y `full`, calculados con una sola función, `ProtectionState::of(hooks_installed, mcp_enabled)`. La mitad de hooks es «instalada» (instalación confirmada en el diario); su actividad va en `GuardStatus.hooks`. La mitad MCP es la marca de la allowlist (`McpRepos::contains`).
+- **Capacidad.** Los cuatro estados se sirven con `guard.protection-layers`; una conexión sin ella recibe `downgraded()` (`mcp-only` → `unprotected`, `full` → `hooks-only`).
+- **Dónde se calcula.** El daemon completa el estado al responder (`guard.status`, plan, desinstalación) y en el contexto de la vista MCP de `status`, que lo traduce con la misma función. La instalación y la desinstalación siguen comparando solo la mitad de hooks: reinstalar en un repo `full` es idempotente.
+- **Diagnóstico junto al estado.** Un repo `full` con los hooks reemplazados sigue `full`: la CLI muestra el estado y, a continuación, `hooks: inactivos (causa)`; la TUI mantiene «protección perdida», que lee la mitad de hooks; la vista MCP lleva `protection_lost`.
+- Se retira «Mientras F-001-05 no exista» del § 2.

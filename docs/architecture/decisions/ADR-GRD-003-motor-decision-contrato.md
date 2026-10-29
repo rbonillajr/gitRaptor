@@ -383,3 +383,12 @@ Sin punto de recuperación, la operación destructiva permitida no se ejecuta (B
 | **Riesgo residual (seguridad L-01, L-02)** | Una excepción aplicada por otra regla cubre también el previo fallido (D5): la operación corre sin punto de recuperación y la razón queda en la decisión (US-GRD-006 lo dirá en el registro). Un cliente del hook anterior a US-TMC-005 (sin `guard.prior-snapshot`) frente a un daemon nuevo no recibe previo ni denegación (N5 de la Dev Spec); hoy no ocurre porque hook y daemon son el mismo binario | § 7 |
 | **Textos** | Plantilla fija `snapshotreq.deny` con una pista por causa; ninguna menciona la excepción ni cómo quitar la protección. `guard.deny.internal` añade, en condicional, que se refresque la protección con `raptor guard install` | § 3 (M-05) |
 
+## Enmienda (2026-10-28, US-GRD-016)
+
+El `status` sigue en `accepted`. Aplica D2 de DS-US-GRD-016.
+
+- **El plan del ejecutor aplica los permisos de sus operaciones conocidas.** `PlanShape::catalog_operations()` dice qué operaciones del catálogo (BR-VAL-002) ejecuta el plan con certeza: merge, rebase, crear worktree, commit y, para borrar un worktree, `worktree-remove` y `branch-delete` (también borra la rama). `decide_all` aplica el permiso de cada una con la misma función pura que los hooks (`permissions::apply`), sin cadena de procesos, y combina el resultado como el máximo (BR-CALC-001).
+- **`known_ops` es un parámetro de `decide_all`**, no un campo de `DecideInput` (decisión del orquestador, validada por el Arquitecto): solo `decide_all` lo lee y tiene un único llamador (`plan_gate`). `decide`, `serve_audited` y los demás constructores de `DecideInput` no cambian.
+- `RuleSet::all()` sigue con `permissions: false`: activarlo clasificaría la cadena vacía del ejecutor como `unverifiable`. Desaparece el caso especial de `commit` en `decide_all`.
+- Con operaciones conocidas, un `ask` sigue al actor que resolvió el daemon (`AskedBy::of`, Q-GRD-46), como en los hooks.
+- En borrar worktree la capa MCP es **más estricta** que la de hooks, que nunca ven `worktree-remove` (NFR-02).
