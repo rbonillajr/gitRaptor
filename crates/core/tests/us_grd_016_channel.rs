@@ -86,6 +86,7 @@ impl Running {
             discovery: Default::default(),
             power: Default::default(),
             tm_capture: Default::default(),
+            predict: Default::default(),
         };
         let daemon = Daemon::start(config).unwrap();
         let handle = daemon.shutdown_handle();
