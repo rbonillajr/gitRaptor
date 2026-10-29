@@ -708,7 +708,7 @@ Sin umbral numérico en el repo (`AGENTS.md`: tests obligatorios para todo cambi
 |---|---|
 | Equipo `deny-<op>` | `{"permissions":{"deny":["<op>"]}}` commiteado en la rama principal y confirmado (como `us_mcp_009_permission.rs`, `rig`) |
 | Sin configuración | Solo el mínimo seguro |
-| Rama protegida | `{"policies":{"protectedBranches":[{"pattern":"release/1.0"}]}}` en la configuración del equipo (`appliesTo` por defecto `agents`, Q-GRD-35) |
+| Rama protegida | `{"policies":{"protectedBranches":{"patterns":["release/1.0"]}}}` en la configuración del equipo (forma que lee el código; la versión anterior de esta tabla tenía una forma que el código no acepta) (`appliesTo` por defecto `agents`, Q-GRD-35) |
 | Actor | `Actor::Agent { kind: ClaudeCode, .. }` en el motor; agente simulado del arnés de `mcp_safe_commit.rs` en extremo a extremo |
 
 ### 9.4 Comportamientos críticos verificados

@@ -36,7 +36,7 @@ const DEADLINE: Duration = Duration::from_secs(60);
 /// The trailer `agents-commit` (the default) asks of an agent's commit.
 const CLAUDE: &str = "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>";
 const DENY_COMMIT: &str = r#"{"permissions":{"deny":["commit"]}}"#;
-const PROTECT_RELEASE: &str = r#"{"policies":{"protectedBranches":[{"pattern":"release/1.0"}]}}"#;
+const PROTECT_RELEASE: &str = r#"{"policies":{"protectedBranches":{"patterns":["release/1.0"]}}}"#;
 
 /// The simulated agent: runs `RAPTOR_FAKE_AGENT_ARGV` as its child, sharing its pipes.
 #[test]
