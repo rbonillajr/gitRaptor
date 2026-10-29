@@ -289,6 +289,83 @@ fn engine_refusals_map_to_the_tool_codes() {
     }
 }
 
+/// `policy-denied` names each rule with its level, once per distinct pair in the decision's
+/// order and at most four; `rules` stays as it was, the reasons' `params` (repo text) never
+/// travel, and the text names the level of the first rule as the CLI does.
+#[test]
+fn policy_denied_names_the_rule_and_its_level() {
+    let reason = |rule, level| Reason {
+        rule,
+        level,
+        cause: None,
+        params: vec![gitraptor_api::guard::Param::new(
+            gitraptor_api::guard::ParamKind::Branch,
+            "SECRET-BRANCH",
+        )],
+    };
+    let denial = GuardrailsDenial {
+        decision_id: "dec-2".into(),
+        effect: Effect::Deny,
+        applied_effect: Effect::Deny,
+        reasons: vec![
+            reason(Rule::PermissionCommit, Level::Floor),
+            reason(Rule::PermissionCommit, Level::Worktree),
+            reason(Rule::PermissionCommit, Level::Floor),
+            reason(Rule::ProtectedBranch, Level::Profile),
+            reason(Rule::PermissionMerge, Level::Local),
+            reason(Rule::PermissionRebase, Level::Floor),
+        ],
+    };
+    let denied = commit_refusal(&ClientError::Rpc(
+        ErrorObject::new(code::OPERATION_REJECTED, "denied").with_data(RejectedData {
+            reason: RejectReason::GuardrailsDenied,
+            guardrails: Some(denial),
+        }),
+    ));
+    let expected = json!([
+        {"rule": "permission.commit", "level": "floor"},
+        {"rule": "permission.commit", "level": "worktree"},
+        {"rule": "policy.protected-branch", "level": "profile"},
+        {"rule": "permission.merge", "level": "local"},
+    ]);
+    assert_eq!(param(&denied, "reasons"), Some(&expected));
+    assert_eq!(
+        param(&denied, "rules"),
+        Some(&json!([
+            "permission.commit",
+            "policy.protected-branch",
+            "permission.merge",
+            "permission.rebase"
+        ]))
+    );
+    for (lang, words) in [
+        (Lang::En, "permission.commit (team configuration)"),
+        (Lang::Es, "permission.commit (configuración del equipo)"),
+    ] {
+        let body = refusal(denied.clone(), lang);
+        assert_eq!(body["params"]["reasons"], expected, "{body}");
+        assert_eq!(body["params"]["decision_id"], "dec-2", "{body}");
+        assert!(body["message"].as_str().unwrap().contains(words), "{body}");
+        assert!(!body.to_string().contains("SECRET-BRANCH"), "{body}");
+    }
+    // A level outside the list, or a rule that is not a code, drops the pair, never the answer.
+    let body = refusal(
+        ToolRefusal {
+            code: McpToolError::PolicyDenied,
+            params: Some(json!({
+                "rules": ["permission.commit"],
+                "reasons": [{"rule": "permission.commit", "level": "elsewhere"},
+                            {"rule": "Bad Rule", "level": "floor"}],
+                "decision_id": "dec-3",
+            })),
+        },
+        Lang::En,
+    );
+    assert!(body["params"].get("reasons").is_none(), "{body}");
+    assert_eq!(body["params"]["rules"], json!(["permission.commit"]), "{body}");
+    assert_eq!(body["message"], "A repo rule denied the commit: permission.commit.");
+}
+
 /// Every refusal of the table with the params its template takes.
 fn all_refusals() -> Vec<ToolRefusal> {
     let with = |code, params: Value| ToolRefusal {
