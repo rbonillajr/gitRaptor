@@ -200,11 +200,10 @@ Derivada de las Enmiendas de ADR-GRD-001 (E-01-2) y ADR-GRD-002 (E-02-4). **Deci
 
 ## Enmienda (2026-10-28, US-GRD-016)
 
-El `status` sigue en `accepted`. Aplica D4 y D5 de DS-US-GRD-016 (Q-GRD-54).
+El `status` sigue en `accepted`. Aplica D4 y D5 de DS-US-GRD-016 (Q-GRD-54, revisada el 2026-10-28).
 
-- **Cuatro estados.** `ProtectionState` tiene `unprotected`, `hooks-only`, `mcp-only` y `full`, calculados con una sola función, `ProtectionState::of(hooks_installed, mcp_enabled)`. La mitad de hooks es «instalada» (instalación confirmada en el diario); su actividad va en `GuardStatus.hooks`. La mitad MCP es la marca de la allowlist (`McpRepos::contains`).
+- **Cuatro estados.** `ProtectionState` tiene `unprotected`, `hooks-only`, `mcp-only` y `full`, calculados con una sola función, `ProtectionState::of(hooks_active, mcp_enabled)`. La mitad de hooks es la de hooks **activos** (BR-WF-002, US-GRD-004): instalación confirmada en el diario y comprobación de salud en verde. La mitad MCP es la marca de la allowlist (`McpRepos::contains`).
 - **Capacidad.** Los cuatro estados se sirven con `guard.protection-layers`; una conexión sin ella recibe `downgraded()` (`mcp-only` → `unprotected`, `full` → `hooks-only`).
 - **Dónde se calcula.** El daemon completa el estado al responder (`guard.status`, plan, desinstalación) y en el contexto de la vista MCP de `status`, que lo traduce con la misma función. La instalación y la desinstalación siguen comparando solo la mitad de hooks: reinstalar en un repo `full` es idempotente.
-- **Diagnóstico junto al estado.** Un repo `full` con los hooks reemplazados sigue `full`: la CLI muestra el estado y, a continuación, `hooks: inactivos (causa)`; la TUI mantiene «protección perdida», que lee la mitad de hooks; la vista MCP lleva `protection_lost`.
-- **Supuesto (pendiente de ratificar).** Los hooks confirmados que la comprobación encuentra inactivos cuentan como instalados solo en un repo con la marca MCP (`full` con el diagnóstico). Sin la marca, siguen leyéndose `unprotected`, como fijan las pruebas de US-GRD-004 (`guard_us_grd_004.rs`, `assert_lost`).
+- **Hooks inactivos.** Un repo `full` cuyos hooks dejan de estar activos pasa a `mcp-only`; sin la marca MCP queda `unprotected`, como hasta ahora. Junto al estado `mcp-only` se muestra el diagnóstico «hooks inactivos» con la acción de recuperación (`raptor guard install`): en el texto de la CLI, en el JSON (`hooks`), en la TUI («protección perdida», que lee la mitad de hooks, nunca `state == HooksOnly`) y en la vista MCP (`protection_lost`). La caída `full` → `mcp-only` la registra la entrada `protection-state` de hooks que ya existe: no hay tipo de entrada nuevo.
 - Se retira «Mientras F-001-05 no exista» del § 2.

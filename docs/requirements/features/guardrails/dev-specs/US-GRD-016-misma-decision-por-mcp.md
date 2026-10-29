@@ -133,7 +133,7 @@ Para eso, cuatro piezas: los permisos de las operaciones que el plan sabe que ha
 |----|-----------|-----------|---------|--------|-------|
 | G2 | La detección del agente por ascendencia y los hooks en Linux y Windows no se verifican desde este Mac; la suite de paridad es `cfg(any(target_os = "macos", target_os = "linux"))` como `crates/core/tests/us_mcp_009_permission.rs:6`, y la de extremo a extremo (`apps/cli/tests/guard_us_grd_016.rs`) es solo macOS con `debug_assertions`, como `mcp_safe_commit.rs`: sus criterios no corren en el CI de ubuntu | Bloquea liberación | — | Pendiente: etapa de validación multiplataforma (fila nueva en `xplat-pendientes.md`, T011) | Orquestador |
 
-Todas las tareas se construyen hoy. G1 (lectura de los escenarios 1 a 3 sin herramienta MCP para seis operaciones) se cerró: el PO aceptó Q-GRD-52 y Q-GRD-53, y reescribió el escenario 3. Q-GRD-54 también está aceptada, con la condición que recoge D5.
+Todas las tareas se construyen hoy. G1 (lectura de los escenarios 1 a 3 sin herramienta MCP para seis operaciones) se cerró: el PO aceptó Q-GRD-52 y Q-GRD-53, y reescribió el escenario 3. Q-GRD-54 se revisó el 2026-10-28: el estado sigue a los hooks activos (D5).
 
 ---
 
@@ -321,7 +321,7 @@ graph LR
 - En `denied()` (`engine.rs:430`) construye `reasons` a partir de `GuardrailsDenial.reasons`: un objeto `{"rule": <código>, "level": <nivel kebab>}` por par distinto, en el orden de la decisión, como mucho `MAX_DENIED_RULES` (4) pares. `rules` sigue igual.
 - En `tool_params` (`messages.rs:100`) reconstruye `reasons` validando cada campo como hoy `denied_rules` valida las reglas: solo ASCII `[a-z.-]`, como mucho 64 bytes; `level` solo de `minimum`, `floor`, `worktree`, `profile`, `local`, `system`.
 - El texto (`messages.rs:483`) añade el nivel de la primera regla con las palabras de la CLI (`guard.level.*` de `apps/cli/i18n/{en,es}/guard.txt`): `floor` → «team configuration» / «configuración del equipo», `worktree` → «team configuration on this branch» / «configuración del equipo en esta rama», `profile`, `local`, `system` como allí.
-- `policy-denied` sigue sin recortar reglas ni `decision_id` (RES-MCP-04); el presupuesto `MCP_POLICY_REFUSAL_TOKENS` se mantiene.
+- `policy-denied` sigue sin recortar reglas, `reasons` ni `decision_id` (RES-MCP-04). Decisión del orquestador (2026-10-28), validada por el Arquitecto: `MCP_POLICY_REFUSAL_TOKENS` sube de 125 a 221 (peor caso medido con cuatro `reasons`: 658 B en es, más uno); el caso típico (una regla, en es) sigue ≤ 125 y lo fija una prueba.
 
 > **Nota técnica.** El daemon ya manda el `Reason` completo, con `level`, `cause` y `params` (`crates/api/src/catalog.rs:878`); `raptor-mcp` lo tira hoy. `params` lleva texto del repo (rama, patrón) y no se reenvía: solo `rule` y `level`.
 
@@ -433,7 +433,7 @@ graph LR
 2. Añade las claves `guard.state.mcp-only` y `guard.state.full` en los dos idiomas, junto a `guard.state.hooks-only` (línea 71): «estado: solo MCP», «estado: completa»; «state: MCP only», «state: full».
 3. Añade la presentación de `LoggedOperation::McpAllowlist` junto a la de `ProtectionState` (`guard.rs:1196`), con las claves `guard.log.mcp-allowlist` en los dos idiomas: «allowlist del MCP: {from} → {to}».
 4. Un cliente de `crates/core` pide toda capacidad posterior a la 9 que conoce (guía de extensión, § Añadir una capacidad): comprueba que `CAP_GUARD_PROTECTION_LAYERS` entra en la lista de `connection.accept` del cliente de la CLI.
-5. Muestra el diagnóstico «hooks inactivos» junto al estado (condición del PO a Q-GRD-54, D5): en el texto de `raptor guard status`, la línea `guard.hooks.inactive` con su causa va justo después de la del estado cuando `state.hooks_installed()` y `hooks.status == Inactive` (hoy sale en otro bloque, `guard.rs:642`); en la TUI, la barra de estado conserva `Text::ProtectionLost` (`apps/cli/src/tui/view.rs:275`) con el repo en `Full`.
+5. Muestra el diagnóstico «hooks inactivos» junto al estado (D5, revisada el 2026-10-28): en el texto de `raptor guard status`, la línea `guard.state.hooks-inactive` con su causa va justo después de la del estado cuando `state.mcp_enabled()` y `hooks.status == Inactive`, seguida del aviso con la acción `raptor guard install`; en la TUI, la barra de estado conserva `Text::ProtectionLost` (`apps/cli/src/tui/view.rs:275`) con el repo en `McpOnly`.
    5.1 ⛔5.1 Si la TUI o la CLI deciden «protección perdida» mirando `state == HooksOnly`, un repo `Full` con los hooks reemplazados deja de avisar.
 
 - **Depende:** T005, T007
@@ -472,7 +472,7 @@ graph LR
 - Escenario 1 (D6): sin configuración, `safe_commit` no tiene equivalente de force-push; la prueba comprueba que `tools/list` no ofrece ninguna herramienta que empuje y que el force-push con Git directo en el mismo repo se deniega con `minimum.force-push`. La paridad de motivo de esa operación la fija T001.
 - Escenario 2, fila `commit`: equipo con `permissions.deny: ["commit"]`; `safe_commit` responde `policy-denied` con `reasons: [{"rule": "permission.commit", "level": "floor"}]`, y la rama no se mueve. Las otras ocho filas las cubre T001 (D6).
 - Escenario 3 (D7): con estado Completa y `release/1.0` protegida por el equipo, un commit del agente en `release/1.0` por `safe_commit` y después con `git commit` se deniegan con la misma regla (`policy.protected-branch`) y el mismo nivel; `guard.log` filtrado por capa (T009) tiene una entrada `mcp` y otra `hooks`, una por intento.
-- `a_full_repo_with_replaced_hooks_stays_full_and_shows_the_diagnostic` (D5): repo en Completa; se reemplaza un dispatcher y se espera a la comprobación de estado (`GITRAPTOR_TEST_GUARD_HEALTH_MS`). `raptor guard status --json` da `state: full` con `hooks.status: inactive`, el texto muestra el estado y el diagnóstico juntos, y la vista MCP de `status` da `protection: full` con `protection_lost`.
+- `a_full_repo_with_replaced_hooks_stays_full_and_shows_the_diagnostic` (D5, revisada el 2026-10-28; el nombre se conserva por el id del criterio): repo en Completa; se reemplaza un dispatcher y se espera a la comprobación de estado (`GITRAPTOR_TEST_GUARD_HEALTH_MS`). `raptor guard status --json` da `state: mcp-only` con `hooks.status: inactive`, el texto muestra el estado, el diagnóstico y la acción `raptor guard install` juntos, y la vista MCP de `status` da `protection: mcp-only` con `protection_lost`.
 - Escenario 4: las cuatro filas con `raptor mcp enable` / `disable` y `raptor guard install`; cada cambio deja una entrada `protection-state` (T007) y `raptor guard status --json` da el estado esperado.
 - Escenario 5: la lista de herramientas de `tools/list` no tiene ninguna que edite la configuración ni decida en la cola (la misma comprobación de T004, ahora contra el binario).
 - `reinstall_on_a_full_repo_is_idempotent` (guarda ⛔2.1 de T006).
@@ -496,7 +496,7 @@ graph LR
 
 **Reglas**
 - ADR-GRD-003: Enmienda (fecha del PR, US-GRD-016): el plan del ejecutor aplica los permisos de sus operaciones conocidas (D2).
-- ADR-GRD-005: Enmienda: los cuatro estados se sirven con `guard.protection-layers`; la mitad de hooks es «instalada», con la actividad en `hooks` y el diagnóstico junto al estado en la CLI, la TUI y la vista MCP (D5, Q-GRD-54). Retira «Mientras F-001-05 no exista» del § 2.
+- ADR-GRD-005: Enmienda: los cuatro estados se sirven con `guard.protection-layers`; la mitad de hooks es la de hooks activos; con la marca MCP y hooks inactivos el estado es `mcp-only`, con el diagnóstico junto al estado en la CLI, la TUI y la vista MCP (D5, Q-GRD-54 revisada). Retira «Mientras F-001-05 no exista» del § 2.
 - ADR-GRD-006: Enmienda: entrada `McpAllowlist` (D5) y filtro por capa hecho (D9).
 - ADR-MCP-001: Enmienda: `policy-denied` con `reasons` (D3) y el contrato de herramienta de escritura de D1.
 - `xplat-pendientes.md`: fila nueva con G2.
@@ -558,8 +558,8 @@ apps/cli/
 
 ```rust
 // crates/api/src/guard.rs (T005)
-/// Protection state of a repo (BR-WF-002, ADR-GRD-005 § 3): the hooks half is "installed"
-/// (a confirmed install in the journal); its activity is `GuardStatus.hooks`.
+/// Protection state of a repo (BR-WF-002, ADR-GRD-005 § 3): the hooks half is the active
+/// install (D5, revised 2026-10-28); why it is not active is `GuardStatus.hooks`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum ProtectionState {
@@ -677,7 +677,7 @@ _No aplica — no hay claves nuevas. Los permisos son los de US-GRD-007 (`permis
 |---|---|---|
 | Pares en `reasons` | ≤ 4 (`MAX_DENIED_RULES`) | `apps/mcp/src/engine.rs:34` |
 | Longitud de un código de regla o de nivel | ≤ 64 bytes | `messages.rs`, `denied_rules` |
-| Presupuesto del cuerpo de `policy-denied` | `MCP_POLICY_REFUSAL_TOKENS`, sin cambio | `crates/api/src/mcp_view.rs` |
+| Presupuesto del cuerpo de `policy-denied` | `MCP_POLICY_REFUSAL_TOKENS` = 221 (antes 125; Enmienda 2026-10-28 de RES-MCP-03) | `crates/api/src/mcp_view.rs` |
 | Entradas por transición de allowlist | 1 por cambio efectivo (`changed`) | D5 |
 
 ---
@@ -732,7 +732,7 @@ Sin umbral numérico en el repo (`AGENTS.md`: tests obligatorios para todo cambi
 | 1 · Force-push por MCP | `guard_us_grd_016::force_push_has_no_mcp_tool_and_is_denied_by_git` + fila force-push de T001 |
 | 2 · Esquema de 9 operaciones | Matriz de arriba |
 | 3 · Commit en «release/1.0» por las dos capas | `guard_us_grd_016::the_same_commit_is_denied_alike_by_both_layers` |
-| Condición de Q-GRD-54 · Completa con hooks reemplazados | `guard_us_grd_016::a_full_repo_with_replaced_hooks_stays_full_and_shows_the_diagnostic`, `status_text_tests::full_with_inactive_hooks_shows_both`, prueba de `apps/cli/src/tui/view.rs` `full_with_inactive_hooks_keeps_the_protection_lost_text` |
+| Q-GRD-54 revisada · Completa con hooks reemplazados pasa a Solo MCP con el diagnóstico | `guard_us_grd_016::a_full_repo_with_replaced_hooks_stays_full_and_shows_the_diagnostic` (nombre conservado por el id del criterio), `status_text_tests::mcp_only_with_inactive_hooks_shows_both`, prueba de `apps/cli/src/tui/view.rs` `mcp_only_with_inactive_hooks_keeps_the_protection_lost_text` |
 | 4 · Estado sigue a la allowlist | `guard_us_grd_016::protection_state_follows_the_allowlist` (cuatro filas) |
 | 5 · Ninguna herramienta relaja ni decide | `no_tool_edits_the_configuration_or_decides_the_queue`, `mcp_gets_no_guardrails_method`, `mcp_never_gets_a_reserved_command` |
 
@@ -771,7 +771,7 @@ Sin umbral numérico en el repo (`AGENTS.md`: tests obligatorios para todo cambi
 | `safe_rebase` y `create_worktree`, y su extremo a extremo | US-MCP-018, US-MCP-019 |
 | La cola de confirmación y la respuesta `confirmation-pending` | US-GRD-015 (espera a SPIKE-GRD-002), US-MCP-014 |
 | Los hechos de `policy.diff-size` y `policy.commit-format` en el plan de un commit | US-GRD-009 (la que entre después lleva la fila de T001; D10) |
-| Que la mitad de hooks del estado pase de «instalada» a «activa» | Descartado en el MVP (Q-GRD-54, aceptada; D5) |
+| Un tipo de entrada nuevo para la caída `full` → `mcp-only` | No: la registra la entrada `protection-state` de hooks que ya existe (D5) |
 | Política de Guardrails sobre `undo` | US-TMC-021 (ADR-MCP-001 § 4.4) |
 
 ---
@@ -786,7 +786,7 @@ Decisiones del orquestador (2026-10-28), validadas por el Arquitecto y el PO. D5
 | D2 | **Permisos de las operaciones conocidas en el plan**, para las capas `mcp` y `cockpit`, con `permissions::apply` y sin cadena de procesos. El caso especial de `commit` se retira | La clasificación por cadena con la cadena vacía del ejecutor deniega como `unverifiable`; el ejecutor sabe qué hace. La persona por el Cockpit queda sujeta a la decisión como en BR-AUTH (fila «Realizar operaciones gobernadas») y un `ask` suyo pasa con aviso (Q-GRD-46). Hoy no cambia nada observable en el Cockpit: sus brazos no están en `ARMS` (`crates/core/src/executor/ops/mod.rs:27`) |
 | D3 | **`policy-denied` añade `reasons: [{rule, level}]`** y conserva `rules` | El escenario 2 exige nombrar el nivel; añadir no rompe a quien ya lee `rules` |
 | D4 | **Cuatro estados en `ProtectionState`, servidos con `guard.protection-layers`**; sin ella, `downgraded()`. Derivados en el daemon con `ProtectionState::of`, que usan también la vista MCP | Precedente de `guard.log-layers` (ADR-GRD-006, Enmienda TS-CKP-003); ADR-GRD-005 § 3 ya define los cuatro valores |
-| D5 | **La mitad de hooks es «instalada»** (diario confirmado), como hoy en `install.rs:135`; la actividad sigue en `hooks.status`. Condición del PO: el diagnóstico «hooks inactivos» se muestra junto al estado en la CLI (`raptor guard status`, texto y JSON), en la TUI (barra de estado) y en la vista MCP (`protection_lost`), a toda conexión con `guard.protection-layers`. Prueba: un repo en Completa con los hooks reemplazados sigue en Completa y muestra el diagnóstico en las tres salidas (T008, T010). La transición de allowlist se registra como `McpAllowlist`, `layer: mcp`, sin aviso | Sigue el código existente sin reabrir US-GRD-004 (Q-GRD-54, aceptada). Las tres salidas ya leen la inactividad (`apps/cli/src/guard.rs:642`, `apps/cli/src/tui/view.rs:275`, `protection_lost` en `mcp_status.rs`); falta que aparezcan junto al estado de cuatro valores y que una prueba lo fije |
+| D5 | **La mitad de hooks del estado es la de hooks activos** (BR-WF-002, US-GRD-004), como la da `install.rs:135`. Revisada el 2026-10-28: el PO retira su condición anterior («la mitad de hooks es instalada; Completa con hooks reemplazados sigue Completa») porque su premisa era falsa: `guard.status` ya da `unprotected` con los hooks inactivos. Un repo con la marca MCP y los hooks inactivos es `mcp-only`, con el diagnóstico «hooks inactivos» y la acción de recuperación junto al estado en la CLI (texto y JSON), la TUI y la vista MCP (`protection_lost`). La caída `full` → `mcp-only` la registra la entrada `protection-state` de hooks existente. La transición de allowlist se registra como `McpAllowlist`, `layer: mcp`, sin aviso | Un estado coherente con BR-WF-002 y con las pruebas de US-GRD-004 (`assert_lost`); ninguna salida decide «protección perdida» mirando `state == HooksOnly` |
 | D6 | **Esquema de 9 operaciones**: extremo a extremo por la herramienta donde existe (commit); paridad del plan del ejecutor con capa `mcp` para las cinco formas de plan; paridad de `decide()` por capa y «ninguna herramienta la ejecuta» para las cuatro sin plan. El escenario 1 se verifica así. **Obligación (ajuste del PO a Q-GRD-52)**: toda historia que añada una herramienta MCP para una operación del catálogo trae, antes de liberarse, su prueba de extremo a extremo en `apps/cli/tests/guard_us_grd_016.rs` (la fila del esquema por la herramienta); T004 la obliga además a entrar en `WRITE_TOOLS`. Sin herramienta de merge, un agente solo integra por Git directo, con el límite de Q-GRD-41 | ADR-MCP-001 § 4.1 no ofrece herramientas para seis de las nueve; BR-CONS-002 aplica «siempre que ambas capas cubren la operación» (Q-GRD-52, aceptada) |
 | D7 | **Escenario 3, reescrito por el PO**: con el repo en Completa y «release/1.0» protegida por el equipo, un commit del agente en «release/1.0» por `safe_commit` y después con Git directo se deniega con la misma regla (`policy.protected-branch`) y el mismo nivel, y el registro guarda una entrada por intento con su capa. El borrado de la rama base queda en la paridad del motor (T001) | No hay herramienta MCP que borre ramas (Q-GRD-53, aceptada) |
 | D8 | **Ninguna herramienta relaja ni decide**: prueba de nombres de `tools/list`, prueba de métodos `guard.*` sin marca MCP y la de reservados que ya existe | BR-AUTH-004 y SEC-GRD-05; la cola no existe y sus métodos serán reservados |
@@ -800,7 +800,7 @@ Decisiones del orquestador (2026-10-28), validadas por el Arquitecto y el PO. D5
 |---|---|---|---|
 | Q-GRD-52 (cerrada) | El escenario 1 y seis filas del esquema de US-GRD-016 piden operaciones «a través de una herramienta MCP» que ADR-MCP-001 § 4.1 no ofrece (push, force-push, reset --hard, borrar rama, merge, borrar worktree). ¿Cómo se cumplen? | La capa MCP no cubre una operación sin herramienta: el agente no puede ejecutarla por MCP. Se verifica con dos pruebas: ninguna herramienta la ejecuta, y el motor da la misma decisión con capa `mcp` y con capa `hooks`. Las operaciones con plan del ejecutor (merge, borrar worktree, rebase, crear worktree) se verifican además por el plan con capa `mcp`. El extremo a extremo de rebase y crear worktree lo añaden US-MCP-018 y US-MCP-019. Ajuste del PO: una historia que añada una herramienta MCP para una operación del catálogo trae su prueba de extremo a extremo antes de liberarse; sin herramienta de merge, un agente solo integra por Git directo, con el límite de Q-GRD-41 | BR-CONS-002 (aplicabilidad), BR-VAL-002 |
 | Q-GRD-53 (cerrada) | El escenario 3 de US-GRD-016 borraba la rama base por la herramienta MCP, y no hay herramienta que borre ramas. ¿Con qué intento se prueba la misma decisión por las dos capas? | Con un commit del agente en «release/1.0», protegida por el equipo, por `safe_commit` y con Git directo: misma regla y nivel, y una entrada por intento con su capa. El PO reescribió el escenario 3 así. El borrado de la rama base se prueba en el motor con las dos capas | BR-CONS-002, BR-CONS-004 |
-| Q-GRD-54 (cerrada) | BR-WF-002 deriva el estado de hooks «activos», pero `guard.status` da `hooks-only` con una instalación confirmada aunque los hooks estén inactivos, y muestra la inactividad aparte (`hooks.status`, US-GRD-004). Con cuatro estados, ¿Completa pasa a Solo MCP cuando los hooks dejan de estar activos? | No en el MVP: la mitad de hooks del estado es «instalada» y la pérdida se ve en `hooks` con su aviso, como hoy. Así una pérdida pasajera no cambia el estado y no duplica la transición, que ya registra la entrada `protection-state` de hooks. Condición del PO: el diagnóstico «hooks inactivos» se muestra junto al estado en la CLI, la TUI y la vista MCP (`guard.protection-layers`) | BR-WF-002 (transición Completa → Solo MCP «o dejan de estar activos por otra causa»), ADR-GRD-005 § 2 |
+| Q-GRD-54 (cerrada, revisada 2026-10-28) | BR-WF-002 deriva el estado de hooks «activos». Con cuatro estados, ¿Completa pasa a Solo MCP cuando los hooks dejan de estar activos? | Sí. El PO retira (2026-10-28) la condición anterior, cuya premisa era falsa: `guard.status` ya daba `unprotected` con hooks inactivos (US-GRD-004). El estado sigue a los hooks activos: `mcp-only` con el diagnóstico «hooks inactivos» y la acción de recuperación junto al estado en la CLI, la TUI y la vista MCP; la transición la registra la entrada `protection-state` de hooks | BR-WF-002 (transición Completa → Solo MCP «o dejan de estar activos por otra causa»), ADR-GRD-005 § 2 |
 
 ---
 
@@ -808,7 +808,7 @@ Decisiones del orquestador (2026-10-28), validadas por el Arquitecto y el PO. D5
 
 - **Lo que ya cumple BR-CONS-002 sin cambios**: `safe_commit` decide con `decide_all`, la misma función de los hooks (`evaluate.rs:461`, «the one function the hooks and the executor's plans share»); su entrada lleva `layer: mcp` (`plan_gate.rs:196`); los hooks del `git` que lanza el ejecutor no dejan otra (`log.rs`, `under_executor`).
 - **Deducción, no gap (D2)**: el comentario de `evaluate.rs:408` asigna a esta historia los permisos del ejecutor; DS-US-GRD-007 (filas de la tabla de momentos y D9) traspasa aquí merge, reset --hard, borrar worktree y crear worktree sin rama. Se sigue el código y esos traspasos.
-- **Deducción, no gap (D5)**: el estado de hooks es «instalada» en `install.rs:135` desde US-GRD-001; se conserva (Q-GRD-54, aceptada por el PO con la condición de D5).
+- **Deducción, no gap (D5)**: `install.rs:135` da `hooks-only` solo con la instalación confirmada y activa desde US-GRD-001/004; el estado de cuatro valores la usa tal cual (Q-GRD-54, revisada el 2026-10-28).
 - **`McpProtectionState` se queda**: es la forma de la vista MCP (`methods/mcp.rs:294`) y no tiene `unprotected` ni `hooks-only` porque un repo fuera de la allowlist no se ve por MCP.
 - **US-MCP-007 (confused deputy) en `draft`**: no bloquea esta entrega; es condición de liberación de `safe_commit` (DS-US-MCP-009 G3), no de la paridad.
 - **Precedente de capacidades**: `CAP_GUARD_LOG_LAYERS` (`methods/guard.rs:92`) y su filtro en `conn.rs:1776`.
