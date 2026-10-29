@@ -565,22 +565,41 @@ fn plan_permissions(
         .filter(|e| e.common_dir == common_text);
     let repo_id = entry.is_some().then_some(input.repo_id);
     let confirmed = entry.and_then(|e| e.confirmed);
+    let layers = load_layers(registry, input, &reader, confirmed.as_ref(), repo_id);
+    Some(effective_permissions(Some(&layers), &reader, input))
+}
+
+/// One read of every level for an evaluation, from the operation's worktree when it has one.
+fn load_layers(
+    registry: &GuardRegistry,
+    input: &DecideInput<'_>,
+    reader: &RepoReader,
+    confirmed: Option<&gitraptor_policy::team::Confirmed>,
+    repo_id: Option<&str>,
+) -> Result<super::layers::Layers, gitraptor_git::ReadError> {
     let worktree = input
         .worktree
         .and_then(|cwd| super::authorship::worktree_reader(cwd, input.common_dir));
-    // A team level the full read cannot load falls back to what the hook client would apply on
-    // its own: never less than the minimum plus the readable floor.
-    Some(
-        match super::layers::load(
-            worktree.as_ref().unwrap_or(&reader),
-            confirmed.as_ref(),
-            registry.profile().as_ref(),
-            repo_id,
-        ) {
-            Ok(layers) => layers.permissions(),
-            Err(_) => super::permissions::team_only(&reader, input.worktree),
-        },
+    super::layers::load(
+        worktree.as_ref().unwrap_or(reader),
+        confirmed,
+        registry.profile().as_ref(),
+        repo_id,
     )
+}
+
+/// The permissions per operation of a read of the levels. A team level the full read cannot
+/// load falls back to what the hook client would apply on its own: never less than the minimum
+/// plus the readable floor.
+fn effective_permissions(
+    layers: Option<&Result<super::layers::Layers, gitraptor_git::ReadError>>,
+    reader: &RepoReader,
+    input: &DecideInput<'_>,
+) -> EffectivePermissions {
+    match layers {
+        Some(Ok(layers)) => layers.permissions(),
+        _ => super::permissions::team_only(reader, input.worktree),
+    }
 }
 
 fn decide_op(
@@ -675,18 +694,8 @@ fn evaluate_op(
     // One read of every level for the whole evaluation: the bases of a protected repo, the
     // permissions, the minimum, the rules, the authorship policy and the ignored relaxations
     // all come from it.
-    let layers =
-        (registered || authorship || policies || commit_policies || permissions).then(|| {
-            let worktree = input
-                .worktree
-                .and_then(|cwd| super::authorship::worktree_reader(cwd, common));
-            super::layers::load(
-                worktree.as_ref().unwrap_or(&reader),
-                confirmed.as_ref(),
-                registry.profile().as_ref(),
-                repo_id,
-            )
-        });
+    let layers = (registered || authorship || policies || commit_policies || permissions)
+        .then(|| load_layers(registry, input, &reader, confirmed.as_ref(), repo_id));
     // A protected repo guards the bases of the team level (ADR-GRD-004 § 3), or the fail-safe
     // union when it cannot be read; an unknown one, `main` and its main branch.
     let mut bases = match &recorded {
@@ -752,12 +761,7 @@ fn evaluate_op(
         commit.chain = chain.clone();
     }
     if permissions {
-        // A team level the full read cannot load falls back to what the hook client would
-        // apply on its own: never less than the minimum plus the readable floor.
-        let effective = match &layers {
-            Some(Ok(layers)) => layers.permissions(),
-            _ => super::permissions::team_only(&reader, input.worktree),
-        };
+        let effective = effective_permissions(layers.as_ref(), &reader, input);
         commit.classified =
             super::permissions::classified(&reader, operation, &effective, || chain.clone());
         commit.permissions = Some(effective);
