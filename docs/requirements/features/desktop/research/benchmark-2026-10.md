@@ -66,7 +66,7 @@ Otras dos, de pasada: **Sourcetree** es gratis, para macOS y Windows, exige cuen
 |---|---|---|---|
 | P1 | Una acción de deshacer visible, con Cmd/Ctrl+Z y rehacer | GitKraken [4], Tower [6] | "Deshacer" de un botón en el historial, pero sobre la Time Machine: cubre más que la última acción y también el trabajo sin commitear |
 | P2 | Cada restauración es una entrada nueva, así que también se deshace | GitButler [11] | Ya es la regla de la Time Machine (el undo es reversible) |
-| P3 | Lenguaje no técnico y pocas decisiones | GitHub Desktop [8] | Copy en lenguaje llano con glosario en tooltip (ver [design-flow](../design-flow.md)) |
+| P3 | Lenguaje no técnico y pocas decisiones | GitHub Desktop [8] | Copy en lenguaje llano con glosario en tooltip (ver [design-flow](../design/design-flow.md)) |
 | P4 | Tarjetas de sesión con estado y acciones de un clic | GitKraken [1] | Flota en vivo (US-CKP-001) como tarjetas |
 | P5 | Crear el worktree en un paso: nombre, agente e "Iniciar", sin decir "worktree" | GitKraken [1] | UI-2 (US-CKP-018 desde la GUI) |
 | P6 | Comentarios de revisión inline que llegan al agente | Warp [14] (el detalle viene de un post de DEV, no de su documentación) | Fuera de UI-1; candidato tras BR-17 (review queue) |
