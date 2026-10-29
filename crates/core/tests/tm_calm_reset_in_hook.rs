@@ -171,6 +171,7 @@ fn a_capture_during_a_reset_paused_in_its_hook_is_not_taken() {
         None,
         Duration::ZERO,
         false,
+        None,
     );
     assert!(
         matches!(out, Err(Failure::NotCalm)),

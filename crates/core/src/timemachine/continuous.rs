@@ -499,6 +499,7 @@ fn capture_one(
         event,
         CAPTURE_SETTLE_LIMIT,
         give_way,
+        None,
     ) {
         Ok(_) => Attempt::Done,
         Err(Failure::NotCalm | Failure::Busy) => Attempt::Again,
@@ -541,7 +542,9 @@ pub enum Failure {
 
 /// Takes one `observation` snapshot of `worktrees` (US-TMC-004): after a calm engine, with its
 /// mark, guarded at the validity point. With `give_way`, new activity in the repo makes it give
-/// way (`Yielded`), so it never competes with the engine during a burst.
+/// way (`Yielded`), so it never competes with the engine during a burst. `echo_settled` is an
+/// anchor's only.
+#[allow(clippy::too_many_arguments)]
 pub fn observe(
     deps: &CaptureDeps,
     repo_id: &str,
@@ -550,6 +553,7 @@ pub fn observe(
     cause_event_seq: Option<i64>,
     settle: Duration,
     give_way: bool,
+    echo_settled: Option<bool>,
 ) -> Result<CaptureOutcome, Failure> {
     let (oplog, store) = deps.repos.repo(repo_id).ok_or(Failure::Unavailable)?;
     let store = store.ok_or(Failure::Unavailable)?;
@@ -618,6 +622,7 @@ pub fn observe(
         }))),
         give_way: give_way
             .then(|| ValidityGuard(Arc::new(move || engine.activity(&repo) != activity))),
+        echo_settled,
     };
     if cfg!(debug_assertions)
         && let Some(err) = deps.layer.as_ref().and_then(|layer| layer(&req))
@@ -629,12 +634,15 @@ pub fn observe(
 
 /// The state an operation of GitRaptor left in its worktrees (US-TMC-004): the engine events up to
 /// the anchor's mark are the operation's own echo, not raw Git (ADR-TMC-003 § 4). Tried a few
-/// times if a `git` interferes; `None` if no anchor could be taken.
+/// times if a `git` interferes; `None` if no anchor could be taken. `echo_settled`: the engine
+/// already persisted every move of the operation (what [`await_moved_branches`] confirms), so
+/// the anchor closes the window of the operation's guaranteed prior.
 pub fn anchor(
     deps: &CaptureDeps,
     repo_id: &str,
     worktrees: &[PathBuf],
     operation_id: &str,
+    echo_settled: bool,
 ) -> Option<String> {
     for _ in 0..3 {
         match observe(
@@ -645,6 +653,7 @@ pub fn anchor(
             None,
             ANCHOR_SETTLE_LIMIT,
             false,
+            Some(echo_settled),
         ) {
             Ok(out) => return Some(out.snapshot_id),
             Err(
@@ -700,16 +709,16 @@ pub fn branch_tips(common_dir: &Path) -> BTreeMap<String, String> {
 /// worktree's stack. A branch is waited for when it is checked out in one of `worktrees` and
 /// points elsewhere than in `before`; the wait ends when that worktree has an event past
 /// `since` naming the branch. Past the limit it returns anyway: the anchor is then taken as
-/// before.
+/// before. Whether every moved branch was seen (none moved included).
 pub fn await_moved_branches(
     deps: &CaptureDeps,
     repo_id: &str,
     worktrees: &[PathBuf],
     before: &BTreeMap<String, String>,
     since: i64,
-) {
+) -> bool {
     let Some(common) = deps.repos.common_dir(repo_id) else {
-        return;
+        return false;
     };
     let after = branch_tips(&common);
     let mut pending: Vec<(&PathBuf, String)> = worktrees
@@ -728,11 +737,15 @@ pub fn await_moved_branches(
                     .any(|e| e.seq > since && e.branch.as_deref() == Some(branch.as_str()))
             })
         });
-        if pending.is_empty() || Instant::now() + ECHO_POLL > end {
-            return;
+        if pending.is_empty() {
+            return true;
+        }
+        if Instant::now() + ECHO_POLL > end {
+            return false;
         }
         std::thread::sleep(ECHO_POLL);
     }
+    true
 }
 
 /// How often [`await_moved_branches`] reads the engine again while waiting.

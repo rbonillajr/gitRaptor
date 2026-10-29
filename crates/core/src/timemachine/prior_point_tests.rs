@@ -10,6 +10,7 @@ fn obs(seq: i64, mark: i64) -> PointFacts {
         mark,
         prior: false,
         mid_operation: false,
+        anchor_seq: None,
     }
 }
 
@@ -28,6 +29,16 @@ fn prior(seq: i64, mark: i64) -> PointFacts {
         mark,
         prior: true,
         mid_operation: false,
+        anchor_seq: None,
+    }
+}
+
+/// A `GuaranteedPrior` recorded at `seq` with mark `mark` whose operation left its anchor at
+/// record `anchor`.
+fn anchored(seq: i64, mark: i64, anchor: i64) -> PointFacts {
+    PointFacts {
+        anchor_seq: Some(anchor),
+        ..prior(seq, mark)
     }
 }
 
@@ -75,6 +86,34 @@ fn restore_anchor_whose_mark_covers_the_event_is_picked_after_it() {
     let points = [prior(5, 20), obs(6, 21)];
     let events = [21, 22];
     assert_eq!(before_event(&points, &events, 22, 0), vec![1, 0]);
+}
+
+// C9 — an edit after a GitRaptor operation, then a raw Git event (NFR-01).
+
+#[test]
+fn an_edit_captured_after_a_restore_is_the_point_before_a_raw_reset() {
+    // GuaranteedPrior(m1) at 12, the restore's anchor Obs(m1) at 28, its follow-up Obs(m1) at
+    // 31, the edit Obs(m1) at 34, then the raw `reset --hard` that moves nothing (event 2).
+    let points = [anchored(12, 1, 28), obs(28, 1), obs(31, 1), obs(34, 1)];
+    let events = [2];
+    assert_eq!(before_event(&points, &events, 2, 0), vec![3, 2, 0]);
+}
+
+#[test]
+fn a_restore_with_a_late_git_event_still_shadows_its_anchor() {
+    // C2 with the anchor known: the anchor itself stays the operation's, not a point before
+    // the late event.
+    let points = [anchored(5, 20, 6), obs(6, 20)];
+    let events = [21];
+    assert_eq!(before_event(&points, &events, 21, 0), vec![0]);
+}
+
+#[test]
+fn a_hook_prior_window_still_runs_until_its_first_event() {
+    // A hooked command's end is unknown: a later observation stays shadowed (C3).
+    let points = [prior(1, 30), obs(2, 30), obs(3, 30)];
+    let events = [31];
+    assert_eq!(before_event(&points, &events, 31, 0), vec![0]);
 }
 
 // C3 — branch deletion with a prior.

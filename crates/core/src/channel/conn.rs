@@ -3742,7 +3742,15 @@ impl Connection<'_> {
         };
         let after_step = |repo_id: &str, worktrees: &[std::path::PathBuf], operation_id: &str| {
             if let Some(deps) = &tm_engine {
-                crate::timemachine::continuous::anchor(deps, repo_id, worktrees, operation_id);
+                // No wait for its moved branches here: its anchor certifies no echo, and its
+                // guaranteed prior keeps the window of the one rule open.
+                crate::timemachine::continuous::anchor(
+                    deps,
+                    repo_id,
+                    worktrees,
+                    operation_id,
+                    false,
+                );
             }
         };
         let env = RunEnv {

@@ -128,3 +128,58 @@ fn an_unavailable_prior_still_shadows_and_an_older_point_or_none_wins() {
     assert!(points.before_event(KEY, 32, 0).is_none());
     assert!(raw_candidates(&all, KEY, &ev[KEY], 32, 0).is_empty());
 }
+
+/// The restore's guaranteed prior, its anchor (with `echo_settled`), then the observation of an
+/// edit; the raw `reset --hard` that moves nothing is event 2.
+fn restore_then_edit(echo_settled: Option<bool>) -> [SnapshotView; 3] {
+    let mut prior = view("prior", 12, SnapshotLevel::GuaranteedPrior, 1, Some(false));
+    prior.record.cause_operation = Some("op-restore".into());
+    let mut anchor = view("anchor", 28, SnapshotLevel::Observation, 1, Some(false));
+    anchor.record.cause_operation = Some("op-restore".into());
+    if let Some(c) = anchor.complete.as_mut() {
+        c.echo_settled = echo_settled;
+    }
+    let edit = view("edit", 34, SnapshotLevel::Observation, 1, Some(false));
+    [prior, anchor, edit]
+}
+
+#[test]
+fn timeline_and_undo_pick_an_edit_made_after_a_restore_for_a_raw_reset() {
+    // NFR-01: the point before the reset is the edit, never the state from before the restore.
+    let all = restore_then_edit(Some(true));
+    let ev = events(&[2]);
+    let points = Points::with_events(&all, &ev);
+    assert_eq!(
+        points
+            .before_event(KEY, 2, 0)
+            .map(|s| s.record.snapshot_id.as_str()),
+        Some("edit")
+    );
+    assert_eq!(
+        raw_candidates(&all, KEY, &ev[KEY], 2, 0),
+        vec!["edit".to_owned(), "prior".to_owned()]
+    );
+}
+
+#[test]
+fn an_anchor_that_does_not_certify_its_echo_keeps_the_prior() {
+    // The echo may still be late (`false`, or a row from before the field): the window stays
+    // open and the prior wins, as before.
+    for settled in [Some(false), None] {
+        let all = restore_then_edit(settled);
+        let ev = events(&[2]);
+        let points = Points::with_events(&all, &ev);
+        assert_eq!(
+            points
+                .before_event(KEY, 2, 0)
+                .map(|s| s.record.snapshot_id.as_str()),
+            Some("prior"),
+            "{settled:?}"
+        );
+        assert_eq!(
+            raw_candidates(&all, KEY, &ev[KEY], 2, 0),
+            vec!["prior".to_owned()],
+            "{settled:?}"
+        );
+    }
+}

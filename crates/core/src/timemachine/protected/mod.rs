@@ -159,6 +159,7 @@ impl PriorSnapshotter for StoreSnapshotter {
             cause_operation: Some(req.operation_id.clone()),
             cause_event_seq: None,
             include_credentials: crate::profile::settings::include_credential_files(&self.profile),
+            echo_settled: None,
             still_valid: req.still_valid.as_ref().map(|g| g.0.clone()),
             give_way: None,
         };

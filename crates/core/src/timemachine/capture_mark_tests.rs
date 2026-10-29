@@ -172,6 +172,7 @@ impl Rig {
             None,
             Duration::ZERO,
             false,
+            None,
         )
     }
 
@@ -445,6 +446,7 @@ fn a_failed_anchor_leaves_the_echo_with_its_operation() {
                 cause_operation: Some(op.clone()),
                 cause_event_seq: None,
                 include_credentials: false,
+                echo_settled: None,
                 still_valid: None,
                 give_way: None,
             },
@@ -476,6 +478,7 @@ fn a_failed_anchor_leaves_the_echo_with_its_operation() {
         REPO,
         std::slice::from_ref(&r.engine.wt),
         &op,
+        true,
     );
     assert_eq!(anchored, None, "no attempt of the anchor holds its mark");
     // The next capture of the worktree, with the echo persisted.

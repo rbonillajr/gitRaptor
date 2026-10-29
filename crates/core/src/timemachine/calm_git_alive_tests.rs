@@ -256,6 +256,7 @@ fn confirm_mark_rejects_a_capture_while_a_git_is_alive() {
         None,
         Duration::ZERO,
         false,
+        None,
     );
     assert!(
         matches!(out, Err(Failure::Capture(CaptureError::Discarded))),

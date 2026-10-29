@@ -342,6 +342,11 @@ pub struct CompleteInfo {
     /// is). `None` on rows recorded before the field existed, read as "not mid-operation".
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mid_operation: Option<bool>,
+    /// An operation's anchor only: whether its mark covers the operation's whole echo (nothing
+    /// it moved was still unseen by the engine). Only then does it close the window of the
+    /// operation's guaranteed prior. `None` on every other row and on older ones.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub echo_settled: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
