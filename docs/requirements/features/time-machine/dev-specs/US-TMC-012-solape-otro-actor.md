@@ -60,7 +60,7 @@ tags: [time-machine, undo, solape, atribucion, aplicador, i18n, m2]
 
 # DS-US-TMC-012 · Un undo nunca sobrescribe trabajo posterior de otro actor
 
-> **Implementado en: PR #__PR__** (2026-10-29, sin certificar). Estado y desvíos: ficha US-TMC-012, "Estado de la implementación".
+> **Implementado en: PR #316** (2026-10-29, sin certificar). Estado y desvíos: ficha US-TMC-012, "Estado de la implementación".
 
 ## Contexto rápido
 
