@@ -81,6 +81,9 @@ pub struct CaptureRequest {
     /// prior (`CaptureError::Yielded`, nothing recorded). The continuous capture gives way to new
     /// activity in the repo, so it never competes with the engine during a burst (US-TMC-004).
     pub give_way: Option<ValidityGuard>,
+    /// An operation's anchor only: whether its mark covers the operation's whole echo, recorded
+    /// in its `complete` row (see [`CompleteInfo::echo_settled`]).
+    pub echo_settled: Option<bool>,
 }
 
 /// A check of [`CaptureRequest::still_valid`].
@@ -1478,6 +1481,7 @@ fn finish_manual(
             unique_size_bytes: unique_bytes,
             exclusions: exclusions.to_vec(),
             mid_operation: Some(mid_operation),
+            echo_settled: None,
         },
         now_ms,
     )?;
@@ -1528,6 +1532,7 @@ fn record(
             unique_size_bytes: unique_bytes,
             exclusions: exclusions.to_vec(),
             mid_operation: Some(mid_operation),
+            echo_settled: req.echo_settled,
         },
         now_ms(),
     )?;

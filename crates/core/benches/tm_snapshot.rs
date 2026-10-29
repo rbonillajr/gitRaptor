@@ -218,6 +218,7 @@ impl Wt {
             cause_operation: None,
             cause_event_seq: None,
             include_credentials: false,
+            echo_settled: None,
             still_valid: None,
             give_way: None,
         }

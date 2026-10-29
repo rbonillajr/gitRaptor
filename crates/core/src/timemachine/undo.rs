@@ -341,11 +341,12 @@ pub(super) fn raw_candidates(
     seq: i64,
     floor: i64,
 ) -> Vec<String> {
-    use super::prior_point::{PointFacts, before_event};
+    use super::prior_point::{PointFacts, before_event, settled_anchors};
+    let anchors = settled_anchors(snaps);
     let (views, facts): (Vec<_>, Vec<_>) = snaps
         .iter()
         .filter(|s| s.record.worktrees.iter().any(|w| w == wt_key))
-        .filter_map(|s| PointFacts::of(s).map(|f| (s, f)))
+        .filter_map(|s| PointFacts::of(s, &anchors).map(|f| (s, f)))
         .unzip();
     before_event(&facts, event_seqs, seq, floor)
         .into_iter()
@@ -878,8 +879,9 @@ pub fn undo_last(
         };
         if let Some(id) = id {
             let worktrees: Vec<PathBuf> = req.worktree_paths.clone();
-            await_moved_branches(deps, repo_id, &worktrees, &tips_before, engine_mark);
-            anchor(deps, repo_id, &worktrees, id);
+            let settled =
+                await_moved_branches(deps, repo_id, &worktrees, &tips_before, engine_mark);
+            anchor(deps, repo_id, &worktrees, id, settled);
         }
     }
     match ran {

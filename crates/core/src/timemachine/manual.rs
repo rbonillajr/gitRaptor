@@ -445,6 +445,7 @@ fn capture_guarded(
         cause_operation: None,
         cause_event_seq: None,
         include_credentials,
+        echo_settled: None,
         still_valid: Some(ValidityGuard(std::sync::Arc::new(move || {
             Instant::now() < deadline
                 && GitState::read(&guarded) == at_start

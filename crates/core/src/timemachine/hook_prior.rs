@@ -341,6 +341,7 @@ fn record_one(
         cause_operation: None,
         cause_event_seq: None,
         include_credentials,
+        echo_settled: None,
         // Evaluated once, right before the validity point: whatever arrives late is discarded,
         // so a `complete` row never follows an answer of `failed`.
         still_valid: Some(ValidityGuard(std::sync::Arc::new(move || {

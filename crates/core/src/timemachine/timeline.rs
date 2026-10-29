@@ -194,9 +194,10 @@ impl<'a> Points<'a> {
     fn with_events(all: &'a [SnapshotView], events: &HashMap<String, Vec<i64>>) -> Self {
         let mut by_id = HashMap::new();
         let mut by_key: HashMap<String, KeyPoints> = HashMap::new();
+        let anchors = prior_point::settled_anchors(all);
         for (i, s) in all.iter().enumerate() {
             by_id.entry(s.record.snapshot_id.clone()).or_insert(i);
-            if let Some(facts) = PointFacts::of(s) {
+            if let Some(facts) = PointFacts::of(s, &anchors) {
                 for key in &s.record.worktrees {
                     let entry = by_key.entry(key.clone()).or_default();
                     entry.facts.push(facts);

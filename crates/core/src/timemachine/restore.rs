@@ -846,8 +846,8 @@ pub fn restore_to(
                 .map(|w| w.root.clone())
                 .filter(|r| is_dir(r))
                 .collect();
-            await_moved_branches(deps, repo_id, &left, &now, engine_mark);
-            anchor(deps, repo_id, &left, id);
+            let settled = await_moved_branches(deps, repo_id, &left, &now, engine_mark);
+            anchor(deps, repo_id, &left, id, settled);
         }
     }
     match ran {
