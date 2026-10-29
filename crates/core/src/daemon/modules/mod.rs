@@ -38,6 +38,9 @@ pub(super) trait DaemonModule: Send {
     /// canonical home folder.
     fn discovery_roots_changed(&self, _roots: &[DiscoveryRoot], _home: Option<PathBuf>) {}
 
+    /// The daemon serves its channel: clients can now read what the module publishes.
+    fn serving(&self) {}
+
     /// The daemon stops: end before the stores close.
     fn stop(self: Box<Self>) {}
 }
@@ -87,6 +90,12 @@ impl Modules {
     pub(super) fn discovery_roots_changed(&self, roots: &[DiscoveryRoot], home: Option<PathBuf>) {
         for module in &self.0 {
             module.discovery_roots_changed(roots, home.clone());
+        }
+    }
+
+    pub(super) fn serving(&self) {
+        for module in &self.0 {
+            module.serving();
         }
     }
 

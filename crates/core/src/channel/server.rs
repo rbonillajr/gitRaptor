@@ -107,6 +107,8 @@ pub(crate) struct ServerCtx {
     pub hook_claims: Arc<crate::detect::HookClaims>,
     /// Connections and budgets per requester (S-03), shared by every connection.
     pub requester_limits: Arc<super::limits::RequesterLimits>,
+    /// What the conflict predictor published (TS-CKP-001), written only by its module.
+    pub prediction: Arc<crate::predict::store::PredictionStore>,
 }
 
 impl ServerCtx {
@@ -191,6 +193,7 @@ pub(crate) struct ServeArgs {
     pub guard: Arc<crate::guardrails::GuardRegistry>,
     pub mcp_repos: Arc<crate::timemachine::protected::McpRepos>,
     pub hook_claims: Arc<crate::detect::HookClaims>,
+    pub prediction: Arc<crate::predict::store::PredictionStore>,
 }
 
 impl Server {
@@ -234,6 +237,7 @@ impl Server {
             commit_decisions: Default::default(),
             hook_claims: args.hook_claims,
             requester_limits: Arc::default(),
+            prediction: args.prediction,
         });
         Self::listen(ctx, bound.listener)
     }

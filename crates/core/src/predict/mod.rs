@@ -2,9 +2,10 @@
 //! every pair, its state, the cache keyed by triple and the queue of dry merges.
 //!
 //! Pure over what the caller reads: [`pairs::plan`] takes a [`gitraptor_git::RepoReader`] for
-//! merge-bases and changed paths and nothing else touches a repo. Nothing here is persisted or
-//! published, and nothing runs a dry merge: [`state::RepoPairs::apply`] says which pairs to
-//! queue and [`state::RepoPairs::complete`] takes the result back.
+//! merge-bases and changed paths and nothing else touches a repo. [`state::RepoPairs::apply`]
+//! says which pairs to queue, [`pool::PredictPool`] runs them through a [`merger::DryMerger`],
+//! [`state::RepoPairs::complete`] takes the result back and [`store::PredictionStore`] keeps
+//! what was published. Nothing is persisted.
 
 pub mod merger;
 pub mod overlap;
@@ -12,6 +13,7 @@ pub mod pairs;
 pub mod pool;
 pub mod queue;
 pub mod state;
+pub mod store;
 pub mod worker;
 
 use std::path::PathBuf;

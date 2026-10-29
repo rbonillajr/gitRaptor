@@ -5,14 +5,27 @@ use std::collections::BTreeMap;
 
 use gitraptor_git::dry_merge::{DryMergeError, DryMergeOutcome};
 
-use super::{NotComputableReason, PairKey, PairPrediction, PairState, PendingReason, Triple};
+use super::{
+    NotComputableReason, PairKey, PairPrediction, PairSide, PairState, PendingReason, Triple,
+};
+
+/// How many computed triples a pair keeps: a base that moves and comes back finds its result.
+const KEPT_RESULTS: usize = 2;
+
+/// One computed triple of a pair and what its result gave.
+struct Kept {
+    triple: Triple,
+    state: PairState,
+    conflict: Option<DryMergeOutcome>,
+    computed_at_utc_ms: i64,
+}
 
 struct Entry {
     pred: PairPrediction,
     /// The triple last queued or computed: an equal one queues nothing.
     cached: Option<Triple>,
-    /// The triple of the kept result and the state that result gave.
-    done: Option<(Triple, PairState)>,
+    /// The results of the last [`KEPT_RESULTS`] computed triples, oldest first.
+    done: Vec<Kept>,
 }
 
 impl Entry {
@@ -26,6 +39,14 @@ impl Entry {
         } else {
             PairState::Calculating
         }
+    }
+
+    /// Takes back the kept result of `triple`, if there is one: the state it gave.
+    fn reuse(&mut self, triple: &Triple) -> Option<PairState> {
+        let kept = self.done.iter().find(|k| k.triple == *triple)?;
+        self.pred.conflict.clone_from(&kept.conflict);
+        self.pred.computed_at_utc_ms = Some(kept.computed_at_utc_ms);
+        Some(kept.state)
     }
 }
 
@@ -48,8 +69,11 @@ impl RepoPairs {
     }
 
     /// Takes a new plan of the repo and returns the pairs to queue, each with its triple. A pair
-    /// whose triple equals the cached one queues nothing; one with a new triple is queued and
-    /// becomes `Recalculating` if it had a result. A `Pending` or `NotComputable` pair of the plan
+    /// whose triple is one of its last computed ones takes that result back and queues nothing;
+    /// one whose triple is already queued queues nothing either; one with a new triple is queued
+    /// and becomes `Recalculating` if it had a result. A pair against the base whose base tip
+    /// moved becomes `Calculating` instead: the old base's result is no longer published, though
+    /// it is kept should that triple come back. A `Pending` or `NotComputable` pair of the plan
     /// keeps its last result and queues nothing. The overlap is always the plan's, and a pair
     /// absent from the plan is forgotten. `_now_utc_ms` is the plan's time: a result keeps the
     /// time it was computed at.
@@ -64,20 +88,31 @@ impl RepoPairs {
                     ..p.clone()
                 },
                 cached: None,
-                done: None,
+                done: Vec::new(),
             });
+            let base_moved = p.key.b == PairSide::Base
+                && matches!(
+                    (&entry.pred.triple, &p.triple),
+                    (Some(was), Some(now)) if was.tip_b != now.tip_b
+                );
             entry.pred.overlap = p.overlap;
             entry.pred.triple.clone_from(&p.triple);
             entry.pred.state = match (p.state, p.triple) {
                 (PairState::Calculating, Some(triple)) => {
-                    if let Some((_, state)) = entry.done.as_ref().filter(|(t, _)| *t == triple) {
+                    if let Some(state) = entry.reuse(&triple) {
                         entry.cached = Some(triple);
-                        *state
-                    } else if entry.cached.as_ref() == Some(&triple) {
-                        entry.queued_state()
+                        state
                     } else {
-                        entry.cached = Some(triple.clone());
-                        queue.push((p.key.clone(), triple));
+                        if base_moved {
+                            // Computed against a base that is gone: never published as current
+                            // again, but kept in `done` should that base come back.
+                            entry.pred.conflict = None;
+                            entry.pred.computed_at_utc_ms = None;
+                        }
+                        if entry.cached.as_ref() != Some(&triple) {
+                            entry.cached = Some(triple.clone());
+                            queue.push((p.key.clone(), triple));
+                        }
                         entry.queued_state()
                     }
                 }
@@ -111,9 +146,18 @@ impl RepoPairs {
             Ok(outcome) => (PairState::Current, Some(outcome)),
             Err(err) => (PairState::NotComputable(reason(&err)), None),
         };
+        entry.done.retain(|k| k.triple != *triple);
+        if entry.done.len() == KEPT_RESULTS {
+            entry.done.remove(0);
+        }
+        entry.done.push(Kept {
+            triple: triple.clone(),
+            state,
+            conflict: conflict.clone(),
+            computed_at_utc_ms: now_utc_ms,
+        });
         entry.pred.conflict = conflict;
         entry.pred.computed_at_utc_ms = Some(now_utc_ms);
-        entry.done = Some((triple.clone(), state));
         if matches!(
             entry.pred.state,
             PairState::Calculating | PairState::Recalculating
@@ -131,7 +175,7 @@ impl RepoPairs {
             entry.pred.state = PairState::Pending(reason);
             if reason == PendingReason::Dormant {
                 entry.cached = None;
-                entry.done = None;
+                entry.done.clear();
             }
         }
     }
@@ -165,7 +209,7 @@ mod tests {
     use gitraptor_git::dry_merge::MergeBaseUsed;
 
     use super::*;
-    use crate::predict::{Overlap, PairSide};
+    use crate::predict::Overlap;
 
     fn pred(tip: &str, state: PairState) -> PairPrediction {
         PairPrediction {
@@ -228,6 +272,44 @@ mod tests {
                 .is_empty()
         );
         assert_eq!(pairs.get(&key).unwrap().state, PairState::Current);
+    }
+
+    fn on_base(tip: &str, base: &str) -> PairPrediction {
+        let mut p = pred(tip, PairState::Calculating);
+        if let Some(t) = p.triple.as_mut() {
+            t.tip_b = base.into();
+        }
+        p
+    }
+
+    #[test]
+    fn a_moved_base_calculates_without_the_old_result_and_its_return_reuses_it() {
+        let mut pairs = RepoPairs::new("r");
+        let queued = pairs.apply(vec![on_base("t", "b1")], 0);
+        let (key, t1) = queued[0].clone();
+        assert!(pairs.complete(&key, &t1, Ok(outcome()), 1));
+
+        let queued = pairs.apply(vec![on_base("t", "b2")], 2);
+        let p = pairs.get(&key).unwrap();
+        assert_eq!(p.state, PairState::Calculating);
+        assert_eq!((p.computed_at_utc_ms, p.conflict.is_none()), (None, true));
+        let (_, t2) = queued[0].clone();
+        assert!(pairs.complete(&key, &t2, Ok(outcome()), 3));
+
+        assert!(pairs.apply(vec![on_base("t", "b1")], 4).is_empty());
+        let p = pairs.get(&key).unwrap();
+        assert_eq!(
+            (p.state, p.computed_at_utc_ms),
+            (PairState::Current, Some(1))
+        );
+
+        // A tip move of the worktree keeps the last result while it recalculates.
+        pairs.apply(vec![on_base("t2", "b1")], 5);
+        let p = pairs.get(&key).unwrap();
+        assert_eq!(
+            (p.state, p.computed_at_utc_ms),
+            (PairState::Recalculating, Some(1))
+        );
     }
 
     #[test]

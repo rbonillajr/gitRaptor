@@ -132,6 +132,7 @@ impl Daemon {
             guard: Arc::clone(&self.guard),
             mcp_repos: Arc::clone(&self.mcp_repos),
             hook_claims: Arc::clone(&self.hook_claims),
+            prediction: Arc::clone(&self.prediction),
         };
         match crate::channel::Server::serve(bound, args) {
             Ok(server) => {

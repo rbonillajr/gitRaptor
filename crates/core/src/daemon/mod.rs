@@ -354,6 +354,8 @@ pub struct Daemon {
     marks: Arc<crate::timemachine::engine::RepoMarks>,
     /// The MCP allowlist, shared with the channel (US-MCP-002).
     mcp_repos: Arc<crate::timemachine::protected::McpRepos>,
+    /// What the conflict predictor published, written by its module and read by the channel.
+    prediction: Arc<crate::predict::store::PredictionStore>,
     /// The claims of Guardrails hooks (S4): the channel writes them, the
     /// detector consumes them (DS-US-GRP-007 § 7).
     hook_claims: Arc<crate::detect::HookClaims>,
@@ -682,6 +684,9 @@ impl Daemon {
         crate::work_class::set_logger(Some(logger.clone()));
         // Resolved before the modules start, so none of them sees a provisional mode.
         let power = power::PowerThread::start(&config.power, &config.dirs, &logger);
+        let prediction = Arc::new(crate::predict::store::PredictionStore::new(
+            config.predict.merger != crate::predict::PredictMerger::Off,
+        ));
         let mut daemon = Self {
             config,
             lock,
@@ -693,6 +698,7 @@ impl Daemon {
             guard,
             marks: Arc::default(),
             mcp_repos,
+            prediction,
             hook_claims: Arc::default(),
             modules: modules::Modules::default(),
             report,
@@ -803,6 +809,7 @@ impl Daemon {
     pub fn run(mut self) -> StopReport {
         self.resources.start();
         self.serve_channel();
+        self.modules.serving();
         let mut next_beat = Instant::now() + self.config.heartbeat;
         loop {
             let tier_check = self.next_tier_check();

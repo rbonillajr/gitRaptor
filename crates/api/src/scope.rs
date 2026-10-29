@@ -134,7 +134,8 @@ pub enum AttentionCount {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum UnavailableCause {
-    /// No component of this engine publishes it yet.
+    /// Not published: no component of this engine publishes it yet, or the one that does has
+    /// not computed it yet (a predicted conflict count while pairs are still calculating).
     NotPublished,
 }
 
