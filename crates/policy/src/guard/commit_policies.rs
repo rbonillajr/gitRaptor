@@ -215,6 +215,16 @@ fn short(oid: &str) -> String {
     oid.chars().take(12).collect()
 }
 
+/// The commit a reason names, if it exists yet: a commit a plan is about to make has no oid,
+/// and its reason names none.
+fn oid_params(oid: &str) -> Vec<Param> {
+    if oid.is_empty() {
+        Vec::new()
+    } else {
+        vec![Param::new(ParamKind::Oid, short(oid))]
+    }
+}
+
 fn reason(rule: Rule, level: Level, cause: Option<Cause>, params: Vec<Param>) -> Reason {
     Reason {
         rule,
@@ -293,11 +303,9 @@ fn diff_size(out: &mut Evaluation, commits: &NewCommits, rule: &DiffRule, budget
     }
     if let Some((commit, lines)) = first {
         let at_least = if commit.partial { "≥" } else { "" };
-        let mut params = vec![
-            Param::new(ParamKind::Oid, short(&commit.oid)),
-            Param::new(ParamKind::Lines, format!("{at_least}{lines}")),
-            limit.clone(),
-        ];
+        let mut params = oid_params(&commit.oid);
+        params.push(Param::new(ParamKind::Lines, format!("{at_least}{lines}")));
+        params.push(limit.clone());
         if over > 1 {
             params.push(Param::new(ParamKind::Commits, over.to_string()));
         }
@@ -309,10 +317,9 @@ fn diff_size(out: &mut Evaluation, commits: &NewCommits, rule: &DiffRule, budget
     if let Some(commit) = unproven
         && (first.is_none() || rule.effect != Effect::Deny)
     {
-        out.add(
-            Effect::Deny,
-            unverifiable(vec![Param::new(ParamKind::Oid, short(&commit.oid)), limit]),
-        );
+        let mut params = oid_params(&commit.oid);
+        params.push(limit);
+        out.add(Effect::Deny, unverifiable(params));
     }
 }
 
@@ -331,16 +338,16 @@ fn commit_format(out: &mut Evaluation, commits: &NewCommits, rule: &FormatRule) 
     }
     let types = || Param::new(ParamKind::Types, rule.types.join(", "));
     for commit in &commits.commits {
-        let oid = Param::new(ParamKind::Oid, short(&commit.oid));
+        let oid = || oid_params(&commit.oid);
         let kind_allowed = commit
             .header
             .kind
             .as_deref()
             .is_none_or(|k| rule.types.iter().any(|t| t == k));
         let (cause, params) = match commit.header.verdict {
-            Verdict::NotConventional => (None, vec![oid, types()]),
-            _ if !kind_allowed => (Some(Cause::TypeNotAllowed), vec![oid, types()]),
-            Verdict::BodyNotSeparated => (Some(Cause::BodyNotSeparated), vec![oid]),
+            Verdict::NotConventional => (None, [oid(), vec![types()]].concat()),
+            _ if !kind_allowed => (Some(Cause::TypeNotAllowed), [oid(), vec![types()]].concat()),
+            Verdict::BodyNotSeparated => (Some(Cause::BodyNotSeparated), oid()),
             Verdict::Conforms => continue,
         };
         out.add(
