@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-04
 created: 2026-10-04
-updated: 2026-10-27
+updated: 2026-10-28
 deciders: [Orquestador (delegación de Rene Bonilla, 2026-10-04)]
 domain: GRP
 feature: cockpit
@@ -318,4 +318,5 @@ Decisión del orquestador (2026-10-27), validada por Arquitecto (A1 y A2), que c
 - **Dueño de la forma**: pasa de TS-GRP-004 a TS-CKP-001. La forma está en [DS-TS-CKP-001 § Contrato de API](../../requirements/features/cockpit/dev-specs/TS-CKP-001-predictor-conflictos.md#contrato-de-api) y la implementa T009.
 - **Corrige** el último punto de § 8 ("pendiente, dueño: worker del canal") y el punto de TS-GRP-004 en E6.
 - **Forma, en resumen**: capacidad `prediction.pairs` con `RepoView.prediction` (resumen por par con `pair_id` determinista, `rev`, estado, motivo y `level` solo en `current`/`recalculating`) y el evento de repo `prediction.changed`; método `prediction.list` para el detalle (rangos, `has_merge_rule`), con páginas de 50 pares o 512 KiB.
+- **Nota (2026-10-28)**: los `rlimits` del cuerpo no rigen tampoco en Linux. La memoria del trabajador es la lectura de RSS del daemon ([DS-TS-CKP-001 D18](../../requirements/features/cockpit/dev-specs/TS-CKP-001-predictor-conflictos.md)), porque `gix` mapea los packs enteros y `RLIMIT_AS` rompería los repos con packs grandes.
 - `attention.conflicts` cuenta los ⚡ conocidos y queda no disponible mientras haya pares `calculating` sin ninguno; un par contra la base cuya punta cambió vuelve a `calculating`.
