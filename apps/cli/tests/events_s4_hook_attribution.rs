@@ -14,7 +14,7 @@
 
 use std::ffi::OsString;
 use std::io::{BufRead, BufReader, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Output, Stdio};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -649,19 +649,47 @@ impl Drop for DeveloperReader {
 }
 
 impl Machine {
-    /// A post-commit hook that waits, so the `git commit` is alive when S3 samples it: the
-    /// outcome no longer depends on the S3 race. Only without Guardrails, whose hooks it would
-    /// replace.
-    fn slow_hooks(&self) -> PathBuf {
+    /// A post-commit hook that waits until the test opens and closes the fifo it returns, so the
+    /// `git commit` is alive until its event is recorded: the outcome no longer depends on the
+    /// S3 race. Only without Guardrails, whose hooks it would replace.
+    fn held_hooks(&self) -> (PathBuf, PathBuf) {
         use std::os::unix::fs::PermissionsExt;
-        let hooks = self.outside.path().join("slow-hooks");
+        let hooks = self.outside.path().join("held-hooks");
+        let fifo = self.outside.path().join("release-commit");
         if !hooks.exists() {
             std::fs::create_dir(&hooks).unwrap();
+            let out = Command::new("/usr/bin/mkfifo").arg(&fifo).output().unwrap();
+            assert!(out.status.success(), "{}", text(&out));
             let post_commit = hooks.join("post-commit");
-            std::fs::write(&post_commit, "#!/bin/sh\nsleep 1\n").unwrap();
+            std::fs::write(
+                &post_commit,
+                format!("#!/bin/sh\nread _ < '{}'\n", fifo.display()),
+            )
+            .unwrap();
             std::fs::set_permissions(&post_commit, std::fs::Permissions::from_mode(0o755)).unwrap();
         }
-        hooks
+        (hooks, fifo)
+    }
+
+    /// Waits until `HEAD` moves from `before`, then until the event of the new commit is
+    /// recorded, and lets the held `git commit` end; the new oid.
+    fn commit_held(&self, before: &str, fifo: &Path) -> String {
+        let start = Instant::now();
+        let oid = loop {
+            let now = self.head();
+            if now != before {
+                break now;
+            }
+            assert!(
+                start.elapsed() < Duration::from_secs(10),
+                "HEAD never moved"
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        };
+        self.event(&oid);
+        // Opening the writing end lets the hook's `read` start; closing it ends it.
+        drop(std::fs::OpenOptions::new().write(true).open(fifo).unwrap());
+        oid
     }
 
     /// The developer's `git <args>` in the worktree, left running with its input open (as an
@@ -680,28 +708,46 @@ impl Machine {
         DeveloperReader(child)
     }
 
-    /// A commit by the simulated Claude Code whose `git` is alive when S3 samples it; its oid.
+    /// A commit by the simulated Claude Code whose `git` is alive until its event is recorded;
+    /// its oid.
     fn agent_commit_seen(&self, claude: &mut FakeClaude, n: usize) -> String {
-        claude.run(&format!(
+        let (hooks, fifo) = self.held_hooks();
+        let before = self.head();
+        claude.start(&format!(
             "printf '{n}\\n' >> agent.txt && {} add agent.txt && {} -c core.hooksPath='{}' commit -q -m 'agent {n}' -m '{TRAILER}'",
             self.git_line(""),
             self.git_line(""),
-            self.slow_hooks().display()
+            hooks.display()
         ));
-        self.head()
+        let oid = self.commit_held(&before, &fifo);
+        claude.wait();
+        oid
     }
 
-    /// A commit by the developer whose `git` is alive when S3 samples it; its oid.
+    /// A commit by the developer whose `git` is alive until its event is recorded; its oid.
     fn human_commit_seen(&self, n: usize) -> String {
+        let (hooks, fifo) = self.held_hooks();
         std::fs::write(self.f.repo.join(format!("human{n}.txt")), "h\n").unwrap();
         let out = self.human(&format!("add human{n}.txt"));
         assert!(out.status.success(), "{}", text(&out));
-        let out = self.human(&format!(
-            "-c core.hooksPath='{}' commit -q -m 'human {n}'",
-            self.slow_hooks().display()
-        ));
-        assert!(out.status.success(), "{}", text(&out));
-        self.head()
+        let before = self.head();
+        let mut commit = Command::new("/bin/sh")
+            .arg("-c")
+            .arg(self.git_line(&format!(
+                "-c core.hooksPath='{}' commit -q -m 'human {n}'",
+                hooks.display()
+            )))
+            .env_clear()
+            .envs(self.env())
+            .current_dir(&self.f.repo)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let oid = self.commit_held(&before, &fifo);
+        assert!(commit.wait().unwrap().success());
+        oid
     }
 
     /// The actor `raptor timeline --json` shows for the event `e`, as the developer reads it.
