@@ -5,7 +5,7 @@ type: us
 status: implemented
 priority: medium
 created: 2026-10-04
-updated: 2026-10-28
+updated: 2026-10-29
 feature: guardrails
 related:
   context:
@@ -107,7 +107,7 @@ Entonces el commit se rechaza con la regla de la convención y la acción
   Y la decisión queda registrada una sola vez con capa "mcp"
   Y el worktree no cambia
 
-_Escenario movido desde US-MCP-009 (DS-US-MCP-009 D14): Decisión del orquestador (2026-10-21), validada por PO. Se prueba cuando existan esta historia y US-MCP-009._
+_Escenario movido desde US-MCP-009 (DS-US-MCP-009 D14): Decisión del orquestador (2026-10-21), validada por PO. Probado en PR #313 (US-GRD-016): `us_grd_016_commit_policies::a_message_out_of_format_gets_the_hooks_reason_without_an_oid`._
 
 ## Requisitos Técnicos
 
@@ -129,4 +129,4 @@ Completado por el Arquitecto (2026-10-21). El detalle y su justificación están
 
 ## Estado de la implementación (2026-10-28)
 
-Implementado en: PR #296. Dev Spec: [DS-US-GRD-009](../dev-specs/US-GRD-009-tamano-diff-formato-commit.md) (§ 10: resultados y residuos). Verificado en macOS; Linux lo cubre el CI; Windows: **Pendiente: etapa de validación multiplataforma**. Pendiente: medición de coste de D15 y el escenario por MCP (US-MCP-009 / US-GRD-016).
+Implementado en: PR #296. Dev Spec: [DS-US-GRD-009](../dev-specs/US-GRD-009-tamano-diff-formato-commit.md) (§ 10: resultados y residuos). Verificado en macOS; Linux lo cubre el CI; Windows: **Pendiente: etapa de validación multiplataforma**. Pendiente: medición de coste de D15. El escenario por MCP se cierra en PR #313 (US-GRD-016).

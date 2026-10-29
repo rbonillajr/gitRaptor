@@ -2,9 +2,9 @@
 id: DS-US-GRD-016
 title: "Dev Spec — US-GRD-016: la misma decisión de Guardrails por las herramientas MCP y por Git directo"
 type: dev-spec
-status: draft
+status: partially-implemented
 created: 2026-10-28
-updated: 2026-10-28
+updated: 2026-10-29
 story: US-GRD-016
 feature: guardrails
 domain: GRP
@@ -817,3 +817,7 @@ Decisiones del orquestador (2026-10-28), validadas por el Arquitecto y el PO. D5
 - **US-MCP-007 (confused deputy) en `draft`**: no bloquea esta entrega; es condición de liberación de `safe_commit` (DS-US-MCP-009 G3), no de la paridad.
 - **Precedente de capacidades**: `CAP_GUARD_LOG_LAYERS` (`methods/guard.rs:92`) y su filtro en `conn.rs:1776`.
 - **Archivos compartidos**: `conn.rs` (tres bloques) y `apps/cli/i18n/{en,es}/guard.txt` (archivo de la feature, guía de extensión § Añadir un mensaje).
+
+## Estado de la implementación (2026-10-29)
+
+Implementado en: PR #313 (parcial, sin certificar). Pendiente: parte B de las políticas de commit (`diff-size` exacto), la prueba de daemon de T007 y Linux/Windows reales (XP-64).
