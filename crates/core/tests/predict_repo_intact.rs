@@ -639,10 +639,7 @@ mod repo_intact {
         rig.wait("the 55 pairs as current", |p| all_current(p, 55));
 
         let since = now_ms();
-        let mut gc = f
-            .git_command(&f.repo, &["gc", "-q"])
-            .spawn()
-            .unwrap();
+        let mut gc = f.git_command(&f.repo, &["gc", "-q"]).spawn().unwrap();
         for (n, root) in roots.iter().enumerate().take(4) {
             user_commit(&f, root, 100 + n as u32);
         }
