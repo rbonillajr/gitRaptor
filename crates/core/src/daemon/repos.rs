@@ -564,6 +564,7 @@ impl Daemon {
                 }
                 self.marks.set_head_logs(&batch.repo_id, &batch.head_logs);
                 self.marks.set_heads(&batch.repo_id, &batch.heads);
+                self.marks.forget_worktrees(&batch.repo_id, &batch.gone);
                 result.seqs
             }
             Err(err) => {
