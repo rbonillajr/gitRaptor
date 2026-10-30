@@ -188,11 +188,19 @@ pub const REGRESSION_CEILINGS: &[(Platform, &str, RegressionCeiling)] = &[
         TUI_MODIFY,
         steady(105.1 + COCKPIT_P95_MS, 151.0 + COCKPIT_P95_MS),
     ),
+    // ⚠️ Provisional until calibrated with its own runs: the "modify" figures of the runner,
+    // since NFR-04 keeps a modify measured while the predictor works within the ceiling of a
+    // plain one (TS-CKP-001 T012; Decisión del orquestador 2026-10-29, validada por Arquitecto).
+    (Platform::MacCi, PREDICTION_ENGINE, steady(224.3, 293.7)),
+    (Platform::LinuxCi, PREDICTION_ENGINE, steady(105.1, 151.0)),
 ];
 
 /// End-to-end scenario of the Cockpit (US-CKP-001, M1 criterion 6): "modify a file" seen by the
 /// real TUI, from `t0` to `t_render` of the frame that shows it.
 pub const TUI_MODIFY: &str = "tui-modify";
+/// The engine's own latency for a "modify" in another worktree while the conflict predictor
+/// works on a commit (TS-CKP-001 T012, NFR-04).
+pub const PREDICTION_ENGINE: &str = "prediction-engine";
 /// NFR-04: a change reaches the TUI in under 500 ms p95, end to end.
 pub const E2E_BUDGET_MS: f64 = 500.0;
 /// The Cockpit's own budget, `t_client_recv` → `t_render` p95 (ADR-GRP-011 E2).
@@ -814,7 +822,7 @@ mod tests {
         }
     }
 
-    const SCENARIOS: [&str; 8] = [
+    const SCENARIOS: [&str; 10] = [
         "modify",
         "git-add",
         "commit",
@@ -823,6 +831,8 @@ mod tests {
         "worktree-delete",
         BURST_1K,
         BURST_10K,
+        TUI_MODIFY,
+        PREDICTION_ENGINE,
     ];
 
     /// Every scenario the bench gates has a calibrated ceiling on both shared runners.

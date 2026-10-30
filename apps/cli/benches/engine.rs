@@ -100,9 +100,9 @@ mod unix {
     use gitraptor_testkit::fixture::git_from_path;
     use gitraptor_testkit::freshness::{
         BURST_1K, BURST_10K, COCKPIT_P95_MS, E2E_BUDGET_MS, FOOTPRINT_LIMITS, Finding, Footprint,
-        GateMode, Level, MAX_ATTEMPTS, MAX_SLACK_EXCESS_MS, Platform, Sample, Scenario, Stage,
-        Summary, TUI_MODIFY, Verdict, confirm, evaluate_footprint, evaluate_latency,
-        evaluate_regression,
+        GateMode, Level, MAX_ATTEMPTS, MAX_SLACK_EXCESS_MS, PREDICTION_ENGINE, Platform, Sample,
+        Scenario, Stage, Summary, TUI_MODIFY, Verdict, confirm, evaluate_footprint,
+        evaluate_latency, evaluate_regression,
     };
     use gitraptor_testkit::repogen;
     use ratatui::Terminal;
@@ -125,7 +125,6 @@ mod unix {
     const TOUCHED: &str = "bench-touched.txt";
     /// Scenario `prediction` (`--only prediction`) and the engine measured during it.
     const PREDICTION: &str = "prediction";
-    const PREDICTION_ENGINE: &str = "prediction-engine";
     /// File each commit of the `prediction` scenario writes, in every worktree.
     const PREDICTED: &str = "bench-predicted.txt";
     /// Gate: p95 from the end of a commit to its prediction published (ADR-CKP-001 § 5).
