@@ -81,7 +81,10 @@ mod unix {
         WorktreeView,
     };
     use gitraptor_api::methods;
-    use gitraptor_api::prediction::{PairSideView, PairStateView, PairSummary, PredictionChanged};
+    use gitraptor_api::prediction::{
+        ListPredictionParams, PairSideView, PairStateView, PairSummary, PredictionChanged,
+        PredictionPage,
+    };
     use gitraptor_api::scope::{Scope, ScopeEventNotification, ScopeSnapshot};
     use gitraptor_cli::client::engine::EngineConnector;
     use gitraptor_cli::client::{self as tui_client, ClientThread};
@@ -483,6 +486,31 @@ mod unix {
     /// Subscribes to the repo scope with `prediction.pairs` (the library client accepts every
     /// capability it knows) and forwards every `prediction.changed`. The pairs the snapshot
     /// already carries come first, with the time of the snapshot.
+    /// Every pair of the repo, page by page through `prediction.list`.
+    fn list_pairs(client: &mut Client, repo_id: &str) -> Vec<PairSummary> {
+        let mut pairs = Vec::new();
+        let mut cursor = None;
+        loop {
+            let params = ListPredictionParams {
+                repo_id: repo_id.to_owned(),
+                worktree: None,
+                pair_ids: None,
+                cursor,
+            };
+            let page: PredictionPage = client
+                .call(
+                    methods::PREDICTION_LIST,
+                    serde_json::to_value(params).unwrap(),
+                )
+                .unwrap();
+            pairs.extend(page.pairs.into_iter().map(|detail| detail.summary));
+            match page.next_cursor {
+                Some(next) => cursor = Some(next),
+                None => return pairs,
+            }
+        }
+    }
+
     fn subscribe_prediction(
         daemon: &Daemon,
         stop: Arc<AtomicBool>,
@@ -504,11 +532,18 @@ mod unix {
         if let ScopeSnapshot::Repo(repo) = &snap
             && let Some(prediction) = &repo.repo.prediction
         {
+            // The snapshot keeps only the pairs that fit in its frame: past a full engine run,
+            // that can be a handful, and an event only carries the pairs that change.
+            let pairs = if prediction.pairs_truncated {
+                list_pairs(&mut client, &daemon.repo_id)
+            } else {
+                prediction.pairs.clone()
+            };
             let _ = tx.send(PredictionReceived {
                 t_client_recv: monotonic_ns(),
                 data: PredictionChanged {
                     repo_id: daemon.repo_id.clone(),
-                    pairs: prediction.pairs.clone(),
+                    pairs,
                     removed: Vec::new(),
                 },
             });
@@ -1694,8 +1729,17 @@ mod unix {
                 seen_at: HashMap::new(),
                 received: 0,
             };
-            let roots = self.wts.len() + 1;
-            let between = roots * (roots - 1) / 2;
+            // The predictor only pairs worktrees with work of their own: one commit each, all on
+            // the same file, so every pair has a real dry merge to compute.
+            for (i, wt) in self.wts.clone().iter().enumerate() {
+                std::fs::write(wt.join(PREDICTED), format!("worktree {i}\n")).unwrap();
+                git(wt, &["add", PREDICTED]);
+                git(wt, &["commit", "-qm", "bench prediction"]);
+            }
+            // Each worktree against the base, plus every pair between them; the main worktree,
+            // on the base with nothing of its own, has none.
+            let n = self.wts.len();
+            let between = n + n * (n - 1) / 2;
             // The initial calculation of every pair, outside the measure.
             let ready = p.until(PREDICTION_SETTLE, |p| {
                 p.pairs.len() >= between && !p.pairs.values().any(computing)
@@ -1705,7 +1749,7 @@ mod unix {
                     level: Level::Fail,
                     scenario: PREDICTION.into(),
                     what: format!(
-                        "the {between} pairs between worktrees never settled within {PREDICTION_SETTLE:?}"
+                        "the {between} pairs of the worktrees never settled within {PREDICTION_SETTLE:?}"
                     ),
                     measured: p.pairs.len() as f64,
                     limit: between as f64,
