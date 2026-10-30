@@ -311,6 +311,25 @@ impl RepoMarks {
         }
     }
 
+    /// The engine saw these worktrees gone: what it read of them belongs to a Git directory that
+    /// no longer exists, and a worktree added again at the same root must not be held to it.
+    pub fn forget_worktrees(&self, repo_id: &str, roots: &[PathBuf]) {
+        if roots.is_empty() {
+            return;
+        }
+        let mark = self.get(repo_id);
+        {
+            let mut map = mark.head_logs.lock().unwrap_or_else(|e| e.into_inner());
+            for root in roots {
+                map.remove(root);
+            }
+        }
+        let mut map = mark.heads.lock().unwrap_or_else(|e| e.into_inner());
+        for root in roots {
+            map.remove(root);
+        }
+    }
+
     fn head(&self, repo_id: &str, root: &Path) -> Option<Vec<u8>> {
         let mark = self.get(repo_id);
         let map = mark.heads.lock().unwrap_or_else(|e| e.into_inner());
@@ -382,7 +401,9 @@ impl RepoMarks {
         }
         let on_disk = head_log_len(&git_dir);
         match self.head_log(repo_id, worktree) {
-            Some(persisted) if on_disk > 0 => persisted == on_disk,
+            // A reflog only grows: a shorter one is another file (the worktree was removed and
+            // added again) the engine has not read, so it is judged as one never read.
+            Some(persisted) if on_disk > 0 && on_disk >= persisted => persisted == on_disk,
             _ => self.quiet(repo_id),
         }
     }
@@ -965,6 +986,41 @@ mod tests {
         std::fs::write(wt.join(".git/index.lock"), "").unwrap();
         assert!(!marks.calm("r", &wt));
         assert!(index_locked(&wt));
+    }
+
+    #[test]
+    fn a_worktree_removed_and_added_again_calms_without_a_new_batch() {
+        let dir = tempfile::tempdir().unwrap();
+        let wt = dir.path().to_path_buf();
+        let log = "a b c\tcommit: x\na b c\tcommit: y\n";
+        std::fs::create_dir_all(wt.join(".git/logs")).unwrap();
+        std::fs::write(wt.join(".git/HEAD"), "ref: refs/heads/old\n").unwrap();
+        std::fs::write(wt.join(".git/logs/HEAD"), log).unwrap();
+        let marks = RepoMarks::default();
+        marks.set_seq("r", 4);
+        marks.set_head_logs("r", &[(wt.clone(), log.len() as u64)]);
+        marks.set_heads("r", &[(wt.clone(), b"ref: refs/heads/old\n".to_vec())]);
+        assert!(marks.calm("r", &wt));
+        // Added again at the same root: a fresh, shorter reflog and another `HEAD`, and no batch
+        // of the engine has read them yet.
+        std::fs::write(wt.join(".git/HEAD"), "ref: refs/heads/new\n").unwrap();
+        std::fs::write(wt.join(".git/logs/HEAD"), "a b c\tadd\n").unwrap();
+        assert!(
+            !marks.calm("r", &wt),
+            "the old worktree's HEAD still holds it"
+        );
+        // The batch that saw it gone drops what the engine read of the old one.
+        marks.forget_worktrees("r", std::slice::from_ref(&wt));
+        assert_eq!(
+            marks.settle("r", std::slice::from_ref(&wt), Duration::ZERO),
+            Some(4)
+        );
+        // Without the gone batch, the shorter reflog alone is not held to the old length.
+        marks.set_head_logs("r", &[(wt.clone(), log.len() as u64)]);
+        assert!(marks.calm("r", &wt));
+        // A reflog that grew past what the engine read still waits for it.
+        std::fs::write(wt.join(".git/logs/HEAD"), format!("{log}a b c\treset: z\n")).unwrap();
+        assert!(!marks.calm("r", &wt));
     }
 
     #[test]
