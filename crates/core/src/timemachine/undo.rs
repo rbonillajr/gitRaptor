@@ -404,6 +404,24 @@ fn raw_of_all(
     (out, complete)
 }
 
+/// Settles every registered worktree of the repo plus `worktree`, within [`ANCHOR_SETTLE_LIMIT`]:
+/// the mark then, `None` when one of them did not calm in time. Worktrees that cannot be listed
+/// are left out here; [`raw_of_all`] reports their events as incomplete.
+fn settle_all(
+    deps: &CaptureDeps,
+    repo_id: &str,
+    common_dir: &Path,
+    worktree: &Path,
+) -> Option<i64> {
+    let mut roots: Vec<PathBuf> = registered_worktrees(common_dir)
+        .map(|r| r.into_iter().map(|(root, _)| root).collect())
+        .unwrap_or_default();
+    if !roots.iter().any(|r| r == worktree) {
+        roots.push(worktree.to_path_buf());
+    }
+    deps.engine.settle(repo_id, &roots, ANCHOR_SETTLE_LIMIT)
+}
+
 /// The candidate targets of a raw Git event, best first (ADR-TMC-003 § 4): the points of
 /// `wt_key` the one rule picks, over every point of the key (an unavailable prior still
 /// shadows), then only those still available and not tampered.
@@ -978,16 +996,25 @@ pub fn undo_last(
     // An undo never plans on a stale mark: not calm in time, the repo is
     // busy.
     let mut raw = RawSide::default();
+    // Whether the events of the other registered worktrees are persisted too.
+    let mut others_settled = true;
     if let Some(deps) = env.engine {
-        // Every registered worktree is settled: the overlap reads the events of all of them.
-        let mut wt: Vec<PathBuf> = registered_worktrees(&repo.repo.common_dir)
-            .map(|r| r.into_iter().map(|(root, _)| root).collect())
-            .unwrap_or_default();
-        if !wt.iter().any(|r| r == worktree) {
-            wt.push(worktree.to_path_buf());
-        }
-        match deps.engine.settle(repo_id, &wt, ANCHOR_SETTLE_LIMIT) {
-            Some(mark) => engine_mark = mark,
+        match deps
+            .engine
+            .settle(repo_id, &[worktree.to_path_buf()], ANCHOR_SETTLE_LIMIT)
+        {
+            Some(mark) => {
+                engine_mark = mark;
+                // The overlap reads the events of every registered worktree, so they are settled
+                // too, but only the undo's own worktree can make the repo busy: another one that
+                // never calms (one a restore recreated and the engine has not re-read yet) leaves
+                // its events incomplete, which the overlap check turns into `overlap-unverified`
+                // when it needs them, and an undo that does not need them goes on.
+                match settle_all(deps, repo_id, &repo.repo.common_dir, worktree) {
+                    Some(mark) => engine_mark = mark,
+                    None => others_settled = false,
+                }
+            }
             None => {
                 let scope = Scope {
                     worktrees: vec![worktree.to_string_lossy().into_owned()],
@@ -1017,6 +1044,7 @@ pub fn undo_last(
     };
     let (raw_all, events_complete) =
         raw_of_all(env.engine, repo_id, &repo.repo.common_dir, worktree);
+    let events_complete = events_complete && others_settled;
     let overlap_started = Instant::now();
 
     let planned = plan(

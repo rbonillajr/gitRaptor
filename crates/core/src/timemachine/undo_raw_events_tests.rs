@@ -14,17 +14,22 @@ use gitraptor_testkit::Fixture;
 
 const REPO: &str = "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0";
 
-/// An engine that reads the events of every worktree except `blind_to`.
+/// An engine that reads the events of every worktree except `blind_to`, and settles any set of
+/// worktrees that leaves out `stuck`.
 struct Engine {
     blind_to: Option<PathBuf>,
+    stuck: Option<PathBuf>,
 }
 
 impl EngineLink for Engine {
     fn mark(&self, _repo_id: &str) -> i64 {
         1
     }
-    fn settle(&self, _repo_id: &str, _worktrees: &[PathBuf], _limit: Duration) -> Option<i64> {
-        Some(1)
+    fn settle(&self, _repo_id: &str, worktrees: &[PathBuf], _limit: Duration) -> Option<i64> {
+        match &self.stuck {
+            Some(stuck) if worktrees.contains(stuck) => None,
+            _ => Some(1),
+        }
     }
     fn raw_events(&self, _repo_id: &str, worktree: &Path) -> Option<Vec<RawGitEvent>> {
         if self.blind_to.as_deref() == Some(worktree) {
@@ -70,9 +75,13 @@ fn rig() -> Rig {
 
 impl Rig {
     fn deps(&self, blind_to: Option<PathBuf>) -> CaptureDeps {
+        self.deps_stuck(blind_to, None)
+    }
+
+    fn deps_stuck(&self, blind_to: Option<PathBuf>, stuck: Option<PathBuf>) -> CaptureDeps {
         CaptureDeps {
             repos: Arc::new(TmRepos::new(self.dirs.clone())),
-            engine: Arc::new(Engine { blind_to }),
+            engine: Arc::new(Engine { blind_to, stuck }),
             profile: self.dirs.clone(),
             logger: Logger::open(&self.dirs.state, LogLimits::default()).unwrap(),
             layer: None,
@@ -129,4 +138,17 @@ fn worktrees_that_cannot_be_listed_make_the_events_incomplete() {
     let missing = r.f.profile.join("no-such-common-dir");
     let (_, complete) = raw_of_all(Some(&deps), REPO, &missing, &r.own());
     assert!(!complete, "the registered worktrees are unknown");
+}
+
+#[test]
+fn every_registered_worktree_is_settled_with_the_own_one() {
+    let r = rig();
+    let calm = r.deps(None);
+    assert_eq!(settle_all(&calm, REPO, &r.common, &r.own()), Some(1));
+    let deps = r.deps_stuck(None, Some(r.linked.clone()));
+    assert_eq!(
+        settle_all(&deps, REPO, &r.common, &r.own()),
+        None,
+        "another worktree that never calms is reported, never skipped"
+    );
 }
