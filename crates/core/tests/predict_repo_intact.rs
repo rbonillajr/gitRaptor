@@ -640,7 +640,7 @@ mod repo_intact {
 
         let since = now_ms();
         let mut gc = f
-            .git_command(&f.repo, &["gc", "--prune=now", "-q"])
+            .git_command(&f.repo, &["gc", "-q"])
             .spawn()
             .unwrap();
         for (n, root) in roots.iter().enumerate().take(4) {
