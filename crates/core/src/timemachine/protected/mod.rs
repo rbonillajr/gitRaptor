@@ -370,7 +370,9 @@ impl StepCtx<'_> {
 
     /// Starts a child in its own process group, marked as started by this
     /// operation and annotated in the journal. If its identity cannot be
-    /// read it is killed: an unmarked child must not run (fail-closed).
+    /// read it is killed: an unmarked child must not run (fail-closed). A
+    /// child that already ended is not running: it is annotated without an
+    /// identity and its status stands.
     pub fn spawn(&mut self, cmd: &mut Command) -> std::io::Result<MarkedChild> {
         #[cfg(unix)]
         {
@@ -423,8 +425,14 @@ impl StepCtx<'_> {
                     info.pgid,
                     transitions,
                 );
-                info.start_us
+                Some(info.start_us)
             }
+            // A fast child (a `git reset` in a small repo) can end before it is read when the
+            // daemon is slow to get the CPU back: an ended process has no identity to read
+            // (a zombie on macOS), and it was failed as `changed` after it had done its work
+            // (CI, run 40998734487). A mark only tells a running process apart (a hook's
+            // ancestor), so an ended child needs none: `try_wait` keeps its status for `wait`.
+            Err(_) if matches!(child.try_wait(), Ok(Some(_))) => None,
             Err(_) => {
                 let _ = child.kill();
                 let _ = child.wait();
@@ -432,8 +440,7 @@ impl StepCtx<'_> {
             }
         };
         drop(pending);
-        let _ =
-            lock(self.oplog).record_child_started(self.operation_id, pid, Some(start_us), now_ms());
+        let _ = lock(self.oplog).record_child_started(self.operation_id, pid, start_us, now_ms());
         Ok(MarkedChild { child, pid })
     }
 

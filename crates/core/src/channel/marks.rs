@@ -2,10 +2,12 @@
 //!
 //! A hook or `git` that the operation's step runs acts with the authority of
 //! whoever asked for the operation: a confused deputy if it could use a
-//! reserved command or pass for someone else. Every child the step spawns is
-//! marked by `(pid, start)` and by its process group, from the moment it
-//! starts until the operation closes (not until the child ends, so an orphan
-//! grandchild of the same group is still covered). The channel treats a
+//! reserved command or pass for someone else. Every child the step spawns that
+//! is still running when it is read is marked by `(pid, start)` and by its
+//! process group, from the moment it starts until the operation closes (not
+//! until the child ends, so an orphan grandchild of the same group is still
+//! covered). One that already ended when it was read runs no more and makes no
+//! hook calls: it is not marked. The channel treats a
 //! marked process, and any descendant of one, as a descendant of the
 //! executor: attributed to the operation's requester and refused for
 //! reserved commands.
