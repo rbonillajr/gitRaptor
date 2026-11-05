@@ -17,6 +17,8 @@ mod conn;
 mod limits;
 pub mod marks;
 #[cfg(any(unix, windows))]
+mod mcp_conflicts;
+#[cfg(any(unix, windows))]
 mod mcp_scope;
 #[cfg(any(unix, windows))]
 mod mcp_status;

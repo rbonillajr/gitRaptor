@@ -1,3 +1,4 @@
+mod conflicts;
 mod engine;
 mod input;
 mod messages;

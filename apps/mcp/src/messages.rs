@@ -624,6 +624,8 @@ el commit."
             "Hay otra sesión de agente en este worktree.",
             "Indica tus rutas: el worktree es compartido.",
         ),
+        // Not produced yet: no tool gives this code until `check_conflicts` is published.
+        (E::PredictionUnavailable, _) => unimplemented!("prediction-unavailable texts"),
         (E::TooManyPaths, lang) => {
             return match lang {
                 Lang::En => (
