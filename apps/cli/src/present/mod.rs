@@ -3,6 +3,10 @@
 
 pub mod i18n;
 pub mod ingest;
+pub mod prediction_text;
 mod sanitize;
 
 pub use sanitize::{NAME_MAX_CHARS, SafeText, TEXT_MAX_CHARS};
+
+#[cfg(test)]
+mod prediction_text_tests;
