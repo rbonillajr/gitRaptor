@@ -143,7 +143,8 @@ Sin la capacidad, el daemon no manda `prediction` ni `prediction.changed`: la TU
 
 - **Depende:** —
 - **Refs:** US-CKP-006, escenarios 1 a 6
-- **Aceptación:** `cargo test -p gitraptor-cli --test tui_conflicts`
+- **Criterios:** CKP006-S1-DEMO, CKP006-S2-OVERLAP-ONLY, CKP006-S3-BASE, CKP006-S4-LIMITS-E2E, CKP006-S5-INTACT, CKP006-S6-NO-OWN-WORK
+- **Aceptación:** `cargo test -p gitraptor-cli --test tui_conflicts` (`apps/cli/tests/tui_conflicts.rs`)
 
 ### T002 — Crear el modelo de la predicción y aplicarlo en `update`
 
@@ -168,7 +169,8 @@ Sin la capacidad, el daemon no manda `prediction` ni `prediction.changed`: la TU
 
 - **Depende:** G1
 - **Refs:** A2, A4, P7, AD2, AD3, AD4
-- **Aceptación:** `cargo test -p gitraptor-cli --lib tui::prediction`
+- **Criterios:** CKP006-REV-RULE, CKP006-CHANGED, CKP006-WANTED, CKP006-KNOWN-CONFLICT, CKP006-SIDES, CKP006-CAPABILITY, CKP006-SANITIZE
+- **Aceptación:** `cargo test -p gitraptor-cli --lib tui::prediction_tests` (`apps/cli/src/tui/prediction_tests.rs`)
 
 ### T003 — Pedir `prediction.list` desde el hilo del canal y avisar de la capacidad
 
@@ -185,7 +187,8 @@ Sin la capacidad, el daemon no manda `prediction` ni `prediction.changed`: la TU
 
 - **Depende:** T002
 - **Refs:** A2, AD3
-- **Aceptación:** `cargo test -p gitraptor-cli --lib client::tests::prediction`
+- **Criterios:** CKP006-CLIENT-LIST
+- **Aceptación:** `cargo test -p gitraptor-cli --lib client::prediction_tests` (`apps/cli/src/client/prediction_tests.rs`)
 
 ### T004 — Pintar la fila, el panel, los límites y la ayuda, con textos en/es
 
@@ -211,7 +214,8 @@ Sin la capacidad, el daemon no manda `prediction` ni `prediction.changed`: la TU
 
 - **Depende:** T002
 - **Refs:** P3, P5, AD1, AD5, AD6, AD7; DSYS-GRP-001 § 3
-- **Aceptación:** `cargo test -p gitraptor-cli --lib tui::view::tests::conflicts` y `cargo test -p gitraptor-cli --lib present::prediction_text`
+- **Criterios:** CKP006-LIMITS, CKP006-TEXT-I18N, CKP006-SNAPSHOT
+- **Aceptación:** `cargo test -p gitraptor-cli --lib tui::view::conflicts_tests` (`apps/cli/src/tui/view/conflicts_tests.rs`) y `cargo test -p gitraptor-cli --lib present::prediction_text_tests` (`apps/cli/src/present/prediction_text_tests.rs`)
 
 ### T005 — Cerrar la historia
 
