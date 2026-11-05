@@ -36,7 +36,9 @@ pub fn worktree_root(dir: &Path) -> Option<PathBuf> {
         .map(Path::to_path_buf)
 }
 
-pub fn run(json_out: bool) -> ExitCode {
+/// `raptor undo [--since <duration>]`. The duration goes to the engine as typed: the engine
+/// validates it and counts the period with its own clock.
+pub fn run(json_out: bool, since: Option<&str>) -> ExitCode {
     let cwd = std::env::current_dir()
         .and_then(gitraptor_cli::paths::canonicalize)
         .ok();
@@ -49,10 +51,14 @@ pub fn run(json_out: bool) -> ExitCode {
         Err(code) => return code,
     };
     notices::show_pending(&mut client, &worktree, CMD);
+    let mut params = json!({ "worktree": worktree.to_string_lossy(), "surface": "cli" });
+    if let Some(since) = since {
+        params["since"] = json!(since);
+    }
     let answer = match confirm::call(
         &mut client,
         methods::TM_UNDO,
-        json!({ "worktree": worktree.to_string_lossy(), "surface": "cli" }),
+        params,
         !json_out,
         &show_undo_plan,
     ) {
@@ -67,7 +73,7 @@ pub fn run(json_out: bool) -> ExitCode {
             }
             match serde_json::from_value::<UndoResult>(value) {
                 Ok(result) => {
-                    print_done(&result, &worktree);
+                    print_done(&result, &worktree, since);
                     ExitCode::SUCCESS
                 }
                 Err(err) => {
@@ -92,7 +98,7 @@ pub fn run(json_out: bool) -> ExitCode {
                 println!("{data}");
                 return ExitCode::FAILURE;
             }
-            for line in failure_text(err, &worktree, None).lines() {
+            for line in failure_text(err, &worktree, since).lines() {
                 eprintln!("{CMD}: {line}");
             }
             ExitCode::FAILURE
@@ -126,26 +132,44 @@ fn show_undo_plan(data: &TmConfirmData) {
     );
 }
 
-fn print_done(result: &UndoResult, worktree: &Path) {
-    let operation = result
-        .undone_subtype
-        .as_ref()
-        .map_or_else(|| t("undo.operation-unnamed", &[]), |s| s.sanitized());
-    println!(
-        "{CMD}: {}",
-        t(
-            "undo.done",
-            &[
-                ("operation", &operation),
-                ("id", &result.undone_operation_id),
-                ("worktree", &shown(worktree)),
-            ],
-        )
-    );
-    println!(
-        "{CMD}: {}",
-        t("undo.saved", &[("snapshot", &result.prior_snapshot_id)])
-    );
+fn print_done(result: &UndoResult, worktree: &Path, since: Option<&str>) {
+    if let Some(since) = since {
+        // A period may take back one operation or many: the count, the oldest and the prior.
+        let count = result.undone_operation_ids.len().max(1).to_string();
+        println!(
+            "{CMD}: {}",
+            t(
+                "undo.done-since",
+                &[
+                    ("count", &count),
+                    ("since", &sanitize(since)),
+                    ("worktree", &shown(worktree)),
+                    ("oldest", &sanitize(&result.undone_operation_id)),
+                    ("id", &sanitize(&result.prior_snapshot_id)),
+                ],
+            )
+        );
+    } else {
+        let operation = result
+            .undone_subtype
+            .as_ref()
+            .map_or_else(|| t("undo.operation-unnamed", &[]), |s| s.sanitized());
+        println!(
+            "{CMD}: {}",
+            t(
+                "undo.done",
+                &[
+                    ("operation", &operation),
+                    ("id", &result.undone_operation_id),
+                    ("worktree", &shown(worktree)),
+                ],
+            )
+        );
+        println!(
+            "{CMD}: {}",
+            t("undo.saved", &[("snapshot", &result.prior_snapshot_id)])
+        );
+    }
     // A branch the undo of a restore left as it is: only a worktree that
     // restore recreated has it out. The ref name is untrusted repo text.
     for kept in result.warnings.iter().filter_map(|w| {
@@ -172,8 +196,12 @@ fn print_done(result: &UndoResult, worktree: &Path) {
 
 /// The message for a failed undo: a rejection with its reason, a scope the
 /// engine does not observe, an interruption, or the common errors.
-fn failure_text(err: ClientError, worktree: &Path, _since: Option<&str>) -> String {
+fn failure_text(err: ClientError, worktree: &Path, since: Option<&str>) -> String {
     match err {
+        // With --since the period is the only parameter the person typed.
+        ClientError::Rpc(err) if err.code == code::INVALID_PARAMS && since.is_some() => {
+            t("undo.invalid-since", &[])
+        }
         ClientError::Rpc(err) if err.code == code::OPERATION_REJECTED => {
             let data = err
                 .data
@@ -190,7 +218,13 @@ fn failure_text(err: ClientError, worktree: &Path, _since: Option<&str>) -> Stri
                 {
                     overlap::rejection_lines(Tr::current(), d.reason, d.overlap.as_ref()).join("\n")
                 }
-                Some(d) => t(reason_key(d.reason), &[]),
+                Some(d) => match (d.reason, since) {
+                    (TmRejectReason::NothingToUndo, Some(since)) => t(
+                        "undo.reason.nothing-in-period",
+                        &[("since", &sanitize(since))],
+                    ),
+                    (reason, _) => t(reason_key(reason), &[]),
+                },
                 None => t("undo.reason.unsupported", &[]),
             }
         }
