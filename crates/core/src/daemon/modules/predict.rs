@@ -69,6 +69,8 @@ enum Msg {
     /// Plan every observed repo: the initial calculation, since a repo's worktrees may never
     /// change.
     PlanAll,
+    /// A repo started to be observed while the daemon was serving: plan it now.
+    Plan(String, Vec<(PathBuf, UncommittedPaths)>),
     Stop,
 }
 
@@ -185,6 +187,12 @@ impl DaemonModule for Predict {
         // The initial calculation starts once clients can watch it, so they see it go from
         // calculating to its results.
         let _ = self.tx.send(Msg::PlanAll);
+    }
+
+    fn repo_added(&self, repo_id: &str, worktrees: &[(PathBuf, UncommittedPaths)]) {
+        let _ = self
+            .tx
+            .send(Msg::Plan(repo_id.to_owned(), worktrees.to_vec()));
     }
 
     fn repo_retired(&self, repo_id: &str) {
@@ -345,6 +353,17 @@ impl Worker {
                     if !self.repos.get(&repo.repo_id).is_some_and(|s| s.dormant) {
                         dirty.entry(repo.repo_id).or_default();
                     }
+                }
+            }
+            // A repo added at runtime has no Git event nor recompute until something changes in
+            // it: its first read, with the uncommitted paths of each worktree, plans it now.
+            Msg::Plan(repo_id, worktrees) => {
+                let state = self.state(&repo_id);
+                if !state.dormant {
+                    for (root, paths) in worktrees {
+                        state.uncommitted.insert(observe::canonical(&root), paths);
+                    }
+                    dirty.entry(repo_id).or_default();
                 }
             }
             Msg::Tier(_, Tier::Waking) | Msg::Stop => {}
