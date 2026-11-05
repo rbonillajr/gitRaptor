@@ -6,9 +6,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use gitraptor_api::catalog::{MAX_LABEL_CHARS, SnapshotRunResult, check_snapshot_label};
-use gitraptor_api::mcp_view::{
-    MCP_WRITE_TIME_LIMIT, McpSnapshotView, McpToolError, compact_schema,
-};
+use gitraptor_api::mcp_view::{MCP_WRITE_TIME_LIMIT, McpSnapshotView, McpToolError};
 use rmcp::model::{JsonObject, Tool};
 use serde_json::{Value, json};
 
@@ -42,15 +40,8 @@ fn input_schema() -> JsonObject {
 }
 
 pub fn tool() -> Tool {
-    let output = serde_json::to_value(schemars::schema_for!(McpSnapshotView))
-        .ok()
-        .and_then(|mut v| {
-            compact_schema(&mut v);
-            v.as_object().cloned()
-        })
-        .unwrap_or_default();
     Tool::new(SNAPSHOT_TOOL, SNAPSHOT_DESCRIPTION, input_schema())
-        .with_raw_output_schema(Arc::new(output))
+        .with_raw_output_schema(crate::server::output_schema::<McpSnapshotView>())
 }
 
 /// The `label` of a call, or the name of the field that makes it malformed: an unknown
