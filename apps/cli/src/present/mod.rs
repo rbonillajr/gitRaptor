@@ -3,6 +3,7 @@
 
 pub mod i18n;
 pub mod ingest;
+pub mod prediction;
 pub mod prediction_text;
 mod sanitize;
 

@@ -13,6 +13,8 @@ use gitraptor_api::messages::{
     EngineStateView, EngineView, GitEventView, RepoTierData, ResyncReason, SessionStateView,
     SessionView, SessionsListResult, WorktreeStateData,
 };
+use gitraptor_api::methods::PREDICTION_CHANGED;
+use gitraptor_api::prediction::PredictionChanged;
 use gitraptor_api::scope::{Scope, ScopeSnapshot};
 use ratatui::crossterm::event::KeyEventKind;
 
@@ -25,6 +27,7 @@ use crate::model::{
 };
 use crate::present::{SafeText, ingest};
 use crate::tui::keymap::{self, Action};
+use crate::tui::prediction;
 
 pub fn update(model: &mut Model, msg: Msg) -> Vec<Cmd> {
     match msg {
@@ -304,7 +307,7 @@ fn on_conn(model: &mut Model, event: ConnEvent) -> Vec<Cmd> {
             model.ui.notice = Some(Notice::DiscoveryFailed(failure));
         }
         ConnEvent::Activity(activity) => model.engine.activity = activity,
-        ConnEvent::Prediction(_) => {}
+        ConnEvent::Prediction(has) => model.engine.prediction = has,
         ConnEvent::Requester(requester) => model.engine.requester = requester,
         ConnEvent::State(state) => {
             if matches!(
@@ -335,7 +338,7 @@ fn on_engine(model: &mut Model, msg: EngineMsg) -> Vec<Cmd> {
     match msg {
         EngineMsg::Snapshot(snapshot) => {
             on_snapshot(model, *snapshot);
-            Vec::new()
+            prediction::wanted(model)
         }
         EngineMsg::Event {
             scope,
@@ -362,7 +365,15 @@ fn on_engine(model: &mut Model, msg: EngineMsg) -> Vec<Cmd> {
             on_history(model, &repo_id, &events);
             Vec::new()
         }
-        EngineMsg::PredictionPage { .. } => Vec::new(),
+        EngineMsg::PredictionPage { repo_id, page } => {
+            if let Some(data) = selected(model, &repo_id).and_then(|r| r.data.as_mut())
+                && let Some(prediction) = data.prediction.as_mut()
+            {
+                prediction.apply_page(&page);
+                model.dirty = true;
+            }
+            prediction::wanted(model)
+        }
         EngineMsg::Protection { repo_id, hooks } => {
             if let Some(data) = selected(model, &repo_id).and_then(|r| r.data.as_mut()) {
                 data.protection = hooks.filter(|h| !matches!(h.status, HooksStatus::Active));
@@ -460,7 +471,7 @@ fn on_event(
         Verdict::Gap => start_resync(model, scope.clone(), false),
         Verdict::Apply => {
             apply(model, scope, event);
-            Vec::new()
+            prediction::wanted(model)
         }
     }
 }
@@ -536,6 +547,12 @@ fn apply(model: &mut Model, scope: &Scope, event: &gitraptor_api::Event) {
                 && lost.repo_id == data.repo_id
             {
                 data.protection = Some(lost.hooks).filter(|h| h.status != HooksStatus::Active);
+            } else if event.kind == PREDICTION_CHANGED
+                && let Ok(changed) = serde_json::from_value::<PredictionChanged>(event.data.clone())
+                && changed.repo_id == data.repo_id
+                && let Some(prediction) = data.prediction.as_mut()
+            {
+                prediction.apply_changed(&changed.pairs, &changed.removed);
             } else if event.kind == GIT_EVENT
                 && let Ok(view) = serde_json::from_value::<GitEventView>(event.data.clone())
                 && view.repo_id == data.repo_id
@@ -569,6 +586,9 @@ fn start_resync(model: &mut Model, scope: Scope, resubscribe: bool) -> Vec<Cmd> 
         Scope::Repo { .. } => {
             if let Some(repo) = model.engine.repo.as_mut() {
                 repo.mark_stale();
+                if let Some(prediction) = repo.data.as_mut().and_then(|d| d.prediction.as_mut()) {
+                    prediction.forget_asked();
+                }
             }
         }
     }

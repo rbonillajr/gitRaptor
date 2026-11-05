@@ -21,7 +21,7 @@ pub const MIN_HEIGHT: u16 = 24;
 pub const WIDE: u16 = 120;
 const LIST_MIN: u16 = 10;
 const GRAPH_MIN: u16 = 6;
-const ALERTS_MAX: u16 = 8;
+pub const ALERTS_MAX: u16 = 8;
 
 /// What the body has to show.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
