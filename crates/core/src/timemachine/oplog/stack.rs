@@ -83,8 +83,7 @@ impl UndoStack {
 
     /// The operations of the scope that are not undone, oldest first.
     pub fn done(&self) -> &[OpRef] {
-        // Stub until the undo by period is built: nothing is listed.
-        &[]
+        &self.done
     }
 
     /// The undo the next redo redoes, if any.

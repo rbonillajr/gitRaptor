@@ -497,7 +497,7 @@ impl UndoResult {
             actor: cap_actor(&self.requester.actor),
             not_restored: self.not_restored.len() as u64,
             kept: self.kept_total.max(self.kept.len() as u64),
-            undone_count: 0,
+            undone_count: self.undone_operation_ids.len() as u64,
         }
     }
 }
