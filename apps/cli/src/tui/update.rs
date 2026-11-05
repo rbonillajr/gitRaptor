@@ -318,6 +318,13 @@ fn on_conn(model: &mut Model, event: ConnEvent) -> Vec<Cmd> {
                     | ConnState::Syncing
             ) {
                 model.engine.mark_all_stale();
+                // What was asked on the old connection will never be answered.
+                if let Some(p) = (model.engine.repo.as_mut())
+                    .and_then(|r| r.data.as_mut())
+                    .and_then(|d| d.prediction.as_mut())
+                {
+                    p.forget_inflight();
+                }
             }
             // A failed observation keeps saying why and how to retry until the next key.
             if state == ConnState::Live
@@ -364,6 +371,14 @@ fn on_engine(model: &mut Model, msg: EngineMsg) -> Vec<Cmd> {
         EngineMsg::History { repo_id, events } => {
             on_history(model, &repo_id, &events);
             Vec::new()
+        }
+        EngineMsg::PredictionRefused { repo_id } => {
+            if let Some(data) = selected(model, &repo_id).and_then(|r| r.data.as_mut())
+                && let Some(prediction) = data.prediction.as_mut()
+            {
+                prediction.apply_refused();
+            }
+            prediction::wanted(model)
         }
         EngineMsg::PredictionPage { repo_id, page } => {
             if let Some(data) = selected(model, &repo_id).and_then(|r| r.data.as_mut())
@@ -427,7 +442,18 @@ fn on_snapshot(model: &mut Model, snapshot: ScopeSnapshot) {
         }
         ScopeSnapshot::Repo(repo) => {
             let replica = model.engine.repo.get_or_insert_with(ScopeReplica::default);
+            // The requests still unanswered keep their place: their answers come in order.
+            let inflight = (replica.data.as_mut())
+                .filter(|old| old.repo_id == repo.repo.repo_id)
+                .and_then(|old| old.prediction.as_mut())
+                .map(|p| p.take_inflight());
             replica.data = Some(ingest::repo(&repo));
+            if let (Some(inflight), Some(p)) = (
+                inflight,
+                replica.data.as_mut().and_then(|d| d.prediction.as_mut()),
+            ) {
+                p.inherit(inflight);
+            }
             // Only the repo changes the register: a snapshot empties the sessions, which is no
             // reason to free their colors.
             model.ui.colors.open(&repo.repo.repo_id);

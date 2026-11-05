@@ -596,6 +596,19 @@ fn sessions(
     Ok(Ok(()))
 }
 
+/// The answer to a `prediction.list` the engine refused or whose reply cannot be read: the model
+/// counts one answer per request.
+fn refused(repo_id: &str, out: &Outlet) -> Result<Result<(), LinkError>, Closed> {
+    out.send(Msg::Engine(Stamped {
+        recv_ns: monotonic_ns(),
+        decoded_ns: monotonic_ns(),
+        msg: EngineMsg::PredictionRefused {
+            repo_id: repo_id.to_owned(),
+        },
+    }))?;
+    Ok(Ok(()))
+}
+
 /// `prediction.list`: the details of `pair_ids` or, with none, the page at `cursor`. A refusal
 /// (an unknown pair, a malformed id) drops the answer: the next event corrects what is shown.
 fn prediction_list(
@@ -613,12 +626,12 @@ fn prediction_list(
     };
     let value = match link.call(methods::PREDICTION_LIST, to_value(&params)) {
         Ok(value) => value,
-        Err(LinkError::Refused) => return Ok(Ok(())),
+        Err(LinkError::Refused) => return refused(&repo_id, out),
         Err(err) => return Ok(Err(err)),
     };
     let recv_ns = monotonic_ns();
     let Ok(page) = serde_json::from_value::<PredictionPage>(value) else {
-        return Ok(Ok(()));
+        return refused(&repo_id, out);
     };
     out.send(Msg::Engine(Stamped {
         recv_ns,

@@ -18,6 +18,8 @@ pub mod widgets;
 pub use term::run;
 
 #[cfg(test)]
+mod prediction_stale_tests;
+#[cfg(test)]
 mod prediction_tests;
 #[cfg(test)]
 mod view_order_tests;

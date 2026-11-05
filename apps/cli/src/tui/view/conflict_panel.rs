@@ -164,7 +164,9 @@ fn clash(kind: ConflictKindView, ours: &[LineRange], theirs: &[LineRange], say: 
     }
     let n = ours.len().max(theirs.len());
     let one = |r: Option<&LineRange>| match r {
-        Some(r) if r.len > 1 => format!("{}–{}", r.start, r.start + r.len - 1),
+        Some(r) if r.len > 1 => {
+            format!("{}–{}", r.start, u64::from(r.start) + u64::from(r.len) - 1)
+        }
         Some(r) => r.start.to_string(),
         None => say.glyphs.unknown.to_owned(),
     };
