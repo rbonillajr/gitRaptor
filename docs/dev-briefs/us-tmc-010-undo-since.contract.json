@@ -1,0 +1,253 @@
+{
+  "version": 1,
+  "source": [
+    "docs/requirements/features/time-machine/dev-specs/US-TMC-010-undo-since.md",
+    "docs/dev-briefs/us-tmc-010-undo-since.2-plan.md"
+  ],
+  "rigor": "alto",
+  "goal": {
+    "intent": "Que el desarrollador deshaga de una vez lo ocurrido en su worktree en un periodo (raptor undo --since 20m) como un solo undo recuperable, sin deshacer nunca de más ni saltarse en silencio nada del periodo (NFR-01, D-TMC-29).",
+    "endState": "timemachine.undo con since deshace el sufijo de la pila del worktree cuyo momento cae en el periodo como una operación undo con un previo propio y Target::Undo(conjunto); UndoResult lleva undone_operation_ids (MCP: undone_count); un periodo inválido da INVALID_PARAMS, uno vacío nothing-to-undo, una operación no deshacible rechaza la petición entera, el trabajo de otro actor pide la confirmación de US-TMC-013; raptor undo --since <duración> [--json] lo expone con textos en/es; agent y operation_id siguen en NOT_IMPLEMENTED.",
+    "nonGoals": [
+      "--agent (US-TMC-011) y el undo por operation_id",
+      "elegir el periodo en la TUI (apps/cli/src/tui/ sin cambios)",
+      "redo (US-TMC-003) y on_remote (US-TMC-014, no está en main)",
+      "seguir un worktree movido por su id (TQ-20)",
+      "cerrar la historia y xplat-pendientes (T007, lo hace el orquestador)"
+    ]
+  },
+  "criteria": [
+    {
+      "id": "TMC010-WIRE",
+      "statement": "T001: UndoResult sin since serializa exactamente la forma de hoy (sin undone_operation_ids) y con since lista todas las operaciones deshechas de la más antigua a la más reciente, con undone_operation_id = la más antigua; McpUndoResult.undone_count = número de deshechas y se omite si es 0; la proyección MCP no lleva ids de Git crudo ni rutas",
+      "verify": "cargo test -p gitraptor-api --lib timemachine_since_tests",
+      "layer": "runtime",
+      "tests": [
+        "crates/api/src/timemachine_since_tests.rs"
+      ]
+    },
+    {
+      "id": "TMC010-STACK-DONE",
+      "statement": "T002: UndoStack::done() devuelve las operaciones no deshechas de la más antigua a la más reciente: tras Do(a), Do(b), Do(c), Undo{targets:[c]} es [a, b]; tras un Redo de ese undo vuelve a [a, b, c]; last_operation() no cambia",
+      "verify": "cargo test -p gitraptor-core --lib timemachine::oplog::stack::done_tests",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/timemachine/oplog/stack_done_tests.rs"
+      ]
+    },
+    {
+      "id": "TMC010-SELECT",
+      "statement": "T003 (D2): con Selection::Since el conjunto es el sufijo de la pila del worktree con momento (recorded_ms del oplog, observed_ms del evento crudo) >= since_ms, en orden de la pila; el recorrido para en la primera operación más antigua aunque haya otra dentro del periodo debajo; Selection::Last da un vector de uno y el comportamiento de hoy",
+      "verify": "cargo test -p gitraptor-core --lib -- --exact timemachine::undo::since_tests::since_takes_the_suffix_of_the_stack_inside_the_period --exact timemachine::undo::since_tests::since_stops_at_the_first_older_operation",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/timemachine/undo_since_tests.rs"
+      ]
+    },
+    {
+      "id": "TMC010-NFR01-WHOLE",
+      "statement": "T003 (D4, NFR-01): un evento crudo del periodo con is_undoable falso rechaza la petición entera con raw-git-not-covered; nada se aplica, no hay previo del undo y el rechazo queda en el oplog con Target::Undo del conjunto",
+      "verify": "cargo test -p gitraptor-core --lib -- --exact timemachine::undo::since_tests::a_raw_event_not_covered_rejects_the_whole_period",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/timemachine/undo_since_tests.rs"
+      ]
+    },
+    {
+      "id": "TMC010-TARGET",
+      "statement": "T003: el destino de un undo por periodo es el estado previo de la operación más antigua del conjunto (su previo garantizado, o raw_target si es un evento crudo), disponible y verificado",
+      "verify": "cargo test -p gitraptor-core --lib -- --exact timemachine::undo::since_tests::the_target_is_the_prior_of_the_oldest",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/timemachine/undo_since_tests.rs"
+      ]
+    },
+    {
+      "id": "TMC010-SERVED",
+      "statement": "T004: timemachine.undo con since ya no responde NOT_IMPLEMENTED (pasa por require_attributed y tm_scope_for como el undo sin selectores); con agent sigue NOT_IMPLEMENTED con implemented_by US-TMC-011",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_010 -- --exact since_is_served_and_agent_is_still_not_implemented",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_tmc_010.rs"
+      ]
+    },
+    {
+      "id": "TMC010-S1-PERIOD",
+      "statement": "Escenario 1: A fuera del periodo (más de 10 s antes), B y C dentro, since = 8s; tras el undo el worktree está como después de A; undone_operation_ids = [B, C]; prior_snapshot_id existe, disponible y verifica; el oplog tiene un undo con Target::Undo([B, C])",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_010 -- --exact since_undoes_the_operations_of_the_period_only",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_tmc_010.rs"
+      ]
+    },
+    {
+      "id": "TMC010-S2-OTHER-WT",
+      "statement": "Escenario 2: commits en feat-pagos dentro del periodo; tras el undo por periodo de feat-login la huella de feat-pagos (worktree y rama) es la misma",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_010 -- --exact since_never_touches_other_worktrees",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_tmc_010.rs"
+      ]
+    },
+    {
+      "id": "TMC010-S3-INVALID",
+      "statement": "Escenario 3: since = \"veinte\" responde INVALID_PARAMS con el campo since; huella igual; ninguna operación nueva en el oplog",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_010 -- --exact an_invalid_period_changes_nothing",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_tmc_010.rs"
+      ]
+    },
+    {
+      "id": "TMC010-S4-NOTHING",
+      "statement": "Escenario 4: sin operaciones en el periodo responde OPERATION_REJECTED con nothing-to-undo; huella igual; el rechazo queda en el oplog",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_010 -- --exact nothing_in_the_period_changes_nothing",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_tmc_010.rs"
+      ]
+    },
+    {
+      "id": "TMC010-S5-CONFIRMED",
+      "statement": "Escenario 5: una operación sin atribuir y trabajo de un agente en el periodo; el solicitante sin atribuir recibe confirmation-required con reto y los dueños; con el token las dos quedan deshechas en un solo undo confirmado",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_010 -- --exact another_actor_in_the_period_is_undone_once_confirmed",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_tmc_010.rs"
+      ]
+    },
+    {
+      "id": "TMC010-S6-UNCONFIRMED",
+      "statement": "Escenario 6: sin token la petición se rechaza con confirmation-required y los dueños; huella igual; nada del periodo se excluye en silencio",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_010 -- --exact another_actor_in_the_period_without_confirmation_is_rejected",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_tmc_010.rs"
+      ]
+    },
+    {
+      "id": "TMC010-EQ-N-UNDOS",
+      "statement": "D1/D2: en dos repos iguales, un undo --since sobre uno y dos undo seguidos sobre el otro dejan el mismo contenido del worktree, el mismo árbol de HEAD y las mismas puntas de rama",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_010 -- --exact since_equals_consecutive_undos",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_tmc_010.rs"
+      ]
+    },
+    {
+      "id": "TMC010-REDO-READY",
+      "statement": "Redo preparado: tras el undo por periodo la pila del worktree ya no tiene B ni C y next_redo es ese undo",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_010 -- --exact the_undo_records_every_target_for_redo",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_tmc_010.rs"
+      ]
+    },
+    {
+      "id": "TMC010-PRECOND",
+      "statement": "DS-US-TMC-015 D7: con un rebase en curso el undo por periodo se rechaza con git-operation-in-progress antes de tomar su previo (ningún punto nuevo); huella igual",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_010 -- --exact since_with_a_rebase_in_progress_is_rejected_without_a_prior",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_tmc_010.rs"
+      ]
+    },
+    {
+      "id": "TMC010-CLI-TEXT",
+      "statement": "T005: undo.done-since, undo.reason.nothing-in-period y undo.invalid-since existen en en y es con sus marcadores (catalogs_match y every_rejection_has_a_message los cubre la suite)",
+      "verify": "cargo test -p gitraptor-cli --bin raptor -- undo::since_tests",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/src/undo/since_tests.rs"
+      ]
+    },
+    {
+      "id": "TMC010-E2E-INVALID",
+      "statement": "e2e (macOS): raptor undo --since veinte con LANG=es imprime el texto de undo.invalid-since en español, sale con fallo y el repo no cambia",
+      "verify": "cargo test -p gitraptor-cli --test us_tmc_010_process -- --exact undo_since_invalid_says_why_in_es",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/us_tmc_010_process.rs"
+      ]
+    },
+    {
+      "id": "TMC010-E2E-NOTHING",
+      "statement": "e2e (macOS): raptor undo --since 5m sin nada en el periodo imprime undo.reason.nothing-in-period con el periodo en inglés y en español, sale con fallo y el repo no cambia",
+      "verify": "cargo test -p gitraptor-cli --test us_tmc_010_process -- --exact undo_since_with_nothing_says_so_in_en_and_es",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/us_tmc_010_process.rs"
+      ]
+    }
+  ],
+  "suite": {
+    "command": "node tools/test/nextest-junit.mjs"
+  },
+  "layers": {
+    "runtime": {
+      "commands": [
+        {
+          "id": "suite",
+          "cmd": "node tools/test/nextest-junit.mjs"
+        }
+      ],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "scope": {
+    "projects": [
+      "gitraptor-api",
+      "gitraptor-core",
+      "gitraptor-cli"
+    ]
+  },
+  "constraints": {
+    "deny_paths": [
+      "Cargo.toml",
+      "Cargo.lock",
+      "crates/api/Cargo.toml",
+      "crates/core/Cargo.toml",
+      "apps/cli/Cargo.toml",
+      "crates/git/",
+      "crates/policy/",
+      "crates/theme/",
+      "apps/mcp/",
+      "apps/cli/src/tui/",
+      "crates/core/src/timemachine/oplog/schema.rs",
+      "crates/core/tests/us_tmc_013_common/",
+      "docs/ARTIFACTS.md"
+    ],
+    "allow_dependency_changes": false
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 600000,
+    "suiteTimeoutMs": 5400000
+  },
+  "hops": {
+    "design": {
+      "agent": "nassa-dev-rust:rust-expert",
+      "model": "opus"
+    },
+    "critic": {
+      "agent": "nassa-core:plan-critic",
+      "model": "opus"
+    },
+    "tester": {
+      "agent": "nassa-core:criterion-tester",
+      "model": "sonnet"
+    },
+    "build": {
+      "agent": "nassa-dev-rust:rust-expert",
+      "model": "opus"
+    },
+    "review": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "opus"
+    },
+    "conformance": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "sonnet"
+    }
+  }
+}
