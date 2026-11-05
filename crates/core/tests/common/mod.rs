@@ -3,6 +3,8 @@
 //! repo (NFR-01).
 #![allow(dead_code)]
 
+pub mod points;
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
