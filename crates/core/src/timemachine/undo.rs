@@ -269,7 +269,8 @@ pub struct Undone {
 
 /// What an undo is about to do.
 struct Planned {
-    undone: Undone,
+    /// What it takes back, oldest first (one for the undo of the last operation).
+    undone: Vec<Undone>,
     target: String,
     scope: Scope,
     worktrees: Vec<PlanWorktree>,
@@ -476,6 +477,37 @@ fn raw_target(
         .find(|id| store.verify(id).is_ok())
 }
 
+/// When `op` happened, for an undo by period (D6): the operation's `recorded_ms`, the raw
+/// event's `observed_ms`. `None` when it cannot be read.
+fn moment(oplog: &Oplog, raw: &RawSide, op: &OpRef) -> Option<i64> {
+    match op {
+        OpRef::Oplog(id) => oplog
+            .operation(id)
+            .ok()
+            .flatten()
+            .map(|view| view.record.recorded_ms),
+        OpRef::GitEvent(seq) => raw
+            .events
+            .iter()
+            .find(|e| e.seq == *seq)
+            .map(|e| e.observed_ms),
+    }
+}
+
+/// Adds to `into` the worktrees and refs of `from` it does not have yet, in order.
+fn merge_scope(into: &mut Scope, from: &Scope) {
+    for w in &from.worktrees {
+        if !into.worktrees.contains(w) {
+            into.worktrees.push(w.clone());
+        }
+    }
+    for r in &from.refs {
+        if !into.refs.contains(r) {
+            into.refs.push(r.clone());
+        }
+    }
+}
+
 /// Steps 4–6 of ADR-TMC-005 § 4 (set, target, base rule). A refusal
 /// carries the scope to record it under.
 #[allow(clippy::too_many_arguments)]
@@ -491,6 +523,7 @@ fn plan(
     raw_all: &HashMap<PathBuf, RawSide>,
     events_complete: bool,
     deadline: Instant,
+    selection: Selection,
 ) -> Result<Planned, PlanRefusal> {
     // The oplog is held while the stack and the target are read, and released before the
     // confirmation gate: that walks the caller's process tree. The repo's write lock (held by
@@ -519,82 +552,113 @@ fn plan(
     // Their roots, when the restore recorded them: the key alone could name
     // another worktree that took the same id since.
     let mut recreated_roots: Vec<PathBuf> = Vec::new();
-    let (undone, scope, target) = match stack.last_operation() {
-        None => return Err(reject(TmRejectReason::NothingToUndo, &own_scope, vec![])),
-        Some(op @ OpRef::GitEvent(seq)) => {
-            let event = raw.events.iter().find(|e| e.seq == *seq);
-            let Some(event) = event.filter(|e| is_undoable(e.kind)) else {
-                // Pushes, reconciliations, branches and worktrees created or
-                // deleted: not undone yet, and never skipped.
-                return Err(reject(
-                    TmRejectReason::RawGitNotCovered,
-                    &own_scope,
-                    vec![op.clone()],
-                ));
-            };
-            let scope = Scope {
-                worktrees: own_scope.worktrees.clone(),
-                refs: event
-                    .branch
-                    .iter()
-                    .map(|b| format!("refs/heads/{b}"))
-                    .collect(),
-            };
-            let mut event_seqs: Vec<i64> = raw.events.iter().map(|e| e.seq).collect();
-            event_seqs.sort_unstable();
-            let target = raw_target(oplog, store, &wt_key, &event_seqs, *seq, raw.floor)
-                .ok_or_else(|| {
-                    reject(TmRejectReason::TargetUnavailable, &scope, vec![op.clone()])
-                })?;
-            let undone = Undone {
-                op: op.clone(),
-                id: format!("git-event-{seq}"),
-                subtype: Some(event.kind.as_str().to_owned()),
-                requester: event.actor.clone(),
-                at_ms: None,
-            };
-            (undone, scope, target)
-        }
-        Some(OpRef::Oplog(id)) => {
-            let Some(view) = oplog.operation(id).ok().flatten() else {
-                return Err(reject(
-                    TmRejectReason::TargetUnavailable,
-                    &own_scope,
-                    vec![],
-                ));
-            };
-            let scope = view.record.scope.clone();
-            if view.record.kind == OperationKind::Restore {
-                let tagged = |prefix: &str| -> Vec<String> {
-                    view.record
-                        .warnings
-                        .iter()
-                        .filter_map(|w| w.strip_prefix(prefix)?.strip_prefix(':'))
-                        .map(str::to_owned)
-                        .collect()
-                };
-                recreated = tagged(RECREATED_WORKTREE_WARNING);
-                recreated_roots = tagged(RECREATED_WORKTREE_ROOT_WARNING)
-                    .into_iter()
-                    .map(PathBuf::from)
-                    .collect();
-            }
-            let op = OpRef::Oplog(view.record.operation_id.clone());
-            // The target: the operation's guaranteed prior snapshot.
-            let target = view.prior_snapshot.clone().ok_or_else(|| {
-                reject(TmRejectReason::TargetUnavailable, &scope, vec![op.clone()])
-            })?;
-            let undone = Undone {
-                op,
-                id: view.record.operation_id.clone(),
-                subtype: view.record.subtype.clone(),
-                requester: view.record.requester.clone(),
-                at_ms: Some(view.record.recorded_ms),
-            };
-            (undone, scope, target)
+    // The set (D2): the most recent operation, or the suffix of the stack whose moment is in the
+    // period. The walk stops at the first older one, so a clock out of order undoes less, never
+    // more. A moment that cannot be read keeps the walk going: the operation joins the set and
+    // its own check below refuses the whole request.
+    let set: Vec<OpRef> = match selection {
+        Selection::Last => stack.last_operation().cloned().into_iter().collect(),
+        Selection::Since { since_ms } => {
+            let mut set: Vec<OpRef> = stack
+                .done()
+                .iter()
+                .rev()
+                .take_while(|op| moment(oplog, raw, op).is_none_or(|at| at >= since_ms))
+                .cloned()
+                .collect();
+            set.reverse();
+            set
         }
     };
-    let target_ref = vec![undone.op.clone()];
+    let Some(oldest_op) = set.first().cloned() else {
+        return Err(reject(TmRejectReason::NothingToUndo, &own_scope, vec![]));
+    };
+    let mut event_seqs: Vec<i64> = raw.events.iter().map(|e| e.seq).collect();
+    event_seqs.sort_unstable();
+    // Every operation of the set passes the checks the only one passes today; one that cannot be
+    // undone refuses the whole request, never skipped (NFR-01).
+    let mut scope = Scope::default();
+    let mut undone: Vec<Undone> = Vec::with_capacity(set.len());
+    for op in &set {
+        match op {
+            OpRef::GitEvent(seq) => {
+                let event = raw.events.iter().find(|e| e.seq == *seq);
+                let Some(event) = event.filter(|e| is_undoable(e.kind)) else {
+                    // Pushes, reconciliations, branches and worktrees created or
+                    // deleted: not undone yet, and never skipped.
+                    merge_scope(&mut scope, &own_scope);
+                    return Err(reject(
+                        TmRejectReason::RawGitNotCovered,
+                        &scope,
+                        set.clone(),
+                    ));
+                };
+                merge_scope(
+                    &mut scope,
+                    &Scope {
+                        worktrees: own_scope.worktrees.clone(),
+                        refs: event
+                            .branch
+                            .iter()
+                            .map(|b| format!("refs/heads/{b}"))
+                            .collect(),
+                    },
+                );
+                undone.push(Undone {
+                    op: op.clone(),
+                    id: format!("git-event-{seq}"),
+                    subtype: Some(event.kind.as_str().to_owned()),
+                    requester: event.actor.clone(),
+                    at_ms: None,
+                });
+            }
+            OpRef::Oplog(id) => {
+                let Some(view) = oplog.operation(id).ok().flatten() else {
+                    merge_scope(&mut scope, &own_scope);
+                    return Err(reject(
+                        TmRejectReason::TargetUnavailable,
+                        &scope,
+                        set.clone(),
+                    ));
+                };
+                merge_scope(&mut scope, &view.record.scope);
+                if view.record.kind == OperationKind::Restore {
+                    let tagged = |prefix: &str| -> Vec<String> {
+                        view.record
+                            .warnings
+                            .iter()
+                            .filter_map(|w| w.strip_prefix(prefix)?.strip_prefix(':'))
+                            .map(str::to_owned)
+                            .collect()
+                    };
+                    recreated.extend(tagged(RECREATED_WORKTREE_WARNING));
+                    recreated_roots.extend(
+                        tagged(RECREATED_WORKTREE_ROOT_WARNING)
+                            .into_iter()
+                            .map(PathBuf::from),
+                    );
+                }
+                undone.push(Undone {
+                    op: OpRef::Oplog(view.record.operation_id.clone()),
+                    id: view.record.operation_id.clone(),
+                    subtype: view.record.subtype.clone(),
+                    requester: view.record.requester.clone(),
+                    at_ms: Some(view.record.recorded_ms),
+                });
+            }
+        }
+    }
+    // The target: the state before the oldest of the set (ADR-TMC-003 § 4).
+    let target = match &oldest_op {
+        OpRef::GitEvent(seq) => raw_target(oplog, store, &wt_key, &event_seqs, *seq, raw.floor),
+        OpRef::Oplog(id) => oplog
+            .operation(id)
+            .ok()
+            .flatten()
+            .and_then(|view| view.prior_snapshot),
+    }
+    .ok_or_else(|| reject(TmRejectReason::TargetUnavailable, &scope, set.clone()))?;
+    let target_ref = set.clone();
     let refuse = |reason| reject(reason, &scope, target_ref.clone());
 
     // Still a point of the timeline and intact in the store.
@@ -615,21 +679,30 @@ fn plan(
 
     // Base permission rule (ADR-TMC-005 § 2), then the interactive confirmation of what it
     // asks to confirm (ADR-TMC-005 § 3).
+    let oldest = &undone[0];
+    let owners: Vec<Requester> = undone.iter().map(|u| u.requester.clone()).collect();
     let facts = PlanFacts {
         kind: PlanKind::Undo,
         worktree: &requested,
         requester: &who.requester,
         channel,
         target_snapshot: &target,
-        undone_id: Some(&undone.id),
-        undone_subtype: undone.subtype.as_deref(),
+        undone_id: Some(&oldest.id),
+        undone_subtype: oldest.subtype.as_deref(),
         scope: &scope,
-        owners: std::slice::from_ref(&undone.requester),
+        owners: &owners,
+    };
+    // The ids of a period enter the plan hash: one more operation in it is another plan. The
+    // undo of the last operation keeps today's hash.
+    let taken_back: Vec<&str> = match selection {
+        Selection::Last => Vec::new(),
+        Selection::Since { .. } => undone.iter().map(|u| u.id.as_str()).collect(),
     };
     let confirmed = confirm
-        .gate(
-            permission(&who.requester, channel, &undone.requester),
+        .gate_over(
+            super::restore::restore_permission(&who.requester, channel, &owners),
             &facts,
+            &taken_back,
         )
         .map_err(refuse)?;
     // Next: Guardrails (US-TMC-021). The overlap (US-TMC-012) needs the worktrees and branches
@@ -677,8 +750,8 @@ fn plan(
             (Ok(ops), Ok(snaps)) => overlap::check_with(
                 store,
                 &OverlapInput {
-                    reference: std::slice::from_ref(&undone.requester),
-                    undone: std::slice::from_ref(&undone.op),
+                    reference: &owners,
+                    undone: &set,
                     target: &target,
                     worktrees: &worktrees,
                     refs: &refs,
@@ -707,7 +780,7 @@ fn plan(
             target_ref.clone(),
             Some(OverlapRefusal {
                 report: Box::new(report),
-                undone: Box::new(undone),
+                undone: Box::new(undone.swap_remove(0)),
             }),
         ));
     }
@@ -834,8 +907,10 @@ pub(super) struct UndoStep<'a> {
 
 /// What phase 2 of the overlap check needs besides the step's plan.
 pub(super) struct Tail<'a> {
-    pub(super) reference: Requester,
-    pub(super) undone: OpRef,
+    /// The owners of what is taken back.
+    pub(super) reference: Vec<Requester>,
+    /// What is taken back, oldest first.
+    pub(super) undone: Vec<OpRef>,
     pub(super) phase1: OverlapReport,
     /// The engine, to read the events again with the repo held; `None`: no events.
     pub(super) engine: Option<&'a CaptureDeps>,
@@ -875,8 +950,8 @@ impl UndoStep<'_> {
             (Ok(ops), Ok(snaps)) => overlap::check_tail_with(
                 self.store,
                 &OverlapInput {
-                    reference: std::slice::from_ref(&tail.reference),
-                    undone: std::slice::from_ref(&tail.undone),
+                    reference: &tail.reference,
+                    undone: &tail.undone,
                     target: &self.plan.target_snapshot,
                     worktrees: &self.plan.worktrees,
                     refs: &refs,
@@ -963,25 +1038,6 @@ impl ProtectedStep for UndoStep<'_> {
     }
 }
 
-/// Undoes what `selection` picks of `repo.repo.worktree`'s stack, for `who` through `channel`.
-///
-/// # Errors
-/// [`UndoError::Internal`] for [`Selection::Since`] until the undo by period is built; nothing
-/// is recorded nor touched then.
-pub fn undo_selected(
-    repo: &TmRepoHandle,
-    who: &Who,
-    channel: Channel,
-    confirm: &Confirmation<'_>,
-    env: &UndoEnv<'_>,
-    selection: Selection,
-) -> Result<UndoDone, UndoError> {
-    match selection {
-        Selection::Last => undo_last(repo, who, channel, confirm, env),
-        Selection::Since { .. } => Err(UndoError::Internal("since: not built".to_owned())),
-    }
-}
-
 /// Undoes the most recent operation of `repo.repo.worktree` that is not
 /// undone yet, for `who` through `channel`.
 pub fn undo_last(
@@ -990,6 +1046,20 @@ pub fn undo_last(
     channel: Channel,
     confirm: &Confirmation<'_>,
     env: &UndoEnv<'_>,
+) -> Result<UndoDone, UndoError> {
+    undo_selected(repo, who, channel, confirm, env, Selection::Last)
+}
+
+/// Undoes what `selection` picks of `repo.repo.worktree`'s stack, for `who` through `channel`,
+/// as one protected `undo` operation with its own prior and `Target::Undo` of the whole set.
+/// Anything of the set that cannot be undone refuses the whole request (NFR-01).
+pub fn undo_selected(
+    repo: &TmRepoHandle,
+    who: &Who,
+    channel: Channel,
+    confirm: &Confirmation<'_>,
+    env: &UndoEnv<'_>,
+    selection: Selection,
 ) -> Result<UndoDone, UndoError> {
     let oplog = &repo.repo.oplog;
     let worktree = repo.repo.worktree.as_path();
@@ -1089,6 +1159,7 @@ pub fn undo_last(
         &raw_all,
         events_complete,
         overlap_started + OVERLAP_BUDGET,
+        selection,
     );
     let planned = match planned {
         Ok(p) => p,
@@ -1107,7 +1178,7 @@ pub fn undo_last(
     };
     // Phase 2 gets what phase 1 left of the budget.
     let tail_budget = OVERLAP_BUDGET.saturating_sub(overlap_started.elapsed());
-    let target_ref = vec![planned.undone.op.clone()];
+    let target_ref: Vec<OpRef> = planned.undone.iter().map(|u| u.op.clone()).collect();
     let (Some(store), Some(main_root)) = (repo.store.as_deref(), repo.main_root.clone()) else {
         return Err(rejected(
             planned.scope,
@@ -1159,7 +1230,7 @@ pub fn undo_last(
         who: who.clone(),
         channel,
         confirmed: planned.confirmed,
-        target: Target::Undo(target_ref),
+        target: Target::Undo(target_ref.clone()),
         warnings: planned.warnings.clone(),
         engine_mark,
         binding: None,
@@ -1175,8 +1246,8 @@ pub fn undo_last(
         declared,
         result: None,
         tail: Some(Tail {
-            reference: planned.undone.requester.clone(),
-            undone: planned.undone.op.clone(),
+            reference: planned.undone.iter().map(|u| u.requester.clone()).collect(),
+            undone: target_ref.clone(),
             phase1: planned.overlap.clone(),
             engine: env.engine,
             repo_id: repo_id.to_owned(),
@@ -1215,18 +1286,27 @@ pub fn undo_last(
             anchor(deps, repo_id, &worktrees, id, settled);
         }
     }
+    let mut undone_all = planned.undone;
+    // Never empty: `plan` refuses an empty set as `nothing-to-undo`.
+    let oldest = undone_all.first().cloned();
+    let Some(oldest) = oldest else {
+        return Err(UndoError::Internal("an undo without a set".to_owned()));
+    };
+    if selection == Selection::Last {
+        undone_all.clear();
+    }
     match ran {
         Ok(outcome) => Ok(UndoDone {
             operation_id: outcome.operation_id,
             prior_snapshot_id: outcome.prior.snapshot_id,
-            undone: planned.undone,
+            undone: oldest,
             target_snapshot_id: planned.target,
             report: match step.result {
                 Some(Ok(report)) => report,
                 _ => ApplyReport::default(),
             },
             warnings: planned.warnings,
-            undone_all: Vec::new(),
+            undone_all,
         }),
         Err(ProtectedError::Prior {
             reason,
@@ -1246,7 +1326,7 @@ pub fn undo_last(
             Err(UndoError::Overlap {
                 operation_id: Some(operation_id),
                 report: Box::new(step.overlap.take().unwrap_or_default()),
-                undone: Box::new(planned.undone),
+                undone: Box::new(oldest),
             })
         }
         Err(ProtectedError::Step {
