@@ -221,9 +221,9 @@ fn a_declared_identity_changes_nothing() {
             [methods::REQUESTER_RESOLVE, { "actor": { "actor": "unattributed" } }],
             [methods::TM_UNDO, { "human": true }],
             [methods::REQUESTER_RESOLVE, {}],
-            // Attributed over MCP: undo passes the requester check and stops
-            // at its story (no executor in the production daemon).
-            [methods::TM_UNDO, { "since": "2h" }],
+            // Attributed over MCP: an undo by agent passes the requester check
+            // and stops at its story (US-TMC-011).
+            [methods::TM_UNDO, { "agent": "claude-1" }],
         ]),
         true,
     );
