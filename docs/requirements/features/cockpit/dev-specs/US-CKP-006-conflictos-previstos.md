@@ -86,9 +86,7 @@ La TUI no calcula nada. Lee `RepoView.prediction` de la instantánea, aplica `pr
 
 ## Gaps
 
-| ID | Qué falta | Severidad | Acción | Owner |
-|----|-----------|-----------|--------|-------|
-| G1 | ~~T009 de TS-CKP-001 y el resto del PR-B~~ | **Cerrado por #314** (2026-11-04): `crates/api/src/prediction.rs`, `methods/prediction.rs`, `PREDICTION_CHANGED`, `PREDICTION_LIST`, `CAP_PREDICTION_PAIRS` y `RepoView.prediction` están en `main`. Los nombres que usa esta DS (`PredictionSummary`, `PairSummary`, `PairDetail`, `PredictionPage`, `PairSideView`, `PairStateView`, `PairReason`, `PairLevel`, `LimitCode`, `ConflictKindView`, `LineRange`, `next_cursor`, `pairs_truncated`) coinciden con los del código; no hizo falta ajustar nada | Cerrado | — | Orquestador |
+_Ninguno abierto._ G1 (el PR-B de TS-CKP-001: `crates/api/src/prediction.rs`, `methods/prediction.rs`, `PREDICTION_CHANGED`, `PREDICTION_LIST`, `CAP_PREDICTION_PAIRS`, `RepoView.prediction`) quedó **cerrado por #314** el 2026-11-04. Los nombres que usa esta DS (`PredictionSummary`, `PairSummary`, `PairDetail`, `PredictionPage`, `PairSideView`, `PairStateView`, `PairReason`, `PairLevel`, `LimitCode`, `ConflictKindView`, `LineRange`, `next_cursor`, `pairs_truncated`) coinciden con los de `main`; no hizo falta ajustar nada.
 
 ---
 
@@ -228,6 +226,8 @@ Sin la capacidad, el daemon no manda `prediction` ni `prediction.changed`: la TU
 
 ## Contratos compartidos
 
+### 6.1 Tipos compartidos
+
 La forma del cable es la de [DS-TS-CKP-001 § Contrato de API](./TS-CKP-001-predictor-conflictos.md#contrato-de-api) (A1). Los enums sin texto (`PairStateView`, `PairReason`, `PairLevel`, `LimitCode`, `ConflictKindView`) y `LineRange` se usan tal cual desde `gitraptor_api::prediction`. La TUI no importa motor ni Git (`apps/cli/tests/tui_boundaries.rs`).
 
 ```rust
@@ -270,6 +270,22 @@ pub struct ConflictEntry { pub conflict: bool, pub left: AgentRef, pub right: Ag
 // DS-US-CKP-007 añade ConflictPanelModel.summary y Prediction::Pending; DS-US-CKP-008 añade ConflictEntry.new
 pub struct AlertFile { pub path: SafeText, pub detail: SafeText, pub merge_rule: Option<SafeText> }
 ```
+
+### 6.2 Ciclos de vida (DI)
+
+_No aplica — la TUI no usa contenedor de dependencias: `PredictionModel` es un campo de `RepoView`, creado y destruido con él en `update`._
+
+### 6.3 Firmas del stack
+
+Las de `wanted`, `known_conflict`, `Cmd::PredictionList`, `ConnEvent::Prediction` y `EngineMsg::PredictionPage` del bloque de § 6.1; la TUI solo consume el API de `gitraptor_api::prediction`.
+
+### 7.1 Forma del error
+
+_No aplica — la historia no añade errores ni códigos de salida. Un `prediction.list` que falla deja el detalle sin pedir y la fila muestra «N archivos» (nunca rutas viejas)._
+
+### 7.3 Valores numéricos
+
+≤ 50 `pair_ids` por `prediction.list` (AD3); ≤ 55 pares publicados (ADR-CKP-001 § 2); hasta 3 rangos por lado y el resto como «+N»; 80×24 con 7 filas de región de alertas (AD6).
 
 ---
 
