@@ -221,6 +221,8 @@ pub struct EngineReplica {
     /// Why the running resync started, as the engine said it; `None` for a gap the client
     /// found, or when nothing is being resynced. Cleared on reaching `Live`.
     pub resync: Option<ResyncReason>,
+    /// The connection has `prediction.pairs` (US-CKP-006).
+    pub prediction: bool,
 }
 
 impl EngineReplica {
@@ -325,6 +327,8 @@ pub struct RepoView {
     /// `guard.status` after the snapshot, then the protection events. `None`: active, never
     /// installed, or the engine does not publish it.
     pub protection: Option<gitraptor_api::guard::HooksLayer>,
+    /// The published conflict prediction (US-CKP-006); `None` without `prediction.pairs`.
+    pub prediction: Option<crate::tui::prediction::PredictionModel>,
 }
 
 impl RepoView {
@@ -544,6 +548,16 @@ pub enum EngineMsg {
         repo_id: String,
         hooks: Option<gitraptor_api::guard::HooksLayer>,
     },
+    /// A page of `prediction.list` (US-CKP-006).
+    PredictionPage {
+        repo_id: String,
+        page: Box<gitraptor_api::prediction::PredictionPage>,
+    },
+    /// The engine refused a `prediction.list`, or its answer could not be read: the one answer
+    /// that stands in for the page, so every request is answered exactly once.
+    PredictionRefused {
+        repo_id: String,
+    },
 }
 
 /// What the channel thread says about the connection.
@@ -565,6 +579,8 @@ pub enum ConnEvent {
     Discovered(Vec<Found>),
     /// Accepting or dismissing a discovered repo failed.
     DiscoveryFailed(ObserveFailure),
+    /// Whether the connection has `prediction.pairs` (US-CKP-006).
+    Prediction(bool),
 }
 
 /// Effects that `update` asks for; they run outside it.
@@ -594,6 +610,12 @@ pub enum Cmd {
     /// Never propose a discovered repo again (`discovery.dismiss`).
     DismissDiscovered {
         path: std::path::PathBuf,
+    },
+    /// `prediction.list` of a repo: details by `pair_ids` (at most 50) or a page by `cursor`.
+    PredictionList {
+        repo_id: String,
+        pair_ids: Vec<String>,
+        cursor: Option<String>,
     },
     /// Hand the terminal back to the shell (`Ctrl-Z`) and take it again when resumed.
     Suspend,

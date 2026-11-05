@@ -3,10 +3,12 @@
 //!
 //! Every text goes through [`Say`], so the ASCII set never sees a Unicode glyph.
 
+use gitraptor_api::prediction::LimitCode;
 use gitraptor_theme::{ColorToken, SymbolToken};
 
 use crate::model::{Model, Pick, SafeText};
 use crate::present::i18n::{HelpPanel, Lang, Legend, Text};
+use crate::present::prediction_text::PredictionText;
 use crate::tui::fleet_order;
 use crate::tui::keymap::{Action, BINDINGS, Binding, Key};
 use crate::tui::view::Say;
@@ -97,6 +99,24 @@ pub(crate) fn help(model: &Model, say: Say) -> HelpModel {
         hints: Vec::new(),
         legend: Legend::ALL.map(|l| legend_row(l, say)).to_vec(),
     });
+    // With a publication, the eight limits of the prediction in full, in the engine's order.
+    let published = (model.engine.repo.as_ref())
+        .and_then(|r| r.data.as_ref())
+        .is_some_and(|r| r.prediction.is_some());
+    if published {
+        groups.push(HelpGroup {
+            title: say.prediction(PredictionText::LimitsTitle),
+            hints: LimitCode::ALL
+                .map(|code| {
+                    KeyHint::new(
+                        SafeText::default(),
+                        say.prediction(PredictionText::Limit(code)),
+                    )
+                })
+                .to_vec(),
+            legend: Vec::new(),
+        });
+    }
     HelpModel {
         title: say.safe(Text::HelpTitle),
         groups,

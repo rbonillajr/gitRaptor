@@ -1,0 +1,236 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "devspec",
+    "ref": "docs/requirements/features/cockpit/dev-specs/US-CKP-006-conflictos-previstos.md"
+  },
+  "rigor": "alto",
+  "goal": {
+    "intent": "Que la TUI muestre, antes del merge, qué agentes van a chocar: el panel de conflictos con ⚡ y ⚠, la fila con ⚡ en la zona de atención y los límites de la predicción",
+    "endState": "La TUI lee RepoView.prediction y prediction.changed, pide prediction.list para el detalle con su rev, pinta el panel ⚡/⚠ con rutas y rangos, la línea de límites al pie y los 8 límites con ?, en en/es y ASCII, sin calcular ni inventar pares y sin dejar rastro en el repo",
+    "nonGoals": [
+      "US-CKP-007: antigüedad, frescura y agregados por estado de la predicción no entran en este PR",
+      "US-CKP-008: alerta de ⚡ nuevo, toast y marca ConflictEntry.new no entran en este PR",
+      "Navegar entre pares con teclas o dar foco al panel",
+      "Cualquier cambio en el predictor del daemon o en crates/api (ya está en main)"
+    ]
+  },
+  "criteria": [
+    {
+      "id": "CKP006-REV-RULE",
+      "statement": "T002 (A2): un detalle con rev igual al del resumen se muestra; con rev mayor se guarda aparte y se adopta cuando el resumen llega a ese rev; con rev menor se descarta; un cambio de rev invalida el detalle del par",
+      "verify": "cargo test -p gitraptor-cli --lib tui::prediction_tests -- detail_with_equal_rev_is_shown detail_with_greater_rev_waits_for_the_event detail_with_lower_rev_is_dropped",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/src/tui/prediction_tests.rs"
+      ]
+    },
+    {
+      "id": "CKP006-CHANGED",
+      "statement": "T002: prediction.changed inserta o sustituye por pair_id y quita los de removed; un resumen con rev menor nunca sustituye a uno más nuevo; un par ausente de la publicación no se dibuja (P7)",
+      "verify": "cargo test -p gitraptor-cli --lib tui::prediction_tests -- changed_batch_replaces_by_pair_id_and_removes older_summary_never_replaces_a_newer_one a_pair_absent_from_the_publication_is_never_drawn",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/src/tui/prediction_tests.rs"
+      ]
+    },
+    {
+      "id": "CKP006-WANTED",
+      "statement": "T002 (AD3, AD4): wanted pide primero los pares con ⚡ y luego ⚠ en lotes de 50, nunca dos veces el mismo rev mientras está en vuelo, y con pairs_truncated recorre el cursor hasta que no hay next_cursor",
+      "verify": "cargo test -p gitraptor-cli --lib tui::prediction_tests -- asks_conflicts_first_in_batches_of_fifty never_asks_twice_for_the_same_rev truncated_summary_walks_the_cursor",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/src/tui/prediction_tests.rs"
+      ]
+    },
+    {
+      "id": "CKP006-KNOWN-CONFLICT",
+      "statement": "T002 (DS-US-CKP-002 D2): la fila sube solo con un ⚡ conocido: level conflict en current o recalculating sí; calculating y pending no",
+      "verify": "cargo test -p gitraptor-cli --lib tui::prediction_tests -- row_rises_with_a_known_conflict_only",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/src/tui/prediction_tests.rs"
+      ]
+    },
+    {
+      "id": "CKP006-ROW-ATTENTION",
+      "statement": "T004 (DS-US-CKP-002 D2): la vista pinta la fila con ⚡ (AgentRowModel.conflict = true) y la sube a la zona de atención solo con level conflict en current o recalculating; con calculating, pending o sin capacidad la fila queda sin ⚡ y no sube",
+      "verify": "cargo test -p gitraptor-cli --lib tui::view::conflicts_tests -- row_with_a_known_conflict_shows_the_bolt_and_rises_to_attention",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/src/tui/view/conflicts_tests.rs"
+      ]
+    },
+    {
+      "id": "CKP006-SIDES",
+      "statement": "T002/T004 (P5, AD5): cada lado toma el nombre de su fila (casada por key de la raíz) o el nombre de la rama base; una raíz sin fila cae a su carpeta, nunca vacío",
+      "verify": "cargo test -p gitraptor-cli --lib tui::view::conflicts_tests -- sides_take_the_row_name_and_the_base_branch an_unmatched_root_falls_back_to_its_folder",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/src/tui/view/conflicts_tests.rs"
+      ]
+    },
+    {
+      "id": "CKP006-CAPABILITY",
+      "statement": "T002/T003 (A2): sin la capacidad prediction.pairs no hay panel y las filas quedan sin ⚡; con ella y 0 pares el panel solo lleva la línea de límites; el test sin capacidad comprueba también que las filas no llevan ⚡",
+      "verify": "cargo test -p gitraptor-cli --lib tui::view::conflicts_tests -- without_the_capability_there_is_no_panel with_the_capability_and_no_pairs_only_the_limits_line_shows",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/src/tui/view/conflicts_tests.rs"
+      ]
+    },
+    {
+      "id": "CKP006-CLIENT-LIST",
+      "statement": "T003: el hilo del canal avisa ConnEvent::Prediction con la capacidad, ejecuta Cmd::PredictionList y devuelve EngineMsg::PredictionPage; Refused se descarta sin aviso, un error de transporte reconecta y fuera de sesión la orden se ignora",
+      "verify": "cargo test -p gitraptor-cli --lib client::prediction_tests",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/src/client/prediction_tests.rs"
+      ]
+    },
+    {
+      "id": "CKP006-LIMITS",
+      "statement": "T004 (P3): la línea de límites cabe en 78 columnas en en, es y ASCII, y ? lista los 8 LimitCode en orden fijo, cada texto de a lo sumo 60 columnas, con 'Sin ⚡ el merge aún puede tener conflictos'",
+      "verify": "cargo test -p gitraptor-cli --lib tui::view::conflicts_tests -- limits_line_fits_78_columns_in_both_languages_and_ascii help_lists_the_eight_limits",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/src/tui/view/conflicts_tests.rs"
+      ]
+    },
+    {
+      "id": "CKP006-TEXT-I18N",
+      "statement": "T004 (AD1): todo PredictionText tiene texto en en y es, y no hay texto de antigüedad en el catálogo",
+      "verify": "cargo test -p gitraptor-cli --lib present::prediction_text_tests",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/src/present/prediction_text_tests.rs"
+      ]
+    },
+    {
+      "id": "CKP006-SANITIZE",
+      "statement": "T002/T004 (SEC-12): rutas, carpetas y nombres de pares con caracteres de control se pintan saneados como SafeText",
+      "verify": "cargo test -p gitraptor-cli --lib tui::view::conflicts_tests -- pair_and_file_names_are_sanitized",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/src/tui/view/conflicts_tests.rs"
+      ]
+    },
+    {
+      "id": "CKP006-SNAPSHOT",
+      "statement": "T004: el panel a 80x24 pinta ⚡ primero y ⚠ después, rangos por lado (hasta 3 y +N), marca de regla de merge solo en ⚡, '+N pares más' si no caben y la línea de límites siempre en la fila de abajo; snapshots en, es y ascii",
+      "verify": "cargo test -p gitraptor-cli --lib tui::view::conflicts_tests -- conflicts_80x24_en conflicts_80x24_es conflicts_80x24_ascii",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/src/tui/view/conflicts_tests.rs"
+      ]
+    },
+    {
+      "id": "CKP006-S1-DEMO",
+      "statement": "Escenario 1 (macOS, daemon real): la TUI muestra el par claude-1 ↔ claude-2 con ⚡ en src/api.rs y su rango antes de cualquier merge; el git merge real en un clon desechable deja src/api.rs en conflicto",
+      "verify": "cargo test -p gitraptor-cli --test tui_conflicts -- --exact demo_conflict_is_seen_before_the_merge_and_the_merge_produces_it",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_conflicts.rs"
+      ]
+    },
+    {
+      "id": "CKP006-S2-OVERLAP-ONLY",
+      "statement": "Escenario 2 (daemon real): claude-3 con README.md sin commitear y claude-4 con README.md commiteado dan solo ⚠ solape en README.md, sin ⚡",
+      "verify": "cargo test -p gitraptor-cli --test tui_conflicts -- --exact uncommitted_work_only_overlaps",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_conflicts.rs"
+      ]
+    },
+    {
+      "id": "CKP006-S3-BASE",
+      "statement": "Escenario 3 (daemon real): con main como base confirmada y un commit en main que choca con feat-pagos, el par feat-pagos ↔ main muestra ⚡ con el archivo y el rango",
+      "verify": "cargo test -p gitraptor-cli --test tui_conflicts -- --exact a_worktree_against_the_confirmed_base_shows_the_conflict",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_conflicts.rs"
+      ]
+    },
+    {
+      "id": "CKP006-S4-LIMITS-E2E",
+      "statement": "Escenario 4 (daemon real): con una predicción visible el panel declara que el solape incluye lo sin commitear, que el ⚡ solo usa lo commiteado y que no aplica drivers de merge ni .gitattributes",
+      "verify": "cargo test -p gitraptor-cli --test tui_conflicts -- --exact the_panel_declares_its_limits",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_conflicts.rs"
+      ]
+    },
+    {
+      "id": "CKP006-S5-INTACT",
+      "statement": "Escenario 5 (NFR-01, daemon real): la huella del repo shop antes de abrir la TUI y después de publicarse los pares es idéntica (fingerprint::diff vacío)",
+      "verify": "cargo test -p gitraptor-cli --test tui_conflicts -- --exact predicting_with_the_tui_open_leaves_the_repo_intact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_conflicts.rs"
+      ]
+    },
+    {
+      "id": "CKP006-S6-NO-OWN-WORK",
+      "statement": "Escenario 6 (daemon real): feat-nuevo recién creado desde la base, sin commits ni cambios, no forma ningún par con otro worktree en la TUI",
+      "verify": "cargo test -p gitraptor-cli --test tui_conflicts -- --exact a_worktree_without_own_work_forms_no_worktree_pairs",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_conflicts.rs"
+      ]
+    }
+  ],
+  "suite": {
+    "command": "node tools/test/nextest-junit.mjs"
+  },
+  "layers": {
+    "runtime": {
+      "commands": [
+        {
+          "id": "suite",
+          "cmd": "node tools/test/nextest-junit.mjs"
+        }
+      ],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "constraints": {
+    "deny_paths": [
+      "docs/ARTIFACTS.md",
+      "crates/api/**",
+      "crates/core/**",
+      "crates/git/**"
+    ],
+    "allow_dependency_changes": false
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 600000,
+    "suiteTimeoutMs": 5400000
+  },
+  "hops": {
+    "design": {
+      "agent": "main-loop",
+      "model": "sonnet"
+    },
+    "critic": {
+      "agent": "nassa-core:plan-critic",
+      "model": "opus"
+    },
+    "tester": {
+      "agent": "nassa-core:criterion-tester",
+      "model": "sonnet"
+    },
+    "build": {
+      "agent": "nassa-dev-rust:rust-expert",
+      "model": "sonnet"
+    },
+    "review": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "opus"
+    },
+    "conformance": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "sonnet"
+    }
+  }
+}

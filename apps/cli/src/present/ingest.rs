@@ -67,6 +67,11 @@ pub fn repo(snapshot: &RepoSnapshot) -> RepoView {
         detection: None,
         commits: Vec::new(),
         protection: None,
+        prediction: snapshot
+            .repo
+            .prediction
+            .as_ref()
+            .map(crate::tui::prediction::PredictionModel::from_summary),
     }
 }
 
@@ -151,7 +156,7 @@ fn temporary(root: &std::path::Path, roots: &[std::path::PathBuf]) -> bool {
 }
 
 /// The last component of a worktree root (the root itself when it has none).
-fn leaf(root: &str) -> String {
+pub(crate) fn leaf(root: &str) -> String {
     std::path::Path::new(root)
         .file_name()
         .map_or_else(|| root.to_owned(), |n| n.to_string_lossy().into_owned())
@@ -159,7 +164,7 @@ fn leaf(root: &str) -> String {
 
 /// The key a worktree and its sessions share: a hash of the raw root, so two roots that only
 /// differ in what the sanitizer neutralizes stay apart.
-fn key(raw: &str) -> u64 {
+pub(crate) fn key(raw: &str) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
     raw.hash(&mut h);

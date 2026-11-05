@@ -168,6 +168,15 @@ impl Daemon {
                 t_published: 0,
             },
         );
+        if state == RepoStateView::Observed {
+            let read: Vec<_> = request
+                .read
+                .worktrees
+                .iter()
+                .map(|w| (PathBuf::from(w.view.path.raw()), w.uncommitted.clone()))
+                .collect();
+            self.modules.repo_added(&repo_id, &read);
+        }
         Ok(RepoAddResult {
             outcome,
             repo: view,

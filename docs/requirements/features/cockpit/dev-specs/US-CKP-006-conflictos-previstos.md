@@ -2,9 +2,9 @@
 id: DS-US-CKP-006
 title: "Dev Spec — US-CKP-006: la TUI muestra qué agentes van a chocar antes del merge"
 type: dev-spec
-status: draft
+status: partially-implemented
 created: 2026-10-27
-updated: 2026-10-27
+updated: 2026-11-04
 story: US-CKP-006
 feature: cockpit
 domain: GRP
@@ -47,8 +47,8 @@ lineage:
 constitution_gates: []
 validation:
   must_read_resolved: true
-  gaps_blocking: 1
-  ready_to_implement: false
+  gaps_blocking: 0
+  ready_to_implement: true
   gaps_release: 0
   ready_to_release: false
 tags: [cockpit, tui, prediccion-conflictos, conflict-alert, demo]
@@ -86,9 +86,7 @@ La TUI no calcula nada. Lee `RepoView.prediction` de la instantánea, aplica `pr
 
 ## Gaps
 
-| ID | Qué falta | Severidad | Acción | Owner |
-|----|-----------|-----------|--------|-------|
-| G1 | T009 de TS-CKP-001 (`crates/api/src/prediction.rs`, `methods/prediction.rs`, `PREDICTION_CHANGED`, `CAP_PREDICTION_PAIRS`) y el resto del PR-B (T006, T007, T010, T012). Esperan a G5 (TS-GRP-005). Sin ellos no compila T002 ni corre T001 | Bloqueante | Implementar el PR-B de [DS-TS-CKP-001](./TS-CKP-001-predictor-conflictos.md) | Orquestador |
+_No gaps. Ready to implement._ G1 (el PR-B de TS-CKP-001: `crates/api/src/prediction.rs`, `methods/prediction.rs`, `PREDICTION_CHANGED`, `PREDICTION_LIST`, `CAP_PREDICTION_PAIRS`, `RepoView.prediction`) quedó **cerrado por #314** el 2026-11-04. Los nombres que usa esta DS (`PredictionSummary`, `PairSummary`, `PairDetail`, `PredictionPage`, `PairSideView`, `PairStateView`, `PairReason`, `PairLevel`, `LimitCode`, `ConflictKindView`, `LineRange`, `next_cursor`, `pairs_truncated`) coinciden con los de `main`; no hizo falta ajustar nada.
 
 ---
 
@@ -145,7 +143,8 @@ Sin la capacidad, el daemon no manda `prediction` ni `prediction.changed`: la TU
 
 - **Depende:** —
 - **Refs:** US-CKP-006, escenarios 1 a 6
-- **Aceptación:** `cargo test -p gitraptor-cli --test tui_conflicts`
+- **Criterios:** CKP006-S1-DEMO, CKP006-S2-OVERLAP-ONLY, CKP006-S3-BASE, CKP006-S4-LIMITS-E2E, CKP006-S5-INTACT, CKP006-S6-NO-OWN-WORK
+- **Aceptación:** `cargo test -p gitraptor-cli --test tui_conflicts` (`apps/cli/tests/tui_conflicts.rs`)
 
 ### T002 — Crear el modelo de la predicción y aplicarlo en `update`
 
@@ -154,7 +153,8 @@ Sin la capacidad, el daemon no manda `prediction` ni `prediction.changed`: la TU
 **Ubicación.**
 - `apps/cli/src/tui/prediction.rs` (**CREATE**): tipos, `apply_summary`, `apply_changed`, `apply_page`, `wanted`, `known_conflict`
 - `apps/cli/src/present/prediction.rs` (**CREATE**): ingest del cable a `SafeText` (SEC-12)
-- `apps/cli/src/present/mod.rs` (**MODIFY**): `pub mod prediction;` y `pub mod prediction_text;`
+- `apps/cli/src/present/mod.rs` (**MODIFY**): `pub mod prediction;` y `pub mod prediction_text;`; `#[cfg(test)] mod prediction_text_tests;`
+- `apps/cli/src/tui/mod.rs` (**MODIFY**): `pub mod prediction;` y `#[cfg(test)] mod prediction_tests;`
 - `apps/cli/src/present/ingest.rs` (**MODIFY**): `repo()` (`:53`) rellena `prediction`; `key` (`:162`) pasa a `pub(crate)`
 - `apps/cli/src/model.rs` (**MODIFY**): `RepoView.prediction`, `EngineReplica.prediction: bool`, `ConnEvent::Prediction(bool)`, `EngineMsg::PredictionPage`, `Cmd::PredictionList`
 - `apps/cli/src/tui/update.rs` (**MODIFY**): en `apply` (`:457`), la rama de `PREDICTION_CHANGED`; `on_event` (`:420`), `on_snapshot` (`:388`) y la página devuelven `prediction::wanted`
@@ -170,14 +170,15 @@ Sin la capacidad, el daemon no manda `prediction` ni `prediction.changed`: la TU
 
 - **Depende:** G1
 - **Refs:** A2, A4, P7, AD2, AD3, AD4
-- **Aceptación:** `cargo test -p gitraptor-cli --lib tui::prediction`
+- **Criterios:** CKP006-REV-RULE, CKP006-CHANGED, CKP006-WANTED, CKP006-KNOWN-CONFLICT, CKP006-SIDES, CKP006-CAPABILITY, CKP006-SANITIZE
+- **Aceptación:** `cargo test -p gitraptor-cli --lib tui::prediction_tests` (`apps/cli/src/tui/prediction_tests.rs`)
 
 ### T003 — Pedir `prediction.list` desde el hilo del canal y avisar de la capacidad
 
 **Objetivo.** El hilo del canal dice si la conexión tiene `prediction.pairs` y ejecuta `Cmd::PredictionList`.
 
 **Ubicación.**
-- `apps/cli/src/client/mod.rs` (**MODIFY**): `LinkCmd::PredictionList { repo_id, pair_ids, cursor }`, su brazo junto al de `Observe` (`:392`) y, en `session` (`:303`), `ConnEvent::Prediction(link.has(CAP_PREDICTION_PAIRS.name))`
+- `apps/cli/src/client/mod.rs` (**MODIFY**): `LinkCmd::PredictionList { repo_id, pair_ids, cursor }`, su brazo junto al de `Observe` (`:392`) y, en `session` (`:303`), `ConnEvent::Prediction(link.has(CAP_PREDICTION_PAIRS.name))` Declara `#[cfg(test)] mod prediction_tests;`.
 - `apps/cli/src/tui/app.rs` (**MODIFY**): `Cmd::PredictionList` → `LinkCmd::PredictionList` (junto a `:202`)
 
 **Reglas**
@@ -187,14 +188,15 @@ Sin la capacidad, el daemon no manda `prediction` ni `prediction.changed`: la TU
 
 - **Depende:** T002
 - **Refs:** A2, AD3
-- **Aceptación:** `cargo test -p gitraptor-cli --lib client::tests::prediction`
+- **Criterios:** CKP006-CLIENT-LIST
+- **Aceptación:** `cargo test -p gitraptor-cli --lib client::prediction_tests` (`apps/cli/src/client/prediction_tests.rs`)
 
 ### T004 — Pintar la fila, el panel, los límites y la ayuda, con textos en/es
 
 **Objetivo.** El ⚡ en la fila, el panel ⚡/⚠ con sus archivos, la línea de límites al pie y el texto completo con `?`.
 
 **Ubicación.**
-- `apps/cli/src/tui/view.rs` (**MODIFY**): `conflict: known_conflict(worktree.key)` en `row` (`:518`); el nombre de la fila sale a `fn row_name` para reutilizarlo en los lados (AD5); `layout` con `BodyPlan { alerts: panel.height(), .. }` (`:73`) y el panel en `regions.alerts`
+- `apps/cli/src/tui/view.rs` (**MODIFY**): `conflict: known_conflict(worktree.key)` en `row` (`:518`); el nombre de la fila sale a `fn row_name` para reutilizarlo en los lados (AD5); `layout` con `BodyPlan { alerts: panel.height(), .. }` (`:73`) y el panel en `regions.alerts` Declara `#[cfg(test)] mod conflicts_tests;` (`tui/view/conflicts_tests.rs`), que también prueba la fila con ⚡ y su subida a la zona de atención (CKP006-ROW-ATTENTION).
 - `apps/cli/src/tui/widgets/conflict_alert.rs` (**MODIFY**): `ConflictPanelModel`, `ConflictEntry`, `AlertFile` (AD6). `ConflictAlertModel` no cambia
 - `apps/cli/src/tui/help.rs` (**MODIFY**): con predicción publicada, `help()` (`:58`) añade el grupo "Límites de la predicción"
 - `apps/cli/src/present/prediction_text.rs` (**CREATE**): `PredictionText`, `render(lang)`, `every()` (AD1)
@@ -204,7 +206,7 @@ Sin la capacidad, el daemon no manda `prediction` ni `prediction.changed`: la TU
 - Orden: ⚡ primero y luego ⚠; dentro, el orden del motor. Línea del par: símbolo, `lado_a ↔ lado_b` con el color de agente de cada fila, y en `ConflictEntry.status` "recalculando" atenuado si el estado es `recalculating`. DS-US-CKP-007 sustituye ese texto por la frescura entera de cada par.
 - ⚡ por archivo: ruta, y en `kind: content` los rangos por lado, `12–18 ↔ 14–20`. Se ven hasta 3 rangos por lado y el resto como "+N". Los demás `kind` muestran su nombre ("añadido en los dos", "modificado y borrado"…). Con `has_merge_rule`, la marca "regla de merge" (AD7).
 - ⚠: las rutas de `overlap`; con `overlap_partial`, "y más". Mientras no hay detalle con el `rev` del resumen, la línea dice "N archivos" con `overlap_files` o `conflict_files`, nunca rutas viejas.
-- Si no caben todos, la última fila dice "+N pares más". La fila de abajo del panel es siempre la línea de límites (P3), en tres piezas con los símbolos del tema: "⚠ con lo sin commitear · ⚡ solo commits · sin drivers de merge ni .gitattributes". Cabe en 78 columnas; en ASCII, los símbolos de `SymbolSet::Ascii`.
+- Si no caben todos, la última fila dice "+N pares más". La fila de abajo del panel es siempre la línea de límites (P3), en tres piezas con los símbolos del tema: "⚠ con lo sin commitear · ⚡ solo commits · sin drivers ni .gitattributes". Cabe en 78 columnas; en ASCII, los símbolos de `SymbolSet::Ascii`.
 - Lados (P5, AD5): `worktree` → `row_name` de su fila; `base` → `RepoView.base`.
 - Con la capacidad y 0 pares publicados, el panel solo lleva la línea de límites (P7; ajuste del PO, 2026-10-27).
 - `?`: los 8 `LimitCode` en orden fijo; `insertions-may-merge` = "Sin ⚡ el merge aún puede tener conflictos". Cada texto ocupa ≤ 60 columnas, para caber en `HELP_WIDTH` (64).
@@ -213,7 +215,8 @@ Sin la capacidad, el daemon no manda `prediction` ni `prediction.changed`: la TU
 
 - **Depende:** T002
 - **Refs:** P3, P5, AD1, AD5, AD6, AD7; DSYS-GRP-001 § 3
-- **Aceptación:** `cargo test -p gitraptor-cli --lib tui::view::tests::conflicts` y `cargo test -p gitraptor-cli --lib present::prediction_text`
+- **Criterios:** CKP006-LIMITS, CKP006-TEXT-I18N, CKP006-SNAPSHOT, CKP006-ROW-ATTENTION
+- **Aceptación:** `cargo test -p gitraptor-cli --lib tui::view::conflicts_tests` (`apps/cli/src/tui/view/conflicts_tests.rs`) y `cargo test -p gitraptor-cli --lib present::prediction_text_tests` (`apps/cli/src/present/prediction_text_tests.rs`)
 
 ### T005 — Cerrar la historia
 
@@ -227,6 +230,8 @@ Sin la capacidad, el daemon no manda `prediction` ni `prediction.changed`: la TU
 ---
 
 ## Contratos compartidos
+
+### 6.1 Tipos compartidos
 
 La forma del cable es la de [DS-TS-CKP-001 § Contrato de API](./TS-CKP-001-predictor-conflictos.md#contrato-de-api) (A1). Los enums sin texto (`PairStateView`, `PairReason`, `PairLevel`, `LimitCode`, `ConflictKindView`) y `LineRange` se usan tal cual desde `gitraptor_api::prediction`. La TUI no importa motor ni Git (`apps/cli/tests/tui_boundaries.rs`).
 
@@ -271,6 +276,22 @@ pub struct ConflictEntry { pub conflict: bool, pub left: AgentRef, pub right: Ag
 pub struct AlertFile { pub path: SafeText, pub detail: SafeText, pub merge_rule: Option<SafeText> }
 ```
 
+### 6.2 Ciclos de vida (DI)
+
+_No aplica — la TUI no usa contenedor de dependencias: `PredictionModel` es un campo de `RepoView`, creado y destruido con él en `update`._
+
+### 6.3 Firmas del stack
+
+Las de `wanted`, `known_conflict`, `Cmd::PredictionList`, `ConnEvent::Prediction` y `EngineMsg::PredictionPage` del bloque de § 6.1; la TUI solo consume el API de `gitraptor_api::prediction`.
+
+### 7.1 Forma del error
+
+_No aplica — la historia no añade errores ni códigos de salida. Un `prediction.list` que falla deja el detalle sin pedir y la fila muestra «N archivos» (nunca rutas viejas)._
+
+### 7.3 Valores numéricos
+
+≤ 50 `pair_ids` por `prediction.list` (AD3); ≤ 55 pares publicados (ADR-CKP-001 § 2); hasta 3 rangos por lado y el resto como «+N»; 80×24 con 7 filas de región de alertas (AD6).
+
 ---
 
 ## Estrategia de pruebas
@@ -286,7 +307,7 @@ Un test de punta a punta por escenario (T001) y los de unidad de las reglas. Los
 | 5 Sin rastro (NFR-01) | `tui_conflicts::predicting_with_the_tui_open_leaves_the_repo_intact` | `crates/git/tests/repo_intact.rs`, `crates/git/tests/repo_intact_exec.rs`, `crates/git/tests/static_check.rs` (`mod repo_intact`) y `crates/core/tests/predict_repo_intact.rs` (**CREATE** en T010) |
 | 6 Sin trabajo propio | `tui_conflicts::a_worktree_without_own_work_forms_no_worktree_pairs` | `crates/core/src/predict/pairs.rs` (`a_cut_comparison_alone_is_own_work`, T002) |
 
-**Unidad (`tui::prediction::tests`, `tui::view::tests::conflicts`, `present::prediction_text::tests`, `client::tests::prediction`):**
+**Unidad (`tui::prediction_tests`, `tui::view::conflicts_tests`, `present::prediction_text_tests`, `client::prediction_tests`):**
 
 - `detail_with_equal_rev_is_shown`, `detail_with_greater_rev_waits_for_the_event`, `detail_with_lower_rev_is_dropped` (A2)
 - `changed_batch_replaces_by_pair_id_and_removes` y `older_summary_never_replaces_a_newer_one`
@@ -295,7 +316,8 @@ Un test de punta a punta por escenario (T001) y los de unidad de las reglas. Los
 - `row_rises_with_a_known_conflict_only` (`current` y `recalculating` sí; `calculating` y `pending` no; DS-US-CKP-002 D2)
 - `a_pair_absent_from_the_publication_is_never_drawn` (P7)
 - `sides_take_the_row_name_and_the_base_branch` y `an_unmatched_root_falls_back_to_its_folder` (P5, AD5)
-- `without_the_capability_there_is_no_panel` (A2)
+- `without_the_capability_there_is_no_panel` y `with_the_capability_and_no_pairs_only_the_limits_line_shows` (A2)
+- `row_with_a_known_conflict_shows_the_bolt_and_rises_to_attention` (DS-US-CKP-002 D2)
 - `limits_line_fits_78_columns_in_both_languages_and_ascii` y `help_lists_the_eight_limits` (P3)
 - `every_prediction_text_has_both_languages` (AD1)
 - `pair_and_file_names_are_sanitized` (SEC-12)
@@ -334,9 +356,12 @@ Un test de punta a punta por escenario (T001) y los de unidad de las reglas. Los
 | N1 | Si DS-TS-CKP-001 § Contrato de API cambia un nombre respecto de decisiones-finales (A2), manda esa sección (A1) y estas reglas se leen con el nombre nuevo | Revisar al cerrar T009 | Arquitecto |
 | N2 | T001 no puede pasar hasta que el trabajador y el pool del PR-B existan (G1): la predicción no se publica sin ellos | Ninguna | — |
 | N3 | La cifra de 5 s p95 la mide T012 de TS-CKP-001 (INF-GRP-002), no T001 | Ninguna | — |
+| N4 | **G-B (hallazgo del PR, fuera de alcance).** Confirmar la base en runtime (`daemon/guard.rs:279` y `:349`, `guardrails/confirm.rs:147`) solo escribe el almacén: no refresca `divergence.base`, que lee `Predict::base()`, ni avisa al predictor, así que el par contra la base queda `pending` y el escenario 3 no pasa. Toca guardrails y el motor: decisión de diseño aparte | Seguimiento: hook `base_confirmed(repo_id)` que refresque la base y replanifique | Arquitecto |
 
 ## Estado
 
 - Hecho: Dev Spec en `draft` con T001 a T005.
-- Pendiente: G1 (T009 y PR-B de TS-CKP-001, bloqueados por G5 / TS-GRP-005).
-- Siguiente paso: cuando T009 esté en `main`, pasar a `ready_to_implement: true` y empezar por T001 en rojo.
+- Hecho: G1 cerrado por #314 (2026-11-04); `ready_to_implement: true`, `gaps_blocking: 0`.
+- Hecho: T001 a T004 implementados en el PR #320 (la TUI con el panel, la fila ⚡ y los límites). Implementado en: PR #320.
+- Pendiente: el escenario 3 (par contra la base confirmada), por el hueco G-B de la nota N4.
+- Siguiente paso: cerrar G-B en el motor (seguimiento) y luego US-CKP-007 (frescura) y US-CKP-008 (aviso).

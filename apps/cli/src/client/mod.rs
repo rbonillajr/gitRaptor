@@ -26,6 +26,7 @@ use gitraptor_api::messages::{
     RepoRejectedData, RepoRejection, ResyncNotification, SessionsListParams, SessionsListResult,
 };
 use gitraptor_api::methods;
+use gitraptor_api::prediction::{ListPredictionParams, PredictionPage};
 use gitraptor_api::rpc::{Notification, ServerMessage, code};
 use gitraptor_api::scope::{
     ConnectionRequester, RepoLocateParams, RepoLocateResult, Scope, ScopeEventNotification,
@@ -145,6 +146,12 @@ pub enum LinkCmd {
     /// Dismiss a discovered repo (`discovery.dismiss`).
     Dismiss {
         path: PathBuf,
+    },
+    /// `prediction.list` for the TUI (US-CKP-006).
+    PredictionList {
+        repo_id: String,
+        pair_ids: Vec<String>,
+        cursor: Option<String>,
     },
     Reconnect,
     Shutdown,
@@ -272,7 +279,8 @@ fn run(
                     return;
                 }
             }
-            Ok(LinkCmd::Resync { .. }) | Err(RecvTimeoutError::Timeout) => {}
+            Ok(LinkCmd::Resync { .. } | LinkCmd::PredictionList { .. })
+            | Err(RecvTimeoutError::Timeout) => {}
         }
     }
 }
@@ -301,6 +309,9 @@ fn session(
     out.send(Msg::Conn(ConnEvent::Requester(requester)))?;
     out.send(Msg::Conn(ConnEvent::Activity(
         link.has(methods::CAP_SCOPE_ACTIVITY.name),
+    )))?;
+    out.send(Msg::Conn(ConnEvent::Prediction(
+        link.has(methods::CAP_PREDICTION_PAIRS.name),
     )))?;
     send_state(out, ConnState::Syncing)?;
     if sync(link, &Scope::Global, true, out)?.is_err() {
@@ -349,6 +360,15 @@ fn session(
             match cmd {
                 LinkCmd::Shutdown => return Ok(End::Shutdown),
                 LinkCmd::Reconnect => return Ok(End::Reconnect),
+                LinkCmd::PredictionList {
+                    repo_id,
+                    pair_ids,
+                    cursor,
+                } => {
+                    if prediction_list(link, repo_id, pair_ids, cursor, out)?.is_err() {
+                        return Ok(End::dropped(lagged));
+                    }
+                }
                 LinkCmd::Resync { scope, resubscribe } => {
                     if sync(link, &scope, resubscribe, out)?.is_err() {
                         return Ok(End::dropped(lagged));
@@ -576,6 +596,54 @@ fn sessions(
     Ok(Ok(()))
 }
 
+/// The answer to a `prediction.list` the engine refused or whose reply cannot be read: the model
+/// counts one answer per request.
+fn refused(repo_id: &str, out: &Outlet) -> Result<Result<(), LinkError>, Closed> {
+    out.send(Msg::Engine(Stamped {
+        recv_ns: monotonic_ns(),
+        decoded_ns: monotonic_ns(),
+        msg: EngineMsg::PredictionRefused {
+            repo_id: repo_id.to_owned(),
+        },
+    }))?;
+    Ok(Ok(()))
+}
+
+/// `prediction.list`: the details of `pair_ids` or, with none, the page at `cursor`. A refusal
+/// (an unknown pair, a malformed id) drops the answer: the next event corrects what is shown.
+fn prediction_list(
+    link: &mut dyn Link,
+    repo_id: String,
+    pair_ids: Vec<String>,
+    cursor: Option<String>,
+    out: &Outlet,
+) -> Result<Result<(), LinkError>, Closed> {
+    let params = ListPredictionParams {
+        repo_id: repo_id.clone(),
+        worktree: None,
+        pair_ids: Some(pair_ids).filter(|ids| !ids.is_empty()),
+        cursor,
+    };
+    let value = match link.call(methods::PREDICTION_LIST, to_value(&params)) {
+        Ok(value) => value,
+        Err(LinkError::Refused) => return refused(&repo_id, out),
+        Err(err) => return Ok(Err(err)),
+    };
+    let recv_ns = monotonic_ns();
+    let Ok(page) = serde_json::from_value::<PredictionPage>(value) else {
+        return refused(&repo_id, out);
+    };
+    out.send(Msg::Engine(Stamped {
+        recv_ns,
+        decoded_ns: monotonic_ns(),
+        msg: EngineMsg::PredictionPage {
+            repo_id,
+            page: Box::new(page),
+        },
+    }))?;
+    Ok(Ok(()))
+}
+
 /// The observed repo that contains `path`, as the daemon canonicalizes it. `None` when the
 /// engine says it is in none (any refusal); a broken connection is an error, never "in none".
 fn locate(link: &mut dyn Link, path: &Path) -> Result<Option<String>, LinkError> {
@@ -725,6 +793,9 @@ pub fn decode(incoming: Incoming) -> Option<Stamped<EngineMsg>> {
         msg,
     })
 }
+
+#[cfg(test)]
+mod prediction_tests;
 
 #[cfg(test)]
 mod tests {
