@@ -94,6 +94,7 @@ const AFTER_FREEZE_FULL: &[&str] = &[
     "mcp.disable",
     "mcp.allowlist",
     "mcp.status",
+    "mcp.conflicts",
     "guard.log",
     "guard.uninstall",
     "guard.cancel",
@@ -110,7 +111,7 @@ const AFTER_FREEZE_FULL: &[&str] = &[
     "events.gaps",
     "prediction.list",
 ];
-const AFTER_FREEZE_MCP: &[&str] = &["mcp.status"];
+const AFTER_FREEZE_MCP: &[&str] = &["mcp.status", "mcp.conflicts"];
 
 /// Protocol 9 adds `connection.accept`, for every profile, and nothing else
 /// that a connection of 8 could miss; methods added later exist only from 9.
