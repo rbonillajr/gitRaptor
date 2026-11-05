@@ -153,7 +153,8 @@ Sin la capacidad, el daemon no manda `prediction` ni `prediction.changed`: la TU
 **Ubicación.**
 - `apps/cli/src/tui/prediction.rs` (**CREATE**): tipos, `apply_summary`, `apply_changed`, `apply_page`, `wanted`, `known_conflict`
 - `apps/cli/src/present/prediction.rs` (**CREATE**): ingest del cable a `SafeText` (SEC-12)
-- `apps/cli/src/present/mod.rs` (**MODIFY**): `pub mod prediction;` y `pub mod prediction_text;`
+- `apps/cli/src/present/mod.rs` (**MODIFY**): `pub mod prediction;` y `pub mod prediction_text;`; `#[cfg(test)] mod prediction_text_tests;`
+- `apps/cli/src/tui/mod.rs` (**MODIFY**): `pub mod prediction;` y `#[cfg(test)] mod prediction_tests;`
 - `apps/cli/src/present/ingest.rs` (**MODIFY**): `repo()` (`:53`) rellena `prediction`; `key` (`:162`) pasa a `pub(crate)`
 - `apps/cli/src/model.rs` (**MODIFY**): `RepoView.prediction`, `EngineReplica.prediction: bool`, `ConnEvent::Prediction(bool)`, `EngineMsg::PredictionPage`, `Cmd::PredictionList`
 - `apps/cli/src/tui/update.rs` (**MODIFY**): en `apply` (`:457`), la rama de `PREDICTION_CHANGED`; `on_event` (`:420`), `on_snapshot` (`:388`) y la página devuelven `prediction::wanted`
@@ -177,7 +178,7 @@ Sin la capacidad, el daemon no manda `prediction` ni `prediction.changed`: la TU
 **Objetivo.** El hilo del canal dice si la conexión tiene `prediction.pairs` y ejecuta `Cmd::PredictionList`.
 
 **Ubicación.**
-- `apps/cli/src/client/mod.rs` (**MODIFY**): `LinkCmd::PredictionList { repo_id, pair_ids, cursor }`, su brazo junto al de `Observe` (`:392`) y, en `session` (`:303`), `ConnEvent::Prediction(link.has(CAP_PREDICTION_PAIRS.name))`
+- `apps/cli/src/client/mod.rs` (**MODIFY**): `LinkCmd::PredictionList { repo_id, pair_ids, cursor }`, su brazo junto al de `Observe` (`:392`) y, en `session` (`:303`), `ConnEvent::Prediction(link.has(CAP_PREDICTION_PAIRS.name))` Declara `#[cfg(test)] mod prediction_tests;`.
 - `apps/cli/src/tui/app.rs` (**MODIFY**): `Cmd::PredictionList` → `LinkCmd::PredictionList` (junto a `:202`)
 
 **Reglas**
@@ -195,7 +196,7 @@ Sin la capacidad, el daemon no manda `prediction` ni `prediction.changed`: la TU
 **Objetivo.** El ⚡ en la fila, el panel ⚡/⚠ con sus archivos, la línea de límites al pie y el texto completo con `?`.
 
 **Ubicación.**
-- `apps/cli/src/tui/view.rs` (**MODIFY**): `conflict: known_conflict(worktree.key)` en `row` (`:518`); el nombre de la fila sale a `fn row_name` para reutilizarlo en los lados (AD5); `layout` con `BodyPlan { alerts: panel.height(), .. }` (`:73`) y el panel en `regions.alerts`
+- `apps/cli/src/tui/view.rs` (**MODIFY**): `conflict: known_conflict(worktree.key)` en `row` (`:518`); el nombre de la fila sale a `fn row_name` para reutilizarlo en los lados (AD5); `layout` con `BodyPlan { alerts: panel.height(), .. }` (`:73`) y el panel en `regions.alerts` Declara `#[cfg(test)] mod conflicts_tests;` (`tui/view/conflicts_tests.rs`), que también prueba la fila con ⚡ y su subida a la zona de atención (CKP006-ROW-ATTENTION).
 - `apps/cli/src/tui/widgets/conflict_alert.rs` (**MODIFY**): `ConflictPanelModel`, `ConflictEntry`, `AlertFile` (AD6). `ConflictAlertModel` no cambia
 - `apps/cli/src/tui/help.rs` (**MODIFY**): con predicción publicada, `help()` (`:58`) añade el grupo "Límites de la predicción"
 - `apps/cli/src/present/prediction_text.rs` (**CREATE**): `PredictionText`, `render(lang)`, `every()` (AD1)
@@ -214,7 +215,7 @@ Sin la capacidad, el daemon no manda `prediction` ni `prediction.changed`: la TU
 
 - **Depende:** T002
 - **Refs:** P3, P5, AD1, AD5, AD6, AD7; DSYS-GRP-001 § 3
-- **Criterios:** CKP006-LIMITS, CKP006-TEXT-I18N, CKP006-SNAPSHOT
+- **Criterios:** CKP006-LIMITS, CKP006-TEXT-I18N, CKP006-SNAPSHOT, CKP006-ROW-ATTENTION
 - **Aceptación:** `cargo test -p gitraptor-cli --lib tui::view::conflicts_tests` (`apps/cli/src/tui/view/conflicts_tests.rs`) y `cargo test -p gitraptor-cli --lib present::prediction_text_tests` (`apps/cli/src/present/prediction_text_tests.rs`)
 
 ### T005 — Cerrar la historia
@@ -306,7 +307,7 @@ Un test de punta a punta por escenario (T001) y los de unidad de las reglas. Los
 | 5 Sin rastro (NFR-01) | `tui_conflicts::predicting_with_the_tui_open_leaves_the_repo_intact` | `crates/git/tests/repo_intact.rs`, `crates/git/tests/repo_intact_exec.rs`, `crates/git/tests/static_check.rs` (`mod repo_intact`) y `crates/core/tests/predict_repo_intact.rs` (**CREATE** en T010) |
 | 6 Sin trabajo propio | `tui_conflicts::a_worktree_without_own_work_forms_no_worktree_pairs` | `crates/core/src/predict/pairs.rs` (`a_cut_comparison_alone_is_own_work`, T002) |
 
-**Unidad (`tui::prediction::tests`, `tui::view::tests::conflicts`, `present::prediction_text::tests`, `client::tests::prediction`):**
+**Unidad (`tui::prediction_tests`, `tui::view::conflicts_tests`, `present::prediction_text_tests`, `client::prediction_tests`):**
 
 - `detail_with_equal_rev_is_shown`, `detail_with_greater_rev_waits_for_the_event`, `detail_with_lower_rev_is_dropped` (A2)
 - `changed_batch_replaces_by_pair_id_and_removes` y `older_summary_never_replaces_a_newer_one`
