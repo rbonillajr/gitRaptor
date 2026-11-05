@@ -1411,6 +1411,7 @@ mod tests {
             kind: GitEventKind::Commit,
             branch: None,
             actor: Requester::Unattributed,
+            observed_ms: 0,
         }
     }
 

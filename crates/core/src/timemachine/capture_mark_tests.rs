@@ -492,6 +492,7 @@ fn a_failed_anchor_leaves_the_echo_with_its_operation() {
                 kind: GitEventKind::BranchUpdate,
                 branch: Some("main".into()),
                 actor: Requester::Unattributed,
+                observed_ms: 0,
             })
             .collect(),
         floor: 0,

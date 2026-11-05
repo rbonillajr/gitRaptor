@@ -26,6 +26,7 @@ fn done(kept: usize) -> UndoDone {
             ..ApplyReport::default()
         },
         warnings: Vec::new(),
+        undone_all: Vec::new(),
     }
 }
 

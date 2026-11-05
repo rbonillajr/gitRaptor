@@ -81,6 +81,12 @@ impl UndoStack {
         self.done.last()
     }
 
+    /// The operations of the scope that are not undone, oldest first.
+    pub fn done(&self) -> &[OpRef] {
+        // Stub until the undo by period is built: nothing is listed.
+        &[]
+    }
+
     /// The undo the next redo redoes, if any.
     pub fn next_redo(&self) -> Option<&str> {
         self.redo.last().map(|(undo, _)| undo.as_str())
@@ -159,6 +165,10 @@ impl Oplog {
         Ok(UndoStack::build(keyed.into_iter().map(|(_, item)| item)))
     }
 }
+
+#[cfg(test)]
+#[path = "stack_done_tests.rs"]
+mod done_tests;
 
 #[cfg(test)]
 mod tests {
