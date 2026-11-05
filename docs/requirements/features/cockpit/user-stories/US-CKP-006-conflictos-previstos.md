@@ -97,4 +97,4 @@ Detalle en [DS-US-CKP-006](../dev-specs/US-CKP-006-conflictos-previstos.md). La 
 - **Diseño:** DSYS-GRP-001 (ConflictAlert, símbolos ⚡ ⚠).
 - **Dev Spec:** [DS-US-CKP-006](../dev-specs/US-CKP-006-conflictos-previstos.md) (`partially-implemented`).
 
-Implementado en: PR #PRNUM ([DS-US-CKP-006](../dev-specs/US-CKP-006-conflictos-previstos.md)). Pendiente: el escenario 3 (un worktree contra la base confirmada) no puede pasar todavía: confirmar la base en runtime (`guard confirm`) no refresca la base publicada ni vuelve a planificar, así que el par contra la base queda `pending` (hueco G-B del predictor, fuera de este PR; cruza guardrails y motor). El resto de los escenarios pasa en macOS con el daemon real.
+Implementado en: PR #320 ([DS-US-CKP-006](../dev-specs/US-CKP-006-conflictos-previstos.md)). Pendiente: el escenario 3 (un worktree contra la base confirmada) no puede pasar todavía: confirmar la base en runtime (`guard confirm`) no refresca la base publicada ni vuelve a planificar, así que el par contra la base queda `pending` (hueco G-B del predictor, fuera de este PR; cruza guardrails y motor). El resto de los escenarios pasa en macOS con el daemon real.
