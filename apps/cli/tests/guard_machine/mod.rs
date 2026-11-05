@@ -107,6 +107,10 @@ impl Running {
             .and_then(|()| stdin.flush())
         {
             let status = self.child.wait();
+            // The reader ends with the terminal: joined, nothing it read is left out.
+            if let Some(r) = self.reader.take() {
+                let _ = r.join();
+            }
             self.seen.extend(self.rx.try_iter().flatten());
             panic!(
                 "the terminal took no input ({e}): the command ended with {status:?} after \
