@@ -362,6 +362,6 @@ Un test de punta a punta por escenario (T001) y los de unidad de las reglas. Los
 
 - Hecho: Dev Spec en `draft` con T001 a T005.
 - Hecho: G1 cerrado por #314 (2026-11-04); `ready_to_implement: true`, `gaps_blocking: 0`.
-- Hecho: T001 a T004 implementados en el PR #PRNUM (la TUI con el panel, la fila ⚡ y los límites). Implementado en: PR #PRNUM.
+- Hecho: T001 a T004 implementados en el PR #320 (la TUI con el panel, la fila ⚡ y los límites). Implementado en: PR #320.
 - Pendiente: el escenario 3 (par contra la base confirmada), por el hueco G-B de la nota N4.
 - Siguiente paso: cerrar G-B en el motor (seguimiento) y luego US-CKP-007 (frescura) y US-CKP-008 (aviso).

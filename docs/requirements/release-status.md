@@ -12,9 +12,9 @@
 |---|---|
 | Implementado (`implemented`) | 62 |
 | Hecho (`done`) | 3 |
-| Implementado en parte (`partially-implemented`) | 26 |
+| Implementado en parte (`partially-implemented`) | 27 |
 | Listo (`ready`) | 27 |
-| Borrador (`draft`) | 59 |
+| Borrador (`draft`) | 58 |
 | Bloqueado (`blocked`) | 1 |
 | **Total** | **178** |
 
@@ -22,7 +22,7 @@
 
 | Feature | Implementado | Hecho | Implementado en parte | Listo | Borrador | Bloqueado | Total |
 |---|---|---|---|---|---|---|---|
-| [cockpit](#cockpit) | 9 | 0 | 5 | 1 | 22 | 1 | 38 |
+| [cockpit](#cockpit) | 9 | 0 | 6 | 1 | 21 | 1 | 38 |
 | [desktop](#desktop) | 0 | 0 | 0 | 22 | 0 | 0 | 22 |
 | [guardrails](#guardrails) | 14 | 0 | 7 | 1 | 3 | 0 | 25 |
 | [mcp](#mcp) | 7 | 0 | 4 | 0 | 9 | 0 | 20 |
@@ -31,7 +31,7 @@
 
 ### cockpit
 
-38 fichas: 9 implementado, 5 implementado en parte, 1 listo, 22 borrador, 1 bloqueado.
+38 fichas: 9 implementado, 6 implementado en parte, 1 listo, 21 borrador, 1 bloqueado.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -47,6 +47,7 @@
 | [SPIKE-CKP-001](features/cockpit/technical-stories/SPIKE-CKP-001-prediccion-5s.md) | Predicción de conflictos en ≤ 5 s p95 sin escribir en el repo: merge en memoria frente a almacén en el perfil | Implementado en parte (`partially-implemented`) | #266 | 3 |
 | [US-CKP-002](features/cockpit/user-stories/US-CKP-002-orden-atencion-terminadas.md) | La lista pone primero lo que pide atención y no se llena de sesiones viejas | Implementado en parte (`partially-implemented`) | #284 | — |
 | [US-CKP-005](features/cockpit/user-stories/US-CKP-005-terminal-pequena-sin-color.md) | La TUI se puede usar en una terminal pequeña, sin color o en ASCII | Implementado en parte (`partially-implemented`) | #273 | 2 |
+| [US-CKP-006](features/cockpit/user-stories/US-CKP-006-conflictos-previstos.md) | El desarrollador ve qué agentes van a chocar antes de hacer merge | Implementado en parte (`partially-implemented`) | — | — |
 | [US-CKP-020](features/cockpit/user-stories/US-CKP-020-trabajo-de-otro-actor.md) | Tocar el trabajo de otro actor exige confirmar el plan concreto | Implementado en parte (`partially-implemented`) | #220 | 3 |
 | [US-CKP-025](features/cockpit/user-stories/US-CKP-025-tui-repo-no-observado.md) | La TUI ofrece observar el repo en el que se abre y, fuera de un repo, lleva a los ya observados | Implementado en parte (`partially-implemented`) | #165, #170 | 2 |
 | [TS-CKP-010](features/cockpit/technical-stories/TS-CKP-010-agentes-en-vivo-por-repo.md) | Recuento de agentes en vivo por repo en el ámbito global | Listo (`ready`) | — | — |
@@ -55,7 +56,6 @@
 | [TS-CKP-008](features/cockpit/technical-stories/TS-CKP-008-preparar-y-quitar-del-indice.md) | Operaciones del catálogo para preparar y quitar del índice por archivo, fragmento y línea | Borrador (`draft`) | — | — |
 | [TS-CKP-009](features/cockpit/technical-stories/TS-CKP-009-commit-capa-cockpit.md) | Operación commit del catálogo abierta a la capa cockpit | Borrador (`draft`) | — | — |
 | [US-CKP-004](features/cockpit/user-stories/US-CKP-004-selector-repo-preferencias.md) | El desarrollador cambia de repo y la TUI recuerda cómo la dejó | Borrador (`draft`) | — | — |
-| [US-CKP-006](features/cockpit/user-stories/US-CKP-006-conflictos-previstos.md) | El desarrollador ve qué agentes van a chocar antes de hacer merge | Borrador (`draft`) | — | — |
 | [US-CKP-007](features/cockpit/user-stories/US-CKP-007-frescura-prediccion.md) | Una predicción vieja nunca se presenta como actual | Borrador (`draft`) | — | — |
 | [US-CKP-008](features/cockpit/user-stories/US-CKP-008-alerta-conflicto-nuevo.md) | El desarrollador se entera en la TUI cuando aparece un conflicto previsto nuevo | Borrador (`draft`) | — | — |
 | [US-CKP-009](features/cockpit/user-stories/US-CKP-009-base-pendiente.md) | Con la rama base sin confirmar, la predicción contra la base queda pendiente | Borrador (`draft`) | — | — |
@@ -281,7 +281,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### M2
 
-102 fichas: 39 implementado, 3 hecho, 20 implementado en parte, 3 listo, 37 borrador.
+102 fichas: 39 implementado, 3 hecho, 21 implementado en parte, 3 listo, 36 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -336,6 +336,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [TS-GRP-005](features/motor-local/technical-stories/TS-GRP-005-clases-trabajo-ahorro-energia.md) | Clases de trabajo del daemon y mecanismo de ahorro de energía | Implementado en parte (`partially-implemented`) | #298 | — |
 | [US-CKP-002](features/cockpit/user-stories/US-CKP-002-orden-atencion-terminadas.md) | La lista pone primero lo que pide atención y no se llena de sesiones viejas | Implementado en parte (`partially-implemented`) | #284 | — |
 | [US-CKP-005](features/cockpit/user-stories/US-CKP-005-terminal-pequena-sin-color.md) | La TUI se puede usar en una terminal pequeña, sin color o en ASCII | Implementado en parte (`partially-implemented`) | #273 | 2 |
+| [US-CKP-006](features/cockpit/user-stories/US-CKP-006-conflictos-previstos.md) | El desarrollador ve qué agentes van a chocar antes de hacer merge | Implementado en parte (`partially-implemented`) | — | — |
 | [US-CKP-020](features/cockpit/user-stories/US-CKP-020-trabajo-de-otro-actor.md) | Tocar el trabajo de otro actor exige confirmar el plan concreto | Implementado en parte (`partially-implemented`) | #220 | 3 |
 | [US-CKP-025](features/cockpit/user-stories/US-CKP-025-tui-repo-no-observado.md) | La TUI ofrece observar el repo en el que se abre y, fuera de un repo, lleva a los ya observados | Implementado en parte (`partially-implemented`) | #165, #170 | 2 |
 | [US-GRD-003](features/guardrails/user-stories/US-GRD-003-retirar-proteccion-sin-rastro.md) | El desarrollador retira la protección y el repo queda exactamente como estaba | Implementado en parte (`partially-implemented`) | #193, #201, #264 | — |
@@ -352,7 +353,6 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [TD-GRP-003](features/motor-local/technical-stories/TD-GRP-003-nfr04-maquina-referencia.md) | Presupuesto de NFR-04 sin gate automático: medirlo en una máquina de referencia | Listo (`ready`) | — | — |
 | [TD-TMC-001](features/time-machine/technical-stories/TD-TMC-001-previo-hook-plazo-y-cupo-sin-atribuir.md) | Previo de hook: plazo real, cupo barato y cubo «sin atribuir» acotado, antes de que un fallo deniegue (US-GRD-017) | Borrador (`draft`) | — | — |
 | [US-CKP-004](features/cockpit/user-stories/US-CKP-004-selector-repo-preferencias.md) | El desarrollador cambia de repo y la TUI recuerda cómo la dejó | Borrador (`draft`) | — | — |
-| [US-CKP-006](features/cockpit/user-stories/US-CKP-006-conflictos-previstos.md) | El desarrollador ve qué agentes van a chocar antes de hacer merge | Borrador (`draft`) | — | — |
 | [US-CKP-007](features/cockpit/user-stories/US-CKP-007-frescura-prediccion.md) | Una predicción vieja nunca se presenta como actual | Borrador (`draft`) | — | — |
 | [US-CKP-008](features/cockpit/user-stories/US-CKP-008-alerta-conflicto-nuevo.md) | El desarrollador se entera en la TUI cuando aparece un conflicto previsto nuevo | Borrador (`draft`) | — | — |
 | [US-CKP-009](features/cockpit/user-stories/US-CKP-009-base-pendiente.md) | Con la rama base sin confirmar, la predicción contra la base queda pendiente | Borrador (`draft`) | — | — |
@@ -460,6 +460,12 @@ La TUI se puede usar en una terminal pequeña, sin color o en ASCII
 
 - Escenario 4 en Windows (idioma de la interfaz del usuario, sin `LANG`): *Pendiente: etapa de validación multiplataforma*; dueño: esta historia (G1).
 - Linux y Windows en terminales reales: *Pendiente: etapa de validación multiplataforma* (XP-21; [`xplat-pendientes.md`](../architecture/xplat-pendientes.md)).
+
+### [US-CKP-006](features/cockpit/user-stories/US-CKP-006-conflictos-previstos.md)
+
+El desarrollador ve qué agentes van a chocar antes de hacer merge
+
+- *La ficha no lista los pendientes en "Estado de la implementación".*
 
 ### [US-CKP-020](features/cockpit/user-stories/US-CKP-020-trabajo-de-otro-actor.md) — #220
 
