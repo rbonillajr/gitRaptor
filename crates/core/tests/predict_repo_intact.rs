@@ -489,9 +489,11 @@ struct Proc {
     name: String,
 }
 
+/// `ucomm` rather than `comm`: a child that has ended but is not reaped yet keeps its name there,
+/// where `comm` says `<defunct>` (macOS).
 fn process_table() -> Vec<Proc> {
     let out = std::process::Command::new("ps")
-        .args(["-A", "-o", "pid=,ppid=,comm="])
+        .args(["-A", "-o", "pid=,ppid=,ucomm="])
         .output()
         .expect("ps");
     String::from_utf8_lossy(&out.stdout)
@@ -507,14 +509,44 @@ fn process_table() -> Vec<Proc> {
         .collect()
 }
 
+/// The name `pid` has now, `None` once it is gone.
+fn name_of(pid: u32) -> Option<String> {
+    let out = std::process::Command::new("ps")
+        .args(["-o", "ucomm=", "-p", &pid.to_string()])
+        .output()
+        .expect("ps");
+    let name = String::from_utf8_lossy(&out.stdout).trim().to_owned();
+    (!name.is_empty()).then_some(name)
+}
+
+/// A child seen between `fork` and `exec` still carries this binary's name: it is followed
+/// until it shows the program it runs. One that ends unseen keeps that name, which no test
+/// accepts.
+fn resolved(mut p: Proc, own: &str) -> Proc {
+    let start = Instant::now();
+    while p.name == own && start.elapsed() < Duration::from_secs(2) {
+        match name_of(p.pid) {
+            Some(name) => p.name = name,
+            None => break,
+        }
+    }
+    p
+}
+
 /// The children of this process (but `ps` itself) and their own children.
 fn census() -> (Vec<Proc>, Vec<Proc>) {
     let me = std::process::id();
     let table = process_table();
+    let own = table
+        .iter()
+        .find(|p| p.pid == me)
+        .map(|p| p.name.clone())
+        .unwrap_or_default();
     let children: Vec<Proc> = table
         .iter()
         .filter(|p| p.ppid == me && p.name != "ps")
         .cloned()
+        .map(|p| resolved(p, &own))
         .collect();
     let grandchildren = table
         .iter()
@@ -524,55 +556,64 @@ fn census() -> (Vec<Proc>, Vec<Proc>) {
     (children, grandchildren)
 }
 
+/// Records `p`, or renames the pid already recorded to its latest name.
+fn see(seen: &mut Vec<Proc>, p: Proc) {
+    match seen.iter_mut().find(|k| k.pid == p.pid) {
+        Some(k) => *k = p,
+        None => seen.push(p),
+    }
+}
+
 /// Samples the process table until `stop`; what it saw of the worker and of anything else.
 struct Sampler {
     stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
-    pause: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    /// Bumped as the test's own processes start and again once they end: odd while they run.
+    own: std::sync::Arc<std::sync::atomic::AtomicU64>,
     join: JoinHandle<(Vec<Proc>, Vec<Proc>)>,
 }
 
 impl Sampler {
     fn start() -> Self {
-        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
         let stop = std::sync::Arc::new(AtomicBool::new(false));
         let flag = stop.clone();
-        let pause = std::sync::Arc::new(AtomicBool::new(false));
-        let paused = pause.clone();
+        let own = std::sync::Arc::new(AtomicU64::new(0));
+        let epoch = own.clone();
         let join = std::thread::spawn(move || {
             let (mut kids, mut grand) = (Vec::new(), Vec::new());
             while !flag.load(Ordering::Relaxed) {
-                if paused.load(Ordering::SeqCst) {
+                let before = epoch.load(Ordering::SeqCst);
+                if before % 2 == 1 {
                     std::thread::sleep(Duration::from_millis(2));
                     continue;
                 }
                 let (c, g) = census();
-                // A sample that overlaps one of the test's own `git` is not the daemon's.
-                if paused.load(Ordering::SeqCst) {
+                // A sample that overlaps one of the test's own `git` is not the daemon's, even
+                // one that started and ended while the sample was taken.
+                if epoch.load(Ordering::SeqCst) != before {
                     continue;
                 }
+                // The latest sighting of a pid names it: one first seen between `fork` and
+                // `exec` still carries this binary's name.
                 for p in c {
-                    if !kids.iter().any(|k: &Proc| k.pid == p.pid) {
-                        kids.push(p);
-                    }
+                    see(&mut kids, p);
                 }
                 for p in g {
-                    if !grand.iter().any(|k: &Proc| k.pid == p.pid) {
-                        grand.push(p);
-                    }
+                    see(&mut grand, p);
                 }
                 std::thread::sleep(Duration::from_millis(5));
             }
             (kids, grand)
         });
-        Self { stop, pause, join }
+        Self { stop, own, join }
     }
 
     /// Runs `own` (the test's own processes) out of the samples.
     fn without_sampling<T>(&self, own: impl FnOnce() -> T) -> T {
         use std::sync::atomic::Ordering;
-        self.pause.store(true, Ordering::SeqCst);
+        self.own.fetch_add(1, Ordering::SeqCst);
         let out = own();
-        self.pause.store(false, Ordering::SeqCst);
+        self.own.fetch_add(1, Ordering::SeqCst);
         out
     }
 
