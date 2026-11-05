@@ -72,8 +72,8 @@
     },
     {
       "id": "CKP006-CAPABILITY",
-      "statement": "T002/T003 (A2): sin la capacidad prediction.pairs no hay panel y las filas quedan sin ⚡; con ella y 0 pares el panel solo lleva la línea de límites",
-      "verify": "cargo test -p gitraptor-cli --lib tui::view::conflicts_tests -- without_the_capability_there_is_no_panel",
+      "statement": "T002/T003 (A2): sin la capacidad prediction.pairs no hay panel y las filas quedan sin ⚡; con ella y 0 pares el panel solo lleva la línea de límites; el test sin capacidad comprueba también que las filas no llevan ⚡",
+      "verify": "cargo test -p gitraptor-cli --lib tui::view::conflicts_tests -- without_the_capability_there_is_no_panel with_the_capability_and_no_pairs_only_the_limits_line_shows",
       "layer": "runtime",
       "tests": [
         "apps/cli/src/tui/view/conflicts_tests.rs"
