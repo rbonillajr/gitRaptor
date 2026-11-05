@@ -7,7 +7,10 @@
 //! process group, from the moment it starts until the operation closes (not
 //! until the child ends, so an orphan grandchild of the same group is still
 //! covered). One that already ended when it was read runs no more and makes no
-//! hook calls: it is not marked. The channel treats a
+//! hook calls: it is not marked, and neither is its group, so a grandchild it
+//! left behind in the background is not covered either; such an orphan is
+//! refused as unverified or taken as unattributed, never as the requester
+//! (the residual risk of ADR-GRP-005 § 6). The channel treats a
 //! marked process, and any descendant of one, as a descendant of the
 //! executor: attributed to the operation's requester and refused for
 //! reserved commands.
