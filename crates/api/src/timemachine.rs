@@ -331,6 +331,14 @@ pub struct TmConfirmData {
     /// `overlap` only, and only with `CAP_TM_OVERLAP`: what overlaps.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub overlap: Option<TmOverlap>,
+    /// Undo by period only: how many operations it would take back (`undone_operation_id` is the
+    /// oldest). 0 (omitted) otherwise.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub undone_count: u64,
+    /// Undo by period only: how many agents own that work, when `owners` is cut at
+    /// `MAX_CONFIRM_OWNERS`. 0 (omitted) otherwise.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub owners_total: u64,
 }
 
 /// Most conflicts an `overlap` rejection lists; `TmOverlap::total` carries the real count.
@@ -405,6 +413,8 @@ impl TmConfirmData {
             undone_operation_id: None,
             undone_subtype: None,
             overlap: None,
+            undone_count: 0,
+            owners_total: 0,
         }
     }
 }

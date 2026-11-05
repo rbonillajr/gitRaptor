@@ -35,6 +35,8 @@ fn full() -> TmConfirmData {
         undone_operation_id: Some("op-0".into()),
         undone_subtype: Some(Untrusted::new("reset")),
         overlap: None,
+        undone_count: 0,
+        owners_total: 0,
     }
 }
 
