@@ -4,7 +4,7 @@ title: "Dev Spec — US-CKP-006: la TUI muestra qué agentes van a chocar antes 
 type: dev-spec
 status: draft
 created: 2026-10-27
-updated: 2026-10-27
+updated: 2026-11-04
 story: US-CKP-006
 feature: cockpit
 domain: GRP
@@ -47,8 +47,8 @@ lineage:
 constitution_gates: []
 validation:
   must_read_resolved: true
-  gaps_blocking: 1
-  ready_to_implement: false
+  gaps_blocking: 0
+  ready_to_implement: true
   gaps_release: 0
   ready_to_release: false
 tags: [cockpit, tui, prediccion-conflictos, conflict-alert, demo]
@@ -88,7 +88,7 @@ La TUI no calcula nada. Lee `RepoView.prediction` de la instantánea, aplica `pr
 
 | ID | Qué falta | Severidad | Acción | Owner |
 |----|-----------|-----------|--------|-------|
-| G1 | T009 de TS-CKP-001 (`crates/api/src/prediction.rs`, `methods/prediction.rs`, `PREDICTION_CHANGED`, `CAP_PREDICTION_PAIRS`) y el resto del PR-B (T006, T007, T010, T012). Esperan a G5 (TS-GRP-005). Sin ellos no compila T002 ni corre T001 | Bloqueante | Implementar el PR-B de [DS-TS-CKP-001](./TS-CKP-001-predictor-conflictos.md) | Orquestador |
+| G1 | ~~T009 de TS-CKP-001 y el resto del PR-B~~ | **Cerrado por #314** (2026-11-04): `crates/api/src/prediction.rs`, `methods/prediction.rs`, `PREDICTION_CHANGED`, `PREDICTION_LIST`, `CAP_PREDICTION_PAIRS` y `RepoView.prediction` están en `main`. Los nombres que usa esta DS (`PredictionSummary`, `PairSummary`, `PairDetail`, `PredictionPage`, `PairSideView`, `PairStateView`, `PairReason`, `PairLevel`, `LimitCode`, `ConflictKindView`, `LineRange`, `next_cursor`, `pairs_truncated`) coinciden con los del código; no hizo falta ajustar nada | Cerrado | — | Orquestador |
 
 ---
 
@@ -338,5 +338,5 @@ Un test de punta a punta por escenario (T001) y los de unidad de las reglas. Los
 ## Estado
 
 - Hecho: Dev Spec en `draft` con T001 a T005.
-- Pendiente: G1 (T009 y PR-B de TS-CKP-001, bloqueados por G5 / TS-GRP-005).
-- Siguiente paso: cuando T009 esté en `main`, pasar a `ready_to_implement: true` y empezar por T001 en rojo.
+- Hecho: G1 cerrado por #314 (2026-11-04); `ready_to_implement: true`, `gaps_blocking: 0`.
+- Siguiente paso: implementar con `/nassa-core:implement --autonomous US-CKP-006`, empezando por T001 en rojo.
