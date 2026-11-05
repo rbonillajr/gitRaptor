@@ -17,12 +17,17 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use super::Daemon;
+use crate::observe::UncommittedPaths;
 use crate::profile::DiscoveryRoot;
 use crate::watch::ObserverHooks;
 
 /// One feature the daemon runs. Every point has a default: a module
 /// implements the ones it needs.
 pub(super) trait DaemonModule: Send {
+    /// A repo started to be observed (`repo.add`), after its first read was published: the root
+    /// and uncommitted paths of each worktree as that read found them.
+    fn repo_added(&self, _repo_id: &str, _worktrees: &[(PathBuf, UncommittedPaths)]) {}
+
     /// A repo is no longer observed: forget what was kept for it.
     fn repo_retired(&self, _repo_id: &str) {}
 
@@ -69,6 +74,12 @@ impl Modules {
                 .filter_map(|(_, start)| start(daemon))
                 .collect(),
         )
+    }
+
+    pub(super) fn repo_added(&self, repo_id: &str, worktrees: &[(PathBuf, UncommittedPaths)]) {
+        for module in &self.0 {
+            module.repo_added(repo_id, worktrees);
+        }
     }
 
     pub(super) fn repo_retired(&self, repo_id: &str) {
