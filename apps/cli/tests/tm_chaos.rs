@@ -641,13 +641,17 @@ fn hostile_half_done_merge_rejects_until_aborted() {
     m.write("conf.txt", b"ours\n");
     m.git(&["add", "conf.txt"]);
     m.git(&["commit", "-q", "-m", "ours"]);
+    // The points known before each step are read before the step starts: the
+    // daemon may capture its result at once (under load it did, before the
+    // test read them), and a point already known is never the one awaited.
+    let known = m.snapshot_ids();
     let (s0, s1, _) = m.lose_work();
     // The captures are asynchronous (the daemon takes a point once the worktree
     // has been quiet): wait for the clean S1 before the merge starts, so what
     // the undo takes back never depends on how fast the daemon is.
-    let known = m.snapshot_ids();
     m.captured(&s1, &known);
 
+    let known = m.snapshot_ids();
     let merge =
         m.f.git_command(&m.worktree, &["merge", "-q", "other"])
             .output()
@@ -659,7 +663,6 @@ fn hostile_half_done_merge_rejects_until_aborted() {
 
     // The daemon may capture the half-done merge too, whenever it likes: wait
     // for that point, so the next undo has a single possible target.
-    let known = m.snapshot_ids();
     m.captured(&stopped, &known);
 
     // `merge --abort` is raw Git too (a reset to `HEAD`): the first undo
