@@ -1,0 +1,361 @@
+{
+  "schema": "nassa.conformance.v1",
+  "contract_sha256": "fd2699cc6689ac7e8097dae796718b7dead63e4e700c1e6359d2d1d89ec74923",
+  "spec": "docs/requirements/features/time-machine/dev-specs/US-TMC-010-undo-since.md",
+  "story": "docs/requirements/features/time-machine/user-stories/US-TMC-010-undo-since.md",
+  "query": {
+    "spec": "docs/requirements/features/time-machine/dev-specs/US-TMC-010-undo-since.md",
+    "tasks": [
+      {
+        "id": "T001",
+        "title": "Ampliar el resultado del undo con las operaciones deshechas",
+        "status": "no-medible",
+        "tests": []
+      },
+      {
+        "id": "T002",
+        "title": "Dar momento a los eventos crudos y exponer la pila",
+        "status": "no-medible",
+        "tests": []
+      },
+      {
+        "id": "T003",
+        "title": "Planificar el undo por periodo",
+        "status": "no-medible",
+        "tests": []
+      },
+      {
+        "id": "T004",
+        "title": "Servir `since` en el canal",
+        "status": "tests-existen",
+        "tests": [
+          {
+            "name": "crates/core/tests/us_tmc_010.rs",
+            "status": "existe"
+          }
+        ]
+      },
+      {
+        "id": "T005",
+        "title": "Añadir `--since` a `raptor undo`",
+        "status": "no-medible",
+        "tests": []
+      },
+      {
+        "id": "T006",
+        "title": "Probar los escenarios",
+        "status": "tests-existen",
+        "tests": [
+          {
+            "name": "crates/core/tests/us_tmc_010.rs",
+            "status": "existe"
+          },
+          {
+            "name": "apps/cli/tests/us_tmc_010_process.rs",
+            "status": "existe"
+          }
+        ]
+      },
+      {
+        "id": "T007",
+        "title": "Cerrar la historia",
+        "status": "no-medible",
+        "tests": []
+      }
+    ],
+    "critical": [],
+    "ports": [],
+    "story": [],
+    "unmeasured": [],
+    "summary": {
+      "tasks": 7,
+      "testsExist": 2,
+      "missingTest": 0,
+      "unmeasurable": 5,
+      "criticalWithoutOwner": 0,
+      "portMismatch": 0,
+      "portNotFound": 0,
+      "portsNotInAcceptance": 0,
+      "storyClauses": 0
+    }
+  },
+  "rows": [
+    {
+      "clause": "Esc.1 Deshacer el periodo indicado",
+      "task": "T003,T004,T006",
+      "rung": 3,
+      "evidence": "crates/core/tests/us_tmc_010.rs:since_undoes_the_operations_of_the_period_only",
+      "criteria": [
+        "suite",
+        "us_tmc_010"
+      ]
+    },
+    {
+      "clause": "Esc.2 Otros worktrees no cambian",
+      "task": "T003,T006",
+      "rung": 3,
+      "evidence": "crates/core/tests/us_tmc_010.rs:since_never_touches_other_worktrees",
+      "criteria": [
+        "suite"
+      ]
+    },
+    {
+      "clause": "Esc.3 Periodo no válido",
+      "task": "T004,T005,T006",
+      "rung": 3,
+      "evidence": "crates/core/tests/us_tmc_010.rs:an_invalid_period_changes_nothing; apps/cli/tests/us_tmc_010_process.rs:undo_since_invalid_says_why_in_es",
+      "criteria": [
+        "suite"
+      ]
+    },
+    {
+      "clause": "Esc.4 Nada que deshacer en el periodo",
+      "task": "T003,T005,T006",
+      "rung": 3,
+      "evidence": "crates/core/tests/us_tmc_010.rs:nothing_in_the_period_changes_nothing; apps/cli/tests/us_tmc_010_process.rs:undo_since_with_nothing_says_so_in_en_and_es",
+      "criteria": [
+        "suite"
+      ]
+    },
+    {
+      "clause": "Esc.5 Otro actor con confirmación, se revierte",
+      "task": "T003,T004,T006",
+      "rung": 3,
+      "evidence": "crates/core/tests/us_tmc_010.rs:another_actor_in_the_period_is_undone_once_confirmed",
+      "criteria": [
+        "suite"
+      ]
+    },
+    {
+      "clause": "Esc.6 Otro actor sin confirmación, se rechaza",
+      "task": "T003,T006",
+      "rung": 3,
+      "evidence": "crates/core/tests/us_tmc_010.rs:another_actor_in_the_period_without_confirmation_is_rejected",
+      "criteria": [
+        "suite"
+      ]
+    },
+    {
+      "clause": "Req. técnico: conjunto = sufijo con momento >= ahora - duración",
+      "task": "T003",
+      "rung": 2,
+      "evidence": "crates/core/src/timemachine/undo_since_tests.rs:since_takes_the_suffix_of_the_stack_inside_the_period; since_stops_at_the_first_older_operation; undo_since_review_tests.rs:an_older_raw_commit_between_two_operations_stops_the_walk",
+      "criteria": [
+        "unit"
+      ]
+    },
+    {
+      "clause": "Req. técnico: duraciones 20m/2h acotadas a la retención",
+      "task": "T004",
+      "rung": 3,
+      "evidence": "parse_since y UndoParams::validate (sin cambios); us_tmc_010.rs:an_invalid_period_changes_nothing",
+      "criteria": []
+    },
+    {
+      "clause": "Req. técnico: permisos US-TMC-013 y solape US-TMC-012",
+      "task": "T003",
+      "rung": 3,
+      "evidence": "crates/core/src/timemachine/undo.rs:restore_permission; crates/core/tests/us_tmc_010_review.rs:a_later_operation_of_the_period_touched_by_another_actor_stops_the_undo, an_operation_that_enters_the_period_after_the_challenge_invalidates_it, the_challenge_of_a_period_counts_its_operations",
+      "criteria": [
+        "review"
+      ]
+    },
+    {
+      "clause": "Transversal: textos en/es",
+      "task": "T005",
+      "rung": 2,
+      "evidence": "apps/cli/src/undo/since_tests.rs:since_messages_exist_in_en_and_es; catalogs_match; every_rejection_has_a_message",
+      "criteria": [
+        "unit"
+      ]
+    },
+    {
+      "clause": "Transversal: repos temporales",
+      "task": "T006",
+      "rung": 3,
+      "evidence": "crates/core/tests/us_tmc_010.rs: fixture repo_with_login y perfiles temporales",
+      "criteria": []
+    },
+    {
+      "clause": "Transversal: mismo comportamiento en Windows/Linux",
+      "task": "T006",
+      "rung": 0,
+      "evidence": "cfg(macos|linux) en us_tmc_010.rs y cfg(macos) en el e2e; pendiente de la etapa multiplataforma (§9.5)",
+      "criteria": []
+    },
+    {
+      "clause": "T001 undone_operation_ids y undone_count",
+      "task": "T001",
+      "rung": 2,
+      "evidence": "crates/api/src/timemachine.rs:UndoResult,McpUndoResult; timemachine_since_tests.rs:undo_result_without_since_is_todays_form, undo_result_lists_every_undone_operation; conn.rs:3476",
+      "criteria": [
+        "unit"
+      ]
+    },
+    {
+      "clause": "T002 observed_ms en RawGitEvent",
+      "task": "T002",
+      "rung": 2,
+      "evidence": "crates/core/src/timemachine/engine.rs:75; daemon/tm.rs:147 (previo al rango del diff)",
+      "criteria": [
+        "unit"
+      ]
+    },
+    {
+      "clause": "T002 UndoStack::done()",
+      "task": "T002",
+      "rung": 2,
+      "evidence": "crates/core/src/timemachine/oplog/stack.rs:done; stack_done_tests.rs:done_lists_what_is_not_undone_oldest_first",
+      "criteria": [
+        "unit"
+      ]
+    },
+    {
+      "clause": "T003 Selection y undo_selected",
+      "task": "T003",
+      "rung": 2,
+      "evidence": "crates/core/src/timemachine/undo.rs:Selection,undo_selected; a_raw_event_not_covered_rejects_the_whole_period; the_target_is_the_prior_of_the_oldest",
+      "criteria": [
+        "unit"
+      ]
+    },
+    {
+      "clause": "T004 since servido, agent sigue NOT_IMPLEMENTED",
+      "task": "T004",
+      "rung": 3,
+      "evidence": "crates/core/src/channel/conn.rs:tm_undo ~4104; us_tmc_010.rs:since_is_served_and_agent_is_still_not_implemented",
+      "criteria": [
+        "canal"
+      ]
+    },
+    {
+      "clause": "T005 --since en raptor undo",
+      "task": "T005",
+      "rung": 3,
+      "evidence": "apps/cli/src/commands/undo.rs:since; undo/mod.rs:run; us_tmc_010_process.rs (rechazos invalid y nothing)",
+      "criteria": [
+        "process"
+      ]
+    },
+    {
+      "clause": "T005 éxito undo.done-since y --json con since",
+      "task": "T005",
+      "rung": 1,
+      "evidence": "solo existe la clave i18n (since_messages_exist_in_en_and_es); ningún test del binario recorre el éxito ni --json",
+      "criteria": []
+    },
+    {
+      "clause": "T006 un test por escenario y los dos e2e",
+      "task": "T006",
+      "rung": 3,
+      "evidence": "crates/core/tests/us_tmc_010.rs; apps/cli/tests/us_tmc_010_process.rs",
+      "criteria": [
+        "suite"
+      ]
+    },
+    {
+      "clause": "T007 Cerrar la historia, backlog, release-status, xplat-pendientes",
+      "task": "T007",
+      "rung": 0,
+      "evidence": "Pendiente: lo hace el bucle principal al cierre; la historia sigue en status: draft",
+      "criteria": []
+    },
+    {
+      "clause": "§9.4 since_equals_consecutive_undos",
+      "task": "T006",
+      "rung": 3,
+      "evidence": "crates/core/tests/us_tmc_010.rs:since_equals_consecutive_undos",
+      "criteria": [
+        "suite"
+      ]
+    },
+    {
+      "clause": "§9.4 the_undo_records_every_target_for_redo",
+      "task": "T006",
+      "rung": 3,
+      "evidence": "crates/core/tests/us_tmc_010.rs:the_undo_records_every_target_for_redo",
+      "criteria": [
+        "suite"
+      ]
+    },
+    {
+      "clause": "§9.4 precondiciones D7 con rebase en curso",
+      "task": "T003,T006",
+      "rung": 3,
+      "evidence": "crates/core/tests/us_tmc_010.rs:since_with_a_rebase_in_progress_is_rejected_without_a_prior",
+      "criteria": [
+        "suite"
+      ]
+    },
+    {
+      "clause": "Diseño paso 7: unión de ámbitos y ref-in-use sobre el conjunto",
+      "task": "T003",
+      "rung": 0,
+      "evidence": "código en undo.rs:merge_scope; ningún test de periodo nombra ref-in-use ni la unión de refs",
+      "criteria": []
+    },
+    {
+      "clause": "Diseño pasos 5-6: evento crudo no deshacible rechaza todo; destino = previo de la más antigua",
+      "task": "T003",
+      "rung": 2,
+      "evidence": "undo_since_tests.rs:a_raw_event_not_covered_rejects_the_whole_period, the_target_is_the_prior_of_the_oldest",
+      "criteria": [
+        "unit"
+      ]
+    }
+  ],
+  "sobra": [
+    {
+      "what": "Selection::Within { span_ms }, convertido a Since tras el lock",
+      "where": "crates/core/src/timemachine/undo.rs:Selection,undo_selected",
+      "verdict": "justificado (diseño paso 3, commit dd2c4836)"
+    },
+    {
+      "what": "undone_count y owners_total en TmConfirmData, con textos en/es",
+      "where": "crates/api/src/timemachine.rs; crates/core/src/timemachine/confirm/mod.rs:agent_count; apps/cli/i18n/{en,es}/timemachine.txt",
+      "verdict": "justificado (D-TMC-29; cambio de contrato compartido que el spec no preveía, anotar en el PR)"
+    },
+    {
+      "what": "Solape con varias bases (undone_bases, base_point_of, classify con bases)",
+      "where": "crates/core/src/timemachine/overlap.rs",
+      "verdict": "justificado (paso 9, NFR-01, commit 6a986b29)"
+    },
+    {
+      "what": "Test reescrito para usar agent en lugar de since",
+      "where": "apps/cli/tests/protected_process.rs",
+      "verdict": "colateral"
+    },
+    {
+      "what": "Campos nuevos en el literal de TmConfirmData",
+      "where": "crates/api/tests/tm_confirmation.rs",
+      "verdict": "colateral"
+    },
+    {
+      "what": "Comentario de módulo undo_last a undo_selected",
+      "where": "crates/core/src/timemachine/restore.rs:2",
+      "verdict": "colateral"
+    },
+    {
+      "what": "Marca de tiempo de la solicitud de aprobación",
+      "where": "docs/dev-briefs/us-tmc-010-undo-since.1-aprobacion.md",
+      "verdict": "no pedido (inocuo)"
+    },
+    {
+      "what": "Tests de revisión",
+      "where": "crates/core/src/timemachine/undo_since_review_tests.rs; crates/core/tests/us_tmc_010_review.rs; apps/cli/src/undo/since_review_tests.rs",
+      "verdict": "justificado"
+    }
+  ],
+  "criticalOpen": [],
+  "goal": {
+    "answer": "sí",
+    "evidence": [
+      "crates/core/tests/us_tmc_010.rs:since_undoes_the_operations_of_the_period_only (canal con daemon real: un undo, previo propio, Target::Undo([B,C]), undone_operation_ids)",
+      "crates/core/src/channel/conn.rs:tm_undo ~4104 y undo.rs:undo_selected con Selection::Since",
+      "us_tmc_010.rs:an_invalid_period_changes_nothing y nothing_in_the_period_changes_nothing; binario real en us_tmc_010_process.rs (en/es)",
+      "us_tmc_010.rs: escenarios 5 y 6 (confirmación de US-TMC-013); since_is_served_and_agent_is_still_not_implemented",
+      "undo_since_tests.rs:a_raw_event_not_covered_rejects_the_whole_period (unit)",
+      "Sin test: éxito y --json de la CLI, unión de refs y ref-in-use, operation_id en NOT_IMPLEMENTED, Linux y Windows. T007 pendiente."
+    ]
+  }
+}

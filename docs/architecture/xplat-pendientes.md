@@ -2,7 +2,7 @@
 title: Pendientes de la etapa de validación multiplataforma
 status: expanded
 generated: 2026-10-05
-updated: 2026-10-28
+updated: 2026-11-04
 generator: orquestador
 domain: GRP
 tags: [xplat, validacion-multiplataforma, linux, windows, contenedor, vm, lima, utm, ssh, repo-intact, strace]
@@ -93,6 +93,7 @@ Las rutas cortas de la columna Origen van bajo `docs/requirements/features/`. La
 | XP-64 | Linux y Windows | US-GRD-016, DS-US-GRD-016 G2 | La misma decisión por MCP y por Git directo, validada solo en macOS. La suite de paridad (`crates/core/tests/us_grd_016_parity.rs`) es `cfg(any(target_os = "macos", target_os = "linux"))`; la e2e (`apps/cli/tests/guard_us_grd_016.rs`) es solo macOS con `debug_assertions` (usa `script` y `proc_pidinfo`, como `mcp_safe_commit.rs`): sus criterios **no corren en el CI de ubuntu**. Falta: (a) Linux: primera ejecución verde de la paridad en CI ubuntu y portar la e2e (detección del agente por ascendencia y hooks); (b) Windows: hooks, detección del agente y los cuatro estados en la máquina de Rene con el binario release y perfil temporal. Etiqueta: validación multiplataforma pendiente | CI ubuntu + máquina Windows | pendiente |
 | XP-65 | Linux y Windows | ADR-GRP-012 (Enmienda 2026-10-28, `git` ajeno que no puede producir un evento), DS-US-GRP-008 T003 (D4), US-GRP-007 | S3 lee del argv de cada `git` si su subcomando puede mover una ref (`writes`) o si no puede producir un evento (`harmless`), validado solo en macOS (`apps/cli/tests/events_s4_hook_attribution.rs`, `cfg(target_os = "macos")`). Falta: (a) Linux: la lectura por defecto de `git_facts` (`/proc/<pid>/cmdline` y `environ`, en dos pasos) y una primera ejecución verde de los tests unitarios de `detect` en CI ubuntu; (b) **Windows: no hay lector del argv**, así que `git_facts` es `None` y falla cerrado. Ningún `git` de una sesión es evidencia de S3 (consecuencia aceptada de D4): un commit de Claude Code solo se atribuye con S4 (Guardrails instalado) o queda "sin atribuir" con la pista. Un `git` de lectura del desarrollador sigue contando como ajeno. **Decisión del orquestador (2026-10-28)**: es fail-safe y nunca atribuye trabajo humano a un agente. El criterio 2 de M1 en macOS no vale como multiplataforma | CI ubuntu + máquina Windows | pendiente |
 | XP-66 | Linux y Windows | US-TMC-012, DS-US-TMC-012 § 9.5 | Solape con otro actor (rechazo `overlap` y `keep`), validado solo en macOS. Falta: (a) Linux: `us_tmc_012.rs` corre bajo `cfg(any(macos, linux))`, falta su primera ejecución verde en CI ubuntu; el e2e `undo_overlap_process.rs` es solo macOS y hay que portarlo; (b) Windows: `overlap_tests.rs` y `tm_apply_keep` compilan y corren, pero el aplicador devuelve `Unsupported`; `keep` queda pendiente hasta que exista el aplicador de Windows. Pendiente: etapa de validación multiplataforma | CI de ubuntu; máquina Windows | pendiente |
+| XP-67 | Linux y Windows | US-TMC-010, DS-US-TMC-010 § 9.5 | `raptor undo --since` (undo por periodo como un solo undo), validado solo en macOS. Falta: (a) Linux: `us_tmc_010.rs` y `us_tmc_010_review.rs` corren bajo `cfg(any(macos, linux))`, falta su primera ejecución verde en CI ubuntu; el e2e `us_tmc_010_process.rs` es solo macOS y hay que portarlo; (b) Windows: compila, pero el aplicador devuelve `Unsupported` y no hay confirmación de trabajo ajeno (TQ-14), así que un periodo con trabajo de un agente se rechaza. Pendiente: etapa de validación multiplataforma | CI de ubuntu; máquina Windows | pendiente |
 
 ## Contenedor Linux: resultados del 2026-10-05
 
@@ -524,3 +525,4 @@ Rutas de `docs/requirements/features/` abreviadas (`motor-local/`, `time-machine
 - **XP-62**: guardrails/dev-specs/US-GRD-006-excepcion-consciente.md § 9.5 (Windows); crates/core/src/guardrails/exception.rs (`NotTheChild`); crates/core/src/guardrails/second_line.rs (`nearest_git`)
 - **XP-63**: crates/core/src/guardrails/health.rs (`fingerprint`); crates/core/src/guardrails/health_tests.rs
 - **XP-66**: crates/core/tests/us_tmc_012.rs (`cfg` macOS y Linux); apps/cli/tests/undo_overlap_process.rs (`cfg` macOS); time-machine/dev-specs/US-TMC-012-solape-otro-actor.md § 9.5
+- **XP-67**: crates/core/tests/us_tmc_010.rs y crates/core/tests/us_tmc_010_review.rs (`cfg` macOS y Linux); apps/cli/tests/us_tmc_010_process.rs (`cfg` macOS); time-machine/dev-specs/US-TMC-010-undo-since.md § 9.5
