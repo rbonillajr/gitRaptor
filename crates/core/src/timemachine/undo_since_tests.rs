@@ -267,7 +267,32 @@ fn since_stops_at_the_first_older_operation() {
 fn a_raw_event_not_covered_rejects_the_whole_period() {
     let r = rig();
     let now = now_ms();
-    let (_a, _) = r.operation("a", now - 60_000, 1);
+    let (a, _) = r.operation("a", now - 60_000, 1);
+    // As in production, the operation leaves an anchor capture (an Observation of the state it
+    // left, at its own mark): without it a's echo window would run on to b's prior and swallow
+    // the push below as a's echo.
+    let store = r.repo.store.as_deref().expect("the store opens");
+    store
+        .capture(
+            &r.repo.repo.oplog,
+            &CaptureRequest {
+                level: SnapshotLevel::Observation,
+                echo_settled: None,
+                common_dir: r.repo.repo.common_dir.clone(),
+                worktrees: vec![WorktreeScope {
+                    key: "main".into(),
+                    path: r.f.repo.clone(),
+                    hint: None,
+                }],
+                engine_mark: Some(1),
+                cause_operation: Some(a),
+                cause_event_seq: None,
+                include_credentials: false,
+                still_valid: None,
+                give_way: None,
+            },
+        )
+        .unwrap();
     // A push inside the period: the Time Machine does not undo it, and does not skip it.
     let push = RawGitEvent {
         seq: 2,
