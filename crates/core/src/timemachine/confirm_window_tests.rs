@@ -65,6 +65,11 @@ impl ProcLister for Blip {
     }
 }
 
+/// The blip of these tests (three busy reads, `PROBE_BACKOFF` apart, then a calm one) fits in the
+/// real `CONFIRM_WINDOW` on a machine that gets the CPU: [`PATIENT_WINDOW`] only absorbs a
+/// starved runner's delays.
+const _: () = assert!(3 * PROBE_BACKOFF.as_millis() < CONFIRM_WINDOW.as_millis());
+
 /// How long [`Patient`] confirms: far over any runner's scheduling delay, never waited out.
 const PATIENT_WINDOW: Duration = Duration::from_secs(30);
 
