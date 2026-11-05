@@ -76,9 +76,14 @@ impl std::fmt::Debug for Engine {
 }
 
 impl Engine {
-    /// `mcp.status`: the caller's repo, resolved by the engine. A broken
-    /// connection (the engine restarted) is opened again once.
-    pub fn status(&self, cursor: Option<String>) -> Result<McpStatus, McpToolError> {
+    /// One read of the engine: `call` under the connection's lock, opened again once when a
+    /// connection that was already open breaks (the engine restarted), and `refused` for what
+    /// the engine says no to.
+    fn read<T>(
+        &self,
+        call: impl Fn(&mut Option<Client>) -> Result<T, ClientError>,
+        refused: impl FnOnce(ClientError) -> McpToolError,
+    ) -> Result<T, McpToolError> {
         // A call still running past its time limit holds the connection:
         // this one answers at once rather than queue behind it, spending
         // the connection's read budget on an answer nobody reads.
@@ -88,44 +93,41 @@ impl Engine {
             Err(TryLockError::WouldBlock) => return Err(self.late()),
         };
         let reused = slot.is_some();
-        let result = match call_status(&mut slot, cursor.as_deref()) {
-            Err(ClientError::Io(_) | ClientError::Protocol(_)) if reused => {
-                call_status(&mut slot, cursor.as_deref())
-            }
+        let result = match call(&mut slot) {
+            Err(ClientError::Io(_) | ClientError::Protocol(_)) if reused => call(&mut slot),
             other => other,
         };
         self.connected.store(slot.is_some(), Ordering::Relaxed);
-        result.map_err(|err| refusal(&err))
+        result.map_err(refused)
     }
 
-    /// `mcp.conflicts`: the predicted conflicts of the caller's worktree (or repo), under the
-    /// same lock and with the same single reconnection as [`Engine::status`]. An engine that
-    /// does not offer the method is `prediction-unavailable`.
+    /// `mcp.status`: the caller's repo, resolved by the engine. A broken
+    /// connection (the engine restarted) is opened again once.
+    pub fn status(&self, cursor: Option<String>) -> Result<McpStatus, McpToolError> {
+        self.read(
+            |slot| call_status(slot, cursor.as_deref()),
+            |err| refusal(&err),
+        )
+    }
+
+    /// `mcp.conflicts`: the predicted conflicts of the caller's worktree (or repo), read as
+    /// [`Engine::status`] is. An engine that does not offer the method is
+    /// `prediction-unavailable`.
     pub fn conflicts(
         &self,
         scope: Option<McpConflictsScope>,
         cursor: Option<String>,
     ) -> Result<McpConflicts, McpToolError> {
-        let mut slot = match self.client.try_lock() {
-            Ok(slot) => slot,
-            Err(TryLockError::Poisoned(e)) => e.into_inner(),
-            Err(TryLockError::WouldBlock) => return Err(self.late()),
-        };
-        let reused = slot.is_some();
         let params = McpConflictsParams { scope, cursor };
-        let result = match call_conflicts(&mut slot, &params) {
-            Err(ClientError::Io(_) | ClientError::Protocol(_)) if reused => {
-                call_conflicts(&mut slot, &params)
-            }
-            other => other,
-        };
-        self.connected.store(slot.is_some(), Ordering::Relaxed);
-        result.map_err(|err| match err {
-            ClientError::Rpc(e) if e.code == code::METHOD_NOT_FOUND => {
-                McpToolError::PredictionUnavailable
-            }
-            other => refusal(&other),
-        })
+        self.read(
+            |slot| call_conflicts(slot, &params),
+            |err| match err {
+                ClientError::Rpc(e) if e.code == code::METHOD_NOT_FOUND => {
+                    McpToolError::PredictionUnavailable
+                }
+                other => refusal(&other),
+            },
+        )
     }
 
     /// `operation.prepare` and `operation.run` of a `snapshot`, in the same connection and under

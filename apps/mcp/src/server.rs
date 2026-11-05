@@ -118,16 +118,21 @@ fn status_arguments() -> JsonObject {
     schema
 }
 
-fn status_tool() -> Tool {
-    let output = serde_json::to_value(schemars::schema_for!(McpStatusView))
+/// The compact output schema of a tool whose answer is a `T`.
+pub(crate) fn output_schema<T: schemars::JsonSchema>() -> Arc<JsonObject> {
+    let output = serde_json::to_value(schemars::schema_for!(T))
         .ok()
         .and_then(|mut v| {
             compact_schema(&mut v);
             v.as_object().cloned()
         })
         .unwrap_or_default();
+    Arc::new(output)
+}
+
+fn status_tool() -> Tool {
     Tool::new(STATUS_TOOL, STATUS_DESCRIPTION, status_arguments())
-        .with_raw_output_schema(Arc::new(output))
+        .with_raw_output_schema(output_schema::<McpStatusView>())
 }
 
 /// The status the tool gives: refused without data when the repo cannot be
