@@ -86,7 +86,7 @@ La TUI no calcula nada. Lee `RepoView.prediction` de la instantánea, aplica `pr
 
 ## Gaps
 
-_Ninguno abierto._ G1 (el PR-B de TS-CKP-001: `crates/api/src/prediction.rs`, `methods/prediction.rs`, `PREDICTION_CHANGED`, `PREDICTION_LIST`, `CAP_PREDICTION_PAIRS`, `RepoView.prediction`) quedó **cerrado por #314** el 2026-11-04. Los nombres que usa esta DS (`PredictionSummary`, `PairSummary`, `PairDetail`, `PredictionPage`, `PairSideView`, `PairStateView`, `PairReason`, `PairLevel`, `LimitCode`, `ConflictKindView`, `LineRange`, `next_cursor`, `pairs_truncated`) coinciden con los de `main`; no hizo falta ajustar nada.
+_No gaps. Ready to implement._ G1 (el PR-B de TS-CKP-001: `crates/api/src/prediction.rs`, `methods/prediction.rs`, `PREDICTION_CHANGED`, `PREDICTION_LIST`, `CAP_PREDICTION_PAIRS`, `RepoView.prediction`) quedó **cerrado por #314** el 2026-11-04. Los nombres que usa esta DS (`PredictionSummary`, `PairSummary`, `PairDetail`, `PredictionPage`, `PairSideView`, `PairStateView`, `PairReason`, `PairLevel`, `LimitCode`, `ConflictKindView`, `LineRange`, `next_cursor`, `pairs_truncated`) coinciden con los de `main`; no hizo falta ajustar nada.
 
 ---
 
