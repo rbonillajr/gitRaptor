@@ -100,7 +100,7 @@ Entonces la petición se rechaza con el motivo
 
 ## Estado de la implementación (2026-11-04)
 
-Implementado en: PR #PR_NUM.
+Implementado en: PR #319.
 
 - **Hecho:** `raptor undo --since <duración>` (CLI) y `timemachine.undo` con `since` en el canal del daemon. Deshace, como un solo undo con su previo, el sufijo de la pila del worktree cuyas operaciones ocurrieron en el periodo, de cualquier actor. El destino es el previo de la más antigua. Si una operación del periodo no se puede deshacer, se rechaza la petición entera (D-TMC-29). El trabajo de otro actor pide la confirmación de US-TMC-013, y el reto muestra cuántas operaciones deshace. El solape de US-TMC-012 cuenta lo que cambió cada operación del conjunto. `UndoResult.undone_operation_ids` y `McpUndoResult.undone_count` dicen qué se deshizo. `agent` y `operation_id` siguen en `NOT_IMPLEMENTED`.
 - **Tests:** los seis escenarios en `crates/core/tests/us_tmc_010.rs` (daemon y Git reales, repos y perfiles temporales); los dos e2e del binario en `apps/cli/tests/us_tmc_010_process.rs` (en/es); unitarios en `undo_since_tests.rs`, `stack_done_tests.rs`, `timemachine_since_tests.rs` y `apps/cli/src/undo/since_tests.rs`; los de la revisión en `crates/core/tests/us_tmc_010_review.rs`, `undo_since_review_tests.rs` y `since_review_tests.rs`.
