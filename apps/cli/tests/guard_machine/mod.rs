@@ -98,10 +98,22 @@ impl Running {
         }
     }
 
+    /// Types `line` on the terminal. If the command already ended (the write fails), the panic
+    /// says how it ended and what it printed, not only the pipe error.
     pub fn type_line(&mut self, line: &str) {
         let stdin = self.stdin.as_mut().unwrap();
-        stdin.write_all(line.as_bytes()).unwrap();
-        stdin.flush().unwrap();
+        if let Err(e) = stdin
+            .write_all(line.as_bytes())
+            .and_then(|()| stdin.flush())
+        {
+            let status = self.child.wait();
+            self.seen.extend(self.rx.try_iter().flatten());
+            panic!(
+                "the terminal took no input ({e}): the command ended with {status:?} after \
+                 printing:\n{}",
+                String::from_utf8_lossy(&self.seen)
+            );
+        }
     }
 
     pub fn finish(mut self) -> Output {
