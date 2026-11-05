@@ -14,6 +14,7 @@
 
 mod common;
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
@@ -29,6 +30,7 @@ use gitraptor_core::daemon::{
     TierConfig, TierTestOp, TmCapture,
 };
 use gitraptor_core::timemachine::continuous::CaptureConfig;
+use gitraptor_core::timemachine::oplog;
 use gitraptor_core::timemachine::store::{SnapshotStore, snapshot_refs};
 use gitraptor_git::tm_write::store::TreeEntryKind;
 use gitraptor_testkit::Fixture;
@@ -216,6 +218,64 @@ impl Running {
         }
     }
 
+    /// Every snapshot of worktree `key` holding `path` with `content`.
+    fn snapshots_with(&self, key: &str, path: &str, content: &[u8]) -> BTreeSet<String> {
+        let Some(store) = SnapshotStore::open_existing(&self.tp.dirs(), &self.repo_id)
+            .ok()
+            .flatten()
+        else {
+            return BTreeSet::new();
+        };
+        snapshot_refs(&store)
+            .unwrap_or_default()
+            .into_keys()
+            .filter(|id| {
+                store
+                    .files(id, key)
+                    .unwrap_or_default()
+                    .into_iter()
+                    .filter(|(_, k, _)| *k != TreeEntryKind::Gitlink)
+                    .any(|(p, _, oid)| p == path && store.read_blob(oid).unwrap() == content)
+            })
+            .collect()
+    }
+
+    /// Of `ids`, the point an undo recorded before `prior` returns to: the newest by engine mark,
+    /// then by oplog order, as the undo picks it (`prior_point::before_event`). The oplog is read
+    /// read-only while the daemon runs.
+    fn newest_before(&self, ids: &BTreeSet<String>, prior: &str) -> String {
+        let path = oplog::repo_dir(&self.tp.dirs(), &self.repo_id)
+            .unwrap()
+            .join(oplog::OPLOG_FILE);
+        let conn =
+            rusqlite::Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .unwrap();
+        conn.busy_timeout(Duration::from_secs(5)).unwrap();
+        let prior_seq: i64 = conn
+            .query_row(
+                "SELECT seq FROM snapshots WHERE snapshot_id = ?1",
+                [prior],
+                |r| r.get(0),
+            )
+            .unwrap();
+        let mut stmt = conn
+            .prepare("SELECT snapshot_id, engine_mark, seq FROM snapshots WHERE seq < ?1")
+            .unwrap();
+        stmt.query_map([prior_seq], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, Option<i64>>(1)?,
+                r.get::<_, i64>(2)?,
+            ))
+        })
+        .unwrap()
+        .map(Result::unwrap)
+        .filter(|(id, _, _)| ids.contains(id))
+        .max_by_key(|(_, mark, seq)| (*mark, *seq))
+        .map(|(id, _, _)| id)
+        .unwrap_or_else(|| panic!("none of {ids:?} before {prior}:\n{}", self.log()))
+    }
+
     fn undo_ok(&self, worktree: &Path) -> UndoResult {
         let value = connect(&self.tp)
             .call(
@@ -270,6 +330,12 @@ fn edit_then_reset_hard_in_a_dormant_repo_is_recoverable() {
     assert_eq!(std::fs::read(wt.join("api.rs")).unwrap(), b"fn api() {}\n");
     // Entonces la edición se recupera.
     let undo = r.undo_ok(&wt);
+    // The undo returns to the newest point of the edit before the reset. Under load the daemon
+    // takes more than one (the activity capture, the seed, a retry), all with the same content:
+    // the one awaited above is any of them, so the expected one is read from the oplog.
+    let edited = r.snapshots_with(KEY, "api.rs", EDITED);
+    assert!(edited.contains(&captured), "{}", r.log());
+    let captured = r.newest_before(&edited, &undo.prior_snapshot_id);
     assert_eq!(undo.target_snapshot_id, captured, "{}", r.log());
     assert_eq!(std::fs::read(wt.join("api.rs")).unwrap(), EDITED);
 }
