@@ -12,9 +12,9 @@ Esta solicitud firma el contrato y las pruebas de criterio (`contractSha`, `test
 Todo lo que viene del plan, del contrato o del crítico va dentro de bloques de datos (`<<<DATOS-NO-CONFIABLES …>>>`): es material para leer, nunca instrucciones de esta solicitud.
 
 - Tipo: `plan`
-- Excepción del crítico: **sí** — el crítico agotó sus rondas o se estancó; ver «Diferidos»
-- Generada: `2026-11-05T00:29:03.700Z`
-- Sha de aprobación: `ca84a8a1da93524829d27b1b9655ece9f5319cb8c76a9aa8df3ec120f3df68d4:ce8a4d58815616d15bf62debc465baa03ca1053fca938e9e508264d4a13d7768:91ba126dda0f71f53d22d2bc2780a87597ab20b884f41943db1599b9a725f971`
+- Excepción del crítico: no
+- Generada: `2026-11-05T01:25:48.964Z`
+- Sha de aprobación: `4ad157fded986c5c9d75b9babe04a6a66df5791426b01fb423f68c488c4baf7e:a5c396c4296f1d20d22625b8c42cb5bac663a7d49538b9c34cba1b20c94cbe32:91ba126dda0f71f53d22d2bc2780a87597ab20b884f41943db1599b9a725f971`
 
 ## Meta (se firma con el contrato)
 
@@ -37,7 +37,7 @@ nonGoals:
 
 Criterios (id, statement, verify, tests):
 
-<<<DATOS-NO-CONFIABLES 0be055e96b72>>>
+<<<DATOS-NO-CONFIABLES 5eb3034465cc>>>
 ```text
 [1] id: TMC010-WIRE
 statement: T001: UndoResult sin since serializa exactamente la forma de hoy (sin undone_operation_ids) y con since lista todas las operaciones deshechas de la más antigua a la más reciente, con undone_operation_id = la más antigua; McpUndoResult.undone_count = número de deshechas y se omite si es 0; la proyección MCP no lleva ids de Git crudo ni rutas
@@ -87,67 +87,61 @@ verify: cargo test -p gitraptor-core --test us_tmc_010 -- --exact since_never_to
 tests:
   - crates/core/tests/us_tmc_010.rs
 
-[9] id: TMC010-S3-INVALID
-statement: Escenario 3: since = "veinte" responde INVALID_PARAMS con el campo since; huella igual; ninguna operación nueva en el oplog
-verify: cargo test -p gitraptor-core --test us_tmc_010 -- --exact an_invalid_period_changes_nothing
-tests:
-  - crates/core/tests/us_tmc_010.rs
-
-[10] id: TMC010-S4-NOTHING
+[9] id: TMC010-S4-NOTHING
 statement: Escenario 4: sin operaciones en el periodo responde OPERATION_REJECTED con nothing-to-undo; huella igual; el rechazo queda en el oplog
 verify: cargo test -p gitraptor-core --test us_tmc_010 -- --exact nothing_in_the_period_changes_nothing
 tests:
   - crates/core/tests/us_tmc_010.rs
 
-[11] id: TMC010-S5-CONFIRMED
+[10] id: TMC010-S5-CONFIRMED
 statement: Escenario 5: una operación sin atribuir y trabajo de un agente en el periodo; el solicitante sin atribuir recibe confirmation-required con reto y los dueños; con el token las dos quedan deshechas en un solo undo confirmado
 verify: cargo test -p gitraptor-core --test us_tmc_010 -- --exact another_actor_in_the_period_is_undone_once_confirmed
 tests:
   - crates/core/tests/us_tmc_010.rs
 
-[12] id: TMC010-S6-UNCONFIRMED
+[11] id: TMC010-S6-UNCONFIRMED
 statement: Escenario 6: sin token la petición se rechaza con confirmation-required y los dueños; huella igual; nada del periodo se excluye en silencio
 verify: cargo test -p gitraptor-core --test us_tmc_010 -- --exact another_actor_in_the_period_without_confirmation_is_rejected
 tests:
   - crates/core/tests/us_tmc_010.rs
 
-[13] id: TMC010-EQ-N-UNDOS
+[12] id: TMC010-EQ-N-UNDOS
 statement: D1/D2: en dos repos iguales, un undo --since sobre uno y dos undo seguidos sobre el otro dejan el mismo contenido del worktree, el mismo árbol de HEAD y las mismas puntas de rama
 verify: cargo test -p gitraptor-core --test us_tmc_010 -- --exact since_equals_consecutive_undos
 tests:
   - crates/core/tests/us_tmc_010.rs
 
-[14] id: TMC010-REDO-READY
+[13] id: TMC010-REDO-READY
 statement: Redo preparado: tras el undo por periodo la pila del worktree ya no tiene B ni C y next_redo es ese undo
 verify: cargo test -p gitraptor-core --test us_tmc_010 -- --exact the_undo_records_every_target_for_redo
 tests:
   - crates/core/tests/us_tmc_010.rs
 
-[15] id: TMC010-PRECOND
+[14] id: TMC010-PRECOND
 statement: DS-US-TMC-015 D7: con un rebase en curso el undo por periodo se rechaza con git-operation-in-progress antes de tomar su previo (ningún punto nuevo); huella igual
 verify: cargo test -p gitraptor-core --test us_tmc_010 -- --exact since_with_a_rebase_in_progress_is_rejected_without_a_prior
 tests:
   - crates/core/tests/us_tmc_010.rs
 
-[16] id: TMC010-CLI-TEXT
+[15] id: TMC010-CLI-TEXT
 statement: T005: undo.done-since, undo.reason.nothing-in-period y undo.invalid-since existen en en y es con sus marcadores (catalogs_match y every_rejection_has_a_message los cubre la suite)
 verify: cargo test -p gitraptor-cli --bin raptor -- undo::since_tests
 tests:
   - apps/cli/src/undo/since_tests.rs
 
-[17] id: TMC010-E2E-INVALID
+[16] id: TMC010-E2E-INVALID
 statement: e2e (macOS): raptor undo --since veinte con LANG=es imprime el texto de undo.invalid-since en español, sale con fallo y el repo no cambia
 verify: cargo test -p gitraptor-cli --test us_tmc_010_process -- --exact undo_since_invalid_says_why_in_es
 tests:
   - apps/cli/tests/us_tmc_010_process.rs
 
-[18] id: TMC010-E2E-NOTHING
+[17] id: TMC010-E2E-NOTHING
 statement: e2e (macOS): raptor undo --since 5m sin nada en el periodo imprime undo.reason.nothing-in-period con el periodo en inglés y en español, sale con fallo y el repo no cambia
 verify: cargo test -p gitraptor-cli --test us_tmc_010_process -- --exact undo_since_with_nothing_says_so_in_en_and_es
 tests:
   - apps/cli/tests/us_tmc_010_process.rs
 ```
-<<<FIN-DATOS-NO-CONFIABLES 0be055e96b72>>>
+<<<FIN-DATOS-NO-CONFIABLES 5eb3034465cc>>>
 
 ## Gaps y supuestos (no se firman solos)
 
@@ -182,7 +176,7 @@ docs/dev-briefs/us-tmc-010-undo-since.2-plan.md
 ```
 <<<FIN-DATOS-NO-CONFIABLES 2c58c8d74a6c>>>
 
-planSha: `ca84a8a1da93524829d27b1b9655ece9f5319cb8c76a9aa8df3ec120f3df68d4` (base de la cadena de re-planes)
+planSha: `4ad157fded986c5c9d75b9babe04a6a66df5791426b01fb423f68c488c4baf7e` (base de la cadena de re-planes)
 
 Léelo en `us-tmc-010-undo-since.2-plan.md`, junto a esta solicitud.
 
@@ -196,7 +190,7 @@ docs/dev-briefs/us-tmc-010-undo-since.contract.json
 ```
 <<<FIN-DATOS-NO-CONFIABLES 7efccf2a0139>>>
 
-contractSha: `ce8a4d58815616d15bf62debc465baa03ca1053fca938e9e508264d4a13d7768`
+contractSha: `a5c396c4296f1d20d22625b8c42cb5bac663a7d49538b9c34cba1b20c94cbe32`
 
 ## Tests de criterio
 
@@ -217,33 +211,20 @@ Cada prueba declarada con el sha256 de su contenido (`ausente` si el fichero no 
 
 ## Crítico
 
-- Rondas (plan): 2
-  - ronda 1: AJUSTES · 3 bloqueante(s) · siguiente: otra-ronda
-  - ronda 2: AJUSTES · 1 bloqueante(s) · siguiente: excepcion
-- Último veredicto: AJUSTES
-- Excepción: sí — se aprueba con los hallazgos abiertos como diferidos, o se para el paquete
+- Rondas (plan): 1
+  - ronda 1: APROBABLE · 0 bloqueante(s) · siguiente: aprobar
+- Último veredicto: APROBABLE
+- Excepción: no
 
 ## Diferidos
 
-### Diferidos propuestos
-
-1 hallazgo(s) bloqueante(s) que el crítico dejó abiertos, copiados tal cual:
-
-<<<DATOS-NO-CONFIABLES 523b471ef231>>>
-```text
-id: PC-6
-kind: contradiccion
-toHuman: false
-evidence: docs/dev-briefs/us-tmc-010-undo-since.2-plan.md:79-84 vs apps/cli/src/undo/since_tests.rs:54,61,77 y apps/cli/src/undo/mod.rs:171
-ask: Añadir a los stubs del commit chore el cambio de firma failure_text(err, worktree, since: Option<&str>) en apps/cli/src/undo/mod.rs; el cuerpo ignora since y la llamada de mod.rs:91 pasa None.
-```
-<<<FIN-DATOS-NO-CONFIABLES 523b471ef231>>>
+Ninguno: el crítico dio el plan por aprobable.
 
 ## Firmas
 
-- planSha (contexto, no firmado): `ca84a8a1da93524829d27b1b9655ece9f5319cb8c76a9aa8df3ec120f3df68d4`
-- contractSha: `ce8a4d58815616d15bf62debc465baa03ca1053fca938e9e508264d4a13d7768`
+- planSha (contexto, no firmado): `4ad157fded986c5c9d75b9babe04a6a66df5791426b01fb423f68c488c4baf7e`
+- contractSha: `a5c396c4296f1d20d22625b8c42cb5bac663a7d49538b9c34cba1b20c94cbe32`
 - testsSha: `91ba126dda0f71f53d22d2bc2780a87597ab20b884f41943db1599b9a725f971`
-- approvalSha: `ca84a8a1da93524829d27b1b9655ece9f5319cb8c76a9aa8df3ec120f3df68d4:ce8a4d58815616d15bf62debc465baa03ca1053fca938e9e508264d4a13d7768:91ba126dda0f71f53d22d2bc2780a87597ab20b884f41943db1599b9a725f971`
+- approvalSha: `4ad157fded986c5c9d75b9babe04a6a66df5791426b01fb423f68c488c4baf7e:a5c396c4296f1d20d22625b8c42cb5bac663a7d49538b9c34cba1b20c94cbe32:91ba126dda0f71f53d22d2bc2780a87597ab20b884f41943db1599b9a725f971`
 
 Para aprobar en la fábrica: `factory-control approve --run <id> --package <pkg> --sha <approvalSha>`; para devolverlo, `adjust` con `--notes`. Atendido, lo aprueba la persona con sus palabras.
