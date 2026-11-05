@@ -22,6 +22,10 @@ mod overlap;
 #[path = "since_tests.rs"]
 mod since_tests;
 
+#[cfg(test)]
+#[path = "since_review_tests.rs"]
+mod since_review_tests;
+
 use crate::i18n::{Tr, t};
 use crate::{engine, error_text, shown};
 
@@ -60,7 +64,7 @@ pub fn run(json_out: bool, since: Option<&str>) -> ExitCode {
         methods::TM_UNDO,
         params,
         !json_out,
-        &show_undo_plan,
+        &|data: &TmConfirmData| eprintln!("{CMD}: {}", plan_text(data, since)),
     ) {
         Ok(answer) => answer,
         Err(code) => return code,
@@ -106,8 +110,9 @@ pub fn run(json_out: bool, since: Option<&str>) -> ExitCode {
     }
 }
 
-/// What the confirmation is about: the operation, its id and whose work it is.
-fn show_undo_plan(data: &TmConfirmData) {
+/// What the confirmation is about: the operation, its id and whose work it is; for a period,
+/// how many operations from the oldest, and how many owners when the list is cut.
+fn plan_text(data: &TmConfirmData, since: Option<&str>) -> String {
     let operation = data
         .undone_subtype
         .as_ref()
@@ -117,19 +122,40 @@ fn show_undo_plan(data: &TmConfirmData) {
         .as_deref()
         .map(sanitize)
         .unwrap_or_default();
-    let owners = data
+    let mut owners = data
         .owners
         .iter()
         .map(crate::events::actor)
         .collect::<Vec<_>>()
         .join(", ");
-    eprintln!(
-        "{CMD}: {}",
-        t(
+    let Some(since) = since else {
+        return t(
             "undo.confirm-plan",
             &[("operation", &operation), ("id", &id), ("owners", &owners)],
-        )
-    );
+        );
+    };
+    let shown = data.owners.len() as u64;
+    if data.owners_total > shown {
+        let more = t(
+            "undo.overlap.more",
+            &[("count", &(data.owners_total - shown))],
+        );
+        owners = if owners.is_empty() {
+            more
+        } else {
+            format!("{owners}, {more}")
+        };
+    }
+    t(
+        "undo.confirm-plan-since",
+        &[
+            ("count", &data.undone_count.max(1)),
+            ("since", &sanitize(since)),
+            ("operation", &operation),
+            ("id", &id),
+            ("owners", &owners),
+        ],
+    )
 }
 
 fn print_done(result: &UndoResult, worktree: &Path, since: Option<&str>) {
@@ -199,7 +225,12 @@ fn print_done(result: &UndoResult, worktree: &Path, since: Option<&str>) {
 fn failure_text(err: ClientError, worktree: &Path, since: Option<&str>) -> String {
     match err {
         // With --since the period is the only parameter the person typed.
-        ClientError::Rpc(err) if err.code == code::INVALID_PARAMS && since.is_some() => {
+        // The engine names the field first (`since: ...`); another invalid field keeps its text.
+        ClientError::Rpc(err)
+            if err.code == code::INVALID_PARAMS
+                && since.is_some()
+                && err.message.starts_with("since:") =>
+        {
             t("undo.invalid-since", &[])
         }
         ClientError::Rpc(err) if err.code == code::OPERATION_REJECTED => {
@@ -221,6 +252,14 @@ fn failure_text(err: ClientError, worktree: &Path, since: Option<&str>) -> Strin
                 Some(d) => match (d.reason, since) {
                     (TmRejectReason::NothingToUndo, Some(since)) => t(
                         "undo.reason.nothing-in-period",
+                        &[("since", &sanitize(since))],
+                    ),
+                    (TmRejectReason::RawGitNotCovered, Some(since)) => t(
+                        "undo.reason.raw-git-not-covered-since",
+                        &[("since", &sanitize(since))],
+                    ),
+                    (TmRejectReason::TargetUnavailable, Some(since)) => t(
+                        "undo.reason.target-unavailable-since",
                         &[("since", &sanitize(since))],
                     ),
                     (reason, _) => t(reason_key(reason), &[]),
