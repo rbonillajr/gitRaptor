@@ -63,6 +63,7 @@ pub(super) const GROUP: Group = Group {
         method(MCP_DISABLE, true, false).since(CAPABILITIES_PROTOCOL),
         method(MCP_ALLOWLIST, false, false).since(CAPABILITIES_PROTOCOL),
         method(MCP_STATUS, false, true).since(CAPABILITIES_PROTOCOL),
+        method(MCP_CONFLICTS, false, true).since(CAPABILITIES_PROTOCOL),
     ],
     capabilities: &[CAP_MCP_STATUS_BRANCH, CAP_MCP_STATUS_FULL],
     errors: &[MCP_UNAVAILABLE],
@@ -488,14 +489,14 @@ mod tests {
     /// Reserved commands are never offered over MCP; the read of the
     /// allowlist is not either.
     #[test]
-    fn only_status_is_offered_over_mcp() {
+    fn only_the_reads_are_offered_over_mcp() {
         let mcp: Vec<_> = GROUP
             .methods
             .iter()
             .filter(|m| m.mcp)
             .map(|m| m.name)
             .collect();
-        assert_eq!(mcp, [MCP_STATUS]);
+        assert_eq!(mcp, [MCP_STATUS, MCP_CONFLICTS]);
         let reserved: Vec<_> = GROUP
             .methods
             .iter()

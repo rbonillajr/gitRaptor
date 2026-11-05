@@ -138,7 +138,7 @@ pub enum McpToolError {
 }
 
 impl McpToolError {
-    pub const ALL: [Self; 33] = [
+    pub const ALL: [Self; 34] = [
         Self::RepoNotEnabled,
         Self::NotInObservedWorktree,
         Self::RepoUnavailable,
@@ -172,6 +172,7 @@ impl McpToolError {
         Self::TooManyPaths,
         Self::PathIgnored,
         Self::OtherSessionPresent,
+        Self::PredictionUnavailable,
     ];
 
     pub const fn as_str(self) -> &'static str {
