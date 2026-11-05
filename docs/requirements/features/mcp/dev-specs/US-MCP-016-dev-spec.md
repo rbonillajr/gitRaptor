@@ -80,8 +80,8 @@ Convenciones que se siguen (código leído): `mcp.status` como patrón del méto
 
 | Id | Hueco | Severidad | Alcance | Qué se hace mientras |
 |---|---|---|---|---|
-| G1 | ~~**T009 del PR-B de TS-CKP-001** no está en `main`~~. **Cerrado por #314 (2026-11-04)**: existen `crates/api/src/prediction.rs`, `crates/api/src/methods/prediction.rs` (`CAP_PREDICTION_PAIRS`, `PREDICTION_LIST`, `PREDICTION_CHANGED`) y `crates/core/src/predict/store.rs::predict_read`. Los nombres que difieren de esta DS están en § Ajustes a `main` | — | — | — |
-| G2 | ~~La lectura interna con la que T009 sirva `prediction.list` aún no tiene nombre~~. **Cerrado (2026-10-27)**: T009 de DS-TS-CKP-001 la fija como `pub(crate) fn predict_read(repo_id, worktree: Option<&Path>) -> Vec<PairDetail>`, fuera del brazo de `conn.rs` | — | — | — |
+| G1 | ~~**T009 del PR-B de TS-CKP-001** no está en `main`~~. **Cerrado por #314 (2026-11-04)**: existen `crates/api/src/prediction.rs`, `crates/api/src/methods/prediction.rs` (`CAP_PREDICTION_PAIRS`, `PREDICTION_LIST`, `PREDICTION_CHANGED`) y `crates/core/src/predict/store.rs::predict_read`. Los nombres que difieren de esta DS están en § Ajustes a `main` | Informativo (cerrado) | — | — |
+| G2 | ~~La lectura interna con la que T009 sirva `prediction.list` aún no tiene nombre~~. **Cerrado (2026-10-27)**: T009 de DS-TS-CKP-001 la fija como `pub(crate) fn predict_read(repo_id, worktree: Option<&Path>) -> Vec<PairDetail>`, fuera del brazo de `conn.rs` | Informativo (cerrado) | — | — |
 | G3 | Linux y Windows: *Pendiente: etapa de validación multiplataforma* (XP-01: Windows sin canal) | Informativo | — | Igual que DS-US-MCP-004 § Matriz de plataformas |
 
 Estado de los bloqueos de la historia (2026-11-04): G1 cerrado por #314, no queda ningún hueco bloqueante. Antes: **ADR-MCP-001** está `accepted` (DEP-MCP-1 aplicada, § 11). **DEP-MCP-6** está "Aplicada" (ADR-MCP-001 § 11: Enmienda 2026-10-05, MCP, de ADR-CKP-001 § 8). **ADR-CKP-001** está `accepted`. La sección "Dependencias" de la historia lo dice todavía como abierto; solo queda G1.
@@ -289,6 +289,23 @@ Calculando: `{…,"counts":{"calculating":1},"pairs":[{"a":…,"b":…,"state":"
 
 Canal: los códigos de `mcp.status` (`SCOPE_REFUSED{not-observed|not-allowlisted}`, `MCP_UNAVAILABLE{reason}`, `NOT_FOUND`/`INVALID_PARAMS` del cursor, `RATE_LIMITED`, `IDENTITY_UNVERIFIED`). Herramienta: `isError: true` y `{code, message, action}` sin `params`, ≤ 80 tokens en en y es (RES-MCP-03), con el mapeo de `engine.rs::refusal` más `prediction-unavailable` (D13). Ningún rechazo lleva datos del repo.
 
+### Ciclos de vida (DI)
+
+`CursorEntry::Conflicts` vive en la tabla `McpCursors` de la `Connection` y muere con ella, como los cursores de `status` (DS-US-MCP-004). `PredictionStore` es el de `ChannelCtx` (compartido con el hilo del predictor, T009): `mcp.conflicts` solo lo lee con `predict_read` y `published`, sin estado propio. La herramienta no guarda nada entre llamadas.
+
+### Firmas del stack
+
+Las de § Contratos → Tipos compartidos, más la lectura aditiva de § Ajustes a `main`:
+
+```rust
+// crates/core/src/predict/store.rs (MODIFY, aditivo)
+impl PredictionStore { pub(crate) fn published(&self, repo_id: &str) -> bool; }
+```
+
+### Forma de la configuración
+
+_No aplica — no hay configuración nueva: los topes son constantes del contrato (`MCP_CONFLICTS_PAGE_PAIRS` y las de `mcp_view.rs`)._
+
 ### Valores numéricos
 
 | Constante | Valor | Origen |
@@ -300,6 +317,10 @@ Canal: los códigos de `mcp.status` (`SCOPE_REFUSED{not-observed|not-allowlisted
 | `MCP_TOOL_TOKENS` (existe, `:175`) | descripción + `inputSchema` ≤ 150 | RES-MCP-01 |
 | `MCP_MAX_CURSORS` / `MCP_CURSOR_LEN` (existen) | 64 por conexión / 16 hex | D4 |
 | Archivos y rangos por par | los topes del motor (200 y 50, ADR-CKP-001 § 3); la vista no los sube | ADR-MCP-001 § 6 |
+
+## Modelo de datos
+
+_No aplica — sin persistencia nueva: se lee el estado publicado del predictor en memoria (`PredictionStore`); los cursores viven en memoria por conexión._
 
 ## Estrategia de pruebas
 
