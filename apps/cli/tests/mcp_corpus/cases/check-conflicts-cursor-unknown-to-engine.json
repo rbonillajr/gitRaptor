@@ -1,0 +1,38 @@
+{
+  "id": "check-conflicts-cursor-unknown-to-engine",
+  "title": "A well formed conflicts cursor the engine does not know is refused without file content",
+  "threats": [
+    "MCP05",
+    "MCP10",
+    "SEC-MCP-05"
+  ],
+  "tier": "engine",
+  "platforms": [
+    "macos",
+    "linux"
+  ],
+  "pending": "XP-42",
+  "setup": {
+    "repo": "enabled"
+  },
+  "session": {
+    "cwd": "repo"
+  },
+  "send": [
+    {
+      "call": "check_conflicts",
+      "arguments": {
+        "cursor": "0123456789abcdef"
+      }
+    }
+  ],
+  "expect": {
+    "refusal": {
+      "code": "invalid-cursor"
+    }
+  },
+  "forbidden": [
+    "{canary:dotenv-file}",
+    "{canary:commit-message}"
+  ]
+}

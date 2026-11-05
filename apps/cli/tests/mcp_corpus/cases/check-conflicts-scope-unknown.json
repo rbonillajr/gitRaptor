@@ -1,0 +1,30 @@
+{
+  "id": "check-conflicts-scope-unknown",
+  "title": "A scope outside worktree and repo is malformed",
+  "threats": [
+    "MCP05",
+    "SEC-MCP-05",
+    "BR-MCP-VAL-005"
+  ],
+  "tier": "server",
+  "platforms": [
+    "macos",
+    "linux",
+    "windows"
+  ],
+  "send": [
+    {
+      "call": "check_conflicts",
+      "arguments": {
+        "scope": "all"
+      }
+    }
+  ],
+  "expect": {
+    "protocol_error": {
+      "code": -32602,
+      "message": "invalid-params",
+      "field": "scope"
+    }
+  }
+}

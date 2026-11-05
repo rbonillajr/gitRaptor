@@ -1,0 +1,31 @@
+{
+  "id": "check-conflicts-param-path",
+  "title": "A path parameter on check_conflicts is malformed",
+  "threats": [
+    "MCP02",
+    "SEC-MCP-02",
+    "BR-MCP-VAL-005"
+  ],
+  "tier": "server",
+  "platforms": [
+    "macos",
+    "linux",
+    "windows"
+  ],
+  "send": [
+    {
+      "call": "check_conflicts",
+      "arguments": {
+        "scope": "repo",
+        "path": "/etc/passwd"
+      }
+    }
+  ],
+  "expect": {
+    "protocol_error": {
+      "code": -32602,
+      "message": "invalid-params",
+      "field": "path"
+    }
+  }
+}

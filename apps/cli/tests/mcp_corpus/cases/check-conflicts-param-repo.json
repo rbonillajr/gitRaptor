@@ -1,0 +1,33 @@
+{
+  "id": "check-conflicts-param-repo",
+  "title": "A repo parameter on check_conflicts is malformed and never echoed",
+  "threats": [
+    "MCP02",
+    "SEC-MCP-02",
+    "BR-MCP-VAL-005"
+  ],
+  "tier": "server",
+  "platforms": [
+    "macos",
+    "linux",
+    "windows"
+  ],
+  "send": [
+    {
+      "call": "check_conflicts",
+      "arguments": {
+        "repo": "{other_repo}"
+      }
+    }
+  ],
+  "forbidden": [
+    "{other_repo}"
+  ],
+  "expect": {
+    "protocol_error": {
+      "code": -32602,
+      "message": "invalid-params",
+      "field": "repo"
+    }
+  }
+}
