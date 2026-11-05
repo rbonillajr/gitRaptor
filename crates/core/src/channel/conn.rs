@@ -3473,6 +3473,7 @@ fn undo_result(done: UndoDone, requester: RequesterView, with_kept: bool) -> Und
             .collect(),
         kept,
         kept_total,
+        undone_operation_ids: Vec::new(),
     }
 }
 

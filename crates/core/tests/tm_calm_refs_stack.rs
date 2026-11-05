@@ -161,6 +161,7 @@ fn a_late_echo_bound_by_a_calm_anchor_stays_below_the_restore() {
                 kind,
                 branch: Some("main".into()),
                 actor: Requester::Unattributed,
+                observed_ms: 0,
             })
             .collect(),
         floor: 0,

@@ -134,6 +134,17 @@ pub struct UndoDone {
     /// (e.g. [`super::restore::KEPT_REF_IN_RECREATED_WORKTREE`] followed by
     /// `:` and the kept ref).
     pub warnings: Vec<String>,
+    /// Every operation an undo by period took back, oldest first; empty otherwise.
+    pub undone_all: Vec<Undone>,
+}
+
+/// Which operations of the worktree's stack an undo takes back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Selection {
+    /// The most recent one not undone yet.
+    Last,
+    /// Every one, from the top, whose moment is at or after `since_ms` (ms since the epoch).
+    Since { since_ms: i64 },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -952,6 +963,25 @@ impl ProtectedStep for UndoStep<'_> {
     }
 }
 
+/// Undoes what `selection` picks of `repo.repo.worktree`'s stack, for `who` through `channel`.
+///
+/// # Errors
+/// [`UndoError::Internal`] for [`Selection::Since`] until the undo by period is built; nothing
+/// is recorded nor touched then.
+pub fn undo_selected(
+    repo: &TmRepoHandle,
+    who: &Who,
+    channel: Channel,
+    confirm: &Confirmation<'_>,
+    env: &UndoEnv<'_>,
+    selection: Selection,
+) -> Result<UndoDone, UndoError> {
+    match selection {
+        Selection::Last => undo_last(repo, who, channel, confirm, env),
+        Selection::Since { .. } => Err(UndoError::Internal("since: not built".to_owned())),
+    }
+}
+
 /// Undoes the most recent operation of `repo.repo.worktree` that is not
 /// undone yet, for `who` through `channel`.
 pub fn undo_last(
@@ -1196,6 +1226,7 @@ pub fn undo_last(
                 _ => ApplyReport::default(),
             },
             warnings: planned.warnings,
+            undone_all: Vec::new(),
         }),
         Err(ProtectedError::Prior {
             reason,
@@ -1240,6 +1271,10 @@ pub fn undo_last(
 #[cfg(test)]
 #[path = "undo_raw_events_tests.rs"]
 mod raw_events_tests;
+
+#[cfg(test)]
+#[path = "undo_since_tests.rs"]
+mod since_tests;
 
 #[cfg(test)]
 mod tests {

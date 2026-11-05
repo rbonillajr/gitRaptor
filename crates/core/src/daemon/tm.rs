@@ -144,6 +144,7 @@ impl Daemon {
                         kind,
                         branch: details.branch.map(|b| b.raw().to_owned()),
                         actor,
+                        observed_ms: e.observed.utc_ms,
                     })
                 })
                 .collect(),

@@ -194,6 +194,7 @@ fn branch_event(seq: i64, actor: Requester) -> RawGitEvent {
         kind: GitEventKind::BranchUpdate,
         branch: Some(BRANCH.into()),
         actor,
+        observed_ms: 0,
     }
 }
 

@@ -461,6 +461,9 @@ pub struct UndoResult {
     /// otherwise. Only with `CAP_TM_OVERLAP`.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub kept_total: u64,
+    /// Every operation a `since` undo took back, oldest first. Empty (omitted) otherwise.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub undone_operation_ids: Vec<String>,
 }
 
 fn is_zero(n: &u64) -> bool {
@@ -480,6 +483,9 @@ pub struct McpUndoResult {
     /// How many paths another actor changed afterwards were kept (never which: SEC-12).
     #[serde(default)]
     pub kept: u64,
+    /// How many operations a `since` undo took back; 0 (omitted) otherwise. Never their ids.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub undone_count: u64,
 }
 
 impl UndoResult {
@@ -491,6 +497,7 @@ impl UndoResult {
             actor: cap_actor(&self.requester.actor),
             not_restored: self.not_restored.len() as u64,
             kept: self.kept_total.max(self.kept.len() as u64),
+            undone_count: 0,
         }
     }
 }

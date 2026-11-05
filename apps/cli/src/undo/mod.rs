@@ -18,6 +18,10 @@ pub(crate) mod confirm;
 pub(crate) mod notices;
 mod overlap;
 
+#[cfg(test)]
+#[path = "since_tests.rs"]
+mod since_tests;
+
 use crate::i18n::{Tr, t};
 use crate::{engine, error_text, shown};
 
@@ -88,7 +92,7 @@ pub fn run(json_out: bool) -> ExitCode {
                 println!("{data}");
                 return ExitCode::FAILURE;
             }
-            for line in failure_text(err, &worktree).lines() {
+            for line in failure_text(err, &worktree, None).lines() {
                 eprintln!("{CMD}: {line}");
             }
             ExitCode::FAILURE
@@ -168,7 +172,7 @@ fn print_done(result: &UndoResult, worktree: &Path) {
 
 /// The message for a failed undo: a rejection with its reason, a scope the
 /// engine does not observe, an interruption, or the common errors.
-fn failure_text(err: ClientError, worktree: &Path) -> String {
+fn failure_text(err: ClientError, worktree: &Path, _since: Option<&str>) -> String {
     match err {
         ClientError::Rpc(err) if err.code == code::OPERATION_REJECTED => {
             let data = err

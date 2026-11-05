@@ -71,6 +71,8 @@ pub struct RawGitEvent {
     pub branch: Option<String>,
     /// The session the engine attributed it to, or "unattributed".
     pub actor: Requester,
+    /// When the engine observed it (UTC ms since the epoch): its moment for `undo --since`.
+    pub observed_ms: i64,
 }
 
 /// The engine as the Time Machine sees it.
