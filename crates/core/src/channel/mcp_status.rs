@@ -46,7 +46,7 @@ pub(crate) struct WorktreeFacts {
 /// the path itself, never of what a symlink points at. A path whose owner cannot be read is not
 /// theirs: the check fails closed.
 #[cfg(unix)]
-fn owned_by_me(paths: &[&Path]) -> Option<bool> {
+pub(super) fn owned_by_me(paths: &[&Path]) -> Option<bool> {
     use std::os::unix::fs::MetadataExt;
     let me = crate::channel::peer::current_uid();
     Some(
@@ -58,7 +58,7 @@ fn owned_by_me(paths: &[&Path]) -> Option<bool> {
 
 /// No owner to compare: the engine's verdict (`safe.directory` of gix) rules.
 #[cfg(not(unix))]
-fn owned_by_me(_paths: &[&Path]) -> Option<bool> {
+pub(super) fn owned_by_me(_paths: &[&Path]) -> Option<bool> {
     None
 }
 
@@ -463,7 +463,6 @@ pub(crate) enum CursorEntry {
     },
     /// A page of `mcp.conflicts`: its scope, the caller's root in the worktree scope, and the
     /// `(rank, pair_id)` of the last pair given.
-    #[allow(dead_code)] // minted by `mcp.conflicts`, not wired into the dispatch yet
     Conflicts {
         repo_id: String,
         scope: gitraptor_api::methods::McpConflictsScope,
