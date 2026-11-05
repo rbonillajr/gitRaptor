@@ -1,0 +1,43 @@
+{
+  "id": "check-conflicts-worktree-of-not-enabled",
+  "title": "check_conflicts from another agent's worktree of a not enabled repo is refused",
+  "threats": [
+    "MCP02",
+    "SEC-MCP-02"
+  ],
+  "tier": "engine",
+  "platforms": [
+    "macos",
+    "linux"
+  ],
+  "pending": "XP-42",
+  "setup": {
+    "repo": "observed",
+    "other_repo": "enabled",
+    "worktrees": [
+      {
+        "name": "feat-a",
+        "branch": "feat-a"
+      }
+    ]
+  },
+  "session": {
+    "cwd": "wt-feat-a"
+  },
+  "send": [
+    {
+      "call": "check_conflicts",
+      "arguments": {
+        "scope": "repo"
+      }
+    }
+  ],
+  "expect": {
+    "refusal": {
+      "code": "repo-not-enabled"
+    }
+  },
+  "forbidden": [
+    "{repo_id:repo}"
+  ]
+}

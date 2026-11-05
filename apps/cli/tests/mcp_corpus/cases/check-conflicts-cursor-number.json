@@ -1,0 +1,30 @@
+{
+  "id": "check-conflicts-cursor-number",
+  "title": "A cursor that is not a string is malformed",
+  "threats": [
+    "MCP05",
+    "SEC-MCP-05",
+    "BR-MCP-VAL-005"
+  ],
+  "tier": "server",
+  "platforms": [
+    "macos",
+    "linux",
+    "windows"
+  ],
+  "send": [
+    {
+      "call": "check_conflicts",
+      "arguments": {
+        "cursor": 7
+      }
+    }
+  ],
+  "expect": {
+    "protocol_error": {
+      "code": -32602,
+      "message": "invalid-params",
+      "field": "cursor"
+    }
+  }
+}

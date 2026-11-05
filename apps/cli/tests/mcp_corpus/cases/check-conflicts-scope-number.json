@@ -1,0 +1,30 @@
+{
+  "id": "check-conflicts-scope-number",
+  "title": "A scope that is not a string is malformed",
+  "threats": [
+    "MCP05",
+    "SEC-MCP-05",
+    "BR-MCP-VAL-005"
+  ],
+  "tier": "server",
+  "platforms": [
+    "macos",
+    "linux",
+    "windows"
+  ],
+  "send": [
+    {
+      "call": "check_conflicts",
+      "arguments": {
+        "scope": 1
+      }
+    }
+  ],
+  "expect": {
+    "protocol_error": {
+      "code": -32602,
+      "message": "invalid-params",
+      "field": "scope"
+    }
+  }
+}

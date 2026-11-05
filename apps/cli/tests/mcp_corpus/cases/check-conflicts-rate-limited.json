@@ -1,0 +1,37 @@
+{
+  "id": "check-conflicts-rate-limited",
+  "title": "A burst of check_conflicts calls is rate limited within its token cap",
+  "threats": [
+    "MCP10",
+    "SEC-MCP-05"
+  ],
+  "tier": "engine",
+  "platforms": [
+    "macos",
+    "linux"
+  ],
+  "pending": "XP-42",
+  "setup": {
+    "repo": "enabled"
+  },
+  "session": {
+    "cwd": "repo"
+  },
+  "send": [
+    {
+      "call": "check_conflicts",
+      "repeat": 200
+    }
+  ],
+  "expect": {
+    "refusal": {
+      "code": "rate-limited",
+      "params": [
+        "retry_after_s"
+      ]
+    }
+  },
+  "forbidden": [
+    "{canary:dotenv-file}"
+  ]
+}

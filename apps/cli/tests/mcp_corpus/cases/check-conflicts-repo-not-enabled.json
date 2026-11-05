@@ -1,0 +1,34 @@
+{
+  "id": "check-conflicts-repo-not-enabled",
+  "title": "check_conflicts in an observed but not enabled repo is refused",
+  "threats": [
+    "MCP02",
+    "SEC-MCP-02"
+  ],
+  "tier": "engine",
+  "platforms": [
+    "macos",
+    "linux"
+  ],
+  "pending": "XP-42",
+  "setup": {
+    "repo": "observed"
+  },
+  "session": {
+    "cwd": "repo"
+  },
+  "send": [
+    {
+      "call": "check_conflicts"
+    }
+  ],
+  "expect": {
+    "refusal": {
+      "code": "repo-not-enabled"
+    }
+  },
+  "forbidden": [
+    "{repo}",
+    "{repo_id:repo}"
+  ]
+}

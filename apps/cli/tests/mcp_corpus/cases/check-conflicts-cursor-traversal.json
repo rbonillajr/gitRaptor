@@ -1,0 +1,30 @@
+{
+  "id": "check-conflicts-cursor-traversal",
+  "title": "A cursor shaped as a path is malformed",
+  "threats": [
+    "MCP05",
+    "SEC-MCP-05",
+    "BR-MCP-VAL-005"
+  ],
+  "tier": "server",
+  "platforms": [
+    "macos",
+    "linux",
+    "windows"
+  ],
+  "send": [
+    {
+      "call": "check_conflicts",
+      "arguments": {
+        "cursor": "../../etc/passwd"
+      }
+    }
+  ],
+  "expect": {
+    "protocol_error": {
+      "code": -32602,
+      "message": "invalid-params",
+      "field": "cursor"
+    }
+  }
+}
