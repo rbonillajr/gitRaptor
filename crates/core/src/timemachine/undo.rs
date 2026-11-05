@@ -145,7 +145,26 @@ pub enum Selection {
     Last,
     /// Every one, from the top, whose moment is at or after `since_ms` (ms since the epoch).
     Since { since_ms: i64 },
+    /// Every one, from the top, whose moment is in the last `span_ms`: the undo counts the period
+    /// with the daemon's clock once it holds the repo and the engine is calm, so waiting for them
+    /// never stretches it back.
+    Within { span_ms: i64 },
 }
+
+impl Selection {
+    /// Where the period starts, now; `None` for the last operation.
+    fn threshold(self) -> Option<i64> {
+        match self {
+            Selection::Last => None,
+            Selection::Since { since_ms } => Some(since_ms),
+            Selection::Within { span_ms } => Some(now_ms().saturating_sub(span_ms)),
+        }
+    }
+}
+
+/// How far ahead of the daemon's clock a moment may be and still count as in the period: a
+/// later one is the mark of a clock that stepped back, and the walk stops there (D2).
+const FUTURE_MARGIN_MS: i64 = 5_000;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UndoError {
@@ -554,16 +573,20 @@ fn plan(
     let mut recreated_roots: Vec<PathBuf> = Vec::new();
     // The set (D2): the most recent operation, or the suffix of the stack whose moment is in the
     // period. The walk stops at the first older one, so a clock out of order undoes less, never
-    // more. A moment that cannot be read keeps the walk going: the operation joins the set and
-    // its own check below refuses the whole request.
-    let set: Vec<OpRef> = match selection {
-        Selection::Last => stack.last_operation().cloned().into_iter().collect(),
-        Selection::Since { since_ms } => {
+    // more; a moment ahead of the clock (the clock stepped back) stops it too. A moment that
+    // cannot be read keeps the walk going: the operation joins the set and its own check below
+    // refuses the whole request.
+    let set: Vec<OpRef> = match selection.threshold() {
+        None => stack.last_operation().cloned().into_iter().collect(),
+        Some(since_ms) => {
+            let latest = now_ms().saturating_add(FUTURE_MARGIN_MS);
             let mut set: Vec<OpRef> = stack
                 .done()
                 .iter()
                 .rev()
-                .take_while(|op| moment(oplog, raw, op).is_none_or(|at| at >= since_ms))
+                .take_while(|op| {
+                    moment(oplog, raw, op).is_none_or(|at| since_ms <= at && at <= latest)
+                })
                 .cloned()
                 .collect();
             set.reverse();
@@ -696,7 +719,9 @@ fn plan(
     // undo of the last operation keeps today's hash.
     let taken_back: Vec<&str> = match selection {
         Selection::Last => Vec::new(),
-        Selection::Since { .. } => undone.iter().map(|u| u.id.as_str()).collect(),
+        Selection::Since { .. } | Selection::Within { .. } => {
+            undone.iter().map(|u| u.id.as_str()).collect()
+        }
     };
     let confirmed = confirm
         .gate_over(
@@ -1038,18 +1063,6 @@ impl ProtectedStep for UndoStep<'_> {
     }
 }
 
-/// Undoes the most recent operation of `repo.repo.worktree` that is not
-/// undone yet, for `who` through `channel`.
-pub fn undo_last(
-    repo: &TmRepoHandle,
-    who: &Who,
-    channel: Channel,
-    confirm: &Confirmation<'_>,
-    env: &UndoEnv<'_>,
-) -> Result<UndoDone, UndoError> {
-    undo_selected(repo, who, channel, confirm, env, Selection::Last)
-}
-
 /// Undoes what `selection` picks of `repo.repo.worktree`'s stack, for `who` through `channel`,
 /// as one protected `undo` operation with its own prior and `Target::Undo` of the whole set.
 /// Anything of the set that cannot be undone refuses the whole request (NFR-01).
@@ -1059,7 +1072,7 @@ pub fn undo_selected(
     channel: Channel,
     confirm: &Confirmation<'_>,
     env: &UndoEnv<'_>,
-    selection: Selection,
+    mut selection: Selection,
 ) -> Result<UndoDone, UndoError> {
     let oplog = &repo.repo.oplog;
     let worktree = repo.repo.worktree.as_path();
@@ -1137,6 +1150,12 @@ pub fn undo_selected(
                 .raw_events(repo_id, worktree)
                 .unwrap_or_default(),
             floor: deps.engine.generation_floor(repo_id),
+        };
+    }
+    // The period, once the repo is held and the engine calm (the wait does not stretch it).
+    if let Selection::Within { span_ms } = selection {
+        selection = Selection::Since {
+            since_ms: now_ms().saturating_sub(span_ms),
         };
     }
     let rejected = |scope, target, reason| {
@@ -1355,6 +1374,10 @@ mod raw_events_tests;
 #[cfg(test)]
 #[path = "undo_since_tests.rs"]
 mod since_tests;
+
+#[cfg(test)]
+#[path = "undo_since_review_tests.rs"]
+mod since_review_tests;
 
 #[cfg(test)]
 mod tests {

@@ -1,7 +1,7 @@
 //! `restore` of a worktree to a point of the timeline (US-TMC-009,
 //! BR-TMC-WF-003, ADR-TMC-004 § 1, ADR-TMC-005).
 //!
-//! A protected operation of kind `restore` on the path of `undo_last`: the
+//! A protected operation of kind `restore` on the path of `undo_selected`: the
 //! repo lock, the engine settled, the plan, the base permission rule over
 //! every actor whose work the restore takes back, the Git preconditions, the
 //! intent, its own prior snapshot and the applier with a bounded ref scope.

@@ -4041,8 +4041,9 @@ impl Connection<'_> {
     }
 
     /// `timemachine.undo` (US-TMC-002): the last operation of the named
-    /// worktree, as a protected operation of the Time Machine. The
-    /// selectors (`since`, `agent`, `operation_id`) stay with their stories.
+    /// worktree, or with `since` every operation of the period (US-TMC-010),
+    /// as one protected operation of the Time Machine. The other selectors
+    /// (`agent`, `operation_id`) stay with their stories.
     fn tm_undo(
         &self,
         spec: &MethodSpec,
@@ -4098,13 +4099,13 @@ impl Connection<'_> {
             &eligibility,
         );
         let with_detail = !self.is_mcp() && self.has(methods::CAP_TM_OVERLAP.name);
-        // The period is counted by the daemon's clock (SEC-TMC-07); `validate` already parsed it.
+        // The period is counted by the daemon's clock (SEC-TMC-07) once the undo holds the repo;
+        // `validate` already parsed it.
         let selection = match p.since.as_deref() {
             Some(since) => {
                 let secs = parse_since(since).map_err(tm_invalid)?;
-                let span_ms = i64::try_from(secs.saturating_mul(1_000)).unwrap_or(i64::MAX);
-                Selection::Since {
-                    since_ms: crate::daemon::now_ms().saturating_sub(span_ms),
+                Selection::Within {
+                    span_ms: i64::try_from(secs.saturating_mul(1_000)).unwrap_or(i64::MAX),
                 }
             }
             None => Selection::Last,
