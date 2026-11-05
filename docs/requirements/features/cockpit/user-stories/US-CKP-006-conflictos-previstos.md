@@ -2,10 +2,10 @@
 id: US-CKP-006
 title: "El desarrollador ve qué agentes van a chocar antes de hacer merge"
 type: us
-status: draft
+status: partially-implemented
 priority: high
 created: 2026-10-04
-updated: 2026-10-27
+updated: 2026-11-04
 feature: cockpit
 related:
   context:
@@ -95,4 +95,6 @@ Detalle en [DS-US-CKP-006](../dev-specs/US-CKP-006-conflictos-previstos.md). La 
 ## Diseño y Dev Spec
 
 - **Diseño:** DSYS-GRP-001 (ConflictAlert, símbolos ⚡ ⚠).
-- **Dev Spec:** [DS-US-CKP-006](../dev-specs/US-CKP-006-conflictos-previstos.md) (`draft`; bloqueada por T009 y el PR-B de TS-CKP-001).
+- **Dev Spec:** [DS-US-CKP-006](../dev-specs/US-CKP-006-conflictos-previstos.md) (`partially-implemented`).
+
+Implementado en: PR #PRNUM ([DS-US-CKP-006](../dev-specs/US-CKP-006-conflictos-previstos.md)). Pendiente: el escenario 3 (un worktree contra la base confirmada) no puede pasar todavía: confirmar la base en runtime (`guard confirm`) no refresca la base publicada ni vuelve a planificar, así que el par contra la base queda `pending` (hueco G-B del predictor, fuera de este PR; cruza guardrails y motor). El resto de los escenarios pasa en macOS con el daemon real.
