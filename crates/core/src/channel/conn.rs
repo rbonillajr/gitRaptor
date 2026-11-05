@@ -99,7 +99,7 @@ use crate::timemachine::overlap::{OverlapReport, Subject as OverlapSubjectCore};
 use crate::timemachine::timeline::recorded_actor;
 use crate::timemachine::undo::TmRepoHandle;
 use crate::timemachine::undo::{
-    RawSide, UndoDone, UndoEnv, UndoError, Undone, tm_scope_for, undo_last,
+    RawSide, Selection, UndoDone, UndoEnv, UndoError, Undone, tm_scope_for, undo_selected,
 };
 
 /// Longest audit page.
@@ -3473,7 +3473,7 @@ fn undo_result(done: UndoDone, requester: RequesterView, with_kept: bool) -> Und
             .collect(),
         kept,
         kept_total,
-        undone_operation_ids: Vec::new(),
+        undone_operation_ids: done.undone_all.into_iter().map(|u| u.id).collect(),
     }
 }
 
@@ -4051,9 +4051,7 @@ impl Connection<'_> {
         let p: UndoParams = request.params()?;
         p.validate().map_err(tm_invalid)?;
         self.check_confirmation_param(p.confirmation.as_ref().map(ConfirmationToken::as_str))?;
-        let selector = if p.since.is_some() {
-            Some("US-TMC-010")
-        } else if p.agent.is_some() {
+        let selector = if p.agent.is_some() {
             Some("US-TMC-011")
         } else if p.operation_id.is_some() {
             Some("unassigned")
@@ -4100,8 +4098,26 @@ impl Connection<'_> {
             &eligibility,
         );
         let with_detail = !self.is_mcp() && self.has(methods::CAP_TM_OVERLAP.name);
-        let done = undo_last(&repo, &r.who, oplog_channel(channel), &confirm, &env)
-            .map_err(|e| undo_error(e, &confirm, with_detail))?;
+        // The period is counted by the daemon's clock (SEC-TMC-07); `validate` already parsed it.
+        let selection = match p.since.as_deref() {
+            Some(since) => {
+                let secs = parse_since(since).map_err(tm_invalid)?;
+                let span_ms = i64::try_from(secs.saturating_mul(1_000)).unwrap_or(i64::MAX);
+                Selection::Since {
+                    since_ms: crate::daemon::now_ms().saturating_sub(span_ms),
+                }
+            }
+            None => Selection::Last,
+        };
+        let done = undo_selected(
+            &repo,
+            &r.who,
+            oplog_channel(channel),
+            &confirm,
+            &env,
+            selection,
+        )
+        .map_err(|e| undo_error(e, &confirm, with_detail))?;
         // Over MCP only the count of kept paths travels (`for_mcp`).
         let result = undo_result(
             done,
