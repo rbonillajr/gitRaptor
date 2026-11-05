@@ -624,8 +624,14 @@ el commit."
             "Hay otra sesión de agente en este worktree.",
             "Indica tus rutas: el worktree es compartido.",
         ),
-        // Not produced yet: no tool gives this code until `check_conflicts` is published.
-        (E::PredictionUnavailable, _) => unimplemented!("prediction-unavailable texts"),
+        (E::PredictionUnavailable, Lang::En) => (
+            "This GitRaptor engine does not predict conflicts.",
+            "Update GitRaptor and restart the session.",
+        ),
+        (E::PredictionUnavailable, Lang::Es) => (
+            "Este motor de GitRaptor no predice conflictos.",
+            "Actualiza GitRaptor y reinicia la sesión.",
+        ),
         (E::TooManyPaths, lang) => {
             return match lang {
                 Lang::En => (

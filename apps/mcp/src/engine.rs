@@ -18,8 +18,9 @@ use gitraptor_api::mcp_view::{
 };
 use gitraptor_api::messages::{ClientKind, RepoStateView};
 use gitraptor_api::methods::{
-    self, MCP_UNAVAILABLE, McpStatus, McpStatusParams, McpUnavailable, McpUnavailableData,
-    OPERATION_SNAPSHOT_QUOTA, OPERATION_SNAPSHOT_TIME_LIMIT,
+    self, MCP_UNAVAILABLE, McpConflicts, McpConflictsParams, McpConflictsScope, McpStatus,
+    McpStatusParams, McpUnavailable, McpUnavailableData, OPERATION_SNAPSHOT_QUOTA,
+    OPERATION_SNAPSHOT_TIME_LIMIT,
 };
 use gitraptor_api::rpc::{Id, Request, ScopeRefusal, ScopeRefusedData, ServerMessage, code};
 use gitraptor_core::client::{Client, ClientError, ClientOptions, ensure_daemon};
@@ -95,6 +96,36 @@ impl Engine {
         };
         self.connected.store(slot.is_some(), Ordering::Relaxed);
         result.map_err(|err| refusal(&err))
+    }
+
+    /// `mcp.conflicts`: the predicted conflicts of the caller's worktree (or repo), under the
+    /// same lock and with the same single reconnection as [`Engine::status`]. An engine that
+    /// does not offer the method is `prediction-unavailable`.
+    pub fn conflicts(
+        &self,
+        scope: Option<McpConflictsScope>,
+        cursor: Option<String>,
+    ) -> Result<McpConflicts, McpToolError> {
+        let mut slot = match self.client.try_lock() {
+            Ok(slot) => slot,
+            Err(TryLockError::Poisoned(e)) => e.into_inner(),
+            Err(TryLockError::WouldBlock) => return Err(self.late()),
+        };
+        let reused = slot.is_some();
+        let params = McpConflictsParams { scope, cursor };
+        let result = match call_conflicts(&mut slot, &params) {
+            Err(ClientError::Io(_) | ClientError::Protocol(_)) if reused => {
+                call_conflicts(&mut slot, &params)
+            }
+            other => other,
+        };
+        self.connected.store(slot.is_some(), Ordering::Relaxed);
+        result.map_err(|err| match err {
+            ClientError::Rpc(e) if e.code == code::METHOD_NOT_FOUND => {
+                McpToolError::PredictionUnavailable
+            }
+            other => refusal(&other),
+        })
     }
 
     /// `operation.prepare` and `operation.run` of a `snapshot`, in the same connection and under
@@ -237,6 +268,18 @@ fn call_status(slot: &mut Option<Client>, cursor: Option<&str>) -> Result<McpSta
         cursor: cursor.map(str::to_owned),
     };
     let result = client.call::<_, McpStatus>(methods::MCP_STATUS, params);
+    if matches!(result, Err(ClientError::Io(_) | ClientError::Protocol(_))) {
+        *slot = None;
+    }
+    result
+}
+
+fn call_conflicts(
+    slot: &mut Option<Client>,
+    params: &McpConflictsParams,
+) -> Result<McpConflicts, ClientError> {
+    let client = connected(slot)?;
+    let result = client.call::<_, McpConflicts>(methods::MCP_CONFLICTS, params);
     if matches!(result, Err(ClientError::Io(_) | ClientError::Protocol(_))) {
         *slot = None;
     }

@@ -100,7 +100,7 @@ fn completes_the_mcp_handshake_over_stdio_and_exits_when_stdin_closes() {
         result["capabilities"],
         json!({"tools": {"listChanged": false}})
     );
-    // `status`, with only a cursor, and `snapshot`, with only a label.
+    // `status`, with only a cursor, the write tools, and `check_conflicts` last.
     let names: Vec<_> = s.tools["result"]["tools"]
         .as_array()
         .unwrap()
@@ -109,7 +109,12 @@ fn completes_the_mcp_handshake_over_stdio_and_exits_when_stdin_closes() {
         .collect();
     assert_eq!(
         names,
-        [json!("status"), json!("snapshot"), json!("safe_commit")]
+        [
+            json!("status"),
+            json!("snapshot"),
+            json!("safe_commit"),
+            json!("check_conflicts")
+        ]
     );
     assert_eq!(
         s.tools["result"]["tools"][0]["inputSchema"]["properties"],
@@ -290,7 +295,7 @@ fn the_catalog_is_fixed_and_declares_repo_text_as_data() {
     assert_eq!(responses[0]["result"], responses[1]["result"]);
     assert_eq!(responses[1]["result"], responses[2]["result"]);
     let tools = responses[0]["result"]["tools"].as_array().unwrap();
-    assert_eq!(tools.len(), 3);
+    assert_eq!(tools.len(), 4);
     for tool in tools {
         let description = tool["description"].as_str().unwrap();
         assert!(description.contains(r#"{"untrusted": …}"#), "{description}");
