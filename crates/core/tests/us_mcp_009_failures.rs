@@ -262,11 +262,18 @@ impl Rig {
 
     /// Installs hook `name`: it writes the "started" marker and waits for the release file (at
     /// most a minute, so a failed test leaves no process behind), then exits with `code`.
+    ///
+    /// An interrupt ends it, as it ends a hook that does not handle it. Without the `trap`,
+    /// `/bin/sh` (bash 3.2 on macOS) ignores a SIGINT that lands between two `sleep`s (its
+    /// foreground child did not die of it, so it goes on looping): under load that happened at
+    /// both interrupts of the time limit, the executor killed the hook and answered
+    /// `failed-changed` (CI, run 40985923557). A hook that survives the interrupt has its own
+    /// tests in `us_mcp_010_untracked.rs`.
     fn slow_hook(&self, name: &str, code: i32) {
         self.hook(
             name,
             &format!(
-                ": > '{}'\ni=0\nwhile [ ! -f '{}' ] && [ $i -lt 1200 ]; do sleep 0.05; i=$((i+1)); done\nexit {code}",
+                "trap 'exit 130' INT TERM\n: > '{}'\ni=0\nwhile [ ! -f '{}' ] && [ $i -lt 1200 ]; do sleep 0.05; i=$((i+1)); done\nexit {code}",
                 self.started().display(),
                 self.release().display(),
             ),
