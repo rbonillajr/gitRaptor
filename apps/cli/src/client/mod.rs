@@ -146,6 +146,12 @@ pub enum LinkCmd {
     Dismiss {
         path: PathBuf,
     },
+    /// `prediction.list` for the TUI (US-CKP-006).
+    PredictionList {
+        repo_id: String,
+        pair_ids: Vec<String>,
+        cursor: Option<String>,
+    },
     Reconnect,
     Shutdown,
 }
@@ -272,7 +278,8 @@ fn run(
                     return;
                 }
             }
-            Ok(LinkCmd::Resync { .. }) | Err(RecvTimeoutError::Timeout) => {}
+            Ok(LinkCmd::Resync { .. } | LinkCmd::PredictionList { .. })
+            | Err(RecvTimeoutError::Timeout) => {}
         }
     }
 }
@@ -349,6 +356,7 @@ fn session(
             match cmd {
                 LinkCmd::Shutdown => return Ok(End::Shutdown),
                 LinkCmd::Reconnect => return Ok(End::Reconnect),
+                LinkCmd::PredictionList { .. } => {}
                 LinkCmd::Resync { scope, resubscribe } => {
                     if sync(link, &scope, resubscribe, out)?.is_err() {
                         return Ok(End::dropped(lagged));
@@ -725,6 +733,9 @@ pub fn decode(incoming: Incoming) -> Option<Stamped<EngineMsg>> {
         msg,
     })
 }
+
+#[cfg(test)]
+mod prediction_tests;
 
 #[cfg(test)]
 mod tests {
