@@ -2,10 +2,10 @@
 id: US-TMC-010
 title: "El desarrollador deshace todo lo ocurrido en su worktree en los últimos minutos"
 type: us
-status: draft
+status: implemented
 priority: medium
 created: 2026-10-03
-updated: 2026-10-27
+updated: 2026-11-04
 domain: GRP
 epic: E-001
 feature: time-machine
@@ -97,3 +97,17 @@ Entonces la petición se rechaza con el motivo
 - **Historias**: US-TMC-002; US-TMC-012 (solape) y US-TMC-013 (permisos) si el periodo incluye operaciones de otro actor.
 - **Externas**: ninguna.
 - **Transversal**: transversal (lo define el Arquitecto): verificación en repos temporales, nunca en un repo real; mismo comportamiento en Windows, macOS y Linux; mensajes en inglés y español.
+
+## Estado de la implementación (2026-11-04)
+
+Implementado en: PR #PR_NUM.
+
+- **Hecho:** `raptor undo --since <duración>` (CLI) y `timemachine.undo` con `since` en el canal del daemon. Deshace, como un solo undo con su previo, el sufijo de la pila del worktree cuyas operaciones ocurrieron en el periodo, de cualquier actor. El destino es el previo de la más antigua. Si una operación del periodo no se puede deshacer, se rechaza la petición entera (D-TMC-29). El trabajo de otro actor pide la confirmación de US-TMC-013, y el reto muestra cuántas operaciones deshace. El solape de US-TMC-012 cuenta lo que cambió cada operación del conjunto. `UndoResult.undone_operation_ids` y `McpUndoResult.undone_count` dicen qué se deshizo. `agent` y `operation_id` siguen en `NOT_IMPLEMENTED`.
+- **Tests:** los seis escenarios en `crates/core/tests/us_tmc_010.rs` (daemon y Git reales, repos y perfiles temporales); los dos e2e del binario en `apps/cli/tests/us_tmc_010_process.rs` (en/es); unitarios en `undo_since_tests.rs`, `stack_done_tests.rs`, `timemachine_since_tests.rs` y `apps/cli/src/undo/since_tests.rs`; los de la revisión en `crates/core/tests/us_tmc_010_review.rs`, `undo_since_review_tests.rs` y `since_review_tests.rs`.
+- **Decisiones de la implementación:** ver [DS-US-TMC-010, Enmienda 2026-11-04](../dev-specs/US-TMC-010-undo-since.md).
+- **Pendiente:**
+  - Linux y Windows (XP-67, etapa de validación multiplataforma).
+  - El éxito de `--since` y `--json` por el binario no tiene e2e.
+  - Revisión de seguridad M-03: una operación nueva de un dueño del conjunto, hecha fuera de lo confirmado, cuenta como propia en la fase 2 del solape.
+  - L-03/L-04: coste de un periodo largo bajo el mutex del oplog y en el solape.
+  - Sin certificar: la fase P3 de `/implement` corta la suite a los 15 min.
