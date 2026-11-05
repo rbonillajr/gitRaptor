@@ -90,15 +90,6 @@
       ]
     },
     {
-      "id": "TMC010-S3-INVALID",
-      "statement": "Escenario 3: since = \"veinte\" responde INVALID_PARAMS con el campo since; huella igual; ninguna operación nueva en el oplog",
-      "verify": "cargo test -p gitraptor-core --test us_tmc_010 -- --exact an_invalid_period_changes_nothing",
-      "layer": "runtime",
-      "tests": [
-        "crates/core/tests/us_tmc_010.rs"
-      ]
-    },
-    {
       "id": "TMC010-S4-NOTHING",
       "statement": "Escenario 4: sin operaciones en el periodo responde OPERATION_REJECTED con nothing-to-undo; huella igual; el rechazo queda en el oplog",
       "verify": "cargo test -p gitraptor-core --test us_tmc_010 -- --exact nothing_in_the_period_changes_nothing",

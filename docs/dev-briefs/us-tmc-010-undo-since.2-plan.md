@@ -99,3 +99,7 @@ Un solo experto, en secuencia. Dos slices disjuntos por ficheros. S2 empieza cua
 - Lo que se apoya en esto: `a_raw_event_not_covered_rejects_the_whole_period`, `since_stops_at_the_first_older_operation`, `since_never_touches_other_worktrees` y `another_actor_in_the_period_without_confirmation_is_rejected`.
 
 Cuestión de coste: la spec obliga a 9 tests de integración y a 2 e2e. Con unitarios sobre `undo_selected` y 4 de integración se cubrirían los mismos caminos más barato. Se construyen todos, como pide la spec.
+
+## Enmienda tras la línea base (2026-11-04)
+
+La línea base marcó `TMC010-S3-INVALID` (`an_invalid_period_changes_nothing`) como **ya verde** (B3): el rechazo de un periodo inválido con `INVALID_PARAMS` en el daemon ya existe (`UndoParams::validate`, Dev Spec § Diseño paso 1, «Sin cambios»). Sale del contrato; el escenario 3 queda probado por `TMC010-E2E-INVALID` (el texto `undo.invalid-since`, que sí es nuevo) y el test de daemon se queda en `crates/core/tests/us_tmc_010.rs` como guarda de regresión de la suite.
