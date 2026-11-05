@@ -123,6 +123,10 @@ pub struct Offer {
     pub owners: Vec<Actor>,
     pub undone_operation_id: Option<String>,
     pub undone_subtype: Option<String>,
+    /// Undo by period: how many operations it takes back; 0 otherwise.
+    pub undone_count: u64,
+    /// Undo by period: how many agents own the work, when `owners` is cut; 0 otherwise.
+    pub owners_total: u64,
 }
 
 impl Offer {
@@ -134,6 +138,8 @@ impl Offer {
             owners: self.owners,
             undone_operation_id: self.undone_operation_id,
             undone_subtype: self.undone_subtype.map(Untrusted::new),
+            undone_count: self.undone_count,
+            owners_total: self.owners_total,
             ..TmConfirmData::rejected(reason, operation_id)
         }
     }
@@ -284,12 +290,27 @@ impl<'a> Confirmation<'a> {
                 if !self.rule_allows {
                     return Err(ConfirmationUnavailable);
                 }
+                // An undo that takes back more than one change (by period) says how many, and
+                // how many agents own them when the list is cut; the others keep their shape.
+                let by_period = plan.kind == PlanKind::Undo && !taken_back.is_empty();
+                let owners = shown_owners(plan.owners);
+                let owners_total = agent_count(plan.owners);
                 let mut offer = Offer {
                     challenge: None,
                     cannot_confirm: None,
-                    owners: shown_owners(plan.owners),
                     undone_operation_id: plan.undone_id.map(str::to_owned),
                     undone_subtype: plan.undone_subtype.map(str::to_owned),
+                    undone_count: if by_period {
+                        taken_back.len() as u64
+                    } else {
+                        0
+                    },
+                    owners_total: if by_period && owners_total > owners.len() {
+                        owners_total as u64
+                    } else {
+                        0
+                    },
+                    owners,
                 };
                 match (offering.eligibility)() {
                     Some(why) => offer.cannot_confirm = Some(why),
@@ -309,6 +330,16 @@ impl<'a> Confirmation<'a> {
             }
         }
     }
+}
+
+/// How many agents, once per session, own work of the plan.
+fn agent_count(owners: &[Requester]) -> usize {
+    owners
+        .iter()
+        .filter(|o| matches!(o, Requester::Agent { .. }))
+        .map(actor_key)
+        .collect::<BTreeSet<_>>()
+        .len()
 }
 
 /// The agents whose work needs the confirmation, once per session, in plan order.
