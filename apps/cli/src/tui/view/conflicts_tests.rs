@@ -29,8 +29,7 @@ const MAIN: &str = "/w/shop";
 const A: &str = "/w/shop/feat-a";
 const B: &str = "/w/shop/feat-b";
 const C: &str = "/w/shop/feat-c";
-const ES_LIMITS: &str =
-    "⚠ con lo sin commitear · ⚡ solo commits · sin drivers de merge ni .gitattributes";
+const ES_LIMITS: &str = "⚠ con lo sin commitear · ⚡ solo commits · sin drivers ni .gitattributes";
 
 fn worktrees() -> Vec<WorktreeView> {
     vec![
@@ -189,7 +188,7 @@ fn at(screen: &[String], needle: &str) -> Option<usize> {
 
 /// The text of a screen line between the borders.
 fn inner(line: &str) -> &str {
-    line.trim_matches(|c: char| " ┃│┏┓┗┛┌┐└┘━─".contains(c))
+    line.trim_matches(|c: char| " ┃│┏┓┗┛┌┐└┘━─|".contains(c))
 }
 
 /// The fleet row of a worktree: the only line with its change count (`~N`).
