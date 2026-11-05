@@ -132,3 +132,134 @@ impl Component for ConflictAlertModel {
         4 + u16::try_from(self.files.len()).unwrap_or(u16::MAX)
     }
 }
+
+/// What a pair is, one line each: ⚡ or ⚠, its two sides and the files the panel has room for.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConflictEntry {
+    /// ⚡ (a predicted conflict) rather than ⚠ (an overlap).
+    pub conflict: bool,
+    pub left: AgentRef,
+    pub right: AgentRef,
+    /// "recalculating" while the pair's last result is being replaced.
+    pub status: Option<SafeText>,
+    pub files: Vec<AlertFile>,
+}
+
+/// A file of a pair: its path, how it clashes (line ranges per side, or the kind) and, when a
+/// merge rule of its own applies, the mark that says the prediction may not hold.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AlertFile {
+    pub path: SafeText,
+    pub detail: SafeText,
+    pub merge_rule: Option<SafeText>,
+}
+
+impl AgentRef {
+    /// The color index of the base branch, which is no agent: it is painted muted.
+    pub const BASE: usize = usize::MAX;
+}
+
+/// The conflicts panel under the fleet: a line per pair and its files while there is room, then
+/// "+N more pairs", and always the limits line on the last row.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConflictPanelModel {
+    pub title: SafeText,
+    pub entries: Vec<ConflictEntry>,
+    /// "+N pairs more": empty when every pair fits.
+    pub hidden: SafeText,
+    /// The three pieces of the limits line: with uncommitted work, commits only, no merge rules.
+    pub limits: [SafeText; 3],
+}
+
+impl Component for ConflictPanelModel {
+    fn render(&self, area: Rect, buf: &mut Buffer, styles: &Styles) {
+        let warn = styles.fg(ColorToken::StatusWarning);
+        let inner = panel(
+            buf,
+            area,
+            &self.title,
+            Some(SymbolToken::Conflict),
+            false,
+            warn,
+            styles,
+        );
+        if inner.height == 0 {
+            return;
+        }
+        let inner = Rect::new(
+            inner.x + 1,
+            inner.y,
+            inner.width.saturating_sub(2),
+            inner.height,
+        );
+        let g = styles.glyphs;
+        let muted = styles.fg(ColorToken::TextMuted);
+        let file = styles.fg(ColorToken::GitConflict);
+        let agent = |a: &AgentRef| {
+            if a.color_index == AgentRef::BASE {
+                muted.add_modifier(Modifier::BOLD)
+            } else {
+                styles.agent(a.color_index).add_modifier(Modifier::BOLD)
+            }
+        };
+        let last = inner.bottom() - 1;
+        let mut y = inner.y;
+        for entry in &self.entries {
+            if y >= last {
+                break;
+            }
+            let (symbol, token) = if entry.conflict {
+                (SymbolToken::Conflict, ColorToken::StatusWarning)
+            } else {
+                (SymbolToken::Warning, ColorToken::StatusWarning)
+            };
+            let mut pen = Pen::new(buf, inner, y, styles);
+            pen.symbol(styles.symbol(symbol), styles.fg(token))
+                .gap(1)
+                .safe(&entry.left.name, agent(&entry.left))
+                .gap(1)
+                .text(g.versus, muted)
+                .gap(1)
+                .safe(&entry.right.name, agent(&entry.right));
+            if let Some(status) = &entry.status {
+                pen.gap(2).safe(status, muted.add_modifier(Modifier::DIM));
+            }
+            y += 1;
+            for f in &entry.files {
+                if y >= last {
+                    break;
+                }
+                let mut pen = Pen::new(buf, inner, y, styles);
+                pen.gap(1).text(g.bullet, muted).gap(1).safe(&f.path, file);
+                if !f.detail.as_str().is_empty() {
+                    pen.gap(1).safe(&f.detail, muted);
+                }
+                if let Some(rule) = &f.merge_rule {
+                    pen.gap(1).safe(rule, warn);
+                }
+                y += 1;
+            }
+        }
+        if y < last && !self.hidden.as_str().is_empty() {
+            Pen::new(buf, inner, y, styles).safe(&self.hidden, muted);
+        }
+        let mut pen = Pen::new(buf, inner, last, styles);
+        // Unpadded: the line reads as the catalog's text, one space after each symbol.
+        pen.text(styles.symbol(SymbolToken::Warning).text, warn)
+            .gap(1)
+            .safe(&self.limits[0], muted)
+            .text(g.separator, muted)
+            .symbol(styles.symbol(SymbolToken::Conflict), warn)
+            .gap(1)
+            .safe(&self.limits[1], muted)
+            .text(g.separator, muted)
+            .safe(&self.limits[2], muted);
+    }
+
+    fn height(&self, _width: u16) -> u16 {
+        // Border, the pairs with their files, the "more pairs" row and the limits line.
+        let lines: usize = self.entries.iter().map(|e| 1 + e.files.len()).sum();
+        let hidden = usize::from(!self.hidden.as_str().is_empty());
+        u16::try_from(3 + lines + hidden).unwrap_or(u16::MAX)
+    }
+}

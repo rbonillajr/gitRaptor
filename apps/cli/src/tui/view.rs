@@ -11,7 +11,7 @@
 use gitraptor_api::AgentKind;
 use gitraptor_api::guard::HooksStatus;
 use gitraptor_api::messages::{DivergenceView, SessionStateView};
-use gitraptor_theme::SymbolSet;
+use gitraptor_theme::{ColorMode, Contrast, SymbolSet, SymbolToken, Theme};
 use ratatui::Frame;
 
 use crate::model::{
@@ -19,6 +19,7 @@ use crate::model::{
     WorktreeRow, WorktreeState,
 };
 use crate::present::i18n::{Fetched, Lang, Legend, Text};
+use crate::present::prediction_text::PredictionText;
 use crate::tui::engine_state::{self, HeaderNotice};
 use crate::tui::fleet_order::{self, Group, Shown};
 use crate::tui::help;
@@ -66,13 +67,31 @@ impl Say {
     pub(crate) fn safe(self, text: Text<'_>) -> SafeText {
         SafeText::text(&self.text(text))
     }
+
+    /// A text of the prediction catalog, with ⚡ and ⚠ as the set draws them and folded the same
+    /// way as [`Say::text`].
+    pub(crate) fn prediction(self, text: PredictionText) -> SafeText {
+        let theme = Theme::new(ColorMode::NoColor, Contrast::Normal, self.set);
+        let raw = PredictionText::render(text, self.lang)
+            .replace('⚡', theme.symbol(SymbolToken::Conflict).text)
+            .replace('⚠', theme.symbol(SymbolToken::Warning).text);
+        SafeText::text(&self.glyphs.fold(&raw))
+    }
 }
 
 pub fn view(model: &Model, frame: &mut Frame) {
     let area = frame.area();
     let styles = Styles::new(model.ui.theme);
     let say = Say::new(model, &styles);
-    let Some(regions) = layout::layout(area, BodyPlan::default()) else {
+    // The panel replaces the fleet's lower rows only while the fleet is what the body shows.
+    let panel = fleet_shown(model)
+        .then(|| conflict_panel::build(model, say, layout::ALERTS_MAX))
+        .flatten();
+    let plan = BodyPlan {
+        alerts: panel.as_ref().map_or(0, |p| p.height(area.width)),
+        ..BodyPlan::default()
+    };
+    let Some(regions) = layout::layout(area, plan) else {
         let small = TooSmallModel {
             message: say.safe(Text::TooSmall {
                 width: area.width,
@@ -126,8 +145,25 @@ pub fn view(model: &Model, frame: &mut Frame) {
             }
         }
     }
+    if let (Some(panel), Some(area)) = (panel, regions.alerts) {
+        // The region can be smaller than the panel wanted: build it again for the room it has.
+        let panel = if panel.height(area.width) > area.height {
+            conflict_panel::build(model, say, area.height).unwrap_or(panel)
+        } else {
+            panel
+        };
+        frame.render_widget(themed(&panel, &styles), area);
+    }
     paint_help(model, say, &styles, frame, regions.header, regions.hints);
     frame.render_widget(themed(&hints, &styles), regions.hints);
+}
+
+/// Whether the body is the fleet: no engine state, question or picker takes its place.
+fn fleet_shown(model: &Model) -> bool {
+    model.ui.pick == Pick::None
+        && engine_state::blocking_panel(model).is_none()
+        && observe_prompt(model, Say::new(model, &Styles::new(model.ui.theme))).is_none()
+        && engine_state::fleet_panel(model).is_none()
 }
 
 /// The `?` help over the body (between the header and the key bar), which both stay visible.
@@ -511,14 +547,15 @@ fn sessions_line(shown: &Shown<'_>, model: &Model, say: Say) -> Option<SessionLi
     })
 }
 
-fn row(
+/// What heads a row: its name, state, agent color and the line of other sessions under it.
+/// The conflict panel names the sides of a pair with the same name (BR-CKP-WF-001).
+fn row_name(
     repo: &RepoView,
     worktree: &WorktreeRow,
     shown: &Shown<'_>,
     model: &Model,
     say: Say,
-    styles: &Styles,
-) -> AgentRowModel {
+) -> (SafeText, AgentState, usize, Option<SessionLine>) {
     let sessions = &shown.sessions;
     let mut color_index = 0;
     let mut line = None;
@@ -562,6 +599,18 @@ fn row(
         // Detection unknown or not available on this system: never "no agent".
         _ => (say.safe(Text::AgentNotAvailable), AgentState::Unknown),
     };
+    (name, state, color_index, line)
+}
+
+fn row(
+    repo: &RepoView,
+    worktree: &WorktreeRow,
+    shown: &Shown<'_>,
+    model: &Model,
+    say: Say,
+    styles: &Styles,
+) -> AgentRowModel {
+    let (name, state, color_index, line) = row_name(repo, worktree, shown, model, say);
     let g = styles.glyphs;
     let mut row = AgentRowModel {
         color_index,
@@ -573,8 +622,11 @@ fn row(
         sync: Sync::Unknown(SafeText::default()),
         activity: say.safe(Text::NotAvailable),
         tag: worktree.temporary.then(|| say.safe(Text::Temporary)),
-        // Published by the predictor and Guardrails (US-CKP-006, TS-GRD); not before.
-        conflict: false,
+        // A ⚡ the predictor publishes; Guardrails' blocks come with their own story.
+        conflict: repo
+            .prediction
+            .as_ref()
+            .is_some_and(|p| p.known_conflict(worktree.key)),
         blocked: false,
         operation: None,
         commit: repo.last_commit(worktree.key).map(|c| commit_line(c, say)),
@@ -665,6 +717,8 @@ fn hint(model: &Model, action: Action, say: Say) -> Option<KeyHint> {
         say.safe(help::hint_text(model, binding)),
     ))
 }
+
+mod conflict_panel;
 
 #[cfg(test)]
 mod a11y_tests;
