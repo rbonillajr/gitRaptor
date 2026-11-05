@@ -203,6 +203,15 @@ impl<B: Backend> App<B> {
                 Cmd::AcceptDiscovered { path } => LinkCmd::Accept { path },
                 Cmd::DismissDiscovered { path } => LinkCmd::Dismiss { path },
                 // The model already says quit; the loop ends after this iteration.
+                Cmd::PredictionList {
+                    repo_id,
+                    pair_ids,
+                    cursor,
+                } => LinkCmd::PredictionList {
+                    repo_id,
+                    pair_ids,
+                    cursor,
+                },
                 Cmd::Quit => continue,
                 // After the input of this iteration, outside `update`.
                 Cmd::Suspend => {

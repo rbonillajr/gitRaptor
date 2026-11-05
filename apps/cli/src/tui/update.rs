@@ -304,6 +304,7 @@ fn on_conn(model: &mut Model, event: ConnEvent) -> Vec<Cmd> {
             model.ui.notice = Some(Notice::DiscoveryFailed(failure));
         }
         ConnEvent::Activity(activity) => model.engine.activity = activity,
+        ConnEvent::Prediction(_) => {}
         ConnEvent::Requester(requester) => model.engine.requester = requester,
         ConnEvent::State(state) => {
             if matches!(
@@ -361,6 +362,7 @@ fn on_engine(model: &mut Model, msg: EngineMsg) -> Vec<Cmd> {
             on_history(model, &repo_id, &events);
             Vec::new()
         }
+        EngineMsg::PredictionPage { .. } => Vec::new(),
         EngineMsg::Protection { repo_id, hooks } => {
             if let Some(data) = selected(model, &repo_id).and_then(|r| r.data.as_mut()) {
                 data.protection = hooks.filter(|h| !matches!(h.status, HooksStatus::Active));

@@ -669,6 +669,9 @@ fn hint(model: &Model, action: Action, say: Say) -> Option<KeyHint> {
 #[cfg(test)]
 mod a11y_tests;
 
+#[cfg(test)]
+mod conflicts_tests;
+
 // The screens the help tests of `tui::help` build on.
 #[cfg(test)]
 pub(crate) use tests::{asking, discovering, outside, shop_model};
