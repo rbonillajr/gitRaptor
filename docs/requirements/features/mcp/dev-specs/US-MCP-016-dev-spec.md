@@ -106,7 +106,7 @@ Decisión del orquestador (2026-10-27), validada por Arquitecto: **A1** (la form
 
 | # | Decisión |
 |---|---|
-| D1 (A3) | **Método `mcp.conflicts`** en `methods/mcp.rs`, perfil `mcp` (`method(MCP_CONFLICTS, false, true)`, sin `.since`: se descubre en `hello.methods`). Sin capacidad: es un método nuevo. Al perfil `mcp` no se le abre `prediction.list` ni el stream. Lee el mismo estado del predictor que `prediction.list` (`predict_read`, T009 de DS-TS-CKP-001). |
+| D1 (A3) | **Método `mcp.conflicts`** en `methods/mcp.rs`, perfil `mcp` (`method(MCP_CONFLICTS, false, true).since(CAPABILITIES_PROTOCOL)`, como `mcp.status` y todos los métodos posteriores al congelamiento; se descubre en `hello.methods`. Ajuste 2026-11-04: la versión anterior decía «sin `.since`», contra la regla del repo (NFR-02 y `methods/mcp.rs::GROUP`)). Sin capacidad: es un método nuevo. Al perfil `mcp` no se le abre `prediction.list` ni el stream. Lee el mismo estado del predictor que `prediction.list` (`predict_read`, T009 de DS-TS-CKP-001). |
 | D2 (A3) | **Herramienta `check_conflicts {scope?: "worktree"\|"repo", cursor?}`** en `apps/mcp/src/conflicts.rs` (CREATE). Por defecto `worktree`: los pares en los que el worktree del llamante es un lado `worktree`. `repo`: todos los pares del repo del llamante. |
 | D3 (A3, P6) | **Ámbito**. Orden de cada llamada, el de DS-US-MCP-004 D8: cubo de lecturas → identidad → ámbito → allowlist → disponibilidad → cursor → respuesta. Fuera de la allowlist: `SCOPE_REFUSED{not-allowlisted}` → `repo-not-enabled` (US-MCP-003). Dentro de un repo de la allowlist sin worktree identificable: pares de todo el repo con `scope: "repo"` y `reason: "caller-worktree-unknown"`. En el worktree principal: sus pares son los que lo incluyen como lado `worktree`. |
 | D4 (A3) | **Cursor = el de DS-US-MCP-004 D4**: asa opaca de 16 hex en la misma tabla `McpCursors` de la conexión (64 entradas), sin MAC, muere con la conexión. Variante nueva `CursorEntry::Conflicts`. Un cursor de `status`, de otra conexión o de otro repo responde `NOT_FOUND` → `invalid-cursor`. Con `cursor`, el `scope` lo fija la entrada y el argumento `scope` se ignora. |
@@ -224,7 +224,7 @@ Puerta final: `cargo fmt --all --check && cargo clippy --workspace --all-targets
 
 ```rust
 // crates/api/src/methods/mcp.rs
-pub const MCP_CONFLICTS: &str = "mcp.conflicts";      // GROUP: method(MCP_CONFLICTS, false, true)
+pub const MCP_CONFLICTS: &str = "mcp.conflicts";      // GROUP: method(MCP_CONFLICTS, false, true).since(CAPABILITIES_PROTOCOL)
 
 // crates/api/src/methods/mcp_conflicts.rs (CREATE). PairState, PairReason, PairLevel, LimitCode y
 // ConflictKind son los de crates/api/src/prediction.rs (T009, DS-TS-CKP-001 § Contrato de API).
