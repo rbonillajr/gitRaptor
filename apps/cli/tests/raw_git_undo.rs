@@ -249,23 +249,35 @@ impl Machine {
 
     /// Waits for a snapshot of the worktree whose `path` holds `content`.
     fn captured(&self, path: &str, content: &[u8]) -> String {
+        self.captured_all(&[(path, content)])
+    }
+
+    /// Waits for a snapshot of the worktree in which every `(path, content)`
+    /// holds.
+    fn captured_all(&self, wanted: &[(&str, &[u8])]) -> String {
         let repo_id = self.repo_id();
         let start = Instant::now();
         loop {
             if let Ok(Some(store)) = SnapshotStore::open_existing(&self.dirs(), &repo_id) {
                 for id in snapshot_refs(&store).unwrap_or_default().keys() {
-                    let found = store
+                    let files: Vec<(String, Vec<u8>)> = store
                         .files(id, "wt-wt-feat-login")
                         .unwrap_or_default()
                         .into_iter()
                         .filter(|(_, k, _)| *k != TreeEntryKind::Gitlink)
-                        .any(|(p, _, oid)| p == path && store.read_blob(oid).unwrap() == content);
+                        .map(|(p, _, oid)| (p, store.read_blob(oid).unwrap()))
+                        .collect();
+                    let found = wanted.iter().all(|(path, content)| {
+                        files
+                            .iter()
+                            .any(|(p, b)| p == path && b.as_slice() == *content)
+                    });
                     if found {
                         return id.clone();
                     }
                 }
             }
-            assert!(start.elapsed() < DEADLINE, "{path} never captured");
+            assert!(start.elapsed() < DEADLINE, "{wanted:?} never captured");
             std::thread::sleep(Duration::from_millis(50));
         }
     }
@@ -365,6 +377,13 @@ fn an_agent_recovers_its_work_after_a_raw_reset_hard() {
         ),
         "{reset:#?}"
     );
+    // The state right after the reset is the base of what the agent takes
+    // back: without a point of it, the undo cannot tell the reset from later
+    // work and refuses as `overlap-unverified` (US-TMC-012, D7). The daemon
+    // captures it once the worktree is quiet, asynchronously; on a loaded
+    // runner that came after the agent's undo. Only after the reset do
+    // `login.txt` as committed and the untracked `util.rs` go together.
+    m.captured_all(&[("login.txt", b"user\n"), ("util.rs", UTIL)]);
 
     // The developer, at a terminal, is asked to confirm taking back the
     // agent's work (US-TMC-013); with no answer it is not confirmed and
