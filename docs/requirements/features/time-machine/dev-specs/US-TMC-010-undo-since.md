@@ -2,9 +2,9 @@
 id: DS-US-TMC-010
 title: "Dev Spec — Deshacer lo ocurrido en el worktree en un periodo (raptor undo --since)"
 type: dev-spec
-status: draft
+status: implemented
 created: 2026-10-27
-updated: 2026-10-28
+updated: 2026-11-04
 story: US-TMC-010
 scope: backend
 frontend_surface: false
@@ -170,13 +170,13 @@ flowchart LR
 
 ### T003 — Planificar el undo por periodo
 
-**Objetivo.** `plan` elige un conjunto en vez de una operación; el resto del flujo de `undo_last` lo reutiliza.
+**Objetivo.** `plan` elige un conjunto en vez de una operación; el resto del flujo del undo de la última operación lo reutiliza.
 
 **Ubicación.** `crates/core/src/timemachine/undo.rs` (**MODIFY**)
 
 **Reglas**
 - `pub enum Selection { Last, Since { since_ms: i64 } }` (nuevo). `plan(.., selection)` devuelve `Planned { undone: Vec<Undone>, .. }` (hoy un solo `Undone`); `Selection::Last` devuelve un vector de uno y el comportamiento de hoy, sin cambios.
-- `pub fn undo_selected(repo, who, channel, confirm, env, selection) -> Result<UndoDone, UndoError>` (nuevo); `undo_last` pasa a llamarlo con `Selection::Last`.
+- `pub fn undo_selected(repo, who, channel, confirm, env, selection) -> Result<UndoDone, UndoError>` (nuevo); el undo de la última operación es `Selection::Last` (ver Enmienda 2026-11-04: `undo_last` se retiró).
 - El conjunto, el destino, el ámbito y los permisos siguen § Diseño, pasos 4–8. Los permisos reutilizan `restore::restore_permission`; el hash del plan del reto incluye los ids del conjunto en orden.
 - El rechazo registra `Target::Undo(conjunto)` (o vacío si no hay conjunto), como hoy.
 - `UndoDone` gana la lista de `Undone` para T001.
@@ -301,7 +301,7 @@ Los ids de Git crudo siguen la forma de hoy (`git-event-<seq>`).
 ```rust
 // crates/core/src/timemachine/oplog/stack.rs — NUEVO
 impl UndoStack { pub fn done(&self) -> &[OpRef]; }
-// crates/core/src/timemachine/undo.rs — NUEVO; `undo_last` pasa a ser un envoltorio
+// crates/core/src/timemachine/undo.rs — NUEVO; sustituye a `undo_last` (Enmienda 2026-11-04)
 pub fn undo_selected(repo: &TmRepoHandle, who: &Who, channel: Channel, confirm: &Confirmation<'_>,
                      env: &UndoEnv<'_>, selection: Selection) -> Result<UndoDone, UndoError>;
 // MODIFICADO: `plan(.., raw: &RawSide, selection: Selection)`; `Planned.undone: Vec<Undone>`
@@ -463,6 +463,18 @@ Corre `/security-review --scope devspec docs/requirements/features/time-machine/
 ## Enmienda (2026-10-28, US-TMC-014)
 
 **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO.** Origen: [DS-US-TMC-014](./US-TMC-014-undo-ya-empujado.md) (E3); D-TMC-46. Su plan hace la misma llamada a `on_remote::check` (tras las precondiciones y antes de `ProtectedRequest`) y usa `UndoResult.on_remote`, que ya existe tras DS-US-TMC-014. Si aterriza después de DS-US-TMC-014, lo hace en su PR.
+
+## Enmienda (2026-11-04, implementación)
+
+**Decisiones de la implementación (worker de US-TMC-010, run de `/implement`), surgidas de la revisión de código y de seguridad.** No cambian el comportamiento que pide la historia; lo endurecen hacia "de menos, nunca de más" (NFR-01, D-TMC-29).
+
+- **Umbral tras el lock (paso 3).** El canal no calcula `since_ms`: manda `Selection::Within { span_ms }` y `undo_selected` lo resuelve a `Selection::Since { since_ms }` después de tomar el lock del repo y de la calma, justo antes de `plan`. Así una espera en la cola del lock no alarga el periodo hacia atrás. `Selection::Since` sigue existiendo.
+- **Momentos del futuro.** Un momento posterior a ahora + 5 s (`FUTURE_MARGIN_MS`) detiene el recorrido: si el reloj de pared retrocedió, se deshace de menos.
+- **Solape sobre el conjunto (paso 9).** Lo que el undo cuenta como propio es la unión de `objetivo → ancla_i` de **todas** las operaciones del conjunto, no solo de la más antigua; el trabajo ajeno se sigue contando desde B (el ancla de la más antigua). Una ruta que cambió una operación posterior del periodo y que luego tocó otro actor es conflicto (`overlap`), como lo sería con N undos seguidos (D1). Si una operación del conjunto no tiene base, el solape queda `overlap-unverified`.
+- **Confirmación con alcance.** `TmConfirmData` gana `undone_count` y `owners_total` (`serde(default)`, omitidos en 0, solo en un undo de más de una operación). La CLI muestra `undo.confirm-plan-since` con el número de operaciones y "+N" cuando los dueños superan `MAX_CONFIRM_OWNERS`. El undo de la última operación y el restore no cambian ni un byte. El número sale del mismo conjunto que entra en el hash del plan.
+- **Textos del periodo.** Con `--since`, `undo.reason.raw-git-not-covered-since` y `undo.reason.target-unavailable-since` hablan del periodo y no de "el último cambio". Solo un `INVALID_PARAMS` cuyo mensaje empieza por `since:` se muestra como periodo no válido.
+- **`undo_last` se retiró.** No le quedaba ningún llamador; el undo de la última operación es `undo_selected(.., Selection::Last)`. Las specs posteriores que nombran `undo_last` (US-TMC-003, 012, 014, US-MCP-011/012, US-CKP-017) se leen como `undo_selected` con `Selection::Last`.
+- **Fixture del criterio NFR01-WHOLE.** El test `a_raw_event_not_covered_rejects_the_whole_period` se enmendó (aprobado por el coordinador): su operación `a` no dejaba la captura ancla que producción siempre deja, y su ventana de eco se tragaba el push del periodo. Solo cambió la preparación, ninguna aserción.
 
 ## Notas del autor
 
