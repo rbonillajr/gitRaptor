@@ -5,10 +5,16 @@
 //! A testkit fixture and a synthetic process table whose answers follow the number of times it is
 //! read, one read per poll of the calm; never this repo or the real profile (NFR-01). The test
 //! sleeps nowhere: the polls are the engine's own.
+//!
+//! The blip clears after a number of reads, not after a time: between reads the engine waits
+//! `PROBE_BACKOFF`, and on a loaded runner those reads do not fit in the real `CONFIRM_WINDOW`
+//! (the capture was discarded in CI, `Err(Discarded)`). The engine here confirms over a window
+//! long enough for any runner; a calm poll still decides at once, so no test waits it out.
 
 use std::ops::Range;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use super::CalmExclusions;
 use super::calm_git_alive_tests::{GIT, Marks, Procs, REPO, Rig};
 use super::*;
 use crate::daemon::{LogLimits, Logger};
@@ -59,6 +65,54 @@ impl ProcLister for Blip {
     }
 }
 
+/// How long [`Patient`] confirms: far over any runner's scheduling delay, never waited out.
+const PATIENT_WINDOW: Duration = Duration::from_secs(30);
+
+/// The daemon's link ([`Marks`]) whose confirmation is the default one, `settle_excluding` at the
+/// sealed mark, over [`PATIENT_WINDOW`] instead of `CONFIRM_WINDOW`.
+struct Patient(Marks);
+
+impl EngineLink for Patient {
+    fn mark(&self, repo_id: &str) -> i64 {
+        self.0.mark(repo_id)
+    }
+    fn settle(&self, repo_id: &str, worktrees: &[PathBuf], limit: Duration) -> Option<i64> {
+        self.0.settle(repo_id, worktrees, limit)
+    }
+    fn raw_events(&self, repo_id: &str, worktree: &Path) -> Option<Vec<RawGitEvent>> {
+        self.0.raw_events(repo_id, worktree)
+    }
+    fn generation_floor(&self, repo_id: &str) -> i64 {
+        self.0.generation_floor(repo_id)
+    }
+    fn activity(&self, repo_id: &str) -> u64 {
+        self.0.activity(repo_id)
+    }
+    fn settle_excluding(
+        &self,
+        repo_id: &str,
+        worktrees: &[PathBuf],
+        limit: Duration,
+        ex: &CalmExclusions<'_>,
+    ) -> Option<i64> {
+        self.0.settle_excluding(repo_id, worktrees, limit, ex)
+    }
+    fn hook_begin(&self, repo_id: &str, worktree: &Path) -> HookInFlight {
+        self.0.hook_begin(repo_id, worktree)
+    }
+    fn confirm(
+        &self,
+        repo_id: &str,
+        worktrees: &[PathBuf],
+        mark: i64,
+        ex: &CalmExclusions<'_>,
+    ) -> bool {
+        self.0
+            .settle_excluding(repo_id, worktrees, PATIENT_WINDOW, ex)
+            == Some(mark)
+    }
+}
+
 /// A manual capture of a repo whose engine persisted everything at mark 1, with the process
 /// table `blip(worktree, marks)`; its result and the manual points kept at mark 1.
 fn manual_capture(
@@ -79,7 +133,7 @@ fn manual_capture(
     repos.insert(REPO, &r.common, Oplog::open(&dirs, REPO, 1).unwrap().0);
     let deps = CaptureDeps {
         repos: Arc::clone(&repos),
-        engine: Arc::new(Marks(Arc::clone(&r.marks))),
+        engine: Arc::new(Patient(Marks(Arc::clone(&r.marks)))),
         profile: dirs.clone(),
         logger: Logger::open(&dirs.state, LogLimits::default()).unwrap(),
         layer: None,
