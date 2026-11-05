@@ -98,6 +98,13 @@ impl PredictionStore {
         self.lock().entry(repo_id.to_owned()).or_default().conflicts = Some(conflicts);
     }
 
+    /// Whether the predictor published `repo_id`, even with no pairs: an unpublished repo is not
+    /// one without conflicts.
+    #[allow(dead_code)] // read by `mcp.conflicts`, not wired into the dispatch yet
+    pub(crate) fn published(&self, repo_id: &str) -> bool {
+        self.lock().contains_key(repo_id)
+    }
+
     /// Forgets a retired repo.
     pub(crate) fn forget(&self, repo_id: &str) {
         self.lock().remove(repo_id);

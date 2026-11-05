@@ -1,0 +1,336 @@
+{
+  "source": [
+    "docs/dev-briefs/us-mcp-016-check-conflicts.2-plan.md",
+    "docs/requirements/features/mcp/dev-specs/US-MCP-016-dev-spec.md"
+  ],
+  "goal": {
+    "intent": "Que el agente de IA pida check_conflicts y reciba la predicción de conflictos que el motor ya publicó para su worktree, sin contenido de archivos, para coordinarse o cambiar de enfoque antes de que un merge o un rebase choque (US-MCP-016).",
+    "endState": "raptor-mcp publica check_conflicts {scope?, cursor?}; el daemon sirve mcp.conflicts al perfil mcp (desde CAPABILITIES_PROTOCOL) leyendo solo el estado publicado del predictor: por par nivel, archivos y rangos [start,len] por lado, age_s, estado y motivo si no hay resultado y los ocho límites; ⚡ primero, páginas dentro de 800 tokens con cursor, textos del repo como untrusted y rechazos con código estable.",
+    "nonGoals": [
+      "Cambiar la forma de la predicción, prediction.list, prediction.changed o attention.conflicts (DS-TS-CKP-001)",
+      "Exponer prediction.list o el stream al perfil mcp",
+      "Calcular algo por petición o forzar un recálculo desde el MCP",
+      "Texto de los LimitCode para el modelo, cambios de la TUI o de raptor conflicts"
+    ]
+  },
+  "criteria": [
+    {
+      "id": "MCP016-FIELD-ALLOWLIST",
+      "statement": "La vista de un par ⚡ de check_conflicts solo lleva los campos de la allowlist del contrato (a, b, state, reason, level, age_s, computed_at_utc_ms, overlap, overlap_partial, conflict con path, kind, a, b, hunks_truncated, merge_rule): nunca pair_id, rev, merge_base, rewrites_escalated, repo_id ni una ruta absoluta",
+      "verify": "cargo test -p gitraptor-api --test mcp_conflicts_contract a_conflict_pair_view_is_its_field_allowlist -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/api/tests/mcp_conflicts_contract.rs"
+      ]
+    },
+    {
+      "id": "MCP016-PAGE-FIT",
+      "statement": "Una página típica (3 ⚡ con 2 archivos y 2 rangos, 2 ⚠ con 3 rutas y los límites) cabe en MCP_PAGE_TOKENS; fit_conflicts conserva los ⚡ primero y marca el corte con truncated y el cursor de relleno; un único par que solo pasa de MCP_FIT_BYTES se recorta en sus archivos y se marca truncated/overlap_partial",
+      "verify": "cargo test -p gitraptor-api --test mcp_conflicts_contract a_typical_page_fits_its_token_target -- --exact && cargo test -p gitraptor-api --test mcp_conflicts_contract fit_conflicts_keeps_conflicts_first_and_marks_the_cut -- --exact && cargo test -p gitraptor-api --test mcp_conflicts_contract a_single_pair_over_the_bound_is_cut_in_its_files -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/api/tests/mcp_conflicts_contract.rs"
+      ]
+    },
+    {
+      "id": "MCP016-SANITIZE-VIEW",
+      "statement": "Rutas y nombres hostiles (\\x1b]52;…, U+202E, U+061C, U+2028, U+2063, U+E0041, nombre de 300 caracteres y ruta de 4 KiB) salen escapados por for_mcp y cortados a 100 caracteres en nombres y 1.024 bytes en rutas",
+      "verify": "cargo test -p gitraptor-api --test mcp_conflicts_contract hostile_paths_and_names_are_escaped_and_cut -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/api/tests/mcp_conflicts_contract.rs"
+      ]
+    },
+    {
+      "id": "MCP016-CONFLICT-SEEN",
+      "statement": "Esc. 1: el agente, con cwd en su worktree, recibe el ⚡ que el motor publicó con el otro worktree, con nivel conflict, la ruta, los rangos [start,len] de cada lado y age_s calculada por el daemon",
+      "verify": "cargo test -p gitraptor-core --test mcp_conflicts the_agent_sees_its_predicted_conflict_with_ranges_and_age -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/mcp_conflicts.rs"
+      ]
+    },
+    {
+      "id": "MCP016-NO-CONTENT",
+      "statement": "Esc. 1: ninguna respuesta de mcp.conflicts contiene contenido ni diff: el marcador único de las líneas en conflicto, @@, <<<<<<< ni líneas +/- de diff",
+      "verify": "cargo test -p gitraptor-core --test mcp_conflicts no_file_content_nor_diff_in_any_answer -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/mcp_conflicts.rs"
+      ]
+    },
+    {
+      "id": "MCP016-DEFAULT-SCOPE",
+      "statement": "Esc. 2: sin scope, solo salen los pares en los que el worktree del llamante es un lado worktree",
+      "verify": "cargo test -p gitraptor-core --test mcp_conflicts by_default_only_the_callers_pairs -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/mcp_conflicts.rs"
+      ]
+    },
+    {
+      "id": "MCP016-REPO-SCOPE",
+      "statement": "Esc. 2: con scope repo salen todos los pares del repo del llamante",
+      "verify": "cargo test -p gitraptor-core --test mcp_conflicts the_repo_scope_gives_every_pair -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/mcp_conflicts.rs"
+      ]
+    },
+    {
+      "id": "MCP016-CALCULATING",
+      "statement": "Un par sin resultado sale con state calculating, sin level, y counts lo cuenta; no se inventa ningún par",
+      "verify": "cargo test -p gitraptor-core --lib channel::mcp_conflicts::tests::declares_a_calculating_prediction_without_inventing_pairs -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/channel/mcp_conflicts_tests.rs"
+      ]
+    },
+    {
+      "id": "MCP016-PENDING",
+      "statement": "Un par pendiente sale con state pending y su reason (p. ej. base-unconfirmed), sin level, y counts lo cuenta; no se inventa ningún par",
+      "verify": "cargo test -p gitraptor-core --test mcp_conflicts declares_a_pending_prediction_with_its_reason_without_inventing_pairs -- --exact && cargo test -p gitraptor-core --lib channel::mcp_conflicts::tests::declares_a_pending_prediction_with_its_reason_without_inventing_pairs -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/mcp_conflicts.rs",
+        "crates/core/src/channel/mcp_conflicts_tests.rs"
+      ]
+    },
+    {
+      "id": "MCP016-LIMITS",
+      "statement": "Esc. 4: cada respuesta declara los ocho LimitCode tal como los publica el motor",
+      "verify": "cargo test -p gitraptor-core --test mcp_conflicts the_limits_are_declared_as_the_engine_published_them -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/mcp_conflicts.rs"
+      ]
+    },
+    {
+      "id": "MCP016-LEVEL",
+      "statement": "level solo aparece en current y recalculating (con el del último resultado) y none va explícito; un par current omite state",
+      "verify": "cargo test -p gitraptor-core --lib channel::mcp_conflicts::tests::level_is_absent_without_a_result_and_none_is_explicit -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/channel/mcp_conflicts_tests.rs"
+      ]
+    },
+    {
+      "id": "MCP016-P6-UNKNOWN",
+      "statement": "P6/D11: con cwd bajo el directorio común de un repo de la allowlist pero bajo ninguna raíz de worktree (repo bare con un enlazado), la respuesta da los pares de todo el repo con scope repo, reason caller-worktree-unknown y sin worktree",
+      "verify": "cargo test -p gitraptor-core --test mcp_conflicts an_unidentified_worktree_gives_the_repo_scope_with_its_reason -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/mcp_conflicts.rs"
+      ]
+    },
+    {
+      "id": "MCP016-P6-ALLOWLIST",
+      "statement": "P6: un repo fuera de la allowlist responde SCOPE_REFUSED not-allowlisted sin ningún dato del repo",
+      "verify": "cargo test -p gitraptor-core --test mcp_conflicts outside_the_allowlist_is_the_repo_not_enabled_refusal -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/mcp_conflicts.rs"
+      ]
+    },
+    {
+      "id": "MCP016-MAIN-WORKTREE",
+      "statement": "En el worktree principal salen los pares que lo incluyen como lado worktree; una lista vacía con pares calculating nunca se presenta como sin conflictos",
+      "verify": "cargo test -p gitraptor-core --lib channel::mcp_conflicts::tests::the_main_worktree_gets_the_pairs_that_include_it -- --exact && cargo test -p gitraptor-core --lib channel::mcp_conflicts::tests::no_pairs_while_calculating_is_not_no_conflicts -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/channel/mcp_conflicts_tests.rs"
+      ]
+    },
+    {
+      "id": "MCP016-DELETED",
+      "statement": "D11: un worktree borrado durante la sesión (Located::Missing) responde worktree-missing",
+      "verify": "cargo test -p gitraptor-core --lib channel::mcp_conflicts::tests::a_deleted_worktree_is_worktree_missing -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/channel/mcp_conflicts_tests.rs"
+      ]
+    },
+    {
+      "id": "MCP016-ORDER",
+      "statement": "D5: la página ordena ⚡ current, ⚡ recalculating, ⚠ current, ⚠ recalculating, calculating, pending, not-computable, none; recorrer con el cursor no duplica ni pierde pares",
+      "verify": "cargo test -p gitraptor-core --lib channel::mcp_conflicts::tests::conflicts_come_first_then_overlaps -- --exact && cargo test -p gitraptor-core --test mcp_conflicts a_conflicts_cursor_pages_without_duplicates -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/channel/mcp_conflicts_tests.rs",
+        "crates/core/tests/mcp_conflicts.rs"
+      ]
+    },
+    {
+      "id": "MCP016-CURSOR-DAEMON",
+      "statement": "D4: un cursor de status no es un cursor de conflicts, y un cursor de conflicts de otra conexión no existe (NOT_FOUND)",
+      "verify": "cargo test -p gitraptor-core --lib channel::mcp_conflicts::tests::a_status_cursor_is_not_a_conflicts_cursor -- --exact && cargo test -p gitraptor-core --test mcp_conflicts a_conflicts_cursor_from_another_connection_does_not_exist -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/channel/mcp_conflicts_tests.rs",
+        "crates/core/tests/mcp_conflicts.rs"
+      ]
+    },
+    {
+      "id": "MCP016-CURSOR-REVERSE",
+      "statement": "Un cursor de check_conflicts no es un cursor de status: mcp.status lo rechaza con NOT_FOUND (invalid-cursor) en la misma conexión y el mismo repo, en lugar de servir la página por defecto (D4 en sentido inverso)",
+      "verify": "cargo test -p gitraptor-core --test mcp_conflicts a_conflicts_cursor_is_not_a_status_cursor -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/mcp_conflicts.rs"
+      ]
+    },
+    {
+      "id": "MCP016-CURSOR-TOOL",
+      "statement": "NFR-02: check_conflicts rechaza con invalid-params {field} y sin llamar al motor cualquier argumento que no sea scope worktree|repo o un cursor de 16 hex",
+      "verify": "cargo test -p gitraptor-mcp --bin raptor-mcp conflicts::tests::malformed_arguments_are_refused_before_the_engine -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/mcp/src/conflicts_tests.rs"
+      ]
+    },
+    {
+      "id": "MCP016-AGE",
+      "statement": "D7: age_s la calcula el daemon como now_ms - computed_at_utc_ms y nunca es negativa (0)",
+      "verify": "cargo test -p gitraptor-core --lib channel::mcp_conflicts::tests::age_is_computed_by_the_daemon_and_never_negative -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/channel/mcp_conflicts_tests.rs"
+      ]
+    },
+    {
+      "id": "MCP016-SIDE-A",
+      "statement": "D14: en ámbito worktree el llamante va en el lado a; si el motor lo tiene en b, la vista intercambia lados y rangos",
+      "verify": "cargo test -p gitraptor-core --lib channel::mcp_conflicts::tests::the_caller_is_side_a_with_its_ranges -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/channel/mcp_conflicts_tests.rs"
+      ]
+    },
+    {
+      "id": "MCP016-RATE",
+      "statement": "D10: cada mcp.conflicts gasta el cubo de lecturas del perfil mcp y, agotado, responde RATE_LIMITED",
+      "verify": "cargo test -p gitraptor-core --test mcp_conflicts conflicts_spend_the_read_bucket -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/mcp_conflicts.rs"
+      ]
+    },
+    {
+      "id": "MCP016-UNPUBLISHED",
+      "statement": "D13: un predictor sin estado para el repo da pairs vacío con unpublished true, sin rechazo",
+      "verify": "cargo test -p gitraptor-core --lib channel::mcp_conflicts::tests::an_unpublished_prediction_is_declared -- --exact && cargo test -p gitraptor-core --test mcp_conflicts an_unpublished_prediction_is_declared_on_the_wire -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/channel/mcp_conflicts_tests.rs",
+        "crates/core/tests/mcp_conflicts.rs"
+      ]
+    },
+    {
+      "id": "MCP016-PREDICTION-UNAVAILABLE",
+      "statement": "D13: un daemon que no ofrece mcp.conflicts (METHOD_NOT_FOUND) da el código de herramienta prediction-unavailable",
+      "verify": "cargo test -p gitraptor-mcp --bin raptor-mcp conflicts::tests::a_daemon_without_mcp_conflicts_is_prediction_unavailable -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/mcp/src/conflicts_tests.rs"
+      ]
+    },
+    {
+      "id": "MCP016-TOOL-BUDGET",
+      "statement": "RES-MCP-01: la descripción más el inputSchema de check_conflicts caben en 150 tokens, el outputSchema en 400 y el catálogo en 1.500; una descripción duplicada falla",
+      "verify": "cargo test -p gitraptor-mcp --bin raptor-mcp conflicts::tests::the_check_conflicts_tool_fits_its_token_budget -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/mcp/src/conflicts_tests.rs"
+      ]
+    },
+    {
+      "id": "MCP016-HOSTILE-PAGE",
+      "statement": "Una página hostil (50 pares, nombres de 1.024 caracteres que crecen al escaparse, 200 rutas de 1.024 B por par) cabe en cada parte de MAX_MCP_PART_BYTES al pasar por la tubería de la herramienta",
+      "verify": "cargo test -p gitraptor-mcp --bin raptor-mcp conflicts::tests::a_hostile_page_fits_each_part -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/mcp/src/conflicts_tests.rs"
+      ]
+    },
+    {
+      "id": "MCP016-MARKED",
+      "statement": "SEC-12/MCP06: todo string de la respuesta de check_conflicts está bajo untrusted, es un literal del contrato o es el cursor hex",
+      "verify": "cargo test -p gitraptor-mcp --bin raptor-mcp conflicts::tests::every_repo_text_in_conflicts_is_marked -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/mcp/src/conflicts_tests.rs"
+      ]
+    },
+    {
+      "id": "MCP016-REFUSALS",
+      "statement": "RES-MCP-03: cada rechazo de check_conflicts cabe en 80 tokens en en y es y no lleva datos del repo",
+      "verify": "cargo test -p gitraptor-mcp --bin raptor-mcp conflicts::tests::every_conflicts_refusal_fits_and_carries_no_repo_data -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/mcp/src/conflicts_tests.rs"
+      ]
+    }
+  ],
+  "constraints": {
+    "deny_paths": [
+      "docs/ARTIFACTS.md",
+      "crates/api/src/prediction.rs",
+      "crates/api/src/methods/prediction.rs"
+    ],
+    "allow_dependency_changes": false,
+    "cargo_lock": "Sin cambios: el brief no añade ninguna dependencia",
+    "notes": "crates/core/src/predict/store.rs solo admite la lectura aditiva PredictionStore::published (DS § Ajustes a main). El corpus de seguridad del MCP (INF-MCP-001, apps/cli/tests/mcp_security_corpus.rs) no es criterio: ya está en verde (B3) y es un archivo existente; lo mide la suite, que debe quedar verde"
+  },
+  "scope": {
+    "projects": [
+      "gitraptor-api",
+      "gitraptor-core",
+      "gitraptor-mcp"
+    ]
+  },
+  "hops": {
+    "design": {
+      "agent": "nassa-dev-rust:rust-expert",
+      "model": "opus"
+    },
+    "critic": {
+      "agent": "nassa-core:plan-critic",
+      "model": "opus"
+    },
+    "tester": {
+      "agent": "nassa-core:criterion-tester",
+      "model": "sonnet"
+    },
+    "build": {
+      "agent": "nassa-dev-rust:rust-expert",
+      "model": "opus"
+    },
+    "review": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "opus"
+    },
+    "conformance": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "sonnet"
+    }
+  },
+  "suite": {
+    "command": "node tools/test/nextest-junit.mjs"
+  },
+  "layers": {
+    "runtime": {
+      "commands": [
+        {
+          "id": "suite",
+          "cmd": "node tools/test/nextest-junit.mjs"
+        }
+      ],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 600000,
+    "suiteTimeoutMs": 5400000
+  }
+}

@@ -461,13 +461,24 @@ pub(crate) enum CursorEntry {
         root: PathBuf,
         after: Option<String>,
     },
+    /// A page of `mcp.conflicts`: its scope, the caller's root in the worktree scope, and the
+    /// `(rank, pair_id)` of the last pair given.
+    #[allow(dead_code)] // minted by `mcp.conflicts`, not wired into the dispatch yet
+    Conflicts {
+        repo_id: String,
+        scope: gitraptor_api::methods::McpConflictsScope,
+        root: Option<PathBuf>,
+        after: (u8, String),
+    },
 }
 
 impl CursorEntry {
     /// The repo the cursor was handed out for.
     pub(crate) fn repo_id(&self) -> &str {
         match self {
-            Self::Worktrees { repo_id, .. } | Self::Paths { repo_id, .. } => repo_id,
+            Self::Worktrees { repo_id, .. }
+            | Self::Paths { repo_id, .. }
+            | Self::Conflicts { repo_id, .. } => repo_id,
         }
     }
 }

@@ -21,6 +21,9 @@ use crate::catalog::SnapshotRunResult;
 use crate::methods::{McpHere, McpPage, McpRepo, McpStatus, McpStatusAction};
 use crate::untrusted::{Untrusted, UntrustedName, sanitize};
 
+mod conflicts;
+pub use conflicts::*;
+
 /// Most bytes of each part of a tool result (structured and text), measured
 /// after escaping (§ 6).
 pub const MAX_MCP_PART_BYTES: usize = 24 * 1024;
@@ -130,6 +133,8 @@ pub enum McpToolError {
     PathIgnored,
     /// Another agent session is in the worktree: name the paths.
     OtherSessionPresent,
+    /// The engine does not offer the conflict prediction.
+    PredictionUnavailable,
 }
 
 impl McpToolError {
@@ -204,6 +209,7 @@ impl McpToolError {
             Self::TooManyPaths => "too-many-paths",
             Self::PathIgnored => "path-ignored",
             Self::OtherSessionPresent => "other-session-present",
+            Self::PredictionUnavailable => "prediction-unavailable",
         }
     }
 }
@@ -902,7 +908,8 @@ mod tests {
             | McpToolError::PathOutsideWorktree
             | McpToolError::TooManyPaths
             | McpToolError::PathIgnored
-            | McpToolError::OtherSessionPresent => McpToolError::ALL.contains(&c),
+            | McpToolError::OtherSessionPresent
+            | McpToolError::PredictionUnavailable => McpToolError::ALL.contains(&c),
         };
         assert!(McpToolError::ALL.into_iter().all(listed));
         for s in [

@@ -132,7 +132,10 @@ fn status_value(status: &McpStatus) -> Result<serde_json::Value, ToolRefusal> {
 /// The answer to a call, through the pipeline: every untrusted text escaped
 /// and the whole within its budget. A result that does not fit is refused
 /// with nothing of it, never sent cut without a mark.
-fn respond(outcome: Result<serde_json::Value, ToolRefusal>, lang: Lang) -> CallToolResult {
+pub(crate) fn respond(
+    outcome: Result<serde_json::Value, ToolRefusal>,
+    lang: Lang,
+) -> CallToolResult {
     let bounded = outcome.and_then(|mut value| {
         for_mcp(&mut value);
         // The text part is this same serialization; the structured part,

@@ -19,6 +19,10 @@ use crate::messages::{RepoStateView, SessionStateView, UnavailableReason};
 use crate::rpc::ErrorSpec;
 use crate::untrusted::{Untrusted, UntrustedName};
 
+#[path = "mcp_conflicts.rs"]
+mod conflicts;
+pub use conflicts::*;
+
 /// Enables a repo for the MCP (reserved).
 pub const MCP_ENABLE: &str = "mcp.enable";
 /// Takes a repo out of the MCP allowlist (reserved).
