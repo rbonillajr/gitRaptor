@@ -274,6 +274,30 @@ impl Machine {
         }
     }
 
+    /// Waits for the base point an undo of event `seq` anchors on (US-TMC-012, D7): a capture
+    /// that event caused or, without one, the first point at or after its mark. The capture is
+    /// asynchronous; an undo before it is refused as `overlap-unverified`, by design.
+    fn captured_after_event(&self, seq: i64) {
+        let repo_id = self.repo_id();
+        let start = Instant::now();
+        loop {
+            if let Ok((oplog, _)) = Oplog::open(&self.dirs(), &repo_id, 1)
+                && let Ok(snaps) = oplog.snapshots(&SnapshotFilter::default())
+                && snaps.iter().any(|s| {
+                    s.record.cause_event_seq == Some(seq)
+                        || s.record.engine_mark.is_some_and(|mark| mark >= seq)
+                })
+            {
+                return;
+            }
+            assert!(
+                start.elapsed() < DEADLINE,
+                "no snapshot at or after event {seq}"
+            );
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    }
+
     fn stop(&self) {
         if running_pid(&self.dirs().state).unwrap().is_none() {
             return;
@@ -376,6 +400,8 @@ fn the_same_agent_session_is_not_another_actor() {
         matches!(moved.actor, Actor::Agent { .. }),
         "the move is attributed to the agent's session: {moved:#?}"
     );
+    // Its base point must exist before it is undone (see `captured_after_event`).
+    m.captured_after_event(moved.seq);
 
     // The branch move is the newest event: it goes first.
     let (ok, said) = agent_undo(&m, &mut claude, "LANG=en_US.UTF-8", "");
