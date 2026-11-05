@@ -7,6 +7,8 @@ use std::sync::atomic::AtomicUsize;
 
 use super::*;
 use crate::channel::peer::SystemProcs;
+#[cfg(unix)]
+use crate::channel::peer::{ProcError, ProcInfo};
 use crate::profile::ProfileDirs;
 use crate::timemachine::oplog::{OperationState, Requester};
 
@@ -448,4 +450,129 @@ fn children_of_the_step_are_marked() {
         .collect();
     assert!(entries.iter().any(|e| e == "child-started"));
     assert!(entries.iter().any(|e| e == "child-ended"));
+}
+
+/// A process table that cannot read the step's child: [`Self::Ended`] answers only once the
+/// child has ended (without reaping it), as the real one does for a fast child read late: on
+/// macOS an ended child is a zombie, and `proc_pidinfo` of a zombie fails. [`Self::Never`]
+/// answers at once, for a child still running.
+#[cfg(unix)]
+enum Unreadable {
+    Ended,
+    Never,
+}
+
+#[cfg(unix)]
+impl ProcSource for Unreadable {
+    fn read(&self, pid: u32) -> Result<ProcInfo, ProcError> {
+        if matches!(self, Self::Ended) {
+            use rustix::process::{Pid, WaitId, WaitIdOptions, waitid};
+            let pid = Pid::from_raw(i32::try_from(pid).unwrap()).unwrap();
+            waitid(
+                WaitId::Pid(pid),
+                WaitIdOptions::EXITED | WaitIdOptions::NOWAIT,
+            )
+            .unwrap();
+        }
+        Err(ProcError::Denied)
+    }
+    fn foreign_to(&self, _pid: u32, _uid: u32) -> Option<bool> {
+        None
+    }
+}
+
+/// Runs `program args` as the step's only child with `procs` as the process table: the step's
+/// result (its error message, if any), and whether the child ran to the end.
+#[cfg(unix)]
+fn run_child(
+    procs: &dyn ProcSource,
+    program: &str,
+    args: &[&str],
+) -> (Result<ProtectedOutcome, ProtectedError>, Fixture) {
+    struct OneChild<'a> {
+        program: &'a str,
+        args: &'a [&'a str],
+    }
+    impl ProtectedStep for OneChild<'_> {
+        fn subtype(&self) -> &str {
+            "reset-hard"
+        }
+        fn scope(&self) -> StepScope {
+            StepScope::default()
+        }
+        fn run(&mut self, ctx: &mut StepCtx<'_>) -> Result<StepOutput, StepError> {
+            let mut cmd = Command::new(self.program);
+            cmd.args(self.args);
+            let child = ctx
+                .spawn(&mut cmd)
+                .map_err(|e| StepError::new(e.to_string()))?;
+            let status = ctx.wait(child).map_err(|e| StepError::new(e.to_string()))?;
+            if !status.success() {
+                return Err(StepError::new(format!("{} failed", self.program)));
+            }
+            Ok(StepOutput::default())
+        }
+    }
+    let f = fixture();
+    let out = ProtectedOperation {
+        oplog: &f.oplog,
+        snapshotter: Arc::new(f.snap()),
+        marks: &f.marks,
+        procs,
+        stopping: &f.stopping,
+        deadline: DEFAULT_PRIOR_DEADLINE,
+        prior_valid: None,
+    }
+    .run(&request(), &mut OneChild { program, args });
+    (out, f)
+}
+
+/// A child that ended before the daemon read it did its work: the operation is not failed as
+/// `changed`, its status stands and its start and end are in the journal (CI, run 40998734487:
+/// a `git reset` in a small repo on a loaded runner).
+#[cfg(unix)]
+#[test]
+fn a_child_that_ended_before_it_was_read_keeps_its_status() {
+    let (out, f) = run_child(&Unreadable::Ended, "/usr/bin/true", &[]);
+    let out = out.expect("an ended child is not an unmarked running one");
+    assert_eq!(state(&f, &out.operation_id), OperationState::Finished);
+    let entries: Vec<_> = f
+        .oplog
+        .lock()
+        .unwrap()
+        .journal(&out.operation_id)
+        .unwrap()
+        .into_iter()
+        .map(|e| e.entry)
+        .collect();
+    assert!(entries.iter().any(|e| e == "child-started"), "{entries:?}");
+    assert!(entries.iter().any(|e| e == "child-ended"), "{entries:?}");
+
+    // Its own failure is still its own: the status read at the end is the child's.
+    let (out, _f) = run_child(&Unreadable::Ended, "/usr/bin/false", &[]);
+    match out {
+        Err(ProtectedError::Step { message, .. }) => {
+            assert_eq!(message, "/usr/bin/false failed");
+        }
+        other => panic!("the child's failure stands: {other:?}"),
+    }
+}
+
+/// A child still running whose identity cannot be read is killed at once and the step fails
+/// (fail-closed: an unmarked child must not run).
+#[cfg(unix)]
+#[test]
+fn a_running_child_whose_identity_cannot_be_read_is_killed() {
+    let start = std::time::Instant::now();
+    let (out, _f) = run_child(&Unreadable::Never, "/bin/sleep", &["60"]);
+    match out {
+        Err(ProtectedError::Step { message, .. }) => {
+            assert!(message.contains("child identity unreadable"), "{message}");
+        }
+        other => panic!("an unreadable running child never runs: {other:?}"),
+    }
+    assert!(
+        start.elapsed() < Duration::from_secs(50),
+        "the child was killed, not waited for"
+    );
 }
