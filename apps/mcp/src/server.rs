@@ -28,6 +28,7 @@ use rmcp::model::{
 use rmcp::service::RequestContext;
 use rmcp::{ErrorData, RoleServer, ServerHandler};
 
+use crate::conflicts::{self, CONFLICTS_TOOL};
 use crate::engine::Engine;
 use crate::messages::{self, Lang, ToolRefusal};
 use crate::safe_commit::{self, SAFE_COMMIT_TOOL};
@@ -57,7 +58,11 @@ pub(crate) const WRITE_TOOLS: &[(&str, OperationId)] = &[
     (SAFE_COMMIT_TOOL, OperationId::Commit),
 ];
 
-/// The tools `tools/list` announces: `status`, the only read-only one, and [`WRITE_TOOLS`].
+/// The tools that only read, besides `status`, in the order `tools/list` publishes them after
+/// [`WRITE_TOOLS`].
+pub(crate) const READ_TOOLS: &[&str] = &[CONFLICTS_TOOL];
+
+/// The tools `tools/list` announces: `status`, [`WRITE_TOOLS`] and then [`READ_TOOLS`].
 fn tools() -> Vec<Tool> {
     let mut tools = vec![status_tool()];
     for (name, _) in WRITE_TOOLS {
@@ -67,6 +72,12 @@ fn tools() -> Vec<Tool> {
             // A name without its definition announces nothing rather than a tool that cannot
             // be called; `every_tool_is_read_only_or_a_catalog_operation` catches it.
             _ => {}
+        }
+    }
+    for name in READ_TOOLS {
+        // A name without its definition announces nothing, as with the write tools.
+        if *name == CONFLICTS_TOOL {
+            tools.push(conflicts::tool());
         }
     }
     tools
@@ -215,6 +226,21 @@ impl ServerHandler for Raptor {
                     .map_err(ToolRefusal::from);
                 Ok(respond(status.and_then(|s| status_value(&s)), self.lang).into())
             }
+            CONFLICTS_TOOL => {
+                // NFR-02: only `scope` and a cursor of the daemon's form, checked before the
+                // engine is asked.
+                let (scope, cursor) =
+                    conflicts::arguments(request.arguments.as_ref()).map_err(malformed)?;
+                let engine = Arc::clone(&self.engine);
+                let answer = within(MCP_READ_TIME_LIMIT, move || engine.conflicts(scope, cursor))
+                    .await
+                    .map_err(|code| match code {
+                        McpToolError::TimeLimit => self.engine.late(),
+                        other => other,
+                    })
+                    .map_err(ToolRefusal::from);
+                Ok(respond(answer.and_then(|c| conflicts::value(&c)), self.lang).into())
+            }
             SNAPSHOT_TOOL => {
                 let label = snapshot::label_argument(request.arguments.as_ref())
                     .map_err(malformed)?
@@ -264,10 +290,16 @@ mod tests {
     #[test]
     fn every_tool_is_read_only_or_a_catalog_operation() {
         let listed: Vec<String> = tools().iter().map(|t| t.name.to_string()).collect();
-        assert_eq!(listed.len(), 1 + WRITE_TOOLS.len(), "{listed:?}");
+        assert_eq!(
+            listed.len(),
+            1 + WRITE_TOOLS.len() + READ_TOOLS.len(),
+            "{listed:?}"
+        );
         for name in &listed {
             assert!(
-                name == STATUS_TOOL || WRITE_TOOLS.iter().any(|(w, _)| w == name),
+                name == STATUS_TOOL
+                    || READ_TOOLS.contains(&name.as_str())
+                    || WRITE_TOOLS.iter().any(|(w, _)| w == name),
                 "{name} is neither read-only nor a catalog operation"
             );
         }
@@ -426,7 +458,9 @@ mod tests {
         let info = serde_json::to_value(Raptor::default().get_info()).unwrap();
         let tool = serde_json::to_value(status_tool()).unwrap();
         let snapshot = serde_json::to_value(snapshot::tool()).unwrap();
-        let overruns = gitraptor_api::mcp_view::catalog_overruns(&info, &[tool.clone(), snapshot]);
+        let conflicts = serde_json::to_value(conflicts::tool()).unwrap();
+        let overruns =
+            gitraptor_api::mcp_view::catalog_overruns(&info, &[tool.clone(), snapshot, conflicts]);
         assert!(overruns.is_empty(), "{overruns:#?}");
         // RES-MCP-01 fails if the description grows past its budget.
         let mut inflated = tool;
