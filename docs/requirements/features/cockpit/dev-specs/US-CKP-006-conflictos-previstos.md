@@ -2,7 +2,7 @@
 id: DS-US-CKP-006
 title: "Dev Spec — US-CKP-006: la TUI muestra qué agentes van a chocar antes del merge"
 type: dev-spec
-status: draft
+status: partially-implemented
 created: 2026-10-27
 updated: 2026-11-04
 story: US-CKP-006
@@ -356,9 +356,12 @@ Un test de punta a punta por escenario (T001) y los de unidad de las reglas. Los
 | N1 | Si DS-TS-CKP-001 § Contrato de API cambia un nombre respecto de decisiones-finales (A2), manda esa sección (A1) y estas reglas se leen con el nombre nuevo | Revisar al cerrar T009 | Arquitecto |
 | N2 | T001 no puede pasar hasta que el trabajador y el pool del PR-B existan (G1): la predicción no se publica sin ellos | Ninguna | — |
 | N3 | La cifra de 5 s p95 la mide T012 de TS-CKP-001 (INF-GRP-002), no T001 | Ninguna | — |
+| N4 | **G-B (hallazgo del PR, fuera de alcance).** Confirmar la base en runtime (`daemon/guard.rs:279` y `:349`, `guardrails/confirm.rs:147`) solo escribe el almacén: no refresca `divergence.base`, que lee `Predict::base()`, ni avisa al predictor, así que el par contra la base queda `pending` y el escenario 3 no pasa. Toca guardrails y el motor: decisión de diseño aparte | Seguimiento: hook `base_confirmed(repo_id)` que refresque la base y replanifique | Arquitecto |
 
 ## Estado
 
 - Hecho: Dev Spec en `draft` con T001 a T005.
 - Hecho: G1 cerrado por #314 (2026-11-04); `ready_to_implement: true`, `gaps_blocking: 0`.
-- Siguiente paso: implementar con `/nassa-core:implement --autonomous US-CKP-006`, empezando por T001 en rojo.
+- Hecho: T001 a T004 implementados en el PR #PRNUM (la TUI con el panel, la fila ⚡ y los límites). Implementado en: PR #PRNUM.
+- Pendiente: el escenario 3 (par contra la base confirmada), por el hueco G-B de la nota N4.
+- Siguiente paso: cerrar G-B en el motor (seguimiento) y luego US-CKP-007 (frescura) y US-CKP-008 (aviso).
