@@ -212,6 +212,16 @@ pub(crate) fn page(
     }
 }
 
+/// Where the page after this one starts: after the last of the `kept` first pairs of `keys`,
+/// when the cut kept fewer than the page had or more pairs follow the page; `None` otherwise.
+pub(crate) fn next_key(keys: &[PageKey], kept: usize, more: bool) -> Option<PageKey> {
+    if kept < keys.len() || more {
+        kept.checked_sub(1).and_then(|last| keys.get(last)).cloned()
+    } else {
+        None
+    }
+}
+
 /// The counts of the whole scope, the page after `after` and where the next one starts: the
 /// keyless form of [`page`], for the tests of the order.
 #[cfg(test)]
@@ -223,15 +233,9 @@ pub(crate) fn build_page(
     now_ms: i64,
 ) -> (McpPairCounts, Vec<McpPair>, Option<PageKey>) {
     let page = page(details, caller, base, after, now_ms);
-    let next = page
-        .more
-        .then(|| page.pairs.last().map(|(key, _)| key.clone()))
-        .flatten();
-    (
-        page.counts,
-        page.pairs.into_iter().map(|(_, p)| p).collect(),
-        next,
-    )
+    let (keys, pairs): (Vec<_>, Vec<_>) = page.pairs.into_iter().unzip();
+    let next = next_key(&keys, pairs.len(), page.more);
+    (page.counts, pairs, next)
 }
 
 #[cfg(test)]

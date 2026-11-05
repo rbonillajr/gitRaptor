@@ -59,7 +59,8 @@ pub struct McpConflicts {
     /// Pairs per class over the whole scope, not only this page.
     pub counts: McpPairCounts,
     pub pairs: Vec<McpPair>,
-    /// Some pairs, files or paths did not fit: the rest come with `cursor`.
+    /// More pairs follow: they come with `cursor`. A cut inside one pair is that pair's own
+    /// `conflict.truncated` or `overlap_partial`.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub truncated: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]

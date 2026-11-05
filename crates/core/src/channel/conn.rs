@@ -2170,16 +2170,20 @@ impl Connection<'_> {
                     .get(w)
                     .ok_or_else(|| scope_refused(ScopeError::NotObserved))?;
                 let facts = mcp_status::facts(repo, w, &crate::observe::home_folders());
-                let admitted = mcp_status::admit(allowed, repo, w, &facts);
-                self.remember_scope(repo, worktree);
-                match admitted {
+                // Remembered as `mcp.status` does: once admitted, or refused for availability,
+                // never for the allowlist.
+                match mcp_status::admit(allowed, repo, w, &facts) {
                     Err(mcp_status::Refusal::NotAllowlisted) => {
                         return Err(scope_refused(ScopeError::NotAllowlisted));
                     }
                     Err(mcp_status::Refusal::Unavailable(reason)) => {
+                        self.remember_scope(repo, worktree);
                         return Err(mcp_unavailable(true, reason));
                     }
-                    Ok(()) => Some(worktree),
+                    Ok(()) => {
+                        self.remember_scope(repo, worktree);
+                        Some(worktree)
+                    }
                 }
             }
             None => {
@@ -2195,9 +2199,13 @@ impl Connection<'_> {
         let own_root = worktree.map(|w| PathBuf::from(w.path.raw()));
         let (scope, root, after) = match params.cursor.as_deref() {
             Some(cursor) => match self.cursor_entry(cursor, &repo.repo_id)? {
+                // A worktree cursor belongs to the worktree it was handed out in: from any
+                // other it does not exist.
                 mcp_status::CursorEntry::Conflicts {
                     scope, root, after, ..
-                } => (scope, root, Some(after)),
+                } if scope == McpConflictsScope::Repo || root == own_root => {
+                    (scope, root, Some(after))
+                }
                 _ => return Err(ErrorObject::new(code::NOT_FOUND, "cursor not found")),
             },
             None => {
@@ -2244,12 +2252,7 @@ impl Connection<'_> {
         );
         // Where the next page starts: after the last pair kept, whether the cut or the page
         // bound stopped it.
-        let kept = answer.pairs.len();
-        let next = if kept < keys.len() || page.more {
-            kept.checked_sub(1).and_then(|last| keys.get(last)).cloned()
-        } else {
-            None
-        };
+        let next = mcp_conflicts::next_key(&keys, answer.pairs.len(), page.more);
         answer.cursor = match next {
             Some(after) => Some(self.mint_cursor(mcp_status::CursorEntry::Conflicts {
                 repo_id: repo.repo_id.clone(),
