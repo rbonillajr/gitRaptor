@@ -6,7 +6,7 @@ status: draft
 feature: mcp
 domain: MCP
 created: 2026-10-27
-updated: 2026-10-27
+updated: 2026-11-04
 story: US-MCP-016
 scope: backend
 frontend_surface: false
@@ -59,8 +59,8 @@ lineage:
 constitution_gates: []
 validation:
   must_read_resolved: true
-  gaps_blocking: 1
-  ready_to_implement: false
+  gaps_blocking: 0
+  ready_to_implement: true
   gaps_release: 0
   ready_to_release: false
 tags: [mcp, check-conflicts, prediccion, cursor, lectura, ola-4]
@@ -80,11 +80,25 @@ Convenciones que se siguen (código leído): `mcp.status` como patrón del méto
 
 | Id | Hueco | Severidad | Alcance | Qué se hace mientras |
 |---|---|---|---|---|
-| G1 | **T009 del PR-B de TS-CKP-001** no está en `main`: no existen `crates/api/src/prediction.rs`, la capacidad `prediction.pairs`, `prediction.list` ni el estado publicado del predictor. T009 espera a G5 de TS-CKP-001 (TS-GRP-005). PR #275 (PR-A) solo trajo `crates/core/src/predict/{mod,pairs,state,queue,overlap}.rs` | **Bloqueante** | T001-T006 | Nada se implementa hasta que T009 esté en `main`. La DS queda `draft` y `ready_to_implement: false` |
+| G1 | ~~**T009 del PR-B de TS-CKP-001** no está en `main`~~. **Cerrado por #314 (2026-11-04)**: existen `crates/api/src/prediction.rs`, `crates/api/src/methods/prediction.rs` (`CAP_PREDICTION_PAIRS`, `PREDICTION_LIST`, `PREDICTION_CHANGED`) y `crates/core/src/predict/store.rs::predict_read`. Los nombres que difieren de esta DS están en § Ajustes a `main` | — | — | — |
 | G2 | ~~La lectura interna con la que T009 sirva `prediction.list` aún no tiene nombre~~. **Cerrado (2026-10-27)**: T009 de DS-TS-CKP-001 la fija como `pub(crate) fn predict_read(repo_id, worktree: Option<&Path>) -> Vec<PairDetail>`, fuera del brazo de `conn.rs` | — | — | — |
 | G3 | Linux y Windows: *Pendiente: etapa de validación multiplataforma* (XP-01: Windows sin canal) | Informativo | — | Igual que DS-US-MCP-004 § Matriz de plataformas |
 
-Estado de los bloqueos de la historia: **ADR-MCP-001** está `accepted` (DEP-MCP-1 aplicada, § 11). **DEP-MCP-6** está "Aplicada" (ADR-MCP-001 § 11: Enmienda 2026-10-05, MCP, de ADR-CKP-001 § 8). **ADR-CKP-001** está `accepted`. La sección "Dependencias" de la historia lo dice todavía como abierto; solo queda G1.
+Estado de los bloqueos de la historia (2026-11-04): G1 cerrado por #314, no queda ningún hueco bloqueante. Antes: **ADR-MCP-001** está `accepted` (DEP-MCP-1 aplicada, § 11). **DEP-MCP-6** está "Aplicada" (ADR-MCP-001 § 11: Enmienda 2026-10-05, MCP, de ADR-CKP-001 § 8). **ADR-CKP-001** está `accepted`. La sección "Dependencias" de la historia lo dice todavía como abierto; solo queda G1.
+
+## Ajustes a `main` (2026-11-04, cierre de G1 por #314)
+
+T009 fijó estos nombres; mandan los de `main` (§ Notas) y la forma de `McpConflicts` no cambia:
+
+| En esta DS | En `main` (#314) |
+|---|---|
+| `PairState` | `PairStateView` (`calculating`, `current`, `recalculating`, `pending`, `not-computable`) |
+| `ConflictKind` | `ConflictKindView` |
+| `predict_read(repo_id, worktree)` | `predict_read(store: &PredictionStore, repo_id, worktree: Option<&Path>) -> Vec<PairDetail>`, en `crates/core/src/predict/store.rs` |
+| rangos `a`/`b` del motor | `ConflictFileView.ours`/`theirs: Vec<LineRange { start, len }>`; la vista los proyecta a `[start, len]` y los intercambia con los lados (D14) |
+| lado base con nombre | `PairSideView::Base {}` no lleva nombre: el nombre de la base sale del `RepoView` del llamante (parámetro `base` de `build_page`) |
+| `limits` del motor | `LimitCode::ALL` (8 códigos), igual que `prediction.page`; siempre los ocho |
+| `unpublished` (D13) | `predict_read` devuelve vacío tanto para un repo sin publicar como para uno sin pares. Se añade una lectura `pub(crate) fn published(&self, repo_id) -> bool` en `PredictionStore` (aditiva, no cambia la API que consume US-CKP-006); `unpublished` = predictor inactivo o repo sin publicación |
 
 ## Decisiones
 
