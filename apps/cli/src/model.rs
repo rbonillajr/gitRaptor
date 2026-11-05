@@ -553,6 +553,11 @@ pub enum EngineMsg {
         repo_id: String,
         page: Box<gitraptor_api::prediction::PredictionPage>,
     },
+    /// The engine refused a `prediction.list`, or its answer could not be read: the one answer
+    /// that stands in for the page, so every request is answered exactly once.
+    PredictionRefused {
+        repo_id: String,
+    },
 }
 
 /// What the channel thread says about the connection.

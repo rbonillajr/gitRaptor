@@ -1,6 +1,6 @@
 //! The TUI's model of the published conflict prediction (DS-US-CKP-006, AD2).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 
 use gitraptor_api::prediction::{
     ConflictKindView, LimitCode, LineRange, PairLevel, PairReason, PairStateView,
@@ -20,6 +20,19 @@ pub struct PredictionModel {
     early: BTreeMap<String, PairDetailRow>,
     asked: BTreeMap<String, u64>,
     walk: Walk,
+    /// What each `prediction.list` still unanswered was for, oldest first. The channel thread
+    /// answers every request, in order, with one page or one refusal, so the oldest entry says
+    /// what the next answer is. A stale details page can then never be taken for the walk's.
+    inflight: VecDeque<Kind>,
+}
+
+/// What a request of `prediction.list` was for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Kind {
+    Walk,
+    Details,
+    /// A walk request of a snapshot that is gone: its answer feeds nothing of the walk.
+    Stale,
 }
 
 /// Where the walk over `prediction.list` pages stands when the summary was cut (AD4).
@@ -115,8 +128,47 @@ impl PredictionModel {
     /// Forgets what was asked: a snapshot, a resync or a reconnection asks again.
     pub fn forget_asked(&mut self) {
         self.asked.clear();
+        self.stale_walks();
         if self.walk == Walk::Waiting {
             self.walk = Walk::Start;
+        }
+    }
+
+    fn stale_walks(&mut self) {
+        for kind in &mut self.inflight {
+            if *kind == Kind::Walk {
+                *kind = Kind::Stale;
+            }
+        }
+    }
+
+    /// The requests still unanswered, to hand to the model that replaces this one on a new
+    /// snapshot of the same connection: their answers will still come, in order.
+    pub(crate) fn take_inflight(&mut self) -> VecDeque<Kind> {
+        std::mem::take(&mut self.inflight)
+    }
+
+    pub(crate) fn inherit(&mut self, inflight: VecDeque<Kind>) {
+        self.inflight = inflight;
+        self.stale_walks();
+    }
+
+    /// A new connection: nothing asked on the old one will be answered.
+    pub fn forget_inflight(&mut self) {
+        self.inflight.clear();
+        self.asked.clear();
+        if self.walk == Walk::Waiting {
+            self.walk = Walk::Start;
+        }
+    }
+
+    /// The engine refused a request, or its answer could not be read. A refused walk ends
+    /// without finishing: `truncated` stays true, so the panel still knows pairs are missing,
+    /// and nothing asks again until the next snapshot. A refused details request stays marked
+    /// as asked for its `rev`, so it is not asked in a loop; a new `rev` asks again.
+    pub fn apply_refused(&mut self) {
+        if self.inflight.pop_front() == Some(Kind::Walk) && self.walk == Walk::Waiting {
+            self.walk = Walk::Done;
         }
     }
 
@@ -160,7 +212,8 @@ impl PredictionModel {
     /// Applies a page of `prediction.list`: details by their `rev` against the summary's, and,
     /// while walking, the summaries of pairs not yet known.
     pub fn apply_page(&mut self, page: &PredictionPage) {
-        let walking = self.walk == Walk::Waiting;
+        // Only the answer to a walk request, never a stale or a details one, is a walk page.
+        let walking = self.inflight.pop_front() == Some(Kind::Walk) && self.walk == Walk::Waiting;
         for detail in &page.pairs {
             self.apply_detail(detail, walking);
         }
@@ -208,8 +261,14 @@ impl PredictionModel {
         };
         // Pages and details share one reply type, so only one call is out while walking.
         match std::mem::replace(&mut self.walk, Walk::Waiting) {
-            Walk::Start => return vec![list(Vec::new(), None)],
-            Walk::Next(cursor) => return vec![list(Vec::new(), Some(cursor))],
+            Walk::Start => {
+                self.inflight.push_back(Kind::Walk);
+                return vec![list(Vec::new(), None)];
+            }
+            Walk::Next(cursor) => {
+                self.inflight.push_back(Kind::Walk);
+                return vec![list(Vec::new(), Some(cursor))];
+            }
             Walk::Waiting => return Vec::new(),
             Walk::Done => self.walk = Walk::Done,
         }
@@ -237,6 +296,7 @@ impl PredictionModel {
             .chunks(BATCH)
             .map(|chunk| {
                 self.asked.extend(chunk.iter().cloned());
+                self.inflight.push_back(Kind::Details);
                 list(chunk.iter().map(|(id, _)| id.clone()).collect(), None)
             })
             .collect()
