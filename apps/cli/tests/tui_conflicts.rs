@@ -37,8 +37,7 @@ const RAPTOR: &str = env!("CARGO_BIN_EXE_raptor");
 /// The only agent executable the debug daemon knows: no process of this test is an agent.
 const FAKE_AGENT: &str = "raptor-fake-agent";
 const DEADLINE: Duration = Duration::from_secs(30);
-const ES_LIMITS: &str =
-    "⚠ con lo sin commitear · ⚡ solo commits · sin drivers de merge ni .gitattributes";
+const ES_LIMITS: &str = "⚠ con lo sin commitear · ⚡ solo commits · sin drivers ni .gitattributes";
 
 /// One scenario at a time: each runs its own engine.
 static SERIAL: Mutex<()> = Mutex::new(());
