@@ -13,7 +13,7 @@ Todo lo que viene del plan, del contrato o del crítico va dentro de bloques de 
 
 - Tipo: `plan`
 - Excepción del crítico: no
-- Generada: `2026-11-05T01:25:48.964Z`
+- Generada: `2026-11-05T01:28:33.968Z`
 - Sha de aprobación: `4ad157fded986c5c9d75b9babe04a6a66df5791426b01fb423f68c488c4baf7e:a5c396c4296f1d20d22625b8c42cb5bac663a7d49538b9c34cba1b20c94cbe32:91ba126dda0f71f53d22d2bc2780a87597ab20b884f41943db1599b9a725f971`
 
 ## Meta (se firma con el contrato)
