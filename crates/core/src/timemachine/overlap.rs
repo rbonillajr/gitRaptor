@@ -115,7 +115,10 @@ pub fn check_with(
     if blind(input, events_complete) || Instant::now() >= input.deadline {
         return OverlapReport::unverified();
     }
-    let Some(base) = base_point(input) else {
+    let Some(bases) = undone_bases(input) else {
+        return OverlapReport::unverified();
+    };
+    let Some(base) = bases.first().copied() else {
         return OverlapReport::unverified();
     };
     let mut chain = vec![base];
@@ -134,7 +137,7 @@ pub fn check_with(
     let mut report = if segments.is_empty() {
         OverlapReport::default()
     } else {
-        match classify(store, input, &base, &segments, last) {
+        match classify(store, input, &bases, &segments, last) {
             Ok(report) => report,
             Err(_) => return OverlapReport::unverified(),
         }
@@ -167,7 +170,10 @@ pub fn check_tail_with(
     if phase1.unverified || blind(input, events_complete) || Instant::now() >= input.deadline {
         return OverlapReport::unverified();
     }
-    let Some(base) = base_point(input) else {
+    let Some(bases) = undone_bases(input) else {
+        return OverlapReport::unverified();
+    };
+    let Some(base) = bases.first().copied() else {
         return OverlapReport::unverified();
     };
     let start = phase1.last_point.as_deref().unwrap_or(base.id);
@@ -180,7 +186,7 @@ pub fn check_tail_with(
         hi: intent_mark,
         seen_ms,
     };
-    let tail = match classify(store, input, &base, std::slice::from_ref(&segment), prior) {
+    let tail = match classify(store, input, &bases, std::slice::from_ref(&segment), prior) {
         Ok(tail) => tail,
         Err(_) => return OverlapReport::unverified(),
     };
@@ -283,10 +289,21 @@ fn facts<'s>(input: &OverlapInput<'s>) -> (Vec<&'s SnapshotView>, Vec<bool>) {
     (views, clean)
 }
 
-/// B, the state the undone change left (its anchor). Without one, an unattributed reference
-/// uses the target: its own edits never count, and what an agent did since is kept rather than
-/// written. An agent's change without B cannot be told from what came after it: `None`.
-fn base_point<'s>(input: &OverlapInput<'s>) -> Option<Point<'s>> {
+/// The state each undone change left, oldest first. The first is B: the check counts the work of
+/// other actors after it. What the undo takes back is what any of them changed from the target.
+/// `None` when one of them has no base.
+fn undone_bases<'s>(input: &OverlapInput<'s>) -> Option<Vec<Point<'s>>> {
+    input
+        .undone
+        .iter()
+        .map(|op| base_point_of(input, op))
+        .collect()
+}
+
+/// The state `undone` left (its anchor). Without one, an unattributed reference uses the
+/// target: its own edits never count, and what an agent did since is kept rather than written.
+/// An agent's change without it cannot be told from what came after it: `None`.
+fn base_point_of<'s>(input: &OverlapInput<'s>, undone: &OpRef) -> Option<Point<'s>> {
     // The base must be a clean point of the current generation: a snapshot of an older engine
     // generation has marks of another numbering, so its `cause_event_seq` names another event.
     let (views, clean) = facts(input);
@@ -302,7 +319,7 @@ fn base_point<'s>(input: &OverlapInput<'s>) -> Option<Point<'s>> {
             .zip(&clean)
             .any(|(v, c)| *c && v.record.snapshot_id == s.record.snapshot_id)
     };
-    let found = match input.undone.first()? {
+    let found = match undone {
         OpRef::Oplog(id) => input
             .snaps
             .iter()
@@ -522,12 +539,14 @@ fn changes(
     store.changed_between(from, to, key, input.deadline)
 }
 
-/// Classifies what differs between the target and `last` over `segments`, with `base` as the
-/// state the undone change left. Any read that fails or runs out of time is an `Err`.
+/// Classifies what differs between the target and `last` over `segments`, with `bases` as the
+/// states the undone changes left: a path or branch any of them changed from the target is the
+/// undo's own, so another actor's later touch of it is a conflict, never kept. Any read that
+/// fails or runs out of time is an `Err`.
 fn classify(
     store: &SnapshotStore,
     input: &OverlapInput<'_>,
-    base: &Point<'_>,
+    bases: &[Point<'_>],
     segments: &[Segment<'_>],
     last: &str,
 ) -> Result<OverlapReport, CaptureError> {
@@ -540,9 +559,11 @@ fn classify(
     let mut seg_refs: Vec<Option<BTreeSet<String>>> = segments.iter().map(|_| None).collect();
 
     for w in input.worktrees {
-        let by_undone = changes(store, input, input.target, base.id, &w.key)?;
-        undone_paths.extend(by_undone.paths.into_iter().map(|p| (w.key.clone(), p)));
-        undone_refs.extend(by_undone.refs);
+        for base in bases {
+            let by_undone = changes(store, input, input.target, base.id, &w.key)?;
+            undone_paths.extend(by_undone.paths.into_iter().map(|p| (w.key.clone(), p)));
+            undone_refs.extend(by_undone.refs);
+        }
         let to_last = changes(store, input, input.target, last, &w.key)?;
         final_refs.get_or_insert(to_last.refs);
         for (i, seg) in segments.iter().enumerate() {
