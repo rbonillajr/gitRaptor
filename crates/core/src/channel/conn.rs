@@ -57,6 +57,7 @@ use gitraptor_git::{ReaderOptions, RepoReader};
 use super::audit_view;
 use super::authz::{AcceptedPeer, ChainLink, Verdict, check_reserved};
 use super::bus::{Outbox, Subscribed};
+use super::mcp_conflicts;
 use super::mcp_status;
 use super::peer::{ProcInfo, peer_cred, process_cwd};
 use super::requester::{self, Resolution};
@@ -1024,6 +1025,12 @@ impl Connection<'_> {
                 let result = request
                     .params::<methods::McpStatusParams>()
                     .and_then(|params| self.mcp_status(params));
+                self.reply(&request.id, result);
+            }
+            methods::MCP_CONFLICTS => {
+                let result = request
+                    .params::<methods::McpConflictsParams>()
+                    .and_then(|params| self.mcp_conflicts(params));
                 self.reply(&request.id, result);
             }
             methods::REGISTRATION_REGISTER => {
@@ -2039,6 +2046,10 @@ impl Connection<'_> {
             .as_deref()
             .map(|cursor| self.cursor_entry(cursor, &repo.repo_id))
             .transpose()?;
+        // A cursor of `mcp.conflicts` is not one of this list.
+        if matches!(entry, Some(mcp_status::CursorEntry::Conflicts { .. })) {
+            return Err(ErrorObject::new(code::NOT_FOUND, "cursor not found"));
+        }
 
         let action = matches!(who.actor, gitraptor_api::Actor::Unattributed)
             .then_some(methods::McpStatusAction::RegisterToWrite);
@@ -2107,6 +2118,149 @@ impl Connection<'_> {
         }
         status.repo = Some(repo_part);
         Ok(status)
+    }
+
+    /// `mcp.conflicts` (US-MCP-016): the pairs the predictor published for the caller's
+    /// worktree, or for its repo, read from the published state only. The checks go in the order
+    /// of `mcp.status`: identity, scope, allowlist, availability, cursor. Every refusal before
+    /// the answer carries no data of any repo.
+    fn mcp_conflicts(
+        &self,
+        params: methods::McpConflictsParams,
+    ) -> Result<methods::McpConflicts, ErrorObject> {
+        use gitraptor_api::mcp_view::{MCP_BYTES_PER_TOKEN, MCP_FIT_BYTES, MCP_PAGE_TOKENS};
+        use methods::{McpConflictsScope, McpScopeReason};
+
+        self.resolve()?;
+        let cwd =
+            process_cwd(self.peer.pid).and_then(|p| gitraptor_git::paths::canonicalize(&p).ok());
+        self.resolve()?;
+        let (_, shared) = self.ctx.bus.snapshot();
+        let last = self.mcp_last.lock().ok().and_then(|last| last.clone());
+        let (r, located) =
+            match mcp_conflicts::locate_conflicts(cwd.as_deref(), &shared.repos, last.as_ref()) {
+                mcp_conflicts::ConflictsLocated::Outside => {
+                    return Err(scope_refused(ScopeError::NotObserved));
+                }
+                mcp_conflicts::ConflictsLocated::Missing { repo } => (repo, None),
+                mcp_conflicts::ConflictsLocated::RepoOnly { repo } => (repo, Some(None)),
+                mcp_conflicts::ConflictsLocated::Worktree { repo, worktree } => {
+                    (repo, Some(Some(worktree)))
+                }
+            };
+        let repo = shared
+            .repos
+            .get(r)
+            .ok_or_else(|| scope_refused(ScopeError::NotObserved))?;
+        let allowed = crate::timemachine::protected::McpAllowlist::allows(
+            self.ctx.mcp_repos.as_ref(),
+            &repo.repo_id,
+        );
+        // The allowlist answers before anything is read from the disk for this repo.
+        if !allowed {
+            return Err(scope_refused(ScopeError::NotAllowlisted));
+        }
+        let Some(located) = located else {
+            return Err(mcp_unavailable(true, McpUnavailable::WorktreeMissing));
+        };
+        let worktree = match located {
+            Some(w) => {
+                let worktree = repo
+                    .worktrees
+                    .get(w)
+                    .ok_or_else(|| scope_refused(ScopeError::NotObserved))?;
+                let facts = mcp_status::facts(repo, w, &crate::observe::home_folders());
+                let admitted = mcp_status::admit(allowed, repo, w, &facts);
+                self.remember_scope(repo, worktree);
+                match admitted {
+                    Err(mcp_status::Refusal::NotAllowlisted) => {
+                        return Err(scope_refused(ScopeError::NotAllowlisted));
+                    }
+                    Err(mcp_status::Refusal::Unavailable(reason)) => {
+                        return Err(mcp_unavailable(true, reason));
+                    }
+                    Ok(()) => Some(worktree),
+                }
+            }
+            None => {
+                if repo.state == gitraptor_api::messages::RepoStateView::Unavailable {
+                    return Err(mcp_unavailable(true, McpUnavailable::RepoUnreadable));
+                }
+                if mcp_status::owned_by_me(&[Path::new(repo.path.raw())]) == Some(false) {
+                    return Err(mcp_unavailable(true, McpUnavailable::OtherOwner));
+                }
+                None
+            }
+        };
+        let own_root = worktree.map(|w| PathBuf::from(w.path.raw()));
+        let (scope, root, after) = match params.cursor.as_deref() {
+            Some(cursor) => match self.cursor_entry(cursor, &repo.repo_id)? {
+                mcp_status::CursorEntry::Conflicts {
+                    scope, root, after, ..
+                } => (scope, root, Some(after)),
+                _ => return Err(ErrorObject::new(code::NOT_FOUND, "cursor not found")),
+            },
+            None => {
+                let scope = match own_root {
+                    Some(_) => params.scope.unwrap_or_default(),
+                    None => McpConflictsScope::Repo,
+                };
+                let root = own_root
+                    .clone()
+                    .filter(|_| scope == McpConflictsScope::Worktree);
+                (scope, root, None)
+            }
+        };
+
+        let store = &self.ctx.prediction;
+        let details = crate::predict::store::predict_read(store, &repo.repo_id, root.as_deref());
+        let page = mcp_conflicts::page(
+            &details,
+            root.as_deref(),
+            repo.base.name.as_ref(),
+            after.as_ref(),
+            now_ms(),
+        );
+        let (keys, pairs): (Vec<_>, Vec<_>) = page.pairs.into_iter().unzip();
+        let mut answer = methods::McpConflicts {
+            repo_id: repo.repo_id.clone(),
+            repo_state: repo.state,
+            worktree: worktree.map(|w| mcp_status::worktree_name(w.path.raw())),
+            scope,
+            reason: own_root
+                .is_none()
+                .then_some(McpScopeReason::CallerWorktreeUnknown),
+            limits: gitraptor_api::prediction::LimitCode::ALL.to_vec(),
+            unpublished: !store.active() || !store.published(&repo.repo_id),
+            counts: page.counts,
+            pairs,
+            truncated: page.more,
+            cursor: None,
+        };
+        gitraptor_api::mcp_view::fit_conflicts(
+            &mut answer,
+            MCP_PAGE_TOKENS * MCP_BYTES_PER_TOKEN,
+            MCP_FIT_BYTES,
+        );
+        // Where the next page starts: after the last pair kept, whether the cut or the page
+        // bound stopped it.
+        let kept = answer.pairs.len();
+        let next = if kept < keys.len() || page.more {
+            kept.checked_sub(1).and_then(|last| keys.get(last)).cloned()
+        } else {
+            None
+        };
+        answer.cursor = match next {
+            Some(after) => Some(self.mint_cursor(mcp_status::CursorEntry::Conflicts {
+                repo_id: repo.repo_id.clone(),
+                scope,
+                root,
+                after,
+            })?),
+            None => None,
+        };
+        answer.truncated = answer.cursor.is_some();
+        Ok(answer)
     }
 
     /// Remembers the scope an `mcp.status` was served for (see `mcp_last`).

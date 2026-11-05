@@ -100,7 +100,6 @@ impl PredictionStore {
 
     /// Whether the predictor published `repo_id`, even with no pairs: an unpublished repo is not
     /// one without conflicts.
-    #[allow(dead_code)] // read by `mcp.conflicts`, not wired into the dispatch yet
     pub(crate) fn published(&self, repo_id: &str) -> bool {
         self.lock().contains_key(repo_id)
     }
