@@ -763,6 +763,18 @@ mod tests {
         );
     }
 
+    /// ADR-GRP-015 § 1: the daemon process runs as a standard one; the work classes lower its
+    /// threads, never the whole process (no `Background`/`Adaptive` type, no `Nice`).
+    #[test]
+    fn the_plist_runs_as_standard() {
+        let plist = launch_agent_plist(Path::new("/Applications/Git Raptor/raptor"), &[]);
+        assert!(plist.contains("<key>ProcessType</key>\n  <string>Standard</string>\n"));
+        assert_eq!(plist.matches("<key>ProcessType</key>").count(), 1);
+        assert!(!plist.contains("<key>Nice</key>"));
+        assert!(!plist.contains("<key>LowPriorityIO</key>"));
+        assert!(!plist.contains("<key>LowPriorityBackgroundIO</key>"));
+    }
+
     #[test]
     fn the_run_value_quotes_a_path_with_spaces() {
         let exe = Path::new(r"C:\Program Files\GitRaptor\raptor.exe");
