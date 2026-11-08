@@ -4,7 +4,7 @@ title: "Dev Spec — El trabajo que el desarrollador hace en su editor nunca se 
 type: dev-spec
 status: draft
 created: 2026-10-28
-updated: 2026-10-28
+updated: 2026-11-08
 story: US-GRP-008
 feature: motor-local
 domain: GRP
@@ -12,7 +12,7 @@ scope: backend
 frontend_surface: false
 stack: rust
 profile: backend-service
-tooling: [cargo]
+tooling: [cargo, git]
 related:
   context: ../context.md
   story: ../user-stories/US-GRP-008-editor-humano-sin-atribuir.md
@@ -94,13 +94,13 @@ Esta ficha cubre lo que falta:
 
 ## ⚠️ Gaps y violaciones de la constitución
 
-| # | Gap | Bloquea | Acción | Owner |
+| # | Gap | Severidad | Acción | Owner |
 |---|---|---|---|---|
-| G1 | **S2 (transcripts) no entra.** DS-US-GRP-007 D2 asignó el adaptador de transcripts (S2a y S2b) a esta historia, y SPIKE-GRP-001 dejó S2a y S2b abiertas "hasta US-GRP-008". Ningún escenario lo exige: los tres son negativos. S2b es además la única señal que podría atribuir un cambio humano a Claude Code (mismo archivo dentro de Δ, ADR-GRP-012, Consecuencias). **Cerrado por Q52**: S2 sale del MVP | No | Enmiendas de ADR-GRP-012, SPIKE-GRP-001 y DS-US-GRP-007 D2 aplicadas (2026-10-28) | — |
-| G2 | **La historia pide un valor que el contrato no tiene.** "El cambio figura como sin atribuir" necesita un dato publicado; la TUI y la CLI no pueden calcularlo (escenario "Un campo que el motor no publica no se calcula en la TUI" de US-CKP-001). Lo resuelve D2 | No | — | — |
-| G3 | **Texto "sin atribuir" frente a "sin agente".** La CLI ya presenta `Actor::Unattributed` con `actor.unattributed` = "sin agente" / "no agent" (`apps/cli/i18n/*/sessions.txt`), y la historia dice "sin atribuir". Los tests comprueban el valor del contrato (`unattributed`) y la clave `actor.unattributed`, no el literal | No | El PO confirma el texto o pide cambiar la clave en otra tarea | PO |
-| G4 | **La pista `single-session` sobre un commit del desarrollador.** Si el `git` del desarrollador terminó antes de la muestra, su commit queda "sin atribuir; inferido: Claude Code" (Enmienda 2026-10-06 de ADR-GRP-012). El escenario 3 se cumple (el actor es "sin atribuir"), **Cerrado por Q54**: la pista no es atribución; PO y Arquitecto aceptan el riesgo, abierto a veto de Rene | No | — | — |
-| G5 | **El hueco de S3 contradice BR-EDGE-004.** Un commit humano sin `git` visible junto a un `git` de solo lectura de Claude Code sale de Claude Code (Contexto, punto 2). Lo cierra D4; el riesgo estaba declarado en DS-US-GRP-007 § 4 y en el comentario de `detect/mod.rs` | No (lo cierra esta ficha) | — | — |
+| G1 | **S2 (transcripts) no entra.** DS-US-GRP-007 D2 asignó el adaptador de transcripts (S2a y S2b) a esta historia, y SPIKE-GRP-001 dejó S2a y S2b abiertas "hasta US-GRP-008". Ningún escenario lo exige: los tres son negativos. S2b es además la única señal que podría atribuir un cambio humano a Claude Code (mismo archivo dentro de Δ, ADR-GRP-012, Consecuencias). **Cerrado por Q52**: S2 sale del MVP | Informativo (cerrado) | Enmiendas de ADR-GRP-012, SPIKE-GRP-001 y DS-US-GRP-007 D2 aplicadas (2026-10-28) | — |
+| G2 | **La historia pide un valor que el contrato no tiene.** "El cambio figura como sin atribuir" necesita un dato publicado; la TUI y la CLI no pueden calcularlo (escenario "Un campo que el motor no publica no se calcula en la TUI" de US-CKP-001). Lo resuelve D2 | Informativo (cerrado) | — | — |
+| G3 | **Texto "sin atribuir" frente a "sin agente".** La CLI ya presenta `Actor::Unattributed` con `actor.unattributed` = "sin agente" / "no agent" (`apps/cli/i18n/*/sessions.txt`), y la historia dice "sin atribuir". Los tests comprueban el valor del contrato (`unattributed`) y la clave `actor.unattributed`, no el literal | Informativo (cerrado) | El PO confirma el texto o pide cambiar la clave en otra tarea | PO |
+| G4 | **La pista `single-session` sobre un commit del desarrollador.** Si el `git` del desarrollador terminó antes de la muestra, su commit queda "sin atribuir; inferido: Claude Code" (Enmienda 2026-10-06 de ADR-GRP-012). El escenario 3 se cumple (el actor es "sin atribuir"), **Cerrado por Q54**: la pista no es atribución; PO y Arquitecto aceptan el riesgo, abierto a veto de Rene | Informativo (cerrado) | — | — |
+| G5 | **El hueco de S3 contradice BR-EDGE-004.** Un commit humano sin `git` visible junto a un `git` de solo lectura de Claude Code sale de Claude Code (Contexto, punto 2). Lo cierra D4; el riesgo estaba declarado en DS-US-GRP-007 § 4 y en el comentario de `detect/mod.rs` | Informativo (lo cierra esta ficha) | — | — |
 
 ---
 
@@ -295,6 +295,33 @@ apps/cli/tests/editor_unattributed_windows.rs    ← CREATE  (T005, Windows)
 docs/…                                           ← MODIFY  (T006)
 ```
 
+## Contratos compartidos
+
+### Tipos y datos compartidos
+
+```rust
+// crates/api/src/methods/observation.rs (T001)
+pub const CAP_OBSERVATION_CHANGE_ATTRIBUTION: Capability = Capability::new("observation.change-attribution");
+
+// crates/api/src/messages.rs (T001) — campo nuevo de WorktreeView
+#[serde(default, skip_serializing_if = "Option::is_none")]
+pub changes_actor: Option<Actor>,   // Actor existente: Agent | Unattributed
+
+// crates/core/src/change_attribution.rs (T002) — nuevo
+pub fn changes_actor(counts: &ChangeCounts) -> Option<Actor>;
+```
+
+### Ciclos de vida (DI)
+
+_No aplica — la función es pura y el campo se calcula al publicar; no hay estado ambiente ni servicio nuevo._
+
+### Firmas del stack
+
+```rust
+impl WorktreeView { pub fn without_change_attribution(&mut self); }          // messages.rs
+impl Outbox { pub fn set_without_change_attribution(&self, without: bool); } // channel/bus.rs
+```
+
 ## Contrato de API
 
 | Elemento | Forma | Quién lo recibe |
@@ -303,6 +330,18 @@ docs/…                                           ← MODIFY  (T006)
 | `WorktreeView.changes_actor` | `Option<Actor>`: ausente si el worktree está limpio, `unavailable` o la conexión no tiene la capacidad; si no, `{"actor":"unattributed"}` | `engine.snapshot`, `scope.snapshot`, `repo.add`, `worktree.state` |
 
 Sin métodos, errores ni eventos nuevos. Sin persistencia nueva: el actor de los cambios se calcula al publicar y no se guarda (Enmienda Cockpit de ADR-GRP-013: las rutas sin commitear no se persisten).
+
+### Forma del error y del cuerpo de respuesta
+
+_No aplica — sin métodos, errores ni eventos nuevos._
+
+### Forma de la configuración
+
+_No aplica — la ficha no añade configuración._
+
+### Valores numéricos
+
+_No aplica — la ficha no añade topes ni plazos; `changes_actor` no ocupa el tope `MAX_WORKTREE_CHANGE_BYTES`._
 
 ## Modelo de datos
 
