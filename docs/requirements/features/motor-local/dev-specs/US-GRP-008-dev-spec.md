@@ -2,7 +2,7 @@
 id: DS-US-GRP-008
 title: "Dev Spec — El trabajo que el desarrollador hace en su editor nunca se atribuye a Claude Code"
 type: dev-spec
-status: draft
+status: implemented
 created: 2026-10-28
 updated: 2026-11-08
 story: US-GRP-008
@@ -64,6 +64,8 @@ tags: [motor-local, atribucion, editor-humano, sin-atribuir, s3, br-edge-004, cl
 ---
 
 # DS-US-GRP-008 · El editor del desarrollador nunca se atribuye a Claude Code
+
+Implementado en: PR #315 (T003) y PR #322 (T001, T002, T004, T005 y T006); pendiente multiplataforma en XP-68.
 
 ## Contexto rápido
 
