@@ -454,7 +454,7 @@ fn main() {
     ));
 
     // ---- saturated machine (RES-07): the load runs until the end of the bench ---------------
-    let _load = if o.saturated {
+    let load = if o.saturated {
         let cores = cpu_load::logical_cores();
         match CpuLoad::start(cores) {
             Ok(load) => {
@@ -716,6 +716,8 @@ fn main() {
     let report_path = root.join(format!("results-{}.md", profile.name));
     std::fs::write(&report_path, &r.0).unwrap();
     println!("\ninforme: {}", report_path.display());
+    // `process::exit` runs no destructor: the load is killed first, never left on every core.
+    drop(load);
     if failed {
         std::process::exit(1);
     }
