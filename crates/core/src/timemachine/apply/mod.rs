@@ -438,6 +438,9 @@ impl<'a> Applier<'a> {
         };
 
         // ---- 1. preconditions and loading (read-only) ----------------------------------
+        if let Err(r) = check_selective(plan) {
+            return reject(vec![r]);
+        }
         let refusals = self.check_preconditions(plan);
         if !refusals.is_empty() {
             return reject(refusals);
@@ -448,6 +451,7 @@ impl<'a> Applier<'a> {
             &plan.prior_snapshot,
             &plan.worktrees,
             &plan.refs,
+            plan.selective.as_ref(),
         ) {
             Ok(l) => l,
             Err(r) => return reject(vec![r]),
@@ -985,6 +989,46 @@ impl<'a> Applier<'a> {
         }
         Ok(())
     }
+}
+
+/// A selective plan that its own rules forbid: its caller is wrong. Debug builds stop here;
+/// release builds refuse, and nothing is changed either way.
+fn programming_error(snapshot: &str, reason: String) -> Refusal {
+    if cfg!(debug_assertions) {
+        panic!("selective application: {reason}");
+    }
+    Refusal::InvalidSnapshot {
+        snapshot: snapshot.to_owned(),
+        reason,
+    }
+}
+
+/// The rules of a selective plan that need no snapshot: its content is the prior's
+/// (`target_snapshot` is the prior), no worktree keeps paths (everything outside the selection
+/// is kept by construction), the refs that move are exactly its own, and it names only worktrees
+/// of the plan. A path the prior excludes is checked when the prior is loaded.
+fn check_selective(plan: &ApplyPlan) -> Result<(), Refusal> {
+    let Some(s) = &plan.selective else {
+        return Ok(());
+    };
+    let fail = |reason: String| Err(programming_error(&plan.prior_snapshot, reason));
+    if plan.target_snapshot != plan.prior_snapshot {
+        return fail("the target of a selective plan is its prior".into());
+    }
+    if plan.worktrees.iter().any(|w| !w.keep.is_empty()) {
+        return fail("selective and keep together".into());
+    }
+    let RefScope::Only(names) = &plan.refs else {
+        return fail("the refs of a selective plan are only its own".into());
+    };
+    if !names.iter().eq(s.refs.keys()) {
+        return fail("the ref scope differs from the selective refs".into());
+    }
+    let known = |key: &String| plan.worktrees.iter().any(|w| &w.key == key);
+    if let Some(key) = s.paths.keys().chain(s.head.keys()).find(|k| !known(k)) {
+        return fail(format!("selective worktree {key:?} is not in the plan"));
+    }
+    Ok(())
 }
 
 fn depth(path: &str) -> usize {
