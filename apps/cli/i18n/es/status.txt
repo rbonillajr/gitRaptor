@@ -19,6 +19,7 @@ status.operation-bisect = bisect en curso
 status.unmerged = {count} rutas sin fusionar
 status.clean = sin cambios
 status.changes = {total} cambios sin commitear: {staged} preparados, {unstaged} sin preparar, {untracked} sin rastrear
+status.changes-actor = {changes} · {actor}
 status.change-staged = preparado {kind} {path}
 status.change-unstaged = sin preparar {kind} {path}
 status.change-untracked = sin rastrear {path}

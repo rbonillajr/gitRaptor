@@ -19,6 +19,7 @@ status.operation-bisect = bisect in progress
 status.unmerged = {count} unmerged paths
 status.clean = no changes
 status.changes = {total} uncommitted changes: {staged} staged, {unstaged} not staged, {untracked} untracked
+status.changes-actor = {changes} · {actor}
 status.change-staged = staged {kind} {path}
 status.change-unstaged = not staged {kind} {path}
 status.change-untracked = untracked {path}

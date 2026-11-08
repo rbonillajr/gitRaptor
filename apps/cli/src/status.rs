@@ -8,13 +8,13 @@
 use std::fmt::Write as _;
 use std::path::Path;
 
-use gitraptor_api::Untrusted;
 use gitraptor_api::messages::{
     BaseBranchView, BaseStatusView, ChangeAreaView, ChangeCounts, CommitCountView, DivergenceView,
     FileChangeView, HeadView, OperationKindView, RepoStateView, RepoView, SessionStateView,
     SessionView, Snapshot, UnavailableReason, WorktreeStatus, WorktreeView,
 };
 use gitraptor_api::timemachine::KeptTempsView;
+use gitraptor_api::{Actor, Untrusted};
 use serde::Serialize;
 
 use crate::i18n::{Tr, t};
@@ -248,7 +248,11 @@ fn worktree_text(out: &mut String, w: &WorktreeView, base: &str, verbose: bool, 
                 let _ = writeln!(out, "    {}", tr.t("status.clean", &[]));
                 return false;
             }
-            let _ = writeln!(out, "    {}", counts_text(counts, tr));
+            let _ = writeln!(
+                out,
+                "    {}",
+                counts_text(counts, w.changes_actor.as_ref(), tr)
+            );
             // Staged first, then not staged, then untracked; the engine's order within each.
             let mut ordered: Vec<&FileChangeView> = changes.iter().collect();
             ordered.sort_by_key(|c| match c.area {
@@ -346,8 +350,10 @@ fn head_text(head: &HeadView, tr: Tr) -> String {
     }
 }
 
-fn counts_text(counts: &ChangeCounts, tr: Tr) -> String {
-    tr.t(
+/// The changes line, with who they are attributed to when the engine says (a daemon without
+/// `observation.change-attribution` leaves it as it was).
+fn counts_text(counts: &ChangeCounts, actor: Option<&Actor>, tr: Tr) -> String {
+    let changes = tr.t(
         "status.changes",
         &[
             ("total", &counts.total()),
@@ -355,7 +361,17 @@ fn counts_text(counts: &ChangeCounts, tr: Tr) -> String {
             ("unstaged", &counts.unstaged),
             ("untracked", &counts.untracked),
         ],
-    )
+    );
+    match actor {
+        Some(actor) => tr.t(
+            "status.changes-actor",
+            &[
+                ("changes", &changes),
+                ("actor", &crate::events::actor(actor)),
+            ],
+        ),
+        None => changes,
+    }
 }
 
 fn change_text(c: &FileChangeView, tr: Tr) -> String {
@@ -429,6 +445,10 @@ struct WorktreeJson {
     /// Paths with unresolved conflicts; absent when there are none.
     #[serde(skip_serializing_if = "is_zero")]
     unmerged_paths: u32,
+    /// Who the uncommitted changes are attributed to, as in `raptor events --json`; absent
+    /// without changes or from a daemon without `observation.change-attribution`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    changes_actor: Option<Actor>,
 }
 
 fn is_zero(n: &u32) -> bool {
@@ -527,6 +547,7 @@ fn worktree_json(w: &WorktreeView) -> WorktreeJson {
         shared: false,
         operation: w.operation.as_ref().map(wire),
         unmerged_paths: w.unmerged_paths,
+        changes_actor: w.changes_actor.clone(),
     };
     match &w.status {
         WorktreeStatus::Unavailable { reason } => out.unavailable_reason = Some(wire(reason)),
@@ -576,6 +597,7 @@ mod tests {
             detached_at: None,
             operation: None,
             unmerged_paths: 0,
+            changes_actor: None,
             path: Untrusted::new(path),
             main,
             admin_name: None,
