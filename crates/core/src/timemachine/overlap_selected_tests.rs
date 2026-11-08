@@ -13,14 +13,12 @@ use std::time::{Duration, Instant};
 use super::*;
 use crate::profile::ProfileDirs;
 use crate::timemachine::engine::RawGitEvent;
-use crate::timemachine::oplog::{
-    OpRef, Oplog, Requester, RequesterOrigin, SnapshotLevel,
-};
+use crate::timemachine::oplog::{OpRef, Oplog, Requester, RequesterOrigin, SnapshotLevel};
 use crate::timemachine::store::{CaptureRequest, SnapshotStore, WorktreeScope};
 use crate::timemachine::undo_agent::{Subject as Subj, Value};
 use gitraptor_api::messages::GitEventKind;
-use gitraptor_git::tm_write::files::Kind;
 use gitraptor_git::Oid;
+use gitraptor_git::tm_write::files::Kind;
 use gitraptor_testkit::Fixture;
 
 const REPO_ID: &str = "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0";
@@ -260,7 +258,11 @@ fn another_actors_commit_on_the_branch_after_the_first_change_conflicts() {
         "TMC011-OVERLAP-SUBJECT: another actor's commit on the branch after the agent's first \
          change is a conflict on the branch: {report:#?}"
     );
-    assert_eq!(on_path(&report), 0, "the file itself is as the agent left it");
+    assert_eq!(
+        on_path(&report),
+        0,
+        "the file itself is as the agent left it"
+    );
 }
 
 #[test]
