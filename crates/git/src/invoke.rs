@@ -588,6 +588,9 @@ impl Invoker {
             command.creation_flags(CREATE_NO_WINDOW);
         }
 
+        #[cfg(target_os = "macos")]
+        lower_background_child(&mut command);
+
         let mut child = command
             .spawn()
             .map_err(|e| ReadError::Unavailable(format!("could not start git: {e}")))?;
@@ -710,6 +713,18 @@ impl Output {
 /// Git's message when `safe.directory` rejects a repository.
 pub(crate) fn is_dubious_ownership(stderr: &str) -> bool {
     stderr.contains("detected dubious ownership")
+}
+
+/// A `git` started by background work inherits its thread's class (ADR-GRP-015 § 1, D9): when
+/// the calling thread runs below `Default`, the child lowers its own nice and disk I/O policy
+/// before `exec`. Any other thread installs nothing, so the child keeps `posix_spawn`.
+/// XP-45: macOS only on purpose; elsewhere the child inherits the priority as is (D4).
+#[cfg(target_os = "macos")]
+fn lower_background_child(command: &mut Command) {
+    use gitraptor_macsys::qos::{self, QosClass};
+    if let Some(class @ (QosClass::Utility | QosClass::Background)) = qos::current() {
+        qos::lower_child(command, class);
+    }
 }
 
 #[cfg(test)]
