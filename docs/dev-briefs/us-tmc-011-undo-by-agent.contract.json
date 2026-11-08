@@ -1,0 +1,359 @@
+{
+  "version": 1,
+  "source": [
+    "docs/requirements/features/time-machine/dev-specs/US-TMC-011-undo-por-agente.md",
+    "docs/dev-briefs/us-tmc-011-undo-by-agent.2-plan.md"
+  ],
+  "rigor": "alto",
+  "goal": {
+    "intent": "Que el desarrollador deshaga, en su worktree y como un solo undo recuperable, solo lo que hizo un agente en un periodo (raptor undo --agent claude-code --since 20m), sin tocar nunca el trabajo de otro actor: deshacer de menos, nunca de más (NFR-01, criterio 2 de M2).",
+    "endState": "timemachine.undo con agent (y since opcional) elige por atribución vigente leída una vez al planificar las operaciones del agente en el periodo, devuelve cada ruta, rama y HEAD que cambiaron a su valor antes del primer cambio con el aplicador en modo selectivo, se detiene con overlap si otro actor cambió después un sujeto, rechaza la petición entera con not-selectable, attribution-unavailable u other-actor cuando corresponde, deja un previo y se rehace con redo; un undo sin agente no baja por debajo de un undo selectivo activo (selective-undo-below); raptor undo --agent <id> [--since] [--json] lo expone con textos en/es; operation_id sigue en NOT_IMPLEMENTED.",
+    "nonGoals": [
+      "atribuir ediciones sin commit a un agente (US-GRP-008)",
+      "reescribir historial para quitar commits intercalados",
+      "--agent unattributed",
+      "elegir el agente en la TUI (apps/cli/src/tui/ sin cambios)",
+      "undo por operation_id",
+      "on_remote (US-TMC-014, no está en main)",
+      "cerrar la historia, release-status y xplat-pendientes (T011, los hace el worker al final)"
+    ]
+  },
+  "criteria": [
+    {
+      "id": "TMC011-WIRE",
+      "statement": "T001: agent y since se combinan y operation_id excluye a los dos; agent=unattributed da INVALID_PARAMS; not-selectable, selective-undo-below y attribution-unavailable tienen su forma de cable y van al final de TmRejectReason",
+      "verify": "cargo test -p gitraptor-api --lib timemachine_agent_tests",
+      "layer": "runtime",
+      "tests": [
+        "crates/api/src/timemachine_agent_tests.rs"
+      ]
+    },
+    {
+      "id": "TMC011-ATTRIBUTION",
+      "statement": "T002: raw_events lleva in_gap, inferred, old_commit y new_commit del evento del motor; session_attribution da el actor vigente de cada sesión y sigue una corrección",
+      "verify": "cargo test -p gitraptor-core --lib daemon::tm::attribution_tests",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/daemon/tm_attribution_tests.rs"
+      ]
+    },
+    {
+      "id": "TMC011-SELECTOR",
+      "statement": "T003: un id de sesión elige esa sesión; un nombre elige por la atribución vigente con la regla de timeline --agent (claude-code casa con cada grafía que el timeline casa); unattributed nunca se elige",
+      "verify": "cargo test -p gitraptor-core --lib timemachine::agent_selector::tests",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/timemachine/agent_selector_tests.rs"
+      ]
+    },
+    {
+      "id": "TMC011-TREE-DIFF",
+      "statement": "T004: commit_tree_diff devuelve las entradas (ruta, antes, después) de la diferencia de árboles entre dos commits, sin tope ni recorte de rutas",
+      "verify": "cargo test -p gitraptor-git --lib changed_paths::tree_diff_tests",
+      "layer": "runtime",
+      "tests": [
+        "crates/git/src/changed_paths_tree_diff_tests.rs"
+      ]
+    },
+    {
+      "id": "TMC011-SET",
+      "statement": "T004: el conjunto son las operaciones no deshechas del agente con momento en el periodo; lo sin atribuir y lo de otros agentes nunca entra; los dueños salen de una sola lectura de session_attribution",
+      "verify": "cargo test -p gitraptor-core --lib -- --exact timemachine::undo_agent::tests::the_set_is_the_agents_operations_in_the_period timemachine::undo_agent::tests::unattributed_and_other_agents_never_enter timemachine::undo_agent::tests::owners_come_from_one_attribution_read",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/timemachine/undo_agent_tests.rs"
+      ]
+    },
+    {
+      "id": "TMC011-GUARD-4.1",
+      "statement": "T004 guard ⛔4.1: un solicitante agente que nombra a otro recibe other-actor antes de calcular el conjunto (el registro del rechazo lleva Target::Undo vacío)",
+      "verify": "cargo test -p gitraptor-core --lib -- --exact timemachine::undo_agent::tests::an_agent_naming_another_is_rejected_before_the_set",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/timemachine/undo_agent_tests.rs"
+      ]
+    },
+    {
+      "id": "TMC011-GUARD-4.2",
+      "statement": "T004 guard ⛔4.2: un evento crudo con in_gap nunca entra al conjunto aunque lleve sesión del agente",
+      "verify": "cargo test -p gitraptor-core --lib -- --exact timemachine::undo_agent::tests::a_gap_event_never_enters",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/timemachine/undo_agent_tests.rs"
+      ]
+    },
+    {
+      "id": "TMC011-NOT-SELECTABLE",
+      "statement": "T004 (D10): un evento cuyo worktree infirió el motor rechaza la petición entera con not-selectable",
+      "verify": "cargo test -p gitraptor-core --lib -- --exact timemachine::undo_agent::tests::an_inferred_worktree_event_is_not_selectable",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/timemachine/undo_agent_tests.rs"
+      ]
+    },
+    {
+      "id": "TMC011-CHANGE",
+      "statement": "T004 (D-TMC-31): el cambio de un commit es su diferencia de árboles más su rama; el destino de una ruta es su valor antes del cambio más antiguo del conjunto que la tocó",
+      "verify": "cargo test -p gitraptor-core --lib -- --exact timemachine::undo_agent::tests::a_commit_change_is_its_tree_diff timemachine::undo_agent::tests::the_target_of_a_path_is_before_the_oldest_change",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/timemachine/undo_agent_tests.rs"
+      ]
+    },
+    {
+      "id": "TMC011-APPLY-SELECTIVE",
+      "statement": "T005: con ApplyPlan.selective el aplicador escribe solo sus rutas (None borra), mueve solo sus refs y nada más; selective con keep o con una ruta excluida por el previo no cambia nada; sin selective todo es como hoy",
+      "verify": "cargo test -p gitraptor-core --test tm_apply_selective",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/tm_apply_selective.rs"
+      ]
+    },
+    {
+      "id": "TMC011-OVERLAP-SUBJECT",
+      "statement": "T006: una edición posterior al último cambio del agente es conflicto; los commits del propio agente sobre un archivo no; un commit de otro actor en la rama tras el primer cambio sí; un cambio anterior de otro actor no; un punto anterior al último cambio deja el sujeto para la fase 2",
+      "verify": "cargo test -p gitraptor-core --lib timemachine::overlap::selected_tests",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/timemachine/overlap_selected_tests.rs"
+      ]
+    },
+    {
+      "id": "TMC011-BARRIER",
+      "statement": "T007 (D6): un undo selectivo pone una barrera con el número de historia más alto de lo hecho; lo de otro actor posterior al último objetivo queda debajo; lo nuevo encima; su redo la quita y devuelve done al orden de historia; un undo por debajo se rechaza",
+      "verify": "cargo test -p gitraptor-core --lib timemachine::oplog::stack::barrier_tests",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/timemachine/oplog/stack_barrier_tests.rs"
+      ]
+    },
+    {
+      "id": "TMC011-CLI-TEXT",
+      "statement": "T009: undo.done-agent, undo.reason.nothing-of-agent, undo.reason.not-selectable, undo.reason.selective-undo-below, undo.reason.attribution-unavailable y undo.invalid-agent existen en en y es con sus marcadores; el texto en/es de undo.reason.selective-undo-below nombra las dos salidas: raptor redo y raptor timeline (escenario 6)",
+      "verify": "cargo test -p gitraptor-cli --bin raptor -- undo::agent_tests",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/src/undo/agent_tests.rs"
+      ]
+    },
+    {
+      "id": "TMC011-SERVED",
+      "statement": "T008: timemachine.undo con agent ya no responde NOT_IMPLEMENTED; con operation_id sí",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_011 -- --exact agent_is_served_and_operation_id_is_still_not_implemented",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_tmc_011.rs",
+        "crates/core/tests/us_tmc_011_common/mod.rs"
+      ]
+    },
+    {
+      "id": "TMC011-S1",
+      "statement": "Escenario 1: claude-1 hace dos commits (uno con su edición de api.rs) y hay una edición sin atribuir de README.md; el solicitante sin atribuir confirma; la rama vuelve a antes del primer commit, api.rs al contenido de antes en archivo e índice, README.md intacto; undone_operation_ids son los dos commits; el previo existe y verifica",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_011 -- --exact undoes_the_agents_commits_and_edits_only",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_tmc_011.rs",
+        "crates/core/tests/us_tmc_011_common/mod.rs"
+      ]
+    },
+    {
+      "id": "TMC011-S2",
+      "statement": "Escenario 2: un commit de claude-2 anterior al primero de claude-1 sigue en la rama con sus archivos; uno intercalado entre los de claude-1 detiene el undo con overlap en la rama y la huella igual (D-TMC-34)",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_011 -- --exact another_agents_commit_stays another_agents_commit_after_stops_on_the_branch",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_tmc_011.rs",
+        "crates/core/tests/us_tmc_011_common/mod.rs"
+      ]
+    },
+    {
+      "id": "TMC011-S3",
+      "statement": "Escenario 3: una sesión corregida a codex-1 ya no es claude-code (nothing-to-undo, huella igual) y --agent codex-1 la elige; retirada la corrección antes del undo, --agent claude-code la elige y sus commits se deshacen",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_011 -- --exact a_corrected_session_is_not_its_detected_agent a_withdrawn_correction_brings_the_session_back",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_tmc_011.rs",
+        "crates/core/tests/us_tmc_011_common/mod.rs"
+      ]
+    },
+    {
+      "id": "TMC011-S4",
+      "statement": "Escenario 4: los commits hechos con el motor parado (hueco) siguen tras un undo --agent cuyo periodo los incluye",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_011 -- --exact gap_commits_never_enter",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_tmc_011.rs",
+        "crates/core/tests/us_tmc_011_common/mod.rs"
+      ]
+    },
+    {
+      "id": "TMC011-S5-OTHER-ACTOR",
+      "statement": "Escenario 5: claude-1 como solicitante pide --agent <sesión de claude-2>: other-actor, huella igual, rechazo en el oplog sin conjunto",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_011 -- --exact an_agent_undoing_another_agent_is_rejected",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_tmc_011.rs",
+        "crates/core/tests/us_tmc_011_common/mod.rs"
+      ]
+    },
+    {
+      "id": "TMC011-S5-NOTHING",
+      "statement": "Escenario 5: un agente sin operaciones en el periodo da nothing-to-undo y la huella igual",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_011 -- --exact an_agent_without_operations_changes_nothing",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_tmc_011.rs",
+        "crates/core/tests/us_tmc_011_common/mod.rs"
+      ]
+    },
+    {
+      "id": "TMC011-TIMELINE-EQ",
+      "statement": "D2: el conjunto de undo --agent X --since D son exactamente las operaciones y eventos que timeline --agent X --since D muestra",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_011 -- --exact undo_takes_what_the_timeline_shows_for_the_agent",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_tmc_011.rs",
+        "crates/core/tests/us_tmc_011_common/mod.rs"
+      ]
+    },
+    {
+      "id": "TMC011-OVERLAP",
+      "statement": "Solape en integración: una edición posterior al último commit del agente detiene el undo con overlap; una edición sin capturar justo antes del undo lo detiene tras el previo (ready → rejected); huella igual. La fase 1 por sujeto (punto anterior al último cambio → fase 2, D8) la prueba TMC011-OVERLAP-SUBJECT",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_011 -- --exact an_edit_after_the_agents_last_commit_stops an_uncaptured_edit_just_before_stops_in_phase_2",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_tmc_011.rs",
+        "crates/core/tests/us_tmc_011_common/mod.rs"
+      ]
+    },
+    {
+      "id": "TMC011-S6-BARRIER",
+      "statement": "Escenario 6 (D-TMC-35): un undo sin agente por debajo de un undo selectivo activo se rechaza con selective-undo-below; el redo restaura el conjunto y quita la barrera; tras el redo, raptor undo deshace la operación más reciente; la variante de una operación de otro actor posterior al último cambio del agente se prueba en la pila (TMC011-BARRIER): en la misma rama, un commit así detiene antes el undo por agente con overlap (D-TMC-34)",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_011 -- --exact plain_undo_below_a_selective_undo_is_rejected redo_restores_the_set_and_lifts_the_barrier plain_undo_after_redo_takes_the_latest_operation",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_tmc_011.rs",
+        "crates/core/tests/us_tmc_011_common/mod.rs"
+      ]
+    },
+    {
+      "id": "TMC011-EXCLUDED",
+      "statement": "D7: el agente commitea una ruta que el perfil excluye de la captura: not-selectable desde lista, huella igual",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_011 -- --exact an_excluded_path_in_the_target_is_not_selectable",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_tmc_011.rs",
+        "crates/core/tests/us_tmc_011_common/mod.rs"
+      ]
+    },
+    {
+      "id": "TMC011-ATTR-AT-PLAN",
+      "statement": "D1: una corrección posterior al undo no cambia los ids que deshizo; el redo rehace los mismos",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_011 -- --exact a_correction_after_the_undo_does_not_change_what_it_undid",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_tmc_011.rs",
+        "crates/core/tests/us_tmc_011_common/mod.rs"
+      ]
+    },
+    {
+      "id": "TMC011-NO-ENGINE",
+      "statement": "D5: sin atribución del motor el undo por agente se rechaza con attribution-unavailable y nada cambia",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_011 -- --exact without_attribution_the_agent_undo_is_rejected",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_tmc_011.rs",
+        "crates/core/tests/us_tmc_011_common/mod.rs"
+      ]
+    },
+    {
+      "id": "TMC011-E2E-NOTHING",
+      "statement": "e2e (macOS): raptor undo --agent con un agente sin trabajo imprime undo.reason.nothing-of-agent con el periodo y 'en este worktree' en inglés y en español, sale con fallo y el repo no cambia",
+      "verify": "cargo test -p gitraptor-cli --test us_tmc_011_process -- --exact undo_agent_with_nothing_says_so_in_en_and_es",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/us_tmc_011_process.rs"
+      ]
+    },
+    {
+      "id": "TMC011-DEMO-M2",
+      "statement": "Demo M2 criterio 2 (macOS): 4 sesiones de Claude Code simuladas en 4 worktrees con commits; en una, raptor undo --agent claude-code --since 20m con confirmación en pty deshace su trabajo; la huella de los otros 3 worktrees y sus ramas no cambia; raptor redo lo devuelve",
+      "verify": "cargo test -p gitraptor-cli --test m2_demo_undo_agent -- --exact four_sessions_and_one_agent_undone",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/m2_demo_undo_agent.rs"
+      ]
+    }
+  ],
+  "suite": {
+    "command": "node tools/test/nextest-junit.mjs"
+  },
+  "layers": {
+    "runtime": {
+      "commands": [
+        {
+          "id": "suite",
+          "cmd": "node tools/test/nextest-junit.mjs"
+        }
+      ],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "scope": {
+    "projects": [
+      "gitraptor-api",
+      "gitraptor-git",
+      "gitraptor-core",
+      "gitraptor-cli"
+    ]
+  },
+  "constraints": {
+    "deny_paths": [
+      "Cargo.toml",
+      "Cargo.lock",
+      "crates/api/Cargo.toml",
+      "crates/core/Cargo.toml",
+      "crates/git/Cargo.toml",
+      "apps/cli/Cargo.toml",
+      "crates/policy/",
+      "crates/theme/",
+      "apps/mcp/",
+      "apps/cli/src/tui/",
+      "crates/core/src/timemachine/oplog/schema.rs",
+      "crates/core/tests/us_tmc_013_common/",
+      "docs/ARTIFACTS.md"
+    ],
+    "allow_dependency_changes": false
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 600000,
+    "suiteTimeoutMs": 5400000
+  },
+  "hops": {
+    "design": {
+      "agent": "main-loop",
+      "model": "opus"
+    },
+    "critic": {
+      "agent": "nassa-core:plan-critic",
+      "model": "opus"
+    },
+    "tester": {
+      "agent": "nassa-core:criterion-tester",
+      "model": "sonnet"
+    },
+    "build": {
+      "agent": "nassa-dev-rust:rust-expert",
+      "model": "opus"
+    },
+    "review": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "opus"
+    },
+    "conformance": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "sonnet"
+    }
+  }
+}
