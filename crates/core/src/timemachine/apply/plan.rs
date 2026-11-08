@@ -12,7 +12,7 @@ use gitraptor_git::tm_write::refs::{RefUpdate, branch_ref};
 use gitraptor_git::tm_write::store::TreeEntryKind;
 use gitraptor_git::tm_write::worktree::{HeadValue, WriteWorktree};
 
-use super::{PlanWorktree, RefScope, Refusal};
+use super::{PlanWorktree, RefScope, Refusal, SelectiveTarget, programming_error};
 use crate::timemachine::store::{Meta, MetaWorktree, SnapshotStore};
 
 /// One worktree, loaded.
@@ -38,18 +38,23 @@ pub(super) struct LoadedWorktree {
     pub target_head: Option<HeadValue>,
 }
 
+/// Whether `path` is one of `excluded` or lies under one of them.
+fn is_excluded_by(excluded: &BTreeSet<String>, path: &str) -> bool {
+    excluded.iter().any(|e| {
+        path == e
+            || path
+                .strip_prefix(e.as_str())
+                .is_some_and(|r| r.starts_with('/'))
+    })
+}
+
 impl LoadedWorktree {
     pub fn is_kept(&self, path: &str) -> bool {
         self.kept.contains(path)
     }
 
     pub fn is_excluded(&self, path: &str) -> bool {
-        self.excluded.iter().any(|e| {
-            path == e
-                || path
-                    .strip_prefix(e.as_str())
-                    .is_some_and(|r| r.starts_with('/'))
-        })
+        is_excluded_by(&self.excluded, path)
     }
 }
 
@@ -91,6 +96,14 @@ fn mode_of_name(kind: &str) -> Option<u32> {
     }
 }
 
+fn mode_of_kind(kind: Kind) -> u32 {
+    match kind {
+        Kind::File => 0o100644,
+        Kind::Executable => 0o100755,
+        Kind::Symlink => 0o120000,
+    }
+}
+
 fn oid(hex: &str, what: &str) -> Result<Oid, String> {
     Oid::from_hex(hex).ok_or_else(|| format!("{what}: not an object id"))
 }
@@ -126,12 +139,16 @@ fn files_of(
 }
 
 /// Loads `plan`. Any problem is a refusal: nothing was touched.
+///
+/// With `selective` (whose `target` is the prior, [`super::check_selective`]), each worktree is
+/// the prior with the subjects of `selective` applied, and the refs that move are exactly its own.
 pub(super) fn load(
     store: &SnapshotStore,
     target: &str,
     prior: &str,
     worktrees: &[PlanWorktree],
     refs: &RefScope,
+    selective: Option<&SelectiveTarget>,
 ) -> Result<Loaded, Refusal> {
     let invalid = |snapshot: &str| {
         let snapshot = snapshot.to_owned();
@@ -247,11 +264,9 @@ pub(super) fn load(
                 }
             }
         }
-        index.sort_by(|a, b| a.path.cmp(&b.path).then(a.stage.cmp(&b.stage)));
-
         // Exclusions are `<key>:<path>`; history gaps have no path.
         let prefix = format!("{}:", plan.key);
-        let excluded = target_meta
+        let excluded: BTreeSet<String> = target_meta
             .exclusions
             .iter()
             .chain(prior_meta.exclusions.iter())
@@ -259,7 +274,40 @@ pub(super) fn load(
             .filter(|p| !p.is_empty())
             .map(|p| p.trim_end_matches('/').to_owned())
             .collect();
-        let target_head = head_of(Some(t_meta)).map_err(invalid(target))?;
+        let mut target_files = target_files;
+        let mut target_head = head_of(Some(t_meta)).map_err(invalid(target))?;
+        if let Some(sel) = selective {
+            // The prior (the target here) with each subject set to its own value.
+            if let Some(paths) = sel.paths.get(&plan.key) {
+                for (path, to) in paths {
+                    if is_excluded_by(&excluded, path) {
+                        // The prior has no copy of it, so a redo could not bring it back.
+                        return Err(programming_error(
+                            prior,
+                            format!("selective path {path:?} is excluded from the prior"),
+                        ));
+                    }
+                    match to.file {
+                        Some(entry) => target_files.insert(path.clone(), entry),
+                        None => target_files.remove(path),
+                    };
+                    index.retain(|e| e.path != path.as_bytes());
+                    if let Some((kind, id)) = to.index {
+                        wants.insert(id);
+                        index.push(IndexEntry {
+                            path: path.clone().into_bytes(),
+                            mode: mode_of_kind(kind),
+                            id,
+                            stage: 0,
+                        });
+                    }
+                }
+            }
+            if let Some(head) = sel.head.get(&plan.key) {
+                target_head = Some(head.clone());
+            }
+        }
+        index.sort_by(|a, b| a.path.cmp(&b.path).then(a.stage.cmp(&b.stage)));
         let prior_head = head_of(p_meta).map_err(invalid(prior))?;
         if let Some(HeadValue::Detached(id)) = &target_head {
             wants.insert(*id);
@@ -296,7 +344,27 @@ pub(super) fn load(
     for id in prior_meta.branches.values().chain(prior_meta.stash.iter()) {
         haves.insert(oid(id, "branch").map_err(invalid(prior))?);
     }
-    if *refs != RefScope::None {
+    if let Some(sel) = selective {
+        // Exactly the refs of the selection, each expected at the prior's value.
+        for (name, new) in &sel.refs {
+            let short = name.strip_prefix("refs/heads/").ok_or_else(|| {
+                programming_error(prior, format!("selective ref {name:?} is not a branch"))
+            })?;
+            let old = prior_meta
+                .branches
+                .get(short)
+                .map(|h| oid(h, "branch"))
+                .transpose()
+                .map_err(invalid(prior))?;
+            if old == *new {
+                continue;
+            }
+            wants.extend(*new);
+            let update =
+                RefUpdate::new(name, old, *new).map_err(|e| invalid(prior)(e.to_string()))?;
+            ref_updates.push(update);
+        }
+    } else if *refs != RefScope::None {
         let names: BTreeSet<&String> = prior_meta
             .branches
             .keys()
