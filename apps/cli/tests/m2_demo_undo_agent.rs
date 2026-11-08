@@ -361,8 +361,18 @@ fn four_sessions_and_one_agent_undone() {
                 "{name}: the agent's commit failed"
             );
         };
-        commit(claude, &format!("{name}.rs"), &format!("fn {name}() {{}}"), "own file");
-        commit(claude, "api.rs", &format!("fn api() {{ {name}(); }}"), "edit api");
+        commit(
+            claude,
+            &format!("{name}.rs"),
+            &format!("fn {name}() {{}}"),
+            "own file",
+        );
+        commit(
+            claude,
+            "api.rs",
+            &format!("fn api() {{ {name}(); }}"),
+            "edit api",
+        );
         m.agent_commits(worktree, 2);
     }
     let after_work: Vec<Vec<String>> = m.worktrees.iter().map(|(n, w)| m.state(n, w)).collect();
@@ -388,12 +398,12 @@ fn four_sessions_and_one_agent_undone() {
         base[0],
         "TMC011-DEMO-M2: the target worktree and its branch are as before its agent's work"
     );
-    for i in 1..4 {
+    for (wt, expected) in m.worktrees.iter().zip(&after_work).skip(1) {
         assert_eq!(
-            m.state(m.worktrees[i].0, &m.worktrees[i].1),
-            after_work[i],
+            m.state(wt.0, &wt.1),
+            *expected,
             "TMC011-DEMO-M2: worktree {} (files, HEAD, branch, status) must not change",
-            m.worktrees[i].0
+            wt.0
         );
     }
 
@@ -408,10 +418,10 @@ fn four_sessions_and_one_agent_undone() {
         after_work[0],
         "TMC011-DEMO-M2: redo brings the agent's work back"
     );
-    for i in 1..4 {
+    for (wt, expected) in m.worktrees.iter().zip(&after_work).skip(1) {
         assert_eq!(
-            m.state(m.worktrees[i].0, &m.worktrees[i].1),
-            after_work[i],
+            m.state(wt.0, &wt.1),
+            *expected,
             "TMC011-DEMO-M2: the other worktrees stay untouched after the redo"
         );
     }
