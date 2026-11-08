@@ -14,9 +14,9 @@
 | Hecho (`done`) | 3 |
 | Implementado en parte (`partially-implemented`) | 29 |
 | Listo (`ready`) | 24 |
-| Borrador (`draft`) | 57 |
+| Borrador (`draft`) | 58 |
 | Bloqueado (`blocked`) | 1 |
-| **Total** | **185** |
+| **Total** | **186** |
 
 ## Por feature
 
@@ -27,7 +27,7 @@
 | [guardrails](#guardrails) | 14 | 0 | 7 | 1 | 3 | 0 | 25 |
 | [mcp](#mcp) | 7 | 0 | 4 | 0 | 9 | 0 | 20 |
 | [motor-local](#motor-local) | 18 | 2 | 9 | 3 | 13 | 0 | 45 |
-| [time-machine](#time-machine) | 16 | 1 | 2 | 1 | 13 | 0 | 33 |
+| [time-machine](#time-machine) | 16 | 1 | 2 | 1 | 14 | 0 | 34 |
 
 ### cockpit
 
@@ -218,7 +218,7 @@
 
 ### time-machine
 
-33 fichas: 16 implementado, 1 hecho, 2 implementado en parte, 1 listo, 13 borrador.
+34 fichas: 16 implementado, 1 hecho, 2 implementado en parte, 1 listo, 14 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -243,6 +243,7 @@
 | [US-TMC-011](features/time-machine/user-stories/US-TMC-011-undo-por-agente.md) | El desarrollador deshace solo lo que hizo un agente en un periodo | Implementado en parte (`partially-implemented`) | #325, #335 | — |
 | [TS-TMC-005](features/time-machine/technical-stories/TS-TMC-005-undo-espera-punto-base.md) | El undo espera, con plazo propio, la captura que da su punto base B en vez de responder `overlap-unverified` de inmediato | Listo (`ready`) | — | — |
 | [TD-TMC-001](features/time-machine/technical-stories/TD-TMC-001-previo-hook-plazo-y-cupo-sin-atribuir.md) | Previo de hook: plazo real, cupo barato y cubo «sin atribuir» acotado, antes de que un fallo deniegue (US-GRD-017) | Borrador (`draft`) | — | — |
+| [TD-TMC-002](features/time-machine/technical-stories/TD-TMC-002-captura-blobs-fuera-del-escritor.md) | Captura continua: blobs fuera del escritor del almacén, para bajar su hashing a background (RES-06) | Borrador (`draft`) | — | — |
 | [TD-TMC-003](features/time-machine/technical-stories/TD-TMC-003-solape-agente-ecos-de-gitraptor.md) | El solape del undo por agente cuenta los ecos anclados de GitRaptor como movimientos sin atribuir | Borrador (`draft`) | — | — |
 | [US-TMC-007](features/time-machine/user-stories/US-TMC-007-timeline-filtros-huecos.md) | El desarrollador filtra el timeline por worktree, agente o periodo y ve lo que no se observó | Borrador (`draft`) | — | — |
 | [US-TMC-008](features/time-machine/user-stories/US-TMC-008-timeline-atribucion-vigente.md) | El timeline refleja las correcciones de atribución sin reescribir quién deshizo qué | Borrador (`draft`) | — | — |
@@ -445,7 +446,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### Sin hito
 
-37 fichas sin hito asignado.
+38 fichas sin hito asignado.
 
 ## Implementadas en parte: lo que falta
 

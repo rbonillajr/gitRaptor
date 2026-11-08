@@ -4,7 +4,7 @@ title: "Dev Spec — Clases de trabajo del daemon y mecanismo de ahorro de energ
 type: dev-spec
 status: partially-implemented
 created: 2026-10-27
-updated: 2026-10-28
+updated: 2026-11-08
 story: TS-GRP-005
 feature: motor-local
 domain: GRP
@@ -118,13 +118,26 @@ El PR-B de esta Dev Spec (T007 a T014) no bloquea a TS-CKP-001. Hasta que llegue
 | D8 | **Monitor**: lee la fuente cada `POWER_POLL` (30 s) en un hilo `raptor-power` de clase `Utility`. Relee `engine.powerSaving` solo si cambió el mtime del documento de ajustes del perfil. La lógica es `PowerMonitor::step(now) -> Option<PowerChange>`, pura respecto al reloj: los tests la avanzan con instantes simulados. Un cambio se publica en ≤ 30 s y llega a quien espera en `wait_change` en el acto, dentro de los 60 s de ADR-GRP-015 § 2. ⚠️ **ASSUMPTION**: 2 despertares por minuto caben en RES-03; INF-GRP-002 lo reporta | ADR-GRP-015 § 2; RES-03 |
 | D9 | **`git` hijos**: solo cuando el hilo que lanza está por debajo de `Default` (lo lee del SO con `qos::current()`), `crates/git` instala un `pre_exec` de `macsys::qos::lower_child` que fija nice (`Utility` 5, `Background` 10) y la política de E/S del proceso (`setiopolicy_np`, ámbito proceso). En el hijo no se llama a `pthread_set_qos_class_self_np` (no es seguro tras `fork`). Los hijos de hilos `Default` o `UserInitiated` (operaciones del usuario, `user_ops.rs:572`; Guardrails) no cambian y conservan `posix_spawn`. El coste de perderlo se mide en T011 | ADR-GRP-015 § 1 (herencia en los hijos) |
 | D10 | **Clase de cada hilo que ya existe**: tabla de [§ Clase por hilo](#clase-por-hilo). Los de la columna PR-A no están en el camino del snapshot previo | ADR-GRP-015 § 1 |
-| D11 | **Inversión de prioridad**: ningún tramo en `Utility` o `Background` retiene el escritor del almacén. La captura baja a `Background` solo en los hilos de hashing (`capture.rs:1165`, cuando `prior == false`); árboles, ref y oplog siguen en el hilo `raptor-tm-capture` en `Default`, que sigue cediendo al previo (`prior_waiting`, `store/mod.rs:616`). El hashing de un previo va en `UserInitiated`, igual que `raptor-prior` y `raptor-conn`. RES-07 bloquea el merge del PR-B | ADR-TMC-004 § 2 (Enmienda 2026-10-04); ADR-TMC-006; NFR-01; NFR-04 |
+| D11 | **Inversión de prioridad**: ningún tramo en `Utility` o `Background` retiene el escritor del almacén. La captura baja a `Background` solo en los hilos de hashing (`capture.rs:1165`, cuando `prior == false`); árboles, ref y oplog siguen en el hilo `raptor-tm-capture` en `Default`, que sigue cediendo al previo (`prior_waiting`, `store/mod.rs:616`). El hashing de un previo va en `UserInitiated`, igual que `raptor-prior` y `raptor-conn`. RES-07 bloquea el merge del PR-B. **Nota (2026-11-08)**: la captura continua no tiene hilos de hashing propios; los blobs se hashean con el escritor tomado. Ver D18 | ADR-TMC-004 § 2 (Enmienda 2026-10-04); ADR-TMC-006; NFR-01; NFR-04 |
 | D12 | **Publicación** (T008): `power_saving = Some(PowerSavingView { setting, active })` en todos los SO desde que corre el monitor. `pools = Some(lista)` solo si `support()` es `Applied`, con los pools que de verdad corren (registro de `work_class::spawn`), nunca la tabla teórica. Sin campos nuevos en el contrato | ADR-GRP-015 § 4; US-GRP-017 |
 | D13 | **Reconciliación espaciada** (T009): `ObserverConfig.saving_periodic` (15 min por defecto); en ahorro, el periodo es `max(periodic, saving_periodic)`. Al cambiar el modo, el observador avisa a sus tareas, que recalculan su próximo plazo desde la última reconciliación. `TierConfig` sigue al modo con `from_settings(…, active)` | ADR-GRP-015 § 2; ADR-GRP-010 § 5; TS-GRP-006 D12 |
 | D14 | **Gates por PR**: el PR-A no toca el camino del snapshot previo y su gate es el banco del motor de INF-GRP-002 sin regresión más los tests de RES-06 del PR. El PR-B lleva RES-07 (T013) como bloqueante. El observador se queda en `Default`, así que bajar su clase no se evalúa; el retraso de despertar en `Utility` (INF-GRP-002 § 6.3) se mide en T013 solo para la reconciliación periódica, como dato | ADR-GRP-015 § 1; INF-GRP-002 § 8 |
 | D15 | **Clave `engine.powerSaving`**: `auto` \| `on` \| `off`, por defecto `auto`, solo en el nivel de perfil (`x-gitraptor-levels = ["profile"]`); en equipo o local se ignora con el diagnóstico del validador de niveles | ADR-GRP-007; ADR-GRP-015 § 2 |
 | D16 | **Producto (refrenda D1, T007, T009 y T011).** (a) El PR-A no entrega nada observable y el predictor puede salir antes que la fuente real: por defecto (`auto` + `Unknown`) nadie pierde cálculo, y con `on` el par sale "sin calcular" con su motivo (BR-CKP-CALC-001). Condición: el PR-B entra antes del cierre de M2, porque TS-GRP-005 es Should de M2 y `engine.resources.power_saving` en `None` mientras el predictor ya pausa con `on` solo se acepta como estado intermedio de `main`. (b) BR-CONS-005 pasa a "como mucho, el intervalo de reconciliación vigente" (Enmienda 2026-10-27; US-GRP-019). (c) Si la revisión de seguridad rechaza `objc_msgSend`, T007 entrega solo la detección por batería: lo que el usuario pidió (Rene, 2026-10-05) es ahorrar con batería, y el bajo consumo con corriente queda pendiente con su nota en el PR y en XP-45, como dice T007. (d) `POWER_POLL` 30 s y `SPAWN_COST_BUDGET` 5 ms p95 no chocan con ningún NFR ni BR de producto | Decisión del orquestador (2026-10-27), validada por Arquitecto y PO |
 | D17 | **Hilos: solo QoS.** En macOS 26 (Darwin 25.6), una política de E/S en ámbito de hilo (`setiopolicy_np`, `IOPOL_SCOPE_THREAD`) saca al hilo de la QoS: `qos_class_self()` devuelve `UNSPECIFIED` y un `pthread_set_qos_class_self_np` posterior falla con `EPERM`. `qos::set_current` fija solo la QoS y el nivel de E/S del hilo lo deriva el SO de la QoS. ADR-GRP-015 § 1 solo pide la QoS en la columna de macOS, así que no se enmienda. Los hijos (D9) siguen con nice y `IOPOL_SCOPE_PROCESS`. ⚠️ ASSUMPTION: el kernel asigna a `Background` el nivel de E/S restringido; T013 lo mide como dato | Hallazgo de la implementación del PR-A. Decisión del orquestador (2026-10-28), validada por Arquitecto |
+| D18 | **La captura continua sigue en `Default` hasta TD-TMC-002.** `run_capture` toma el escritor (`capture.rs:434`) y lo mantiene durante toda la captura: detección, `write_blobs` (`:586`), árboles, ref y oplog. Sin un previo, `write_blobs` usa un solo hilo y hashea en línea en `raptor-tm-capture`. Bajar ese hashing a `Background` bajaría al hilo que tiene el escritor, que es justo la inversión que prohíben D11 y RES-07. Por eso, en el PR-B: `raptor-tm-capture` y su hashing en línea quedan en `Default` (`Pool::Capture` se publica como `Default`); el camino del previo pasa a `UserInitiated` (`raptor-conn`, `raptor-prior` y los hilos de hashing de un previo, `capture.rs:1168`); `raptor-tm-seed` baja a `Background`, porque `seed_with` (`store/mod.rs:491` → `seed_from`) no toma el escritor ni ningún cerrojo. RES-06 del hashing de la captura queda pendiente de TD-TMC-002 (sacar los blobs del escritor), y TS-GRP-005 queda `partially-implemented`. Opciones descartadas: reestructurar `run_capture` ahora (toca ADR-TMC-004 § 2 y NFR-01), y `scoped(Background)` con el escritor tomado (viola D11) | Hallazgo de la preparación del PR-B. Decisión del orquestador (2026-11-08), validada por Arquitecto y aprobada por el coordinador; Enmienda 2026-11-08 de ADR-GRP-015 § 1 |
+
+#### Ajustes del PR-B frente a `main` (2026-11-08)
+
+La DS se escribió antes de #311, #312, #317, #318, #319 y #321. Al prepararlo se ajustó lo siguiente, sin ninguna decisión nueva aparte de D18:
+
+| # | Qué cambió | Ajuste |
+|---|---|---|
+| A1 | Números de línea | `raptor-conn` `conn.rs:211`; `raptor-prior` `protected/mod.rs:650`; hashing de un previo `capture.rs:1168`; `spawn_and_wait` `invoke.rs:557`; `pools: None` `resources/mod.rs:277`; `ResourceMonitor::new` `daemon/mod.rs:710` |
+| A2 | `macsys::qos::lower_child` ya llegó con el PR-A (T001) | T011 solo lo conecta en `crates/git`; `crates/macsys/src/qos.rs` no cambia |
+| A3 | `ObserverConfig` se llama `WatchConfig` (`watch/mod.rs:61`), y el `TierConfig` del daemon es un valor fijo de `DaemonConfig` (los tests lo fijan sin pasar por los ajustes) | T009: `WatchConfig.saving_periodic`. El ahorro se aplica sobre la configuración base con `TierConfig::with_power_saving(active)`, la misma regla que `from_settings(…, true)`. `raptor-power` avisa al bucle del daemon con un mensaje `Control::PowerMode(bool)` (`daemon/shutdown.rs`), y el bucle llama a `Observer::set_power_saving`. El barrido de dormidos y el presupuesto de la reconciliación lenta siguen el modo |
+| A4 | El banco `engine` vive en `apps/cli/benches/engine.rs`, no en `crates/core` | T013 añade `--saturated` a `tm_snapshot` (previo, cola del escritor con capturas en curso, retraso de despertar en `Utility`) y a `engine` (p95 del motor). La carga es `gitraptor_testkit::cpu_load`: un proceso ajeno por núcleo lógico, a prioridad normal (Unix) |
+| A5 | Las pruebas de `engine.resources` de punta a punta están en `apps/cli/tests/resources.rs` | T008 prueba `ResourceMonitor` en `crates/core/tests/resources_power.rs` |
 
 > **Validación del PO (2026-10-27)**: alcance y producto validados. Corte en dos PR aceptado con la condición de D16 (a); BR-CONS-005 enmendada; fallback del bajo consumo aceptado; sin pregunta abierta nueva.
 
@@ -249,9 +262,9 @@ Dos PR. El PR-A (T001 a T006) cierra G5 de TS-CKP-001; el PR-B (T007 a T014) lle
 | T008 | Publicar `pools` y `power_saving` en `engine.resources` | B | T005, T006 | `crates/core/src/resources/mod.rs` |
 | T009 | Reconciliación espaciada y niveles según el modo | B | T005 | `crates/core/src/watch`, `crates/core/src/daemon/tiers.rs` |
 | T010 | Clases en el camino del snapshot previo | B | T002 | `crates/core/src/{channel,timemachine}` |
-| T011 | Clase de los `git` hijos y coste de perder `posix_spawn` | B | T001, T002 | `crates/git/src/invoke.rs`, `crates/macsys/src/qos.rs` |
+| T011 | Clase de los `git` hijos y coste de perder `posix_spawn` | B | T001, T002 | `crates/git/src/invoke.rs`, `crates/git/benches/spawn_cost.rs` |
 | T012 | Test de la unidad de autoarranque (`ProcessType`, sin `Nice=`) | B | — | `crates/core/src/autostart.rs` |
-| T013 | Escenario RES-07 de INF-GRP-002 | B | T010, T011 | `crates/core/benches/tm_snapshot.rs` |
+| T013 | Escenario RES-07 de INF-GRP-002 | B | T010, T011 | `crates/core/benches/tm_snapshot.rs`, `apps/cli/benches/engine.rs`, `crates/testkit/src/cpu_load.rs` |
 | T014 | Cerrar la historia y la documentación | B | T007, T008, T009, T012, T013 | `docs` |
 
 ### En qué orden
@@ -445,8 +458,9 @@ graph LR
 **Objetivo.** `raptor status --resources` (US-GRP-017) deja de mostrar "no disponible" en clases y ahorro en macOS.
 
 **Ubicación.**
-- `crates/core/src/resources/mod.rs` (**MODIFY**: `ResourceMonitor` recibe `PowerMode` y lee `work_class::pools()`; `:275` deja de poner `None`)
-- `crates/core/src/daemon/mod.rs` (**MODIFY**: pasa el handle al `ResourceMonitor`, `:679`)
+- `crates/core/src/resources/mod.rs` (**MODIFY**: `ResourceMonitor::set_power(PowerMode)` y lectura de `work_class::pools()`; `:277` deja de poner `None`)
+- `crates/core/src/daemon/mod.rs` (**MODIFY**: pasa el handle al `ResourceMonitor`, `:710`)
+- `crates/core/tests/resources_power.rs` (**CREATE**, A5)
 
 **Reglas**
 - D12. Sin cambios en `crates/api`: `PoolClass` y `PowerSavingView` ya existen (`crates/api/src/resources.rs:216` y `:232`).
@@ -454,20 +468,21 @@ graph LR
 
 - **Depende:** T005, T006
 - **Refs:** ADR-GRP-015 § 4; US-GRP-017; D12
-- **Aceptación:** `cargo test -p gitraptor-core --test resources`
-- **Guard ⛔8.1:** `resources::power_saving_follows_the_mode`
-- **Guard ⛔8.2:** `resources::pools_are_none_when_classes_are_unavailable`
-- **Guard ⛔8.3:** `resources::pools_list_only_running_pools` (macOS)
+- **Aceptación:** `cargo test -p gitraptor-core --test resources_power`
+- **Guard ⛔8.1:** `resources_power::power_saving_follows_the_mode`
+- **Guard ⛔8.2:** `resources_power::pools_are_none_when_classes_are_unavailable` (fuera de macOS)
+- **Guard ⛔8.3:** `resources_power::pools_list_only_running_pools` (macOS)
 
 ### T009 — Reconciliación espaciada y niveles según el modo
 
 **Objetivo.** En ahorro, la reconciliación periódica pasa de 5 a 15 min y las redes de seguridad de los repos dormidos se alargan; al volver a corriente, vuelven a su valor en ≤ 60 s.
 
 **Ubicación.**
-- `crates/core/src/watch/mod.rs` (**MODIFY**: `ObserverConfig.saving_periodic`, `:71`/`:100`; `Observer::set_power_saving(bool)` que avisa a las tareas)
+- `crates/core/src/watch/mod.rs` (**MODIFY**: `WatchConfig.saving_periodic`, `:71`/`:100`; `Observer::set_power_saving(bool)`, que avisa a las tareas, al barrido de dormidos y al presupuesto de la reconciliación lenta; A3)
 - `crates/core/src/watch/worktree.rs` (**MODIFY**: mensaje de modo; `next_periodic` recalculado desde la última reconciliación)
 - `crates/core/src/watch/schedule.rs` (**CREATE**: `fn periodic_period(config, saving) -> Duration` y `fn reconciliations_in(window, timeline)`, puras)
-- `crates/core/src/daemon/power.rs` y `daemon/tiers.rs` (**MODIFY**: al cambiar el modo, `Observer::set_power_saving` y `TierConfig::from_settings(…, active)`)
+- `crates/core/src/daemon/power.rs`, `daemon/shutdown.rs`, `daemon/mod.rs` y `daemon/tiers.rs` (**MODIFY**: `raptor-power` envía `Control::PowerMode(active)`; el bucle aplica `TierConfig::with_power_saving(active)` sobre la base y llama a `Observer::set_power_saving`; A3)
+- `crates/core/tests/observe_power.rs` (**CREATE**)
 
 **Reglas**
 - D13. El cambio de modo no dispara una reconciliación: solo mueve el próximo plazo.
@@ -487,18 +502,19 @@ graph LR
 **Ubicación.**
 - `crates/core/src/channel/conn.rs` (**MODIFY**: `raptor-conn`, `:196` → `UserInitiated`)
 - `crates/core/src/timemachine/protected/mod.rs` (**MODIFY**: `raptor-prior`, `:600` → `UserInitiated`)
-- `crates/core/src/timemachine/store/capture.rs` (**MODIFY**: hilos de `std::thread::scope`, `:1165`: `set_current(if prior { UserInitiated } else { Background })` al empezar cada uno)
-- `crates/core/src/timemachine/continuous.rs` (**MODIFY**: `raptor-tm-capture`, `:148`, `spawn(Pool::Capture, Default, …)`; `raptor-tm-seed`, `:311`, ver regla)
+- `crates/core/src/timemachine/store/capture.rs` (**MODIFY**: hilos de `std::thread::scope`, `:1168`, que solo lanza un previo: `set_current(UserInitiated)` al empezar cada uno. El hashing en línea de una captura no cambia (D18))
+- `crates/core/src/timemachine/continuous.rs` (**MODIFY**: `raptor-tm-capture`, `:148`, `spawn(Pool::Capture, Default, …)`; `raptor-tm-seed`, `:311`, `spawn_unpooled(Background, …)`)
 - `crates/core/tests/work_class_boundary.rs` (**MODIFY**: quitar estas excepciones)
 
 **Reglas**
-- Ninguna sección que tome el cerrojo del escritor del almacén corre en `Utility` o `Background` (D11). `raptor-tm-seed` baja a `Background` solo si `seed_with` no retiene el escritor mientras lee los packs; si lo retiene, queda en `Default` y se anota en el PR.
+- Ninguna sección que tome el cerrojo del escritor del almacén corre en `Utility` o `Background` (D11, D18). `seed_with` no retiene el escritor (verificado en la preparación), así que `raptor-tm-seed` baja a `Background`.
+- `work_class_boundary.rs` falla si un archivo que llama a `.writer(` declara `Utility` o `Background` (la función de fitness de D11).
 - `prior_waiting` (`store/mod.rs:616`) no cambia.
 
 - **Depende:** T002
 - **Refs:** ADR-TMC-004 § 2 (Enmienda 2026-10-04); ADR-TMC-006; ADR-GRP-015 § 1; D10, D11
 - **Aceptación:** `cargo test -p gitraptor-core --test work_class_boundary --test tm_classes`
-- **Guard ⛔10.1:** `tm_classes::capture_hashing_runs_in_background_and_prior_hashing_in_user_initiated` (macOS)
+- **Guard ⛔10.1:** `tm_classes::prior_hashing_runs_in_user_initiated_and_capture_stays_in_default` (macOS; D18)
 - **Guard ⛔10.2:** `tm_classes::the_writer_is_never_held_below_default` (macOS)
 
 ### T011 — Clase de los `git` hijos y coste de perder `posix_spawn`
@@ -506,7 +522,7 @@ graph LR
 **Objetivo.** Un `git` lanzado por trabajo de fondo sale con prioridad baja (RES-06), y el usuario no paga el `fork` en sus operaciones.
 
 **Ubicación.**
-- `crates/git/src/invoke.rs` (**MODIFY**: `spawn_and_wait`, `:553`, único punto de lanzamiento de `invoke`; en macOS, `qos::current()` y `qos::lower_child` si está por debajo de `Default`)
+- `crates/git/src/invoke.rs` (**MODIFY**: `spawn_and_wait`, `:557`, único punto de lanzamiento de `invoke`; en macOS, `qos::current()` y `qos::lower_child` si está por debajo de `Default`)
 - `crates/git/Cargo.toml` (**MODIFY**: `gitraptor-macsys` en `cfg(target_os = "macos")`, como `winsys` en Windows)
 - `crates/git/tests/child_class.rs` (**CREATE**)
 - `crates/git/benches/spawn_cost.rs` (**CREATE**)
@@ -542,7 +558,9 @@ graph LR
 **Objetivo.** Con todos los núcleos saturados por un proceso ajeno, el snapshot previo y el motor cumplen sus cifras con las clases puestas. Bloquea el merge del PR-B.
 
 **Ubicación.**
-- `crates/core/benches/tm_snapshot.rs` (**MODIFY**: escenario `saturated`)
+- `crates/core/benches/tm_snapshot.rs` (**MODIFY**: escenario `--saturated`, A4)
+- `apps/cli/benches/engine.rs` (**MODIFY**: `--saturated`, A4)
+- `crates/testkit/src/cpu_load.rs` (**CREATE**: la carga ajena, A4)
 - `docs/requirements/features/motor-local/dev-specs/INF-GRP-002-dev-spec.md` (**MODIFY**: RES-07 pasa de pendiente a escenario, con sus cifras)
 
 **Reglas**
@@ -552,8 +570,8 @@ graph LR
 
 - **Depende:** T010, T011
 - **Refs:** ADR-GRP-015 Validación 2; ADR-TMC-004 Validación 7; ADR-TMC-006; INF-GRP-002 § 6.3 y § 8; D11, D14
-- **Aceptación:** `cargo bench -p gitraptor-core --bench tm_snapshot -- saturated` en verde en macOS, cifras en el PR
-- **Guard ⛔13.1:** escenario `saturated` del banco `tm_snapshot`
+- **Aceptación:** `cargo bench -p gitraptor-core --bench tm_snapshot -- --saturated` y `cargo bench -p gitraptor-cli --bench engine -- --quick --saturated` en verde en macOS, cifras en el PR
+- **Guard ⛔13.1:** escenario `--saturated` de los bancos `tm_snapshot` y `engine`
 
 ### T014 — Cerrar la historia y la documentación
 
@@ -594,11 +612,11 @@ Cada `std::thread::Builder::new()` de `crates/core/src` de hoy. "Heredada" signi
 | pool del predictor, `predict-worker` | TS-CKP-001 T006 y T007 | `Utility` | `Predictor` | TS-CKP-001 |
 | `raptor-sessions`, `raptor-s3` | `detect/mod.rs:532`, `:539` | `Default` (heredada) | — | — |
 | `raptor-accept`, `raptor-conn-out` | `channel/server.rs:250`, `:268`; `channel/conn.rs:258` | `Default` (heredada): canal y stream | — | — |
-| `raptor-conn` | `channel/conn.rs:196` | `UserInitiated` | — | B |
-| `raptor-prior` | `timemachine/protected/mod.rs:600` | `UserInitiated` | — | B |
+| `raptor-conn` | `channel/conn.rs:211` | `UserInitiated` | — | B |
+| `raptor-prior` | `timemachine/protected/mod.rs:650` | `UserInitiated` | — | B |
 | `raptor-tm-capture` | `timemachine/continuous.rs:148` | `Default` | `Capture` | B |
-| hashing de la captura | `timemachine/store/capture.rs:1165` | `Background` (captura) o `UserInitiated` (previo) | `Capture` | B |
-| `raptor-tm-seed` | `timemachine/continuous.rs:311` | `Background` o `Default` (T010) | — | B |
+| hashing de la captura | `timemachine/store/capture.rs:1168` | `UserInitiated` (hilos de un previo); el de una captura continua corre en línea en `raptor-tm-capture`, en `Default` (D18) | `Capture` | B |
+| `raptor-tm-seed` | `timemachine/continuous.rs:311` | `Background` (D18) | — | B |
 | `raptor-signals`, `raptor-stop-deadline`, `raptor-time-limit` | `daemon/shutdown.rs:714`, `daemon/mod.rs:934`, `executor/git.rs:56` | `Default` (heredada) | — | — |
 | `raptor-daemon-reaper` | `client.rs:250` | Lado cliente, fuera de alcance | — | — |
 
