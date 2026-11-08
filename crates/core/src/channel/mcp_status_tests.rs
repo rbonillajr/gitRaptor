@@ -34,6 +34,7 @@ fn worktree(root: &Path, main: bool, admin: Option<&str>, status: WorktreeStatus
         detached_at: None,
         operation: None,
         unmerged_paths: 0,
+        changes_actor: None,
     }
 }
 

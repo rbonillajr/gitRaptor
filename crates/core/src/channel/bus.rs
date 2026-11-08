@@ -46,6 +46,8 @@ pub struct Outbox {
     without_tiers: std::sync::atomic::AtomicBool,
     /// Without `observation.special-states` (see [`Outbox::set_without_special_states`]).
     without_special_states: std::sync::atomic::AtomicBool,
+    /// Without `observation.change-attribution` (see [`Outbox::set_without_change_attribution`]).
+    without_change_attribution: std::sync::atomic::AtomicBool,
     /// Without `sessions.worktree-removed` (see [`Outbox::set_without_worktree_removed`]).
     without_worktree_removed: std::sync::atomic::AtomicBool,
     /// Without `discovery.events` (see [`Outbox::set_without_discovery`]).
@@ -82,6 +84,7 @@ impl Outbox {
             without_authorship: std::sync::atomic::AtomicBool::new(true),
             without_tiers: std::sync::atomic::AtomicBool::new(true),
             without_special_states: std::sync::atomic::AtomicBool::new(true),
+            without_change_attribution: std::sync::atomic::AtomicBool::new(true),
             without_worktree_removed: std::sync::atomic::AtomicBool::new(true),
             without_discovery: std::sync::atomic::AtomicBool::new(true),
             without_protection: std::sync::atomic::AtomicBool::new(true),
@@ -118,6 +121,13 @@ impl Outbox {
     /// the operation in progress nor the unmerged paths, which it cannot read.
     pub fn set_without_special_states(&self, without: bool) {
         self.without_special_states
+            .store(without, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// The connection lacks `observation.change-attribution`: `worktree.state` reaches it
+    /// without the actor of the uncommitted changes.
+    pub fn set_without_change_attribution(&self, without: bool) {
+        self.without_change_attribution
             .store(without, std::sync::atomic::Ordering::Relaxed);
     }
 
@@ -193,7 +203,10 @@ impl Outbox {
         let without_special_states = self
             .without_special_states
             .load(std::sync::atomic::Ordering::Relaxed);
-        if !(without_activity || without_special_states)
+        let without_change_attribution = self
+            .without_change_attribution
+            .load(std::sync::atomic::Ordering::Relaxed);
+        if !(without_activity || without_special_states || without_change_attribution)
             || event.kind != gitraptor_api::event::WORKTREE_STATE
         {
             return std::borrow::Cow::Borrowed(event);
@@ -208,6 +221,9 @@ impl Outbox {
         }
         if without_special_states {
             data.without_special_states();
+        }
+        if without_change_attribution {
+            data.without_change_attribution();
         }
         let mut event = event.clone();
         event.data = serde_json::to_value(data).unwrap_or(serde_json::Value::Null);
@@ -868,6 +884,7 @@ mod tests {
                 detached_at: Some("abc".into()),
                 operation: Some(OperationKindView::Rebase),
                 unmerged_paths: 2,
+                changes_actor: None,
             }],
             fetched_utc_ms: None,
         };
