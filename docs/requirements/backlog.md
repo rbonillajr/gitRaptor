@@ -97,6 +97,7 @@ Todo lo que el criterio de salida necesita construir está en `main`. Lo que fal
 | Ver | US-GRP-001 | Must | Implementada (#46) | Base de todo: repo observado |
 | Ver | US-GRP-002 | Must | Implementada (#57, #75) | Cambios y eventos en vivo |
 | Ver | US-GRP-007 | Must | Implementada (#80, #119, #124, #155, #169) | Sesiones de Claude Code, el único agente del MVP |
+| Ver | US-GRP-008 | Must | Implementada (#315, #322) | El trabajo del desarrollador en su editor nunca se atribuye a Claude Code |
 | Ver | US-GRP-009 | Must | Implementada (#106) | La pide US-GRP-004 (registros que sobreviven al reinicio) |
 | Ver | US-GRP-004 | Must | Implementada (#112) | Observación continua; la pide la captura continua (US-TMC-004) |
 | Ver | TS-GRP-004: N1 a N7 de ADR-CKP-003 § 4 | Must | Implementados (#87). La TS queda en parte por N8 a N11 | Lo que necesita INF-CKP-001; N8 a N11 son Should |
