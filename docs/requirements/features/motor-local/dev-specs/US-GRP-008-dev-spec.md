@@ -205,7 +205,7 @@ flowchart LR
 1. `pub fn changes_actor(counts: &ChangeCounts) -> Option<Actor>`: `None` si `counts.is_clean()`, `Some(Actor::Unattributed)` si no. Doc con la regla: un cambio de archivo solo tendría agente con evidencia positiva por archivo (S2b o S5, ADR-GRP-012); el MVP no tiene ninguna (D1, D3). No recibe sesiones, registros ni actividad, a propósito: ninguno de ellos es evidencia para un cambio de archivo.
 2. `observe.rs` rellena el campo al construir la vista con los `counts` que ya calcula `changes()`. Un worktree `unavailable` no lo lleva.
 3. `Outbox` y `apply_capabilities`: sin `observation.change-attribution`, `without_change_attribution()` antes de enviar, como `set_without_special_states`.
-4. `raptor-mcp` no la pide: `channel/mcp_status.rs` no cambia (fuera de alcance).
+4. `raptor-mcp` la recibe como todas (`capability::all()`), pero `channel/mcp_status.rs` no la lleva y no cambia (fuera de alcance).
 
 - **Depende:** T001
 - **Refs:** ADR-GRP-012 (regla de combinación, puntos 2, 3 y 6), ADR-GRP-013 § 3 y Enmienda Cockpit, BR-EDGE-004
@@ -239,7 +239,7 @@ flowchart LR
 **Reglas**
 - El cliente pide la capacidad en `connection.accept` (regla 3 de "Añadir una capacidad"). La TUI no la presenta en esta historia: la tolera, porque `WorktreeView` ya la deserializa.
 - Texto: la línea de recuento de cambios (`status.changes`) añade el actor con la clave nueva `status.changes-actor` = "{changes} · {actor}", con `{actor}` de `crate::events::actor` (hoy "sin agente" / "no agent", G3). Sin el campo (daemon anterior), la línea queda como hoy.
-- JSON: `WorktreeJson.changes_actor`, con la misma forma que el actor de `raptor events --json`, ausente sin cambios.
+- JSON: `WorktreeJson.changes_actor`, con la forma del cable (`{"actor":"unattributed"}`, no la cadena plana de `raptor events --json`: **Decisión del orquestador (2026-11-08)**, tras la revisión), ausente sin cambios.
 
 - **Depende:** T001
 - **Refs:** AGENTS.md (i18n en/es), US-GRP-001 D11

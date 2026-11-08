@@ -248,7 +248,7 @@ fn status_shows_the_changes_actor_in_json_only_with_changes() {
     assert_eq!(
         dirty["changes_actor"],
         json!({"actor": "unattributed"}),
-        "status --json must carry changes_actor as raptor events --json does: {dirty:#}"
+        "status --json must carry changes_actor as the engine sends it: {dirty:#}"
     );
     let clean = worktree_in(&m.status(), &linked).expect("the linked worktree");
     assert_eq!(clean["changes"], json!([]), "{clean:#}");
