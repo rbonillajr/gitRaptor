@@ -145,9 +145,14 @@ fn below_floor(profile: &ProfileDirs, floor: FreeSpaceFloor) -> bool {
 impl ContinuousCapture {
     pub fn start(config: CaptureConfig, deps: CaptureDeps) -> std::io::Result<Self> {
         let (tx, rx) = channel();
-        let thread = std::thread::Builder::new()
-            .name("raptor-tm-capture".into())
-            .spawn(move || run(config, deps, rx))?;
+        // Default, not lower: the capture holds the store writer while it hashes in line, and a
+        // prior must never wait on a lowered holder (D11, D18).
+        let thread = crate::work_class::spawn(
+            crate::work_class::Pool::Capture,
+            crate::work_class::WorkClass::Default,
+            "raptor-tm-capture",
+            move || run(config, deps, rx),
+        )?;
         Ok(Self {
             tx,
             thread: Some(thread),
@@ -308,9 +313,11 @@ fn seeded(
     let repo = repo_id.to_owned();
     // The packs are read from the repo's own Git folder, never through a worktree's `.git`.
     let path = common;
-    let spawned = std::thread::Builder::new()
-        .name("raptor-tm-seed".into())
-        .spawn(move || {
+    // Background: seeding takes neither the store writer nor any lock (D18).
+    let spawned = crate::work_class::spawn_unpooled(
+        crate::work_class::WorkClass::Background,
+        "raptor-tm-seed",
+        move || {
             let started = Instant::now();
             let ms = || i64::try_from(started.elapsed().as_millis()).unwrap_or(i64::MAX);
             match store.seed_with(&path, seed_limits()) {
@@ -333,7 +340,8 @@ fn seeded(
                 ),
             }
             flag.store(true, std::sync::atomic::Ordering::Release);
-        });
+        },
+    );
     if spawned.is_err() {
         seeds.insert(repo_id.to_owned(), Seed::Done);
         return true;
