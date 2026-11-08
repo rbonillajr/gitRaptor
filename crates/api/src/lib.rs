@@ -31,6 +31,9 @@ pub mod rpc;
 pub mod scope;
 pub mod timemachine;
 #[cfg(test)]
+#[path = "timemachine_agent_tests.rs"]
+mod timemachine_agent_tests;
+#[cfg(test)]
 #[path = "timemachine_inferred_tests.rs"]
 mod timemachine_inferred_tests;
 #[cfg(test)]

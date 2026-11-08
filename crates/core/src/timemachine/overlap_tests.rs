@@ -195,6 +195,10 @@ fn branch_event(seq: i64, actor: Requester) -> RawGitEvent {
         branch: Some(BRANCH.into()),
         actor,
         observed_ms: 0,
+        in_gap: false,
+        inferred: false,
+        old_commit: None,
+        new_commit: None,
     }
 }
 

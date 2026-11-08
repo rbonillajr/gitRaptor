@@ -20,6 +20,7 @@ fn done_lists_what_is_not_undone_oldest_first() {
     items.push(StackItem::Undo {
         undo: "u1".into(),
         targets: vec![op("c")],
+        selective: false,
     });
     let stack = UndoStack::build(items);
     assert_eq!(
@@ -40,6 +41,7 @@ fn done_gets_the_undone_operations_back_after_a_redo() {
     items.push(StackItem::Undo {
         undo: "u1".into(),
         targets: vec![op("c")],
+        selective: false,
     });
     items.push(StackItem::Redo {
         redo: "r1".into(),

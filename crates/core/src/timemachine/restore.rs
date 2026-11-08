@@ -769,6 +769,7 @@ pub fn restore_to(
         prior_snapshot: String::new(),
         worktrees: existing.iter().chain(&recreate).cloned().collect(),
         refs: RefScope::Only(refs.clone()),
+        selective: None,
     };
     // Git preconditions before the restore's prior; the
     // applier runs them again under its locks.

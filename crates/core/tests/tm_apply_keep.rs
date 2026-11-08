@@ -120,6 +120,7 @@ impl Apply {
                     .collect::<BTreeSet<_>>(),
             }],
             refs: RefScope::All,
+            selective: None,
         };
         Applier::new(
             &self.env.store,

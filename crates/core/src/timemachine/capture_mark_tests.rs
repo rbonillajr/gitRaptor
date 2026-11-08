@@ -493,6 +493,10 @@ fn a_failed_anchor_leaves_the_echo_with_its_operation() {
                 branch: Some("main".into()),
                 actor: Requester::Unattributed,
                 observed_ms: 0,
+                in_gap: false,
+                inferred: false,
+                old_commit: None,
+                new_commit: None,
             })
             .collect(),
         floor: 0,

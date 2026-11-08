@@ -121,6 +121,7 @@ impl Apply {
                 keep: Default::default(),
             }],
             refs: RefScope::All,
+            selective: None,
         }
     }
 

@@ -246,6 +246,13 @@ pub enum TmRejectReason {
     /// Whether another actor changed it afterwards could not be checked (no base point, or the
     /// store could not be read in time): fail closed.
     OverlapUnverified,
+    /// An operation of the chosen agent cannot be undone on its own (it spans other worktrees
+    /// or lacks its commits).
+    NotSelectable,
+    /// An undo of an agent's work sits above an operation the undo would take back.
+    SelectiveUndoBelow,
+    /// The engine's attribution could not be read, so no agent's work can be chosen.
+    AttributionUnavailable,
 }
 
 /// `data` of an `OPERATION_REJECTED` error of a Time Machine command.

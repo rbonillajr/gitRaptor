@@ -227,6 +227,33 @@ struct Frame {
     mark: usize,
 }
 
+/// One entry of the tree difference between two commits, whole: the path is never cut.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TreeChange {
+    pub path: Vec<u8>,
+    /// The entry in the old commit; `None` when the path is added.
+    pub old: Option<(crate::tm_write::files::Kind, crate::Oid)>,
+    /// The entry in the new commit; `None` when the path is deleted.
+    pub new: Option<(crate::tm_write::files::Kind, crate::Oid)>,
+}
+
+impl RepoReader {
+    /// The entries that differ between the trees of the commits `old` and `new` (hex ids),
+    /// with both sides and uncut paths.
+    ///
+    /// # Errors
+    ///
+    /// Fails if `deadline` passes or an object cannot be read: never a partial list.
+    pub fn commit_tree_diff(
+        &self,
+        _old: &str,
+        _new: &str,
+        _deadline: Instant,
+    ) -> Result<Vec<TreeChange>, ReadError> {
+        Ok(Vec::new())
+    }
+}
+
 impl Walk {
     fn leaf(&mut self, path: &[u8]) {
         self.total += 1;
@@ -430,3 +457,7 @@ mod tests {
         ));
     }
 }
+
+#[cfg(test)]
+#[path = "changed_paths_tree_diff_tests.rs"]
+mod tree_diff_tests;

@@ -13,7 +13,8 @@ use super::{Daemon, sessions};
 use crate::profile::RepoStore;
 use crate::timemachine::continuous::{CaptureConfig, CaptureLayer};
 use crate::timemachine::engine::{
-    CalmExclusions, EngineLink, HookInFlight, RawGitEvent, RepoMarks, generation_floor,
+    CalmExclusions, EngineLink, HookInFlight, RawGitEvent, RepoMarks, SessionAttribution,
+    generation_floor,
 };
 use crate::timemachine::oplog::{Requester, RequesterOrigin};
 
@@ -115,6 +116,16 @@ impl Daemon {
         self.marks.set_floor(repo_id, floor);
     }
 
+    /// The current attribution of every session of the repo (loop side): one read, never
+    /// kept past the call; `None` if the repo's store cannot be read.
+    #[allow(
+        dead_code,
+        reason = "the loop starts serving it with the undo by agent"
+    )]
+    pub(super) fn session_attribution(&self, _repo_id: &str) -> Option<SessionAttribution> {
+        None
+    }
+
     /// The raw Git events of a worktree, with the actor the engine attributed (loop side).
     pub(super) fn raw_events(&self, repo_id: &str, worktree: &Path) -> Option<Vec<RawGitEvent>> {
         let (_, store) = self.stores.iter().find(|(id, _)| id == repo_id)?;
@@ -145,6 +156,10 @@ impl Daemon {
                         branch: details.branch.map(|b| b.raw().to_owned()),
                         actor,
                         observed_ms: e.observed.utc_ms,
+                        in_gap: false,
+                        inferred: false,
+                        old_commit: None,
+                        new_commit: None,
                     })
                 })
                 .collect(),
@@ -177,3 +192,7 @@ fn requester_of(store: &RepoStore, session_id: &str) -> Requester {
         Actor::Unattributed => Requester::Unattributed,
     }
 }
+
+#[cfg(test)]
+#[path = "tm_attribution_tests.rs"]
+mod attribution_tests;

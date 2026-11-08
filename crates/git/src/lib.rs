@@ -40,7 +40,7 @@ pub use capture::{
     Conversions, EntryKind, FileKind, FileStat, HistoryGap, IgnoreCheck, IndexEntry, IndexView,
     Untracked, UntrackedKind,
 };
-pub use changed_paths::{ChangedPaths, MAX_PATH_BYTES, PATH_CUT_MARK};
+pub use changed_paths::{ChangedPaths, MAX_PATH_BYTES, PATH_CUT_MARK, TreeChange};
 pub use committed::{BlobRead, CommittedFile, NotRegular};
 pub use guard_changes::{CommitChange, LineLimits, NewCommitChanges, message_facts};
 pub use guard_paths::{Hide, NewCommitPaths, NewCommits, PathLimits, RootEntry};

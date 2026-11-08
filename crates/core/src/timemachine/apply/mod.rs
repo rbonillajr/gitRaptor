@@ -27,16 +27,16 @@
 
 mod plan;
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use gitraptor_git::tm_write::WriteContext;
 use gitraptor_git::tm_write::files::{Content, Expected, Kind, Outcome, RootDir};
 use gitraptor_git::tm_write::lock::GitLock;
-use gitraptor_git::tm_write::worktree::{Precondition, WriteWorktree};
+use gitraptor_git::tm_write::worktree::{HeadValue, Precondition, WriteWorktree};
 use gitraptor_git::tm_write::{WriteError, index, objects, recreate, refs, tree_path};
-use gitraptor_git::{ReadError, ReaderOptions, RepoReader};
+use gitraptor_git::{Oid, ReadError, ReaderOptions, RepoReader};
 
 use super::chaos;
 use super::oplog::{OperationTransition, Oplog, file_identity};
@@ -55,6 +55,27 @@ pub struct ApplyPlan {
     pub worktrees: Vec<PlanWorktree>,
     /// Which branches and whether `refs/stash` move to the target's values.
     pub refs: RefScope,
+    /// When set, only these subjects are written, each to its own value (an undo by agent);
+    /// `None` writes the whole target.
+    pub selective: Option<SelectiveTarget>,
+}
+
+/// What a selective application writes at one path; `None` is absent.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PathTarget {
+    pub file: Option<(Kind, Oid)>,
+    pub index: Option<(Kind, Oid)>,
+}
+
+/// The subjects a selective application writes, each with its value.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SelectiveTarget {
+    /// Worktree key → path → its target.
+    pub paths: BTreeMap<String, BTreeMap<String, PathTarget>>,
+    /// Full ref name (`refs/heads/…`) → its target; `None` deletes it.
+    pub refs: BTreeMap<String, Option<Oid>>,
+    /// Worktree key → its `HEAD`.
+    pub head: BTreeMap<String, HeadValue>,
 }
 
 /// The refs an application moves to the target's values.

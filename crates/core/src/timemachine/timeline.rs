@@ -1412,6 +1412,10 @@ mod tests {
             branch: None,
             actor: Requester::Unattributed,
             observed_ms: 0,
+            in_gap: false,
+            inferred: false,
+            old_commit: None,
+            new_commit: None,
         }
     }
 
