@@ -10,7 +10,16 @@
 //! cargo bench -p gitraptor-core --bench tm_snapshot                 # profile M
 //! cargo bench -p gitraptor-core --bench tm_snapshot -- --profile S --iters 20
 //! TM_BENCH_ROOT=/scratch cargo bench -p gitraptor-core --bench tm_snapshot -- --profile L
+//! cargo bench -p gitraptor-core --bench tm_snapshot -- --saturated   # RES-07
 //! ```
+//!
+//! `--saturated` (RES-07 of INF-GRP-002, DS-TS-GRP-005 T013): every logical core runs a foreign
+//! busy process (`gitraptor_testkit::cpu_load`) for the whole scenario. The bench's own thread
+//! takes the prior in `UserInitiated`, as `raptor-prior` does, while the other worktrees capture
+//! by observation in `Default` threads, as the continuous capture does. It measures the prior's
+//! p95 with the configured worktrees, the p95 of its wait for the store writer ("cola") and, as
+//! data, the wake-up delay of a `Utility` thread on 100 ms timers. **Fails** on a prior p95 of
+//! 200 ms or more, or a writer wait p95 over 10 ms. Needs `--worktrees` of 2 or more.
 //!
 //! Everything lives under a root outside any Git repo (NFR-01): `TM_BENCH_ROOT` or a temporary
 //! folder. The generated repo is kept there and reused by later runs.
@@ -26,18 +35,25 @@ use gitraptor_core::timemachine::oplog::{Oplog, SnapshotLevel};
 use gitraptor_core::timemachine::store::{
     CaptureError, CaptureRequest, ChangeHint, SnapshotStore, StageTimings, WorktreeScope,
 };
+use gitraptor_core::work_class::{self, WorkClass};
+use gitraptor_testkit::cpu_load::{self, CpuLoad};
 use gitraptor_testkit::fingerprint::{Scope, Snapshot};
 use gitraptor_testkit::repogen::{self, Rng};
 
 const REPO_ID: &str = "be0c0000-0000-4000-8000-00000000be0c";
 /// NFR-04 limit on the p95 of the overhead (ADR-TMC-006 § 2).
 const LIMIT_MS: f64 = 200.0;
+/// Limit on the p95 of the prior's wait for the store writer (ADR-TMC-004 Validación 7).
+const QUEUE_LIMIT_MS: f64 = 10.0;
+/// Timer of the `Utility` wake-up probe of `--saturated` (INF-GRP-002 § 6.3).
+const UTILITY_TIMER: Duration = Duration::from_millis(100);
 
 struct Opts {
     profile: String,
     iters: usize,
     worktrees: usize,
     root: Option<PathBuf>,
+    saturated: bool,
 }
 
 fn opts() -> Opts {
@@ -46,6 +62,7 @@ fn opts() -> Opts {
         iters: 100,
         worktrees: 10,
         root: std::env::var_os("TM_BENCH_ROOT").map(PathBuf::from),
+        saturated: false,
     };
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mut i = 0;
@@ -56,6 +73,11 @@ fn opts() -> Opts {
             "--iters" => o.iters = next.parse().expect("--iters N"),
             "--worktrees" => o.worktrees = next.parse().expect("--worktrees N"),
             "--root" => o.root = Some(PathBuf::from(next)),
+            "--saturated" => {
+                o.saturated = true;
+                i += 1;
+                continue;
+            }
             // `cargo bench` passes `--bench`; nothing else is expected.
             _ => {
                 i += 1;
@@ -299,6 +321,12 @@ fn git_fingerprint(repo: &Path) -> Snapshot {
 
 fn main() {
     let o = opts();
+    if o.saturated && o.worktrees < 2 {
+        eprintln!(
+            "--saturated needs --worktrees 2 or more: the writer wait is measured against them"
+        );
+        std::process::exit(1);
+    }
     let profile = repogen::profile(&o.profile).expect("profile S|P50|M|L");
     let tmp;
     let root = match &o.root {
@@ -425,24 +453,54 @@ fn main() {
         first.timings.files_read
     ));
 
+    // ---- saturated machine (RES-07): the load runs until the end of the bench ---------------
+    let _load = if o.saturated {
+        let cores = cpu_load::logical_cores();
+        match CpuLoad::start(cores) {
+            Ok(load) => {
+                r.line(format!(
+                    "- Carga ajena (`--saturated`): {} procesos ocupados, uno por núcleo lógico, a prioridad normal\n",
+                    load.len()
+                ));
+                // The prior is taken here, as `raptor-prior` takes it.
+                work_class::set_current(WorkClass::UserInitiated);
+                Some(load)
+            }
+            Err(e) => {
+                eprintln!("--saturated: {e}");
+                std::process::exit(1);
+            }
+        }
+    } else {
+        None
+    };
+
     // ---- 1 worktree -----------------------------------------------------------------------
-    r.line("## Snapshot previo, 1 worktree, almacén sembrado\n");
-    table_header(&mut r);
     let mut ed = Editor::new(&repo);
     let mut warnings = Vec::new();
     let mut gate: Vec<(String, f64)> = Vec::new();
-    let scenarios: Vec<(&str, usize, Option<u64>)> = vec![
-        ("sin cambios (camino rápido)", 0, None),
-        ("delta 1 archivo", 1, None),
-        ("delta 10 archivos", 10, None),
-        ("delta 100 archivos", 100, None),
-        (
-            "delta de referencia: 100 archivos / ~20 MB",
-            100,
-            Some(20 << 20),
-        ),
-        ("delta 1.000 archivos (fuera de referencia)", 1000, None),
-    ];
+    let mut queue_gate: Vec<(String, f64)> = Vec::new();
+    if !o.saturated {
+        r.line("## Snapshot previo, 1 worktree, almacén sembrado\n");
+        table_header(&mut r);
+    }
+    // Saturated, only the scenario with the configured worktrees runs.
+    let scenarios: Vec<(&str, usize, Option<u64>)> = if o.saturated {
+        Vec::new()
+    } else {
+        vec![
+            ("sin cambios (camino rápido)", 0, None),
+            ("delta 1 archivo", 1, None),
+            ("delta 10 archivos", 10, None),
+            ("delta 100 archivos", 100, None),
+            (
+                "delta de referencia: 100 archivos / ~20 MB",
+                100,
+                Some(20 << 20),
+            ),
+            ("delta 1.000 archivos (fuera de referencia)", 1000, None),
+        ]
+    };
     for (name, n, heavy) in scenarios {
         let paths = match heavy {
             Some(b) => ed.pick_heavy(n, b),
@@ -497,7 +555,12 @@ fn main() {
                 path.clone(),
                 repo.clone(),
             );
+            let saturated = o.saturated;
             threads.push(std::thread::spawn(move || {
+                if saturated {
+                    // The continuous capture's class: it holds the writer, never below Default.
+                    work_class::set_current(WorkClass::Default);
+                }
                 let mut ed = Editor::new(&path);
                 ed.rng = Rng::new(100 + i as u64);
                 let mut wt = Wt {
@@ -529,6 +592,20 @@ fn main() {
                 ed.restore(&path)
             }));
         }
+        // The wake-up delay of a Utility thread on short timers, as data (D14).
+        let probe = o.saturated.then(|| {
+            let stop = Arc::clone(&stop);
+            work_class::spawn_unpooled(WorkClass::Utility, "bench-utility-timer", move || {
+                let mut late = Vec::new();
+                while !stop.load(Ordering::Acquire) {
+                    let t = Instant::now();
+                    std::thread::sleep(UTILITY_TIMER);
+                    late.push(ms(t.elapsed().saturating_sub(UTILITY_TIMER)));
+                }
+                late
+            })
+            .expect("utility timer thread")
+        });
         std::thread::sleep(Duration::from_millis(1500));
         for (name, n, heavy) in [
             ("delta 100 archivos", 100usize, None),
@@ -557,7 +634,9 @@ fn main() {
             gate.push((label.clone(), series.p95_total()));
             warnings.extend(series.warnings(&label));
             let queue = pct(&series.col(|t| t.queue), 95.0);
-            if queue > 10.0 {
+            if o.saturated {
+                queue_gate.push((label.clone(), queue));
+            } else if queue > QUEUE_LIMIT_MS {
                 warnings.push(format!(
                     "⚠️ {label}: espera del escritor p95 {queue:.1} ms > 10 ms (ADR-TMC-004 § 2)"
                 ));
@@ -573,6 +652,17 @@ fn main() {
         stop.store(true, Ordering::Release);
         for t in threads {
             t.join().unwrap();
+        }
+        if let Some(probe) = probe {
+            let late = probe.join().unwrap();
+            r.line(format!(
+                "\nRetraso de despertar de un hilo `Utility` con temporizadores de {} ms (dato, D14): p50 {:.1} ms · p95 {:.1} ms · máx {:.1} ms · n {}",
+                UTILITY_TIMER.as_millis(),
+                pct(&late, 50.0),
+                pct(&late, 95.0),
+                pct(&late, 100.0),
+                late.len()
+            ));
         }
         r.line(format!(
             "\nCapturas por observación que cedieron al previo: {}",
@@ -608,6 +698,17 @@ fn main() {
             "- {label}: p95 {p95:.1} ms {}",
             if ok { "✅" } else { "❌" }
         ));
+    }
+    if o.saturated {
+        r.line("\n## Gate RES-07: espera del previo al escritor (p95 ≤ 10 ms)\n");
+        for (label, queue) in &queue_gate {
+            let ok = *queue <= QUEUE_LIMIT_MS;
+            failed |= !ok;
+            r.line(format!(
+                "- {label}: cola p95 {queue:.1} ms {}",
+                if ok { "✅" } else { "❌" }
+            ));
+        }
     }
     for w in &warnings {
         r.line(format!("- {w}"));
