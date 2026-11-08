@@ -51,6 +51,9 @@ struct Task {
     overflow_from_ms: Option<i64>,
     ignore: IgnoreCache,
     next_periodic: Instant,
+    /// When the last full reconciliation ran (the task's start counts as one): where the next
+    /// one is recomputed from when the power mode changes.
+    last_periodic: Instant,
     last_periodic_ms: i64,
     degraded: bool,
     next_degraded: Instant,
@@ -82,7 +85,8 @@ pub(super) fn run(
     let now = Instant::now();
     // Worktrees are staggered over the period so they do not all
     // reconcile at once.
-    let stagger = stagger(&root, config.periodic);
+    let period = shared.periodic();
+    let stagger = stagger(&root, period);
     let mut task = Task {
         repo_id,
         main: initial.view.main,
@@ -97,7 +101,8 @@ pub(super) fn run(
         last_event_ms: wall_now().0,
         overflow_from_ms: None,
         ignore: IgnoreCache::with_prefixes(ignored),
-        next_periodic: now + config.periodic.min(stagger + config.periodic / 2),
+        next_periodic: now + period.min(stagger + period / 2),
+        last_periodic: now,
         last_periodic_ms: wall_now().0,
         degraded,
         next_degraded: now + config.degraded_poll,
@@ -136,6 +141,7 @@ pub(super) fn run(
             }
             Ok(WtMsg::Reconcile(t_recv)) => task.open_window(t_recv, Duration::ZERO),
             Ok(WtMsg::IgnoreRules) => task.ignore.clear(),
+            Ok(WtMsg::Power) => task.retime_periodic(),
             // Going dormant: what is in the window is handed over first
             // (ADR-GRP-010, Enmienda 2026-10-07, N1 step 1).
             Ok(WtMsg::Sleep(done)) => {
@@ -305,6 +311,21 @@ impl Task {
         }
     }
 
+    /// The power mode changed (D13): the next full reconciliation is one period of the new mode
+    /// after the last one. The change never fires one: when that moment has already passed, the
+    /// next one is spread over the new period as at the start, so the tasks do not all run at
+    /// once.
+    fn retime_periodic(&mut self) {
+        let period = self.shared.periodic();
+        let now = Instant::now();
+        let due = self.last_periodic + period;
+        self.next_periodic = if due > now {
+            due
+        } else {
+            now + period.min(stagger(&self.root, period) + period / 2)
+        };
+    }
+
     /// Full reconciliation every period (ADR-GRP-010 § 5): what it finds
     /// was missed without a mark, so it is published in a gap of its own.
     /// Not in degraded mode, which already reads the full state.
@@ -312,8 +333,9 @@ impl Task {
         // Utility for the whole stretch, its send included, and back to the thread's own class
         // when it returns: the debounce and the recompute stay where they were (D5).
         let _class = crate::work_class::scoped(crate::work_class::WorkClass::Utility);
-        let period = self.shared.config.periodic;
-        self.next_periodic = Instant::now() + period;
+        let period = self.shared.periodic();
+        self.last_periodic = Instant::now();
+        self.next_periodic = self.last_periodic + period;
         let (now_ms, offset_s) = wall_now();
         let from_ms = std::mem::replace(&mut self.last_periodic_ms, now_ms);
         if self.degraded {

@@ -311,6 +311,9 @@ pub(crate) enum Control {
     /// A repo went dormant: the batches its tasks flushed are ahead of
     /// this in the queue, so its store can close (TS-GRP-006).
     Slept(String),
+    /// The power-saving mode changed (TS-GRP-005): the loop applies it to the tiers and the
+    /// observer.
+    PowerMode(bool),
     /// Tests only (debug builds): drives the observer and the tiers step by
     /// step, so a race can be reproduced without timing.
     Test(TierTestOp, SyncSender<()>),
@@ -640,6 +643,11 @@ impl ShutdownHandle {
     /// Hands an observed batch to the loop. `false` if it already stopped.
     pub(crate) fn observed(&self, batch: ObservedBatch) -> bool {
         self.tx.send(Control::Observed(Box::new(batch))).is_ok()
+    }
+
+    /// Tells the loop the power-saving mode changed (TS-GRP-005). `false` if it already stopped.
+    pub(crate) fn power_mode(&self, active: bool) -> bool {
+        self.tx.send(Control::PowerMode(active)).is_ok()
     }
 
     /// Tells the loop a repo's sleep batches are all queued (TS-GRP-006).

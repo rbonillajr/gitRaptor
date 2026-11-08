@@ -17,7 +17,7 @@ use gitraptor_api::messages::{RepoStateView, RepoTier, RepoTierData};
 use super::{Daemon, Field, ShutdownHandle, profile_error_kind, repo_base};
 use crate::observe;
 use crate::profile::WriteOp;
-use crate::watch::{ObserverHooks, SleepRefused, Tier, WakeCause};
+use crate::watch::{ObserverHooks, SleepRefused, Tier, WakeCause, schedule};
 
 /// When repos go dormant (TS-GRP-006). The default sleeps nothing, so the
 /// tests that do not test tiers keep every repo active; the real daemon
@@ -52,33 +52,46 @@ impl Default for TierConfig {
 const DORMANT_AFTER_HOURS: u32 = 24;
 const SWEEP_SECONDS: u32 = 120;
 const RECONCILE_MINUTES: u32 = 60;
-/// Power saving (ADR-GRP-015, Enmienda 2026-10-07): 300 s and 180 min.
-const SAVING_SWEEP_SECONDS: u32 = 300;
-const SAVING_RECONCILE_MINUTES: u32 = 180;
 
 impl TierConfig {
     /// The values of `engine.observation`, with their defaults. Power
-    /// saving lengthens both intervals; the engine has no power saving yet
-    /// (TS-GRP-005), so the daemon passes `false`.
+    /// saving lengthens both intervals ([`TierConfig::with_power_saving`]).
     pub fn from_settings(
         settings: &gitraptor_policy::settings::Observation,
         power_saving: bool,
     ) -> Self {
         let hours = settings.dormant_after_hours.unwrap_or(DORMANT_AFTER_HOURS);
-        let mut sweep = settings.dormant_poll_seconds.unwrap_or(SWEEP_SECONDS);
-        let mut reconcile = settings
+        let sweep = settings.dormant_poll_seconds.unwrap_or(SWEEP_SECONDS);
+        let reconcile = settings
             .dormant_reconcile_minutes
             .unwrap_or(RECONCILE_MINUTES);
-        if power_saving {
-            sweep = sweep.max(SAVING_SWEEP_SECONDS);
-            reconcile = reconcile.max(SAVING_RECONCILE_MINUTES);
-        }
         let sweep = Duration::from_secs(u64::from(sweep));
         Self {
             dormant_after: Some(Duration::from_secs(u64::from(hours) * 3600)),
             check_every: sweep,
             sweep_every: sweep,
             reconcile_every: Duration::from_secs(u64::from(reconcile) * 60),
+        }
+        .with_power_saving(power_saving)
+    }
+
+    /// This configuration in the given power mode: while saving, the sweep (and the threshold
+    /// check that runs with it) takes at least 300 s and the slow reconciliation at least
+    /// 180 min (ADR-GRP-015, Enmienda 2026-10-07); a longer configured value stays. Without
+    /// saving it is returned untouched, so the daemon applies it over its base on every change.
+    #[must_use]
+    pub fn with_power_saving(self, active: bool) -> Self {
+        if !active {
+            return self;
+        }
+        let (sweep, reconcile) =
+            schedule::dormant_intervals(self.sweep_every, self.reconcile_every, true);
+        let (check, _) = schedule::dormant_intervals(self.check_every, self.reconcile_every, true);
+        Self {
+            check_every: check,
+            sweep_every: sweep,
+            reconcile_every: reconcile,
+            ..self
         }
     }
 

@@ -22,7 +22,9 @@ use gitraptor_api::resources::{
     WatchBackendKind, WatchUsage,
 };
 
+use crate::power::PowerMode;
 use crate::profile::ProfileDirs;
+use crate::work_class::{self, Support};
 pub use disk::DiskLimits;
 use window::{CpuPoint, CpuWindow};
 
@@ -123,6 +125,8 @@ struct Inner {
     observation: Mutex<Option<ObservationSource>>,
     /// The file watcher backend that runs, once the observer does.
     backend: Mutex<Option<WatchBackendKind>>,
+    /// The power mode (TS-GRP-005), once the daemon hands it over.
+    power: Mutex<Option<PowerMode>>,
 }
 
 /// Reads the observation tiers when `engine.resources` is asked.
@@ -166,6 +170,7 @@ impl ResourceMonitor {
             roots,
             observation: Mutex::new(None),
             backend: Mutex::new(None),
+            power: Mutex::new(None),
         });
         inner.record();
         Self {
@@ -191,6 +196,12 @@ impl ResourceMonitor {
             .observation
             .lock()
             .unwrap_or_else(|e| e.into_inner()) = Some(source);
+    }
+
+    /// The power mode to publish (`power_saving`, on every OS) and, with it, the live pools of
+    /// the work classes (`pools`, only where the classes are applied; `null` elsewhere).
+    pub fn set_power(&self, mode: PowerMode) {
+        *self.inner.power.lock().unwrap_or_else(|e| e.into_inner()) = Some(mode);
     }
 
     /// Starts the sampling thread. It wakes once per interval and ends as
@@ -274,8 +285,14 @@ impl ResourceMonitor {
                 inotify: meter::inotify(),
             },
             disk: self.disk(),
-            pools: None,
-            power_saving: None,
+            pools: self.pools(),
+            power_saving: self
+                .inner
+                .power
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .as_ref()
+                .map(PowerMode::view),
             observation: self
                 .inner
                 .observation
@@ -285,6 +302,18 @@ impl ResourceMonitor {
                 .and_then(|read| read()),
             targets: self.inner.config.targets,
         }
+    }
+
+    /// The live pools once the power mode is set, and only where the classes are applied
+    /// (D12): never an empty list standing for "unavailable".
+    fn pools(&self) -> Option<Vec<gitraptor_api::resources::PoolClass>> {
+        let set = self
+            .inner
+            .power
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_some();
+        (set && work_class::support() == Support::Applied).then(work_class::pools)
     }
 
     fn disk(&self) -> DiskUsage {
@@ -345,7 +374,16 @@ mod tests {
         assert_eq!(r.disk.time_machine.len(), 1);
         assert_eq!(r.disk.time_machine[0].repo_id, "r1");
         assert_eq!(r.targets.rss_bytes, TARGETS.rss_bytes);
+        // No power mode yet: neither the mode nor the pools are published.
         assert!(r.pools.is_none() && r.power_saving.is_none());
+        monitor.set_power(crate::power::PowerMode::fixed(true));
+        let r = monitor.read();
+        assert_eq!(r.power_saving.map(|v| v.active), Some(true));
+        assert_eq!(
+            r.pools.is_some(),
+            work_class::support() == Support::Applied,
+            "pools are listed only where the classes are applied"
+        );
         #[cfg(any(target_os = "macos", target_os = "linux", windows))]
         {
             assert!(r.process.rss_bytes.unwrap() > 0);
