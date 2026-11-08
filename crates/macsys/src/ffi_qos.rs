@@ -51,6 +51,21 @@ pub(crate) fn thread_io() -> Option<c_int> {
     (rc >= 0).then_some(rc)
 }
 
+/// The nice of the calling process; `None` when it cannot be read.
+pub(crate) fn process_nice() -> Option<c_int> {
+    // SAFETY: no arguments; returns the address of the calling thread's own `errno`, valid
+    // for the thread's whole life.
+    let errno = unsafe { libc::__error() };
+    // SAFETY: `errno` points to this thread's own, aligned `c_int`. Clearing it first is how a
+    // legitimate `-1` from `getpriority` is told from a failure.
+    unsafe { *errno = 0 };
+    // SAFETY: integers only; reads the calling process's own nice, failing with -1 and errno.
+    let nice = unsafe { libc::getpriority(libc::PRIO_PROCESS, 0) };
+    // SAFETY: as above, this thread's own `errno`.
+    let failed = unsafe { *errno } != 0;
+    (!failed).then_some(nice)
+}
+
 /// Makes the child of `cmd` set its own nice and process disk I/O policy right before `exec`.
 ///
 /// The hook runs between `fork` and `exec`, where only async-signal-safe work is sound: it makes
