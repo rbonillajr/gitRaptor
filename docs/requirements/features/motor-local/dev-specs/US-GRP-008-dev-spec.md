@@ -265,7 +265,7 @@ flowchart LR
 
 **Objetivo.** La historia pasa a `implemented` con su PR; los pendientes quedan anotados donde corresponde.
 
-**Ubicación.** `docs/requirements/features/motor-local/user-stories/US-GRP-008-editor-humano-sin-atribuir.md` (**MODIFY**) · `docs/architecture/xplat-pendientes.md` (**MODIFY**)
+**Ubicación.** `docs/requirements/features/motor-local/user-stories/US-GRP-008-editor-humano-sin-atribuir.md` (**MODIFY**) · `docs/architecture/xplat-pendientes.md` (**MODIFY**) · esta Dev Spec (`status: implemented`, **MODIFY**) · `docs/requirements/backlog.md` (**MODIFY**, fila nueva de US-GRP-008) · `docs/requirements/release-status.md` (**MODIFY**, regenerado con `node tools/status/release-status.mjs`)
 
 **Reglas**
 - Las enmiendas de ADR-GRP-012 (S2 fuera del MVP por Q52; la regla de D4), SPIKE-GRP-001, DS-US-GRP-007 y ADR-GRP-016 ya están aplicadas (§ Enmiendas aplicadas). El PR solo comprueba que siguen al día.
@@ -292,7 +292,7 @@ crates/core/src/daemon/sessions.rs               ← MODIFY  (T003, contador del
 apps/cli/src/status.rs, i18n/{en,es}/status.txt  ← MODIFY  (T004)
 apps/cli/tests/editor_unattributed.rs            ← CREATE  (T005, macOS)
 apps/cli/tests/editor_unattributed_windows.rs    ← CREATE  (T005, Windows)
-docs/…                                           ← MODIFY  (T006)
+docs/…                                           ← MODIFY  (T006: historia, esta DS, backlog.md, xplat-pendientes.md y release-status.md)
 ```
 
 ## Contratos compartidos
@@ -370,7 +370,7 @@ Repos temporales del arnés (INF-GRP-001) con `feat-pagos` y `feat-login`; perfi
 | ídem · el desarrollador desde otro editor | `a_change_without_an_identified_agent_is_unattributed_other_editor`: lo mismo con un proceso `code` |
 | ídem · un agente sin soporte completo que no se registró, como Codex | `a_change_without_an_identified_agent_is_unattributed_unregistered_codex`: lo mismo con un proceso `codex`; además `raptor sessions --all --json` no tiene ninguna sesión `other` |
 | Un cambio dudoso junto a Claude Code no se atribuye a Claude Code | `a_doubtful_change_next_to_claude_code_is_unattributed`: el Claude Code simulado está `active` en `feat-login`; un proceso `cursor` modifica `README.md`; la sesión sigue siendo la única de `feat-login` (`shared: false`), `changes` incluye `README.md` y `changes_actor` es `unattributed`, no `claude-code`. La sesión puede seguir `active` por esa actividad (BR-WF-001): no es atribución |
-| Un commit del desarrollador junto a Claude Code no se atribuye a Claude Code | `a_developer_commit_next_to_claude_code_without_a_visible_git_is_unattributed`: un `git` de solo lectura del Claude Code simulado sigue vivo (`git cat-file --batch-check` de 4 s, como en `claude_sessions.rs`); el desarrollador escribe el commit sin `git` visible (T005, Reglas); el evento `commit` tiene actor `unattributed` y en el almacén no apunta a ninguna sesión. **Falla hoy**: sale `claude-code / detected` |
+| Un commit del desarrollador junto a Claude Code no se atribuye a Claude Code | `a_developer_commit_next_to_claude_code_without_a_visible_git_is_unattributed`: un `git` de solo lectura del Claude Code simulado sigue vivo (`git cat-file --batch-check` de 4 s, como en `claude_sessions.rs`); el desarrollador escribe el commit sin `git` visible (T005, Reglas); el evento `commit` tiene actor `unattributed` y en el almacén no apunta a ninguna sesión. Antes de T003 salía `claude-code / detected`; con T003 (PR #315) pasa, y queda como guarda de regresión |
 | ídem, con el `git` del desarrollador visible | Ya cubierto: `a_developer_commit_while_claude_code_runs_git_is_unattributed` (`claude_sessions.rs`) y, con Guardrails, `a_developers_commit_next_to_a_live_agent_session_stays_unattributed` (`events_s4_hook_attribution.rs`). No se duplican |
 | ídem, cuando S3 no ve ningún `git` | `a_developer_commit_after_claude_codes_git_ended_is_unattributed`: sin `git` vivo de la sesión; actor `unattributed`, sin sesión en el almacén; si lleva la pista `inferred`, su `trailer` es `unconfirmed`, nunca `confirmed` (G4, Q54) |
 
