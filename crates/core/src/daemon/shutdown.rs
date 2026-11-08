@@ -403,6 +403,12 @@ pub(crate) enum Control {
         worktree: std::path::PathBuf,
         reply: SyncSender<Option<Vec<crate::timemachine::engine::RawGitEvent>>>,
     },
+    /// The current attribution of every session of a repo, read once when an undo by agent
+    /// plans (US-TMC-011).
+    SessionAttribution {
+        repo_id: String,
+        reply: SyncSender<Option<crate::timemachine::engine::SessionAttribution>>,
+    },
 }
 
 /// Answer of `sessions.list`: whether detection is available here, and the
@@ -796,6 +802,22 @@ impl ShutdownHandle {
             .send(Control::RawEvents {
                 repo_id: repo_id.to_owned(),
                 worktree: worktree.to_path_buf(),
+                reply,
+            })
+            .ok()?;
+        rx.recv_timeout(AUDIT_TIMEOUT).ok().flatten()
+    }
+
+    /// The current attribution of every session of a repo, read through the loop, which owns
+    /// the stores. `None` if the loop does not answer or the store cannot be read.
+    pub(crate) fn session_attribution(
+        &self,
+        repo_id: &str,
+    ) -> Option<crate::timemachine::engine::SessionAttribution> {
+        let (reply, rx) = sync_channel(1);
+        self.tx
+            .send(Control::SessionAttribution {
+                repo_id: repo_id.to_owned(),
                 reply,
             })
             .ok()?;
