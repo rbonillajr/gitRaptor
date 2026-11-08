@@ -42,7 +42,7 @@
     },
     {
       "id": "CLS1",
-      "statement": "Cuando se toma un snapshot previo en macOS, sus hilos de hashing corren en `UserInitiated`; la captura continua corre en `Default` y figura como pool `Capture` mientras su hilo vive, y ningún tramo que retiene el escritor corre por debajo de `Default` (T010, D18, guards 10.1 y 10.2).",
+      "statement": "Cuando el motor atiende en macOS, `raptor-conn`, `raptor-prior` y los hilos de hashing de un previo leen `UserInitiated` del SO, la captura continua corre en `Default` y figura como pool `Capture` mientras su hilo vive, y ningún tramo que retiene el escritor corre por debajo de `Default` (T010, D18, guards 10.1 a 10.3).",
       "verify": "cargo test -p gitraptor-core --test tm_classes",
       "layer": "runtime",
       "tests": ["crates/core/tests/tm_classes.rs"]
@@ -53,6 +53,12 @@
       "verify": "cargo test -p gitraptor-core --test work_class_boundary",
       "layer": "runtime",
       "tests": ["crates/core/tests/work_class_boundary.rs"]
+    },
+    {
+      "id": "SEED1",
+      "statement": "Cuando se siembra el almacén, el hilo `raptor-tm-seed` nace en `Background` por `work_class::spawn_unpooled` (D18; su clase no se puede leer sin un punto de enganche nuevo en producción, así que se fija en el código).",
+      "verify": "grep -A3 'spawn_unpooled' crates/core/src/timemachine/continuous.rs | grep -q 'WorkClass::Background' && grep -A6 'spawn_unpooled' crates/core/src/timemachine/continuous.rs | grep -q 'raptor-tm-seed'",
+      "layer": "static"
     },
     {
       "id": "GIT1",
@@ -76,7 +82,7 @@
   ],
   "constraints": {
     "deny_paths": ["docs/ARTIFACTS.md", "crates/core/src/predict", "apps/cli/src/tui", "apps/cli/src/resources.rs", "crates/api/src"],
-    "allow_dependency_changes": false
+    "allow_dependency_changes": true
   },
   "suite": { "command": "node tools/test/nextest-junit.mjs" },
   "layers": {
