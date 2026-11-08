@@ -449,7 +449,8 @@ graph LR
 
 - **Depende:** T003, T005
 - **Refs:** ADR-GRP-015 § 2; ADR-GRP-002, Enmienda 2026-10-07; D3, D6; G1
-- **Aceptación:** `cargo test -p gitraptor-macsys --test power` y `cargo test -p gitraptor-core --lib power::macos`
+- **Aceptación:** `cargo test -p gitraptor-macsys --test power` y `cargo test -p gitraptor-core --test power_source`
+- **Criterios:** PWR1, PWR2
 - **Guard ⛔7.1:** `power::reading_returns_a_value_on_this_mac`
 - **Guard ⛔7.2:** `power::macos::tests::low_power_wins_over_ac`
 
@@ -469,6 +470,7 @@ graph LR
 - **Depende:** T005, T006
 - **Refs:** ADR-GRP-015 § 4; US-GRP-017; D12
 - **Aceptación:** `cargo test -p gitraptor-core --test resources_power`
+- **Criterios:** RES1
 - **Guard ⛔8.1:** `resources_power::power_saving_follows_the_mode`
 - **Guard ⛔8.2:** `resources_power::pools_are_none_when_classes_are_unavailable` (fuera de macOS)
 - **Guard ⛔8.3:** `resources_power::pools_list_only_running_pools` (macOS)
@@ -490,7 +492,8 @@ graph LR
 
 - **Depende:** T005
 - **Refs:** ADR-GRP-015 § 2 y Validación 3 (RES-08); ADR-GRP-010 § 5; TS-GRP-006 D12; D13
-- **Aceptación:** `cargo test -p gitraptor-core --lib watch::schedule` y `cargo test -p gitraptor-core --test observe_power`
+- **Aceptación:** `cargo test -p gitraptor-core --test observe_power`
+- **Criterios:** SAV1
 - **Guard ⛔9.1:** `watch::schedule::tests::sixty_minutes_have_4_reconciliations_on_battery_and_12_on_ac`
 - **Guard ⛔9.2:** `observe_power::back_on_ac_the_next_reconciliation_moves_within_60_s`
 - **Guard ⛔9.3:** `observe_power::power_saving_lengthens_the_dormant_safety_nets`
@@ -513,7 +516,8 @@ graph LR
 
 - **Depende:** T002
 - **Refs:** ADR-TMC-004 § 2 (Enmienda 2026-10-04); ADR-TMC-006; ADR-GRP-015 § 1; D10, D11
-- **Aceptación:** `cargo test -p gitraptor-core --test work_class_boundary --test tm_classes`
+- **Aceptación:** `cargo test -p gitraptor-core --test work_class_boundary --test tm_classes` (`crates/core/tests/tm_classes.rs`, `crates/core/tests/work_class_boundary.rs`)
+- **Criterios:** CLS1, CLS2
 - **Guard ⛔10.1:** `tm_classes::prior_hashing_runs_in_user_initiated_and_capture_stays_in_default` (macOS; D18)
 - **Guard ⛔10.2:** `tm_classes::the_writer_is_never_held_below_default` (macOS)
 
@@ -534,7 +538,8 @@ graph LR
 
 - **Depende:** T001, T002
 - **Refs:** ADR-GRP-015 § 1 y Validación 1; ADR-GRP-009; D9
-- **Aceptación:** `cargo test -p gitraptor-git --test child_class`; `cargo bench -p gitraptor-git --bench spawn_cost` con la cifra en el PR
+- **Aceptación:** `cargo test -p gitraptor-git --test child_class` (`crates/git/tests/child_class.rs`); `cargo bench -p gitraptor-git --bench spawn_cost` (`crates/git/benches/spawn_cost.rs`) con la cifra en el PR
+- **Criterios:** GIT1, GIT2
 - **Guard ⛔11.1:** `child_class::a_git_child_of_a_background_thread_runs_at_nice_10` (macOS; el test lee el nice del hijo con `getpriority` desde el propio hijo de prueba)
 - **Guard ⛔11.2:** `child_class::a_default_thread_installs_no_pre_exec`
 
@@ -550,7 +555,8 @@ graph LR
 
 - **Depende:** —
 - **Refs:** ADR-GRP-005 § 3; ADR-GRP-015 § 1
-- **Aceptación:** `cargo test -p gitraptor-core --lib autostart`
+- **Aceptación:** `cargo test -p gitraptor-core --lib autostart` (`crates/core/src/autostart.rs`)
+- **Criterios:** — (solo fija con un test lo que ya cumple el código: no puede nacer en rojo; lo cubre la suite)
 - **Guard ⛔12.1:** `autostart::tests::the_plist_runs_as_standard`
 
 ### T013 — Escenario RES-07 de INF-GRP-002
@@ -570,7 +576,8 @@ graph LR
 
 - **Depende:** T010, T011
 - **Refs:** ADR-GRP-015 Validación 2; ADR-TMC-004 Validación 7; ADR-TMC-006; INF-GRP-002 § 6.3 y § 8; D11, D14
-- **Aceptación:** `cargo bench -p gitraptor-core --bench tm_snapshot -- --saturated` y `cargo bench -p gitraptor-cli --bench engine -- --quick --saturated` en verde en macOS, cifras en el PR
+- **Aceptación:** `cargo bench -p gitraptor-core --bench tm_snapshot -- --saturated` y `cargo bench -p gitraptor-cli --bench engine -- --quick --saturated` en verde en macOS, cifras en el PR (`crates/core/benches/tm_snapshot.rs`, `apps/cli/benches/engine.rs`)
+- **Criterios:** BEN1
 - **Guard ⛔13.1:** escenario `--saturated` de los bancos `tm_snapshot` y `engine`
 
 ### T014 — Cerrar la historia y la documentación
@@ -590,6 +597,7 @@ graph LR
 - **Depende:** T007, T008, T009, T012, T013 (las clases del camino del previo y de los hijos llegan a través de T013)
 - **Refs:** ADR-GRP-015 § Validación
 - **Aceptación:** `cargo test --workspace` y `cargo clippy --workspace --all-targets -- -D warnings` en verde
+- **Criterios:** — (documentación; la cubren la suite y docs-lint)
 - **Guard ⛔14.1:** —
 
 ---

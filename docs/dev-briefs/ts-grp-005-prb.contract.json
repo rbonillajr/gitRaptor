@@ -1,0 +1,97 @@
+{
+  "source": "docs/requirements/features/motor-local/dev-specs/TS-GRP-005-dev-spec.md",
+  "goal": {
+    "intent": "Que el motor ceda la máquina al usuario: el trabajo de fondo corre con la prioridad del SO de su clase, el camino del snapshot previo nunca espera a un hilo bajado, y en batería o modo de bajo consumo el motor ahorra energía y lo publica (ADR-GRP-015 § 1 y § 2; PR-B de DS-TS-GRP-005, T007 a T014).",
+    "endState": "En macOS, con `engine.powerSaving` en `auto`, desenchufar el portátil o activar el bajo consumo pone el motor en ahorro en ≤ 60 s. `engine.resources` publica `power_saving` en todos los SO y `pools` en macOS (null fuera de él). La reconciliación periódica pasa de 5 a 15 min y las redes de seguridad de los dormidos se alargan mientras dura el ahorro, y vuelven a su valor al volver a corriente. `raptor-conn`, `raptor-prior` y el hashing de un previo corren en `UserInitiated`, `raptor-tm-capture` en `Default` (D18) y `raptor-tm-seed` en `Background`. Un `git` lanzado por un hilo `Utility` o `Background` sale con nice 5 o 10. Los bancos `tm_snapshot` y `engine` tienen el escenario `--saturated` de RES-07. En Linux y Windows todo compila y degrada sin pánico (XP-45).",
+    "nonGoals": [
+      "Sacar la fase de blobs de la captura fuera del escritor y bajar su hashing a Background (TD-TMC-002, D18)",
+      "El texto y la vista del modo de ahorro en la TUI y la CLI (US-GRP-019, US-GRP-017)",
+      "La pausa del predictor (TS-CKP-001)",
+      "Aplicar clases o leer la fuente de energía en Linux y Windows (XP-45)",
+      "Cambiar el contrato de `engine.resources` o el perfil `mcp`"
+    ]
+  },
+  "criteria": [
+    {
+      "id": "PWR1",
+      "statement": "Cuando macOS lee la fuente de energía, el motor la traduce a `PowerReading`: el bajo consumo manda sobre la corriente y la batería, sin batería es `Ac` y un fallo es `Unknown`; en macOS `platform_source()` ya no devuelve `Unknown` (T007, guards 7.1 y 7.2).",
+      "verify": "cargo test -p gitraptor-core --test power_source",
+      "layer": "runtime",
+      "tests": ["crates/core/tests/power_source.rs"]
+    },
+    {
+      "id": "PWR2",
+      "statement": "Cuando se pide la lectura de energía en esta Mac, `gitraptor_macsys::power::reading()` devuelve un valor (`on_battery`, `low_power`) sin `unsafe` fuera de `ffi_power` (T007, guard 7.1).",
+      "verify": "cargo test -p gitraptor-macsys --test power",
+      "layer": "runtime",
+      "tests": ["crates/macsys/tests/power.rs"]
+    },
+    {
+      "id": "RES1",
+      "statement": "Cuando el monitor de recursos tiene el modo de energía, `power_saving` sigue al modo (`setting`, `active`) en todos los SO, y `pools` lista solo los pools vivos en macOS y es null donde las clases no están disponibles (T008, guards 8.1 a 8.3).",
+      "verify": "cargo test -p gitraptor-core --test resources_power",
+      "layer": "runtime",
+      "tests": ["crates/core/tests/resources_power.rs"]
+    },
+    {
+      "id": "SAV1",
+      "statement": "Cuando el motor entra en ahorro, la reconciliación periódica pasa a `max(periodic, saving_periodic)` (4 reconciliaciones en 60 min con batería y 12 con corriente), las redes de seguridad de los dormidos se alargan, y al volver a corriente el próximo plazo se recalcula en ≤ 60 s sin disparar una reconciliación (T009, guards 9.1 a 9.3).",
+      "verify": "cargo test -p gitraptor-core --test observe_power",
+      "layer": "runtime",
+      "tests": ["crates/core/tests/observe_power.rs"]
+    },
+    {
+      "id": "CLS1",
+      "statement": "Cuando se toma un snapshot previo en macOS, sus hilos de hashing corren en `UserInitiated`; la captura continua corre en `Default` y figura como pool `Capture` mientras su hilo vive, y ningún tramo que retiene el escritor corre por debajo de `Default` (T010, D18, guards 10.1 y 10.2).",
+      "verify": "cargo test -p gitraptor-core --test tm_classes",
+      "layer": "runtime",
+      "tests": ["crates/core/tests/tm_classes.rs"]
+    },
+    {
+      "id": "CLS2",
+      "statement": "Cuando se revisa `crates/core/src`, ningún hilo del camino del snapshot previo (`raptor-conn`, `raptor-prior`, `raptor-tm-capture`, `raptor-tm-seed`, los hilos de hashing) nace sin clase declarada, y ningún archivo que toma el escritor del almacén declara `Utility` ni `Background` (T010, guard 6.1 sin las excepciones del PR-B; D11).",
+      "verify": "cargo test -p gitraptor-core --test work_class_boundary",
+      "layer": "runtime",
+      "tests": ["crates/core/tests/work_class_boundary.rs"]
+    },
+    {
+      "id": "GIT1",
+      "statement": "Cuando un hilo `Background` o `Utility` lanza `git` por la capa de invocación en macOS, el hijo sale con nice 10 o 5, y el hijo de un hilo `Default` conserva la prioridad heredada (T011, guards 11.1 y 11.2).",
+      "verify": "cargo test -p gitraptor-git --test child_class",
+      "layer": "runtime",
+      "tests": ["crates/git/tests/child_class.rs"]
+    },
+    {
+      "id": "GIT2",
+      "statement": "Cuando se mide el coste de perder `posix_spawn`, existe el banco `spawn_cost` de `crates/git`, que mide `git --version` p50 y p95 con y sin `pre_exec` (T011; la cifra va al PR).",
+      "verify": "test -f crates/git/benches/spawn_cost.rs && grep -q 'name = \"spawn_cost\"' crates/git/Cargo.toml && grep -q 'pre_exec\\|lower_child' crates/git/benches/spawn_cost.rs",
+      "layer": "static"
+    },
+    {
+      "id": "BEN1",
+      "statement": "Cuando se mide RES-07, los bancos `tm_snapshot` y `engine` aceptan `--saturated`, que satura cada núcleo lógico con la carga de `gitraptor_testkit::cpu_load` durante todo el escenario (T013; las cifras van al PR).",
+      "verify": "test -f crates/testkit/src/cpu_load.rs && grep -q -- '--saturated' crates/core/benches/tm_snapshot.rs && grep -q -- '--saturated' apps/cli/benches/engine.rs && grep -q 'cpu_load' crates/core/benches/tm_snapshot.rs && grep -q 'cpu_load' apps/cli/benches/engine.rs",
+      "layer": "static"
+    }
+  ],
+  "constraints": {
+    "deny_paths": ["docs/ARTIFACTS.md", "crates/core/src/predict", "apps/cli/src/tui", "apps/cli/src/resources.rs", "crates/api/src"],
+    "allow_dependency_changes": false
+  },
+  "suite": { "command": "node tools/test/nextest-junit.mjs" },
+  "layers": {
+    "runtime": {
+      "commands": [{ "id": "suite", "cmd": "node tools/test/nextest-junit.mjs" }],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "budget": { "maxRounds": 3, "verifyTimeoutMs": 1200000, "suiteTimeoutMs": 5400000, "maxOutsidePlan": 6 },
+  "hops": {
+    "design": { "agent": "main-loop", "model": "opus" },
+    "critic": { "agent": "nassa-core:plan-critic", "model": "opus" },
+    "tester": { "agent": "nassa-core:criterion-tester", "model": "sonnet" },
+    "build": { "agent": "nassa-dev-rust:rust-expert", "model": "opus" },
+    "review": { "agent": "nassa-dev-rust:rust-code-reviewer", "model": "opus" },
+    "conformance": { "agent": "nassa-dev-rust:rust-code-reviewer", "model": "sonnet" }
+  }
+}
