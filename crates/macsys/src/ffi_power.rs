@@ -46,6 +46,8 @@ unsafe extern "C" {
     fn sel_registerName(name: *const c_char) -> Sel;
     fn object_getClass(object: Id) -> Id;
     fn class_respondsToSelector(class: Id, selector: Sel) -> u8;
+    fn objc_autoreleasePoolPush() -> *mut c_void;
+    fn objc_autoreleasePoolPop(pool: *mut c_void);
     /// Declared without a signature on purpose: it is only ever called through a pointer cast
     /// to the exact type of each message, as the runtime requires.
     fn objc_msgSend();
@@ -98,8 +100,29 @@ pub(crate) fn on_battery() -> Option<bool> {
     Some(kind.to_bytes() == BATTERY_POWER)
 }
 
+/// An autorelease pool for the messages below, popped on drop. The monitor thread lives as
+/// long as the daemon and has no pool of its own, so anything a message autoreleases would
+/// otherwise wait for the thread to end.
+struct Pool(*mut c_void);
+
+impl Drop for Pool {
+    fn drop(&mut self) {
+        // SAFETY: pops the token this thread pushed in `Pool::push`, once, in LIFO order (the
+        // pool lives in one stack frame and nothing pushes another in between).
+        unsafe { objc_autoreleasePoolPop(self.0) };
+    }
+}
+
+impl Pool {
+    fn push() -> Self {
+        // SAFETY: no arguments; pushes a pool on the calling thread and returns its token.
+        Self(unsafe { objc_autoreleasePoolPush() })
+    }
+}
+
 /// Whether the low power mode is on; `None` when the runtime does not offer it.
 pub(crate) fn low_power() -> Option<bool> {
+    let _pool = Pool::push();
     // SAFETY: a NUL-terminated literal; returns the registered class or null.
     let class = unsafe { objc_getClass(c"NSProcessInfo".as_ptr()) };
     if class.is_null() {

@@ -87,11 +87,15 @@ pub fn current_io() -> Option<QosClass> {
     }
 }
 
-/// Lowers a child before `exec`: nice (`Utility` 5, `Background` 10) and the process disk I/O
-/// policy. Nothing for `Default` and `UserInitiated`, which keep `posix_spawn`. The thread QoS
+/// Lowers a child before `exec`: nice (`Utility` 5, `Background` 10, or the inherited one when
+/// higher) and the process disk I/O policy. Nothing for `Default` and `UserInitiated`, which keep `posix_spawn`. The thread QoS
 /// is not set in the child: it is not safe after `fork`.
 pub fn lower_child(cmd: &mut Command, class: QosClass) {
     if let Some(nice) = class.child_nice() {
+        // Never above the inherited priority (ADR-GRP-015 § 1): a process already at a higher
+        // nice keeps it, also when it could lower it back (privileged). Read here, in the
+        // parent, so the hook in the child still makes only its two system calls.
+        let nice = ffi_qos::process_nice().map_or(nice, |inherited| inherited.max(nice));
         ffi_qos::lower_child(cmd, nice, class.io_policy());
     }
 }
