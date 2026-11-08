@@ -500,11 +500,11 @@ graph LR
 
 ### T010 — Clases en el camino del snapshot previo
 
-**Objetivo.** Lo que el usuario espera (peticiones, snapshot previo, operaciones) corre en `UserInitiated` y el hashing de la captura en `Background`, sin que un previo espere nunca a un hilo bajado (D11).
+**Objetivo.** Lo que el usuario espera (peticiones, snapshot previo, operaciones) corre en `UserInitiated`, la captura continua sigue en `Default` (D18) y `raptor-tm-seed` baja a `Background`, sin que un previo espere nunca a un hilo bajado (D11).
 
 **Ubicación.**
-- `crates/core/src/channel/conn.rs` (**MODIFY**: `raptor-conn`, `:196` → `UserInitiated`)
-- `crates/core/src/timemachine/protected/mod.rs` (**MODIFY**: `raptor-prior`, `:600` → `UserInitiated`)
+- `crates/core/src/channel/conn.rs` (**MODIFY**: `raptor-conn`, `:211` → `UserInitiated`)
+- `crates/core/src/timemachine/protected/mod.rs` (**MODIFY**: `raptor-prior`, `:650` → `UserInitiated`)
 - `crates/core/src/timemachine/store/capture.rs` (**MODIFY**: hilos de `std::thread::scope`, `:1168`, que solo lanza un previo: `set_current(UserInitiated)` al empezar cada uno. El hashing en línea de una captura no cambia (D18))
 - `crates/core/src/timemachine/continuous.rs` (**MODIFY**: `raptor-tm-capture`, `:148`, `spawn(Pool::Capture, Default, …)`; `raptor-tm-seed`, `:311`, `spawn_unpooled(Background, …)`)
 - `crates/core/tests/work_class_boundary.rs` (**MODIFY**: quitar estas excepciones)
@@ -517,9 +517,10 @@ graph LR
 - **Depende:** T002
 - **Refs:** ADR-TMC-004 § 2 (Enmienda 2026-10-04); ADR-TMC-006; ADR-GRP-015 § 1; D10, D11
 - **Aceptación:** `cargo test -p gitraptor-core --test work_class_boundary --test tm_classes` (`crates/core/tests/tm_classes.rs`, `crates/core/tests/work_class_boundary.rs`)
-- **Criterios:** CLS1, CLS2
+- **Criterios:** CLS1, CLS2, SEED1
 - **Guard ⛔10.1:** `tm_classes::prior_hashing_runs_in_user_initiated_and_capture_stays_in_default` (macOS; D18)
 - **Guard ⛔10.2:** `tm_classes::the_writer_is_never_held_below_default` (macOS)
+- **Guard ⛔10.3:** `tm_classes::conn_and_prior_threads_run_in_user_initiated_and_seed_in_background` (macOS; lee `raptor-conn` y `raptor-prior`. La clase de `raptor-tm-seed` no se observa sin un punto de enganche nuevo, así que la fija el criterio estático SEED1)
 
 ### T011 — Clase de los `git` hijos y coste de perder `posix_spawn`
 
@@ -527,7 +528,7 @@ graph LR
 
 **Ubicación.**
 - `crates/git/src/invoke.rs` (**MODIFY**: `spawn_and_wait`, `:557`, único punto de lanzamiento de `invoke`; en macOS, `qos::current()` y `qos::lower_child` si está por debajo de `Default`)
-- `crates/git/Cargo.toml` (**MODIFY**: `gitraptor-macsys` en `cfg(target_os = "macos")`, como `winsys` en Windows)
+- `crates/git/Cargo.toml` (**MODIFY**: `gitraptor-macsys` en `cfg(target_os = "macos")`, como `winsys` en Windows. Es la única dependencia nueva del PR, interna al workspace; el contrato la permite)
 - `crates/git/tests/child_class.rs` (**CREATE**)
 - `crates/git/benches/spawn_cost.rs` (**CREATE**)
 
@@ -542,6 +543,7 @@ graph LR
 - **Criterios:** GIT1, GIT2
 - **Guard ⛔11.1:** `child_class::a_git_child_of_a_background_thread_runs_at_nice_10` (macOS; el test lee el nice del hijo con `getpriority` desde el propio hijo de prueba)
 - **Guard ⛔11.2:** `child_class::a_default_thread_installs_no_pre_exec`
+- **Guard ⛔11.3:** `child_class::a_git_child_of_a_utility_thread_runs_at_nice_5` (macOS)
 
 ### T012 — Test de la unidad de autoarranque (`ProcessType`, sin `Nice=`)
 
