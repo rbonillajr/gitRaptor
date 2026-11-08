@@ -7,11 +7,14 @@
 //! clears the redo. Each worktree has its own stack, and operations that
 //! only touch refs share the repo's refs stack.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use super::Oplog;
 use super::model::{OpRef, OperationKind, OperationState, Target};
 use crate::profile::Result;
+
+/// The subtype the oplog records for an undo by agent: a selective undo.
+pub const SELECTIVE_UNDO_SUBTYPE: &str = "agent";
 
 /// Whose stack: one worktree, or the repo's refs for operations that touch
 /// no worktree.
@@ -54,25 +57,57 @@ pub enum StackItem {
 pub struct UndoStack {
     done: Vec<OpRef>,
     redo: Vec<(String, Vec<OpRef>)>,
+    /// History number of each operation done, in the order the history did them (from 1).
+    number: HashMap<OpRef, u64>,
+    /// Active barriers: the selective undo and the highest history number done when it ran.
+    barriers: Vec<(String, u64)>,
 }
 
 impl UndoStack {
+    /// Replays `items`. A selective undo leaves a barrier at the highest history number still
+    /// done when it ran (every operation done then is below it, also another actor's after its
+    /// last target); its redo lifts it. A number, not a position in `done`: later undos do not
+    /// shift it. After a redo `done` is back in history order, so the next plain undo takes the
+    /// most recent operation and never one under a redone target.
     pub fn build(items: impl IntoIterator<Item = StackItem>) -> Self {
         let mut stack = Self::default();
+        let mut next = 0u64;
         for item in items {
             match item {
                 StackItem::Do(op) => {
+                    next += 1;
+                    stack.number.entry(op.clone()).or_insert(next);
                     stack.done.push(op);
                     stack.redo.clear();
                 }
-                StackItem::Undo { undo, targets, .. } => {
+                StackItem::Undo {
+                    undo,
+                    targets,
+                    selective,
+                } => {
                     stack.done.retain(|op| !targets.contains(op));
+                    if selective {
+                        let highest = stack
+                            .done
+                            .iter()
+                            .filter_map(|op| stack.number.get(op))
+                            .max()
+                            .copied();
+                        if let Some(highest) = highest {
+                            stack.barriers.push((undo.clone(), highest));
+                        }
+                    }
                     stack.redo.push((undo, targets));
                 }
                 StackItem::Redo { undo, .. } => {
                     if let Some(pos) = stack.redo.iter().rposition(|(u, _)| *u == undo) {
                         let (_, targets) = stack.redo.remove(pos);
                         stack.done.extend(targets);
+                        let number = &stack.number;
+                        stack
+                            .done
+                            .sort_by_key(|op| number.get(op).copied().unwrap_or(u64::MAX));
+                        stack.barriers.retain(|(u, _)| *u != undo);
                     }
                 }
             }
@@ -88,8 +123,11 @@ impl UndoStack {
 
     /// Whether `op` was done when a selective undo still in force ran: undoing it would bring
     /// back work that undo took away.
-    pub fn is_below_barrier(&self, _op: &OpRef) -> bool {
-        false
+    pub fn is_below_barrier(&self, op: &OpRef) -> bool {
+        let Some(highest) = self.barriers.iter().map(|(_, n)| *n).max() else {
+            return false;
+        };
+        self.number.get(op).is_some_and(|n| *n <= highest)
     }
 
     /// The operations of the scope that are not undone, oldest first.
@@ -147,7 +185,8 @@ impl Oplog {
                     StackItem::Undo {
                         undo: id,
                         targets: targets.clone(),
-                        selective: false,
+                        // An undo by agent took back a chosen set, not the top of the stack.
+                        selective: op.record.subtype.as_deref() == Some(SELECTIVE_UNDO_SUBTYPE),
                     }
                 }
                 (OperationState::Finished, OperationKind::Redo, Target::Redo(undo))
