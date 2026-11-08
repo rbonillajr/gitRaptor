@@ -5,7 +5,7 @@ type: adr
 status: proposed
 date: 2026-10-05
 created: 2026-10-05
-updated: 2026-10-07
+updated: 2026-11-08
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
@@ -55,7 +55,7 @@ Todo trabajo del daemon declara una de cuatro **clases**. La clase fija la prior
 
 - **El observador se queda en `default`**: NFR-04 se confirmó con esa clase y bajarla ahorra muy poco (0,04 % de CPU en reposo). Solo pasaría a `utility` si INF-GRP-002 demuestra que cumple NFR-04.
 - **La evaluación de Guardrails va en `user-initiated`** porque su hook bloquea el `git` del usuario.
-- **Para evitar la inversión de prioridad**, la captura separa el hashing (`background`) de la escritura de la ref y del oplog, que va en el hilo escritor en `user-initiated`. Así un snapshot previo nunca espera a una captura en segundo plano (RES-07).
+- **Para evitar la inversión de prioridad**, la captura separa el hashing (`background`) de la escritura de la ref y del oplog, que va en el hilo escritor en `user-initiated`. Así un snapshot previo nunca espera a una captura en segundo plano (RES-07). *(La premisa no se cumple hoy: ver la [Enmienda (2026-11-08)](#enmienda-2026-11-08-hashing-de-la-captura-bajo-el-escritor).)*
 - **Sin `SCHED_IDLE` ni `ionice` idle para la captura**: dejarían la captura sin turno y abrirían huecos (BR-CONS-005). Por eso la captura va en best-effort.
 - **Autoarranque** (ADR-GRP-005 § 3):
   - launchd: `ProcessType=Standard`. `Background` limitaría el proceso entero (también el snapshot previo) y `Adaptive` solo se eleva por XPC, que el canal no usa.
@@ -145,3 +145,26 @@ Referencia cruzada de la [Enmienda (2026-10-07) de ADR-GRP-010](./ADR-GRP-010-ob
 | **Modo de ahorro**: barrido de dormidos cada 300 s en lugar de 120, y reconciliación lenta con un intervalo mínimo de 180 min en lugar de 60 (⚠️ **ASSUMPTION**) | § 2 | ADR-GRP-010, N2 y N3 |
 | **Gate**: RES-11 (100 repos observados, 5 activos) con los mismos objetivos que RES-01, RES-02 y RES-04, y RES-12 (retraso de un dormido y tiempo de despertar), en el escenario `tiered-scale` de INF-GRP-002 | § 3 | [non-functional.md](../non-functional.md) § Consumo de recursos |
 | **Visibilidad**: `engine.resources` añade el bloque opcional `observation` (repos y worktrees por nivel, vigilancias por nivel y CPU de las tareas de los dormidos y del descubrimiento), detrás de la capacidad `observation.tiers` (ADR-GRP-016). La dueña de la vista sigue siendo US-GRP-017, y el PO la enmienda | § 4 | ADR-GRP-010, N8 |
+
+## Enmienda (2026-11-08, hashing de la captura bajo el escritor)
+
+**Decisión del orquestador (2026-11-08), validada por el Arquitecto.** Origen: DS-TS-GRP-005, PR-B (D11).
+
+**Hallazgo.** `run_capture` (`crates/core/src/timemachine/store/capture.rs`) toma el escritor del almacén (`MutexGuard` sobre `capture::State`, `store/mod.rs`) y lo retiene durante toda la captura: detección, `write_blobs`, árboles, ref y oplog. Sin previo, `write_blobs` usa un hilo y hace el hash en línea en el hilo `raptor-tm-capture`; no hay hilo de hashing separado. La premisa de § 1 ("la captura separa el hashing (`background`) de la escritura de la ref y del oplog") no se cumple. Bajar ese hashing a `background` bajaría el hilo que retiene el escritor: la inversión de prioridad que D11 y RES-07 prohíben.
+
+**Regla.** Hasta que la fase de blobs salga del escritor ([TD-TMC-002](../../requirements/features/time-machine/technical-stories/TD-TMC-002-captura-blobs-fuera-del-escritor.md)), el hashing de la captura continua va en `default`; el camino del previo en `user-initiated`.
+
+| Hilo | Clase en PR-B |
+|---|---|
+| Captura continua (`Pool::Capture`, `raptor-tm-capture`) | `default`, de punta a punta |
+| Previo (`raptor-conn`, `raptor-prior` y sus hilos de hashing) | `user-initiated` |
+| `raptor-tm-seed` | `background` (`seed_with` no toma el escritor; verificado) |
+
+**RES-06 para el hashing de la captura sigue pendiente** de TD-TMC-002. El resto de § 1 no cambia.
+
+**Alternativas rechazadas.**
+
+- **B. Reestructurar `run_capture` ahora** para sacar los blobs del escritor: toca la semántica de continuidad de ADR-TMC-004 § 2 (`state` se lee durante la detección) y abre una carrera con NFR-01. Se diseña aparte, en TD-TMC-002.
+- **C. `scoped(Background)` reteniendo el escritor**: viola D11.
+
+Referencias: [ADR-TMC-004](./ADR-TMC-004-cobertura-dos-niveles.md), [ADR-TMC-006](./ADR-TMC-006-presupuesto-rendimiento-snapshot.md), TS-GRP-005.
