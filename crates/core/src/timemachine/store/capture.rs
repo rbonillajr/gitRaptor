@@ -1170,7 +1170,13 @@ impl SnapshotStore {
                 .map(|_| {
                     let handle = self.store.handle();
                     let run = &run;
-                    s.spawn(move || run(handle))
+                    s.spawn(move || {
+                        // Only a prior hashes on threads: in the class of the prior that waits
+                        // for them, never below the writer they hold (D11). A new thread is
+                        // not trusted to inherit it.
+                        crate::work_class::set_current(crate::work_class::WorkClass::UserInitiated);
+                        run(handle)
+                    })
                 })
                 .collect();
             handles

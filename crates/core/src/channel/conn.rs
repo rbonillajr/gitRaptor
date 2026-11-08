@@ -210,9 +210,11 @@ pub(crate) fn accept(ctx: &Arc<ServerCtx>, stream: Stream) {
     drop(table);
 
     let thread_ctx = Arc::clone(ctx);
-    let spawned = std::thread::Builder::new()
-        .name("raptor-conn".into())
-        .spawn(move || {
+    // A client waits on every request of the connection, a prior included: UserInitiated.
+    let spawned = crate::work_class::spawn_unpooled(
+        crate::work_class::WorkClass::UserInitiated,
+        "raptor-conn",
+        move || {
             let mut conn = Connection {
                 ctx: &thread_ctx,
                 id,
@@ -247,7 +249,8 @@ pub(crate) fn accept(ctx: &Arc<ServerCtx>, stream: Stream) {
             thread_ctx.bus.drop_outbox(&outbox);
             outbox.close();
             remove(&thread_ctx, id);
-        });
+        },
+    );
     if spawned.is_err() {
         remove(ctx, id);
     }

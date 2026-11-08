@@ -655,11 +655,14 @@ impl ProtectedOperation<'_> {
         };
         let (tx, rx) = mpsc::sync_channel(1);
         let snapshotter = Arc::clone(&self.snapshotter);
-        let spawned = std::thread::Builder::new()
-            .name("raptor-prior".into())
-            .spawn(move || {
+        // The user waits for the prior: UserInitiated, set explicitly rather than inherited.
+        let spawned = crate::work_class::spawn_unpooled(
+            crate::work_class::WorkClass::UserInitiated,
+            "raptor-prior",
+            move || {
                 let _ = tx.send(snapshotter.prior(&prior_req));
-            });
+            },
+        );
         if spawned.is_err() {
             return Err(abort(PriorFailure::CaptureFailed, Some("no thread".into())));
         }

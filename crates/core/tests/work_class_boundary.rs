@@ -2,6 +2,12 @@
 //! declaring its class. A `thread::Builder::new()` or `thread::spawn` outside `work_class/`
 //! must be in the list below, with the reason it keeps the class it inherits.
 //!
+//! T010 (CLS2): the prior-snapshot path is no longer excepted: `raptor-conn`, `raptor-prior`,
+//! `raptor-tm-capture`, `raptor-tm-seed` and the hashing threads of a capture
+//! (`std::thread::scope`) declare their class too. A `thread::scope` counts as a thread
+//! creation and must call `set_current(` within `SCOPE_DECLARES_WITHIN` lines of it. D11: a
+//! file that takes the store writer (`.writer(`) never declares `Utility` or `Background`.
+//!
 //! Test code (`#[cfg(test)]` modules, `*tests*.rs` files) is out of scope.
 
 use std::path::{Path, PathBuf};
@@ -55,38 +61,10 @@ const EXCEPTIONS: &[(&str, &str, &str)] = &[
         "raptor-daemon-reaper",
         "client side, out of scope",
     ),
-    // Prior-snapshot path: PR-B (T010), never lowered in PR-A.
-    (
-        "channel/conn.rs",
-        "raptor-conn",
-        "prior-snapshot path, PR-B (T010)",
-    ),
-    (
-        "timemachine/protected/mod.rs",
-        "raptor-prior",
-        "prior-snapshot path, PR-B (T010)",
-    ),
-    (
-        "timemachine/continuous.rs",
-        "raptor-tm-capture",
-        "prior-snapshot path, PR-B (T010)",
-    ),
-    (
-        "timemachine/continuous.rs",
-        "raptor-tm-seed",
-        "prior-snapshot path, PR-B (T010)",
-    ),
-    (
-        "timemachine/store/capture.rs",
-        "<unnamed>",
-        "capture hashing threads, PR-B (T010)",
-    ),
-    (
-        "timemachine/store/capture.rs",
-        "raptor-tm-hash",
-        "capture hashing threads, PR-B (T010)",
-    ),
 ];
+
+/// Lines after a `thread::scope(` where each scoped thread must declare its class.
+const SCOPE_DECLARES_WITHIN: usize = 12;
 
 fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
     for entry in std::fs::read_dir(dir).unwrap() {
@@ -130,6 +108,12 @@ fn thread_creations(text: &str) -> Vec<(usize, String)> {
             found.push((i + 1, name));
         } else if line.contains("thread::spawn(") {
             found.push((i + 1, "<unnamed>".into()));
+        } else if line.contains("thread::scope(") {
+            let end = (i + 1 + SCOPE_DECLARES_WITHIN).min(lines.len());
+            let declared = lines[i..end].iter().any(|l| l.contains("set_current("));
+            if !declared {
+                found.push((i + 1, "<scope>".into()));
+            }
         }
     }
     found
@@ -157,6 +141,11 @@ fn every_daemon_thread_declares_its_class() {
         }
         let text = std::fs::read_to_string(&file).unwrap();
         for (line, name) in thread_creations(&text) {
+            // Scoped threads are checked only on the Time Machine path (D18); other scopes
+            // (`daemon::reconcile_all`) are out of this guard.
+            if name == "<scope>" && !rel.starts_with("timemachine/") {
+                continue;
+            }
             let allowed = EXCEPTIONS.iter().any(|(f, n, _)| *f == rel && *n == name);
             if !allowed {
                 undeclared.push(format!("{rel}:{line} `{name}`"));
@@ -168,5 +157,42 @@ fn every_daemon_thread_declares_its_class() {
         "threads created with thread::Builder::new()/thread::spawn outside work_class/ \
          without a declared class (use work_class::spawn or add a reasoned exception):\n{}",
         undeclared.join("\n")
+    );
+}
+
+/// D11 (inversion of priority): no section that holds the store writer runs below `Default`.
+/// A file that calls `.writer(` must not name `WorkClass::Utility` or `WorkClass::Background`.
+#[test]
+fn a_file_that_takes_the_writer_never_declares_a_lower_class() {
+    let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let mut files = Vec::new();
+    rust_files(&src, &mut files);
+    files.sort();
+    let mut offenders = Vec::new();
+    for file in files {
+        let rel = file
+            .strip_prefix(&src)
+            .unwrap()
+            .to_string_lossy()
+            .replace('\\', "/");
+        if is_test_file(&rel) {
+            continue;
+        }
+        let text = std::fs::read_to_string(&file).unwrap();
+        let code: String = text
+            .lines()
+            .take_while(|l| !l.trim_start().starts_with("#[cfg(test)]"))
+            .filter(|l| !l.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        if code.contains(".writer(")
+            && (code.contains("WorkClass::Utility") || code.contains("WorkClass::Background"))
+        {
+            offenders.push(rel);
+        }
+    }
+    assert!(
+        offenders.is_empty(),
+        "files that take the store writer must not declare Utility or Background (D11, D18): {offenders:?}"
     );
 }
