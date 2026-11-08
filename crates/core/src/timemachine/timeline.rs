@@ -85,13 +85,18 @@ impl AgentFilter {
         match (self, actor) {
             (Self::Unattributed, Actor::Unattributed) => true,
             (Self::Named(wanted), Actor::Agent { kind, name, .. }) => {
-                name.as_ref().is_some_and(|n| {
-                    n.raw() == wanted || (wanted == "claude-code" && is_claude_code_name(n.raw()))
-                }) || (*kind == AgentKind::ClaudeCode && wanted == "claude-code")
+                name.as_ref().is_some_and(|n| name_matches(wanted, n.raw()))
+                    || (*kind == AgentKind::ClaudeCode && wanted == "claude-code")
             }
             _ => false,
         }
     }
+}
+
+/// Whether the agent name `name` is the one `--agent wanted` asks for: exactly, or any spelling
+/// of Claude Code for `claude-code`. The timeline and the undo by agent share this rule.
+pub(crate) fn name_matches(wanted: &str, name: &str) -> bool {
+    name == wanted || (wanted == "claude-code" && is_claude_code_name(name))
 }
 
 /// The names a recorded requester can carry for Claude Code: its kind (`claude-code`, what the
