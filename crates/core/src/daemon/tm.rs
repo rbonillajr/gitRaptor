@@ -85,6 +85,10 @@ impl EngineLink for DaemonEngine {
         self.handle.raw_events(repo_id, worktree)
     }
 
+    fn session_attribution(&self, repo_id: &str) -> Option<SessionAttribution> {
+        self.handle.session_attribution(repo_id)
+    }
+
     fn generation_floor(&self, repo_id: &str) -> i64 {
         self.marks.floor(repo_id)
     }
@@ -118,12 +122,18 @@ impl Daemon {
 
     /// The current attribution of every session of the repo (loop side): one read, never
     /// kept past the call; `None` if the repo's store cannot be read.
-    #[allow(
-        dead_code,
-        reason = "the loop starts serving it with the undo by agent"
-    )]
-    pub(super) fn session_attribution(&self, _repo_id: &str) -> Option<SessionAttribution> {
-        None
+    pub(super) fn session_attribution(&self, repo_id: &str) -> Option<SessionAttribution> {
+        let (_, store) = self.stores.iter().find(|(id, _)| id == repo_id)?;
+        let sessions = store.sessions_with_state().ok()?;
+        Some(SessionAttribution(
+            sessions
+                .into_iter()
+                .map(|(session, _)| {
+                    let requester = requester_of(store, &session.session_id);
+                    (session.session_id, requester)
+                })
+                .collect(),
+        ))
     }
 
     /// The raw Git events of a worktree, with the actor the engine attributed (loop side).
@@ -139,8 +149,7 @@ impl Daemon {
                 .into_iter()
                 .filter_map(|e| {
                     let kind = GitEventKind::parse(&e.kind)?;
-                    let details: gitraptor_api::messages::GitEventDetails =
-                        serde_json::from_str(&e.metadata).unwrap_or_default();
+                    let details = event_details(&e.metadata);
                     let actor = e
                         .session_id
                         .as_deref()
@@ -153,17 +162,63 @@ impl Daemon {
                     Some(RawGitEvent {
                         seq: e.seq,
                         kind,
-                        branch: details.branch.map(|b| b.raw().to_owned()),
+                        branch: details.branch,
                         actor,
                         observed_ms: e.observed.utc_ms,
-                        in_gap: false,
-                        inferred: false,
-                        old_commit: None,
-                        new_commit: None,
+                        in_gap: e.gap_id.is_some(),
+                        inferred: details.worktree_inferred,
+                        old_commit: details.old_commit,
+                        new_commit: details.new_commit,
                     })
                 })
                 .collect(),
         )
+    }
+}
+
+/// What the Time Machine reads from the stored details of a Git event.
+#[derive(Debug, Default)]
+struct StoredDetails {
+    branch: Option<String>,
+    old_commit: Option<String>,
+    new_commit: Option<String>,
+    worktree_inferred: bool,
+}
+
+/// The details of a stored event. The engine stores [`GitEventDetails`] (its branch as an
+/// untrusted name); when that does not parse, each field is read on its own, so one odd field
+/// never hides the commits and the inferred flag of the event (a branch may then be a plain
+/// string). Unreadable metadata gives no details: the event is then not selectable.
+///
+/// [`GitEventDetails`]: gitraptor_api::messages::GitEventDetails
+fn event_details(metadata: &str) -> StoredDetails {
+    if let Ok(d) = serde_json::from_str::<gitraptor_api::messages::GitEventDetails>(metadata) {
+        return StoredDetails {
+            branch: d.branch.map(|b| b.raw().to_owned()),
+            old_commit: d.old_commit,
+            new_commit: d.new_commit,
+            worktree_inferred: d.worktree_inferred,
+        };
+    }
+    let Ok(serde_json::Value::Object(map)) = serde_json::from_str::<serde_json::Value>(metadata)
+    else {
+        return StoredDetails::default();
+    };
+    let text = |key: &str| map.get(key).and_then(|v| v.as_str()).map(str::to_owned);
+    let branch = map.get("branch").and_then(|v| match v {
+        serde_json::Value::String(s) => Some(s.clone()),
+        other => serde_json::from_value::<gitraptor_api::UntrustedName>(other.clone())
+            .ok()
+            .map(|b| b.raw().to_owned()),
+    });
+    StoredDetails {
+        branch,
+        old_commit: text("old_commit"),
+        new_commit: text("new_commit"),
+        worktree_inferred: map
+            .get("worktree_inferred")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false),
     }
 }
 

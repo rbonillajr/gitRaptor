@@ -954,6 +954,10 @@ impl Daemon {
                     self.wake_for_request(&repo_id);
                     let _ = reply.send(self.raw_events(&repo_id, &worktree));
                 }
+                Ok(Control::SessionAttribution { repo_id, reply }) => {
+                    self.wake_for_request(&repo_id);
+                    let _ = reply.send(self.session_attribution(&repo_id));
+                }
                 Err(RecvTimeoutError::Timeout) => {
                     if tier_check.is_some_and(|t| t <= Instant::now()) {
                         self.check_tiers();
