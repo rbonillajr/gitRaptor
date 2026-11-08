@@ -43,7 +43,15 @@ impl PowerSource for FakePowerSource {
     }
 }
 
-/// The source of this OS: `Unknown` everywhere until T007.
+/// The source of this OS: the IOKit reading on macOS, `Unknown` elsewhere (XP-45: Linux and
+/// Windows have no source yet, so `auto` saves nothing there).
 pub fn platform_source() -> Arc<dyn PowerSource> {
-    Arc::new(UnknownPowerSource)
+    #[cfg(target_os = "macos")]
+    {
+        Arc::new(super::macos::MacPowerSource)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Arc::new(UnknownPowerSource)
+    }
 }

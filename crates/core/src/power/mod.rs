@@ -1,6 +1,8 @@
 //! Power saving (ADR-GRP-015 § 2; DS-TS-GRP-005 T003): the mode the engine is in, resolved from
 //! `engine.powerSaving` and the power source, and handed to its consumers.
 
+#[cfg(target_os = "macos")]
+pub mod macos;
 pub mod monitor;
 pub mod source;
 
@@ -33,6 +35,19 @@ pub fn resolve(setting: PowerSavingSetting, reading: PowerReading) -> bool {
         PowerSavingSetting::Auto => {
             matches!(reading, PowerReading::Battery | PowerReading::LowPower)
         }
+    }
+}
+
+/// Translates a platform reading, `(on_battery, low_power)`, into a [`PowerReading`]: low power
+/// wins over AC and battery (D6), no battery reads `Ac`, and a failed reading (`None`) is
+/// `Unknown`.
+#[must_use]
+pub fn reading_from(reading: Option<(bool, bool)>) -> PowerReading {
+    match reading {
+        None => PowerReading::Unknown,
+        Some((_, true)) => PowerReading::LowPower,
+        Some((true, false)) => PowerReading::Battery,
+        Some((false, false)) => PowerReading::Ac,
     }
 }
 

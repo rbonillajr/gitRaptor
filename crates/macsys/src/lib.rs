@@ -12,6 +12,8 @@ pub mod process;
 #[cfg(target_os = "macos")]
 pub mod fsevents;
 #[cfg(target_os = "macos")]
+pub mod power;
+#[cfg(target_os = "macos")]
 pub mod qos;
 
 #[cfg(target_os = "macos")]
@@ -26,6 +28,9 @@ mod ffi_kinfo;
 #[cfg(target_os = "macos")]
 #[allow(unsafe_code)]
 mod ffi_pidpath;
+#[cfg(target_os = "macos")]
+#[allow(unsafe_code)]
+mod ffi_power;
 #[cfg(target_os = "macos")]
 #[allow(unsafe_code)]
 mod ffi_procargs;
