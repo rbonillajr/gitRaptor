@@ -4,17 +4,17 @@
 
 > **Archivo generado, no editar a mano.** Sale del frontmatter (`status`) y de la sección "Estado de la implementación" de cada ficha (US, TS, INF, SPIKE y TD) de `docs/requirements/features/`. Para cambiar un estado, edita la ficha y regenera con `node tools/status/release-status.mjs`. El CI (docs-lint) falla si este archivo no coincide con lo que genera el script.
 
-Última actualización de una ficha: 2026-11-04.
+Última actualización de una ficha: 2026-11-08.
 
 ## Totales por estado
 
 | Estado | Fichas |
 |---|---|
-| Implementado (`implemented`) | 60 |
+| Implementado (`implemented`) | 61 |
 | Hecho (`done`) | 3 |
 | Implementado en parte (`partially-implemented`) | 27 |
 | Listo (`ready`) | 3 |
-| Borrador (`draft`) | 56 |
+| Borrador (`draft`) | 55 |
 | Bloqueado (`blocked`) | 1 |
 | **Total** | **150** |
 
@@ -24,7 +24,7 @@
 |---|---|---|---|---|---|---|---|
 | [cockpit](#cockpit) | 9 | 0 | 5 | 0 | 18 | 1 | 33 |
 | [guardrails](#guardrails) | 14 | 0 | 7 | 1 | 3 | 0 | 25 |
-| [mcp](#mcp) | 6 | 0 | 4 | 0 | 10 | 0 | 20 |
+| [mcp](#mcp) | 7 | 0 | 4 | 0 | 9 | 0 | 20 |
 | [motor-local](#motor-local) | 16 | 2 | 10 | 2 | 11 | 0 | 41 |
 | [time-machine](#time-machine) | 15 | 1 | 1 | 0 | 14 | 0 | 31 |
 
@@ -102,7 +102,7 @@
 
 ### mcp
 
-20 fichas: 6 implementado, 4 implementado en parte, 10 borrador.
+20 fichas: 7 implementado, 4 implementado en parte, 9 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -112,6 +112,7 @@
 | [US-MCP-004](features/mcp/user-stories/US-MCP-004-status-completo-y-no-disponible.md) | Un agente sabe por MCP quién más trabaja en su repo, contra qué base y con qué protección | Implementado (`implemented`) | — | — |
 | [US-MCP-005](features/mcp/user-stories/US-MCP-005-respuestas-acotadas-y-seguras.md) | Un agente recibe respuestas acotadas que no pueden darle órdenes ni filtrar secretos | Implementado (`implemented`) | #157, #159 | — |
 | [US-MCP-008](features/mcp/user-stories/US-MCP-008-snapshot-manual.md) | Un agente guarda por MCP un punto de recuperación antes de un cambio arriesgado | Implementado (`implemented`) | #213 | — |
+| [US-MCP-016](features/mcp/user-stories/US-MCP-016-check-conflicts.md) | Un agente sabe con quién va a chocar antes de que choque | Implementado (`implemented`) | — | — |
 | [INF-MCP-001](features/mcp/technical-stories/INF-MCP-001-corpus-seguridad-mcp.md) | Corpus de seguridad del MCP como suite de CI que bloquea el merge | Implementado en parte (`partially-implemented`) | — | — |
 | [US-MCP-009](features/mcp/user-stories/US-MCP-009-safe-commit.md) | Un agente commitea por MCP con las reglas del repo y con un punto de recuperación previo | Implementado en parte (`partially-implemented`) | #289 | — |
 | [US-MCP-010](features/mcp/user-stories/US-MCP-010-safe-commit-rutas.md) | Un agente commitea solo los archivos que nombra y nunca fuera de su worktree | Implementado en parte (`partially-implemented`) | #289 | — |
@@ -122,7 +123,6 @@
 | [US-MCP-012](features/mcp/user-stories/US-MCP-012-undo-de-lo-propio.md) | Un agente deshace por MCP su última operación sin tocar el trabajo de otros | Borrador (`draft`) | — | — |
 | [US-MCP-014](features/mcp/user-stories/US-MCP-014-confirmacion-pendiente-en-cola.md) | La acción de riesgo de un agente queda en espera del desarrollador sin bloquear al agente | Borrador (`draft`) | — | — |
 | [US-MCP-015](features/mcp/user-stories/US-MCP-015-medicion-del-mcp.md) | El desarrollador mide cuánto paró y cuánto recuperó el MCP | Borrador (`draft`) | — | — |
-| [US-MCP-016](features/mcp/user-stories/US-MCP-016-check-conflicts.md) | Un agente sabe con quién va a chocar antes de que choque | Borrador (`draft`) | — | — |
 | [US-MCP-017](features/mcp/user-stories/US-MCP-017-explain-history.md) | Un agente entiende qué pasó en su repo sin ver mensajes ni contenido | Borrador (`draft`) | — | — |
 | [US-MCP-018](features/mcp/user-stories/US-MCP-018-safe-rebase-atomico.md) | Un agente se pone al día con la rama base y, si choca, su rama queda como estaba | Borrador (`draft`) | — | — |
 | [US-MCP-019](features/mcp/user-stories/US-MCP-019-create-worktree.md) | Un agente prepara un worktree nuevo desde la rama base para otro trabajo | Borrador (`draft`) | — | — |
@@ -245,7 +245,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### M2
 
-112 fichas: 37 implementado, 3 hecho, 21 implementado en parte, 3 listo, 47 borrador, 1 bloqueado.
+112 fichas: 38 implementado, 3 hecho, 21 implementado en parte, 3 listo, 46 borrador, 1 bloqueado.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -279,6 +279,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-MCP-004](features/mcp/user-stories/US-MCP-004-status-completo-y-no-disponible.md) | Un agente sabe por MCP quién más trabaja en su repo, contra qué base y con qué protección | Implementado (`implemented`) | — | — |
 | [US-MCP-005](features/mcp/user-stories/US-MCP-005-respuestas-acotadas-y-seguras.md) | Un agente recibe respuestas acotadas que no pueden darle órdenes ni filtrar secretos | Implementado (`implemented`) | #157, #159 | — |
 | [US-MCP-008](features/mcp/user-stories/US-MCP-008-snapshot-manual.md) | Un agente guarda por MCP un punto de recuperación antes de un cambio arriesgado | Implementado (`implemented`) | #213 | — |
+| [US-MCP-016](features/mcp/user-stories/US-MCP-016-check-conflicts.md) | Un agente sabe con quién va a chocar antes de que choque | Implementado (`implemented`) | — | — |
 | [US-TMC-005](features/time-machine/user-stories/US-TMC-005-snapshot-previo-hooks-guardrails.md) | El borrado de ramas y el rebase con Git crudo tienen punto previo cuando el repo usa los hooks de Guardrails | Implementado (`implemented`) | #248 | — |
 | [US-TMC-006](features/time-machine/user-stories/US-TMC-006-timeline-que-cuando-quien.md) | El desarrollador sabe qué cambió en su repo, cuándo y quién lo hizo | Implementado (`implemented`) | #198 | — |
 | [US-TMC-009](features/time-machine/user-stories/US-TMC-009-restaurar-punto-timeline.md) | El desarrollador devuelve su worktree a cualquier punto del timeline | Implementado (`implemented`) | #212, #219 | — |
@@ -345,7 +346,6 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-MCP-012](features/mcp/user-stories/US-MCP-012-undo-de-lo-propio.md) | Un agente deshace por MCP su última operación sin tocar el trabajo de otros | Borrador (`draft`) | — | — |
 | [US-MCP-014](features/mcp/user-stories/US-MCP-014-confirmacion-pendiente-en-cola.md) | La acción de riesgo de un agente queda en espera del desarrollador sin bloquear al agente | Borrador (`draft`) | — | — |
 | [US-MCP-015](features/mcp/user-stories/US-MCP-015-medicion-del-mcp.md) | El desarrollador mide cuánto paró y cuánto recuperó el MCP | Borrador (`draft`) | — | — |
-| [US-MCP-016](features/mcp/user-stories/US-MCP-016-check-conflicts.md) | Un agente sabe con quién va a chocar antes de que choque | Borrador (`draft`) | — | — |
 | [US-MCP-017](features/mcp/user-stories/US-MCP-017-explain-history.md) | Un agente entiende qué pasó en su repo sin ver mensajes ni contenido | Borrador (`draft`) | — | — |
 | [US-MCP-018](features/mcp/user-stories/US-MCP-018-safe-rebase-atomico.md) | Un agente se pone al día con la rama base y, si choca, su rama queda como estaba | Borrador (`draft`) | — | — |
 | [US-MCP-019](features/mcp/user-stories/US-MCP-019-create-worktree.md) | Un agente prepara un worktree nuevo desde la rama base para otro trabajo | Borrador (`draft`) | — | — |

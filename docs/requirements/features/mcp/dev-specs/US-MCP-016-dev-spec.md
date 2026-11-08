@@ -2,11 +2,11 @@
 id: DS-US-MCP-016
 title: "Dev Spec — US-MCP-016: check_conflicts, la predicción de conflictos para el agente"
 type: dev-spec
-status: draft
+status: implemented
 feature: mcp
 domain: MCP
 created: 2026-10-27
-updated: 2026-11-04
+updated: 2026-11-08
 story: US-MCP-016
 scope: backend
 frontend_surface: false
@@ -380,3 +380,7 @@ Para `security-expert`: la revisión de esta DS no cambia superficie de escritur
 - Los límites por archivo de ADR-CKP-001 § 3 (200 archivos, 50 hunks) son del motor; la vista solo puede recortar más, nunca menos.
 - Si T009 fija nombres distintos para `PairState`, `PairReason`, `PairLevel`, `LimitCode` o `ConflictKind`, mandan los de DS-TS-CKP-001 § Contrato de API y esta DS se ajusta sin cambiar la forma de `McpConflicts`.
 - Matriz de plataformas: la de DS-US-MCP-004 (macOS soportado; Linux en CI ubuntu; Windows tipado, sin canal).
+
+## Estado de la implementación
+
+Implementado en: PR #321 (2026-11-08, sin certificar). Los 28 criterios del contrato están en verde por crate, y la suite completa también, corrida a mano tras el rebase (3413 passed). El corpus del MCP quedó en 110/110, con 15 casos nuevos de `check_conflicts`. Pendiente: validación en Linux y Windows.

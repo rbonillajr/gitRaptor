@@ -2,10 +2,10 @@
 id: US-MCP-016
 title: "Un agente sabe con quién va a chocar antes de que choque"
 type: us
-status: draft
+status: implemented
 priority: high
 created: 2026-10-04
-updated: 2026-10-27
+updated: 2026-11-08
 domain: GRP
 epic: E-001
 feature: mcp
@@ -97,3 +97,7 @@ Resumen de [DS-US-MCP-016](../dev-specs/US-MCP-016-dev-spec.md):
 
 - **Diseño:** no aplica.
 - **Dev Spec:** [DS-US-MCP-016](../dev-specs/US-MCP-016-dev-spec.md).
+
+Implementado en: PR #321 (2026-11-08, sin certificar: P3 de `deliver-run` agota su tope fijo de 15 min; suite completa en verde a mano).
+
+**Falta**: Linux y Windows: *Pendiente: etapa de validación multiplataforma*.

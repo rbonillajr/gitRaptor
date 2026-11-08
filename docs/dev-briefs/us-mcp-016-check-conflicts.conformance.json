@@ -1,0 +1,288 @@
+{
+  "schema": "nassa.conformance.v1",
+  "contract_sha256": "8998fb9041b2d8cec38c8292a73ce70abb46ffd37c16c2dfbc778f1ffd1fb1da",
+  "spec": "docs/requirements/features/mcp/dev-specs/US-MCP-016-dev-spec.md",
+  "story": "docs/requirements/features/mcp/user-stories/US-MCP-016-check-conflicts.md",
+  "query": {
+    "spec": "docs/requirements/features/mcp/dev-specs/US-MCP-016-dev-spec.md",
+    "tasks": [
+      {
+        "id": "T001",
+        "title": "Escribir en rojo los tests del contrato",
+        "status": "no-medible",
+        "tests": []
+      },
+      {
+        "id": "T002",
+        "title": "Definir el contrato",
+        "status": "no-medible",
+        "tests": []
+      },
+      {
+        "id": "T003",
+        "title": "Escribir en rojo los tests del daemon",
+        "status": "no-medible",
+        "tests": []
+      },
+      {
+        "id": "T004",
+        "title": "Construir el lado del daemon",
+        "status": "no-medible",
+        "tests": []
+      },
+      {
+        "id": "T005",
+        "title": "Escribir en rojo los tests de la herramienta",
+        "status": "no-medible",
+        "tests": []
+      },
+      {
+        "id": "T006",
+        "title": "Construir la herramienta",
+        "status": "no-medible",
+        "tests": []
+      }
+    ],
+    "critical": [],
+    "ports": [],
+    "story": [],
+    "unmeasured": [],
+    "summary": {
+      "tasks": 6,
+      "testsExist": 0,
+      "missingTest": 0,
+      "unmeasurable": 6,
+      "criticalWithoutOwner": 0,
+      "portMismatch": 0,
+      "portNotFound": 0,
+      "portsNotInAcceptance": 0,
+      "storyClauses": 0
+    }
+  },
+  "rows": [
+    {
+      "clause": "Esc.1 conflicto previsto visible (par, nivel, ruta, rangos, antigüedad)",
+      "task": "T004,T006",
+      "rung": 3,
+      "evidence": "crates/core/tests/mcp_conflicts.rs; crates/core/src/channel/conn.rs::mcp_conflicts",
+      "criteria": [
+        "MCP016-CONFLICT-SEEN",
+        "MCP016-AGE",
+        "MCP016-SIDE-A",
+        "MCP016-LEVEL"
+      ]
+    },
+    {
+      "clause": "Esc.1 sin contenido de líneas ni diff",
+      "task": "T002,T004",
+      "rung": 3,
+      "evidence": "crates/core/tests/mcp_conflicts.rs::no_file_content_nor_diff_in_any_answer; crates/api/src/mcp_view/conflicts.rs",
+      "criteria": [
+        "MCP016-NO-CONTENT",
+        "MCP016-FIELD-ALLOWLIST"
+      ]
+    },
+    {
+      "clause": "Esc.2 por defecto solo pares del propio worktree",
+      "task": "T004",
+      "rung": 3,
+      "evidence": "crates/core/tests/mcp_conflicts.rs::by_default_only_the_callers_pairs; crates/core/tests/mcp_conflicts_cursor_scope.rs",
+      "criteria": [
+        "MCP016-DEFAULT-SCOPE",
+        "MCP016-MAIN-WORKTREE"
+      ]
+    },
+    {
+      "clause": "Esc.2 scope repo da todos los pares",
+      "task": "T004,T006",
+      "rung": 3,
+      "evidence": "crates/core/tests/mcp_conflicts.rs::the_repo_scope_gives_every_pair",
+      "criteria": [
+        "MCP016-REPO-SCOPE"
+      ]
+    },
+    {
+      "clause": "Esc.3 calculando sin inventar pares ni level",
+      "task": "T004",
+      "rung": 2,
+      "evidence": "crates/core/src/channel/mcp_conflicts_tests.rs::declares_a_calculating_prediction_without_inventing_pairs",
+      "criteria": [
+        "MCP016-CALCULATING",
+        "MCP016-LEVEL"
+      ]
+    },
+    {
+      "clause": "Esc.3 pendiente con reason",
+      "task": "T004",
+      "rung": 3,
+      "evidence": "crates/core/tests/mcp_conflicts.rs::declares_a_pending_prediction_with_its_reason_without_inventing_pairs",
+      "criteria": [
+        "MCP016-PENDING"
+      ]
+    },
+    {
+      "clause": "Esc.4 límites como los publicó el motor",
+      "task": "T002,T004",
+      "rung": 3,
+      "evidence": "crates/core/tests/mcp_conflicts.rs::the_limits_are_declared_as_the_engine_published_them",
+      "criteria": [
+        "MCP016-LIMITS"
+      ]
+    },
+    {
+      "clause": "Orden ⚡ primero y cursor sin duplicados",
+      "task": "T004",
+      "rung": 3,
+      "evidence": "crates/core/tests/mcp_conflicts.rs::a_conflicts_cursor_pages_without_duplicates",
+      "criteria": [
+        "MCP016-ORDER"
+      ]
+    },
+    {
+      "clause": "Cursor por conexión, sin cruce con status",
+      "task": "T004,T006",
+      "rung": 3,
+      "evidence": "crates/core/src/channel/conn.rs::mcp_status; crates/core/tests/mcp_conflicts_cursor_scope.rs",
+      "criteria": [
+        "MCP016-CURSOR-DAEMON",
+        "MCP016-CURSOR-REVERSE",
+        "MCP016-CURSOR-TOOL"
+      ]
+    },
+    {
+      "clause": "Página ≤50 pares, 800 tokens, tope 23 KiB",
+      "task": "T002,T006",
+      "rung": 2,
+      "evidence": "crates/api/tests/mcp_conflicts_contract.rs; apps/mcp/src/conflicts_tests.rs::a_hostile_page_fits_each_part",
+      "criteria": [
+        "MCP016-PAGE-FIT",
+        "MCP016-HOSTILE-PAGE",
+        "MCP016-TOOL-BUDGET"
+      ]
+    },
+    {
+      "clause": "NFR-02 textos no confiables (SEC-12)",
+      "task": "T002,T006",
+      "rung": 3,
+      "evidence": "apps/mcp/src/conflicts_tests.rs::every_repo_text_in_conflicts_is_marked; corpus check-conflicts-*",
+      "criteria": [
+        "MCP016-SANITIZE-VIEW",
+        "MCP016-MARKED"
+      ]
+    },
+    {
+      "clause": "NFR-02 validación de entradas",
+      "task": "T006",
+      "rung": 3,
+      "evidence": "apps/mcp/src/conflicts.rs::arguments; corpus check-conflicts-param-*/scope-*/cursor-*",
+      "criteria": [
+        "MCP016-CURSOR-TOOL",
+        "MCP016-REFUSALS"
+      ]
+    },
+    {
+      "clause": "NFR-02 allowlist",
+      "task": "T004",
+      "rung": 3,
+      "evidence": "crates/core/tests/mcp_conflicts.rs::outside_the_allowlist_is_the_repo_not_enabled_refusal",
+      "criteria": [
+        "MCP016-P6-ALLOWLIST",
+        "MCP016-REFUSALS"
+      ]
+    },
+    {
+      "clause": "P6 sin worktree identificable",
+      "task": "T004",
+      "rung": 3,
+      "evidence": "crates/core/tests/mcp_conflicts.rs::an_unidentified_worktree_gives_the_repo_scope_with_its_reason",
+      "criteria": [
+        "MCP016-P6-UNKNOWN"
+      ]
+    },
+    {
+      "clause": "D11 worktree borrado",
+      "task": "T004",
+      "rung": 2,
+      "evidence": "crates/core/src/channel/mcp_conflicts_tests.rs::a_deleted_worktree_is_worktree_missing",
+      "criteria": [
+        "MCP016-DELETED"
+      ]
+    },
+    {
+      "clause": "Rate limit de lecturas",
+      "task": "T004",
+      "rung": 3,
+      "evidence": "crates/core/tests/mcp_conflicts.rs::conflicts_spend_the_read_bucket",
+      "criteria": [
+        "MCP016-RATE"
+      ]
+    },
+    {
+      "clause": "D13 predictor sin publicar",
+      "task": "T004",
+      "rung": 3,
+      "evidence": "crates/core/tests/mcp_conflicts.rs::an_unpublished_prediction_is_declared_on_the_wire",
+      "criteria": [
+        "MCP016-UNPUBLISHED"
+      ]
+    },
+    {
+      "clause": "D13 daemon sin mcp.conflicts",
+      "task": "T002,T006",
+      "rung": 2,
+      "evidence": "apps/mcp/src/engine.rs::conflicts; apps/mcp/src/conflicts_tests.rs::a_daemon_without_mcp_conflicts_is_prediction_unavailable",
+      "criteria": [
+        "MCP016-PREDICTION-UNAVAILABLE"
+      ]
+    },
+    {
+      "clause": "Sin cálculo por petición (BR-MCP-CALC-004)",
+      "task": "T004",
+      "rung": 1,
+      "evidence": "crates/core/src/channel/mcp_conflicts.rs (solo predict_read/published); sin test que lo afirme",
+      "criteria": []
+    }
+  ],
+  "sobra": [
+    {
+      "what": "Engine::read genérico",
+      "where": "apps/mcp/src/engine.rs::read",
+      "verdict": "colateral"
+    },
+    {
+      "what": "output_schema<T>() y retoque de snapshot.rs",
+      "where": "apps/mcp/src/server.rs::output_schema",
+      "verdict": "colateral"
+    },
+    {
+      "what": "respond() pub(crate)",
+      "where": "apps/mcp/src/server.rs::respond",
+      "verdict": "justificado"
+    },
+    {
+      "what": "Cursor atado a su worktree y mcp_conflicts_cursor_scope.rs",
+      "where": "crates/core/src/channel/conn.rs::mcp_conflicts",
+      "verdict": "colateral"
+    },
+    {
+      "what": "PredictionStore::published",
+      "where": "crates/core/src/predict/store.rs::published",
+      "verdict": "justificado"
+    },
+    {
+      "what": "15 casos nuevos del corpus (condición del coordinador)",
+      "where": "apps/cli/tests/mcp_corpus/cases/check-conflicts-*.json",
+      "verdict": "justificado"
+    }
+  ],
+  "criticalOpen": [],
+  "goal": {
+    "answer": "sí",
+    "evidence": [
+      "apps/mcp/src/server.rs::list_tools",
+      "crates/core/src/channel/conn.rs::mcp_conflicts",
+      "crates/core/tests/mcp_conflicts.rs (14/14)",
+      "apps/cli/tests/mcp_security_corpus (110/110)"
+    ]
+  }
+}
