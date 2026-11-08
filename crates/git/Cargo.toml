@@ -18,6 +18,10 @@ unicode-normalization = "0.1.25"
 # Owner and DACL of the Git executable (SEC-10, TD-GRP-001).
 gitraptor-winsys.workspace = true
 
+[target."cfg(target_os = \"macos\")".dependencies]
+# The class of a `git` child started by background work (ADR-GRP-015 § 1, DS-TS-GRP-005 D9).
+gitraptor-macsys.workspace = true
+
 [target."cfg(unix)".dependencies]
 rustix = { version = "1.1.5", features = ["fs", "process"] }
 
@@ -34,4 +38,9 @@ workspace = true
 # Test runner, probe, shim and traps of the dynamic exec audit (INF-GRP-001).
 [[test]]
 name = "repo_intact_exec"
+harness = false
+
+# Cost of losing `posix_spawn` when a child is lowered (DS-TS-GRP-005 T011, SPAWN_COST_BUDGET).
+[[bench]]
+name = "spawn_cost"
 harness = false
