@@ -1,0 +1,137 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "brief",
+    "ref": "docs/requirements/features/motor-local/dev-specs/US-GRP-008-dev-spec.md"
+  },
+  "rigor": "alto",
+  "goal": {
+    "intent": "Que el cambio sin commitear de un worktree figure en el estado del motor como sin atribuir y que el trabajo del desarrollador desde su editor nunca salga de Claude Code (BR-EDGE-004), con pruebas de aceptación de los tres escenarios de US-GRP-008",
+    "endState": "raptor status (texto en/es y --json) muestra changes_actor unattributed en un worktree con cambios, solo a la conexión que pide observation.change-attribution; los escenarios 1, 2 y 3 de § 9.4 pasan en macOS con el binario raptor real; la historia queda implemented con su PR (T003 ya está en main, PR #315)",
+    "nonGoals": [
+      "T003 (S3, ya en main): no se toca ni se duplican a_session_reader_does_not_take_the_developers_commit, a_developer_commit_while_claude_code_runs_git_is_unattributed ni a_developers_commit_next_to_a_live_agent_session_stays_unattributed",
+      "Cambiar la API de atribución existente (session_actor, US-GRP-010, W124 US-TMC-011)",
+      "TUI (apps/cli/src/tui/), MCP (channel/mcp_status.rs) y actor por archivo en FileChangeView",
+      "Adaptador de transcripts S2 y atribución positiva de cambios de archivo (Q52)",
+      "Ejecución real en Linux y Windows: es de la etapa de validación multiplataforma"
+    ]
+  },
+  "criteria": [
+    {
+      "id": "C1",
+      "statement": "T001: la capacidad observation.change-attribution se lista en el grupo observation sin subir el protocolo; WorktreeView lleva changes_actor como {\"actor\":\"unattributed\"} cuando se fija y lo omite cuando falta (y deserializa sin él); without_change_attribution lo quita en WorktreeView, WorktreeStateData, RepoView y las vistas de snapshot",
+      "verify": "cargo test -p gitraptor-api --test change_attribution -- --exact change_attribution_is_a_capability_of_observation 2>&1 | grep -q 'test result: ok. 1 passed' && cargo test -p gitraptor-api --test change_attribution -- --exact changes_actor_wire_form 2>&1 | grep -q 'test result: ok. 1 passed' && cargo test -p gitraptor-api --test change_attribution -- --exact without_change_attribution_drops_it_in_every_view 2>&1 | grep -q 'test result: ok. 1 passed' && cargo test -p gitraptor-api --test architecture 2>&1 | grep -q 'test result: ok'",
+      "layer": "runtime",
+      "tests": [
+        "crates/api/tests/change_attribution.rs"
+      ]
+    },
+    {
+      "id": "C2",
+      "statement": "T002: el motor publica changes_actor unattributed en cada worktree ready con cambios y nunca en uno limpio o unavailable, sea cual sea el estado de las sesiones (con una sesión Claude Code activa y con un otro agente registrado); una conexión sin la capacidad no lo ve en engine.snapshot, scope.snapshot ni worktree.state y una con la capacidad lo ve en las tres salidas. La salida repo.add es reservada y no se prueba en proceso: la cubre el unit test del módulo a_connection_without_the_capability_never_sees_changes_actor en channel/conn.rs (escrito por el experto, T002 de la Dev Spec)",
+      "verify": "cargo test -p gitraptor-core --test change_attribution 2>&1 | grep -q 'test result: ok. 6 passed' && cargo test -p gitraptor-core --lib -- --exact channel::conn::tests::a_connection_without_the_capability_never_sees_changes_actor 2>&1 | grep -q 'test result: ok. 1 passed'",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/change_attribution.rs"
+      ]
+    },
+    {
+      "id": "C3",
+      "statement": "T004: raptor status pide la capacidad y muestra el actor de los cambios en texto (en y es, clave status.changes-actor, con el texto de actor.unattributed) y en --json (changes_actor con la forma de raptor events --json, ausente sin cambios o con un daemon anterior sin la capacidad); catalogs_match sigue verde con la clave nueva",
+      "verify": "cargo test -p gitraptor-cli --test status_changes_actor 2>&1 | grep -q 'test result: ok. 3 passed' && cargo test -p gitraptor-cli --bin raptor -- --exact i18n::tests::catalogs_match 2>&1 | grep -q 'test result: ok. 1 passed'",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/status_changes_actor.rs"
+      ]
+    },
+    {
+      "id": "C4",
+      "statement": "T005 macOS, con el binario raptor real y perfil y repos temporales: un cambio hecho desde cursor, code o codex (fuera de GITRAPTOR_AGENT_EXECUTABLES) o junto a Claude Code o por el propio agente queda unattributed, sin sesión nueva ni fila en sessions/attribution_records, y un otro agente registrado no se lleva los cambios; un commit del desarrollador sin git visible o tras terminar el git de Claude Code sale unattributed y sin sesión (con trailer unconfirmed si lleva la pista inferred); un commit de Claude Code sigue atribuido por S3; la huella del repo no cambia. Las esperas son a señales con tope, sin sleeps fijos",
+      "verify": "cargo test -p gitraptor-cli --test editor_unattributed 2>&1 | grep -q 'test result: ok. 10 passed' && cargo test -p gitraptor-cli --test editor_unattributed_windows 2>&1 | grep -q 'running 0 tests'",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/editor_unattributed.rs",
+        "apps/cli/tests/editor_unattributed_windows.rs"
+      ]
+    },
+    {
+      "id": "C6",
+      "statement": "T006: la historia y la Dev Spec quedan en status: implemented con updated y 'Implementado en: PR #'; el backlog nombra la historia; Linux e2e y el escenario 3 en Windows quedan en xplat-pendientes.md; release-status.md está regenerado; la TUI y mcp_status.rs no cambian",
+      "verify": "grep -q '^status: implemented' docs/requirements/features/motor-local/user-stories/US-GRP-008-editor-humano-sin-atribuir.md && grep -q 'Implementado en: PR #' docs/requirements/features/motor-local/user-stories/US-GRP-008-editor-humano-sin-atribuir.md && grep -q '^status: implemented' docs/requirements/features/motor-local/dev-specs/US-GRP-008-dev-spec.md && grep -q 'US-GRP-008' docs/requirements/backlog.md && grep -q 'DS-US-GRP-008' docs/architecture/xplat-pendientes.md && node tools/status/release-status.mjs --check && test -z \"$(git diff --stat origin/main -- apps/cli/src/tui crates/core/src/channel/mcp_status.rs)\"",
+      "layer": "static",
+      "tests": [
+        "tools/status/release-status.mjs"
+      ]
+    }
+  ],
+  "constraints": {
+    "deny_paths": [
+      "package.json",
+      "pnpm-lock.yaml",
+      "packages/",
+      "Cargo.toml",
+      "Cargo.lock",
+      ".config/",
+      "tools/ci/",
+      "docs/ARTIFACTS.md",
+      "apps/mcp/",
+      "apps/cli/src/tui/",
+      "crates/core/src/channel/mcp_status.rs",
+      "crates/git/",
+      "crates/policy/",
+      "crates/theme/",
+      "crates/macsys/",
+      "crates/winsys/",
+      "crates/core/src/detect/",
+      ".github/workflows/",
+      "docs/architecture/decisions/"
+    ],
+    "allow_dependency_changes": false
+  },
+  "scope": {
+    "projects": [
+      "gitraptor-api",
+      "gitraptor-core",
+      "gitraptor-cli"
+    ]
+  },
+  "suite": {
+    "command": "node tools/test/nextest-junit.mjs"
+  },
+  "layers": {
+    "runtime": {
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 600000,
+    "suiteTimeoutMs": 5400000
+  },
+  "hops": {
+    "design": {
+      "agent": "nassa-dev-rust:rust-expert",
+      "model": "sonnet"
+    },
+    "critic": {
+      "agent": "nassa-core:plan-critic",
+      "model": "opus"
+    },
+    "tester": {
+      "agent": "nassa-core:criterion-tester",
+      "model": "sonnet"
+    },
+    "build": {
+      "agent": "nassa-dev-rust:rust-expert",
+      "model": "sonnet"
+    },
+    "review": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "opus"
+    },
+    "conformance": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "sonnet"
+    }
+  }
+}
