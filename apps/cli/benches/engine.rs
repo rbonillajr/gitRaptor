@@ -11,6 +11,7 @@
 //! cargo bench -p gitraptor-cli --bench engine                    # full run, ~10-15 min
 //! cargo bench -p gitraptor-cli --bench engine -- --quick         # smoke, ~2 min
 //! cargo bench -p gitraptor-cli --bench engine -- --gate ci       # the gate of the CI runners
+//! cargo bench -p gitraptor-cli --bench engine -- --quick --saturated   # RES-07
 //! ENGINE_BENCH_ROOT=/scratch cargo bench -p gitraptor-cli --bench engine -- --keep
 //! ```
 //!
@@ -24,6 +25,11 @@
 //! (`prediction-engine`, NFR-04's budget) and the RSS of the daemon plus its predictor's worker.
 //! The daemon is this binary, so it also answers the worker's hidden subcommand.
 //! `cargo bench -p gitraptor-cli --bench engine -- --only prediction` runs it alone.
+//!
+//! `--saturated` (RES-07 of INF-GRP-002, DS-TS-GRP-005 T013): every logical core runs a foreign
+//! busy process (`gitraptor_testkit::cpu_load`), at normal priority, from the daemon's start to
+//! the end of the run; the timer slack is measured before, on the idle machine. It always uses
+//! the `reference` gate: the engine p95 must stay within 300 ms with the load running.
 //!
 //! Gates (exit code 1), by `--gate` (INF-GRP-002, Enmienda 2026-10-05):
 //! - `reference` (default outside CI): the p95 of the engine total (`t0` → `t_client_recv`)
@@ -147,6 +153,7 @@ mod unix {
         only: Option<Vec<String>>,
         keep: bool,
         gate: GateMode,
+        saturated: bool,
     }
 
     fn opts() -> Opts {
@@ -162,6 +169,7 @@ mod unix {
             out: None,
             only: None,
             keep: false,
+            saturated: false,
             gate: if std::env::var_os("GITHUB_ACTIONS").is_some() {
                 GateMode::SharedCi
             } else {
@@ -203,10 +211,19 @@ mod unix {
                     o.keep = true;
                     used = false;
                 }
+                "--saturated" => {
+                    o.saturated = true;
+                    used = false;
+                }
                 // `cargo bench` passes `--bench`; nothing else is expected.
                 _ => used = false,
             }
             i += if used { 2 } else { 1 };
+        }
+        if o.saturated {
+            // RES-07 is a budget, not a regression ceiling: it is gated as on the reference
+            // machine.
+            o.gate = GateMode::Reference;
         }
         assert!(o.worktrees >= 4, "--worktrees: at least 4");
         assert!(o.samples > WARMUP, "--samples: more than {WARMUP}");
@@ -2106,6 +2123,28 @@ mod unix {
             );
             wts.push(path.canonicalize().unwrap());
         }
+
+        // RES-07: the foreign load runs from the daemon's start to the end of the run.
+        let _load = if opts.saturated {
+            match gitraptor_testkit::cpu_load::CpuLoad::start(
+                gitraptor_testkit::cpu_load::logical_cores(),
+            ) {
+                Ok(load) => {
+                    println!(
+                        "--saturated: {} busy processes, one per logical core",
+                        load.len()
+                    );
+                    report.insert("saturated".into(), json!({ "busy_processes": load.len() }));
+                    Some(load)
+                }
+                Err(e) => {
+                    eprintln!("--saturated: {e}");
+                    return 1;
+                }
+            }
+        } else {
+            None
+        };
 
         let setup = Instant::now();
         // The profile lives in a short temporary folder: the channel socket path must fit in

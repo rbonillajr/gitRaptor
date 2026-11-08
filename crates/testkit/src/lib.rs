@@ -24,10 +24,12 @@
 //! - [`mcp_corpus`]: declarative MCP attack corpus: case model, judge, scanners and KPI report.
 //! - [`sibling`]: binaries of another workspace package, next to the binary under test.
 //! - [`syn_corpus`]: the R-SYN corpus of SPIKE-CKP-001, for the fidelity of the dry merge.
+//! - [`cpu_load`]: a foreign busy process per core, for the saturated bench scenarios (RES-07).
 
 #[cfg(unix)]
 pub mod canary;
 pub mod control;
+pub mod cpu_load;
 pub mod cut;
 pub mod exceptions;
 pub mod exec_audit;
