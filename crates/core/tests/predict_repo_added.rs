@@ -3,7 +3,10 @@
 //! (`PredictMerger::InProcess`), temporary profile and repo with two linked worktrees whose
 //! commits conflict (NFR-01). Every wait is on the notification that proves the fact; the
 //! deadline is only a ceiling.
-#![cfg(any(target_os = "macos", target_os = "linux"))]
+//!
+//! macOS only: `repo.add` needs a controlling terminal, which the test gives the developer
+//! client with `script`. Linux: Pendiente (validated later on a real machine).
+#![cfg(target_os = "macos")]
 
 mod common;
 
@@ -268,7 +271,6 @@ impl Drop for StopOnDrop {
 /// `script` (a pty). The agent classifier is replaced so a Claude Code session running the suite
 /// does not make the developer an agent.
 /// Linux: Pendiente: etapa de validación multiplataforma.
-#[cfg(target_os = "macos")]
 #[test]
 fn a_repo_added_while_serving_gets_its_pairs_without_a_file_event() {
     use std::process::{Command, Stdio};
