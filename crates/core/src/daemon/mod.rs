@@ -374,6 +374,10 @@ pub struct Daemon {
     resources: Arc<crate::resources::ResourceMonitor>,
     /// The power-saving mode and the `raptor-power` thread that follows it (TS-GRP-005).
     power: power::PowerThread,
+    /// The tiers configured, before the power mode applies (`config.tiers` is the effective).
+    tiers_base: TierConfig,
+    /// The power-saving mode last applied by the loop.
+    power_saving: bool,
     /// Ahead/behind already counted for observed changes (US-GRP-012).
     divergence_cache: observe::DivergenceCache,
     /// Periodic reconciliations that found differences: a value above 0 in
@@ -683,7 +687,10 @@ impl Daemon {
         // Past the last fallible step, so a failed start leaves no log open behind it.
         crate::work_class::set_logger(Some(logger.clone()));
         // Resolved before the modules start, so none of them sees a provisional mode.
-        let power = power::PowerThread::start(&config.power, &config.dirs, &logger);
+        let power = power::PowerThread::start(&config.power, &config.dirs, &logger, handle.clone());
+        // The tiers of the configuration are the base; the power mode applies over it (A3).
+        let tiers_base = config.tiers;
+        let power_saving = power.mode().is_saving();
         let prediction = Arc::new(crate::predict::store::PredictionStore::new(
             config.predict.merger != crate::predict::PredictMerger::Off,
         ));
@@ -713,6 +720,8 @@ impl Daemon {
                 Arc::default(),
             )),
             power,
+            tiers_base,
+            power_saving: false,
             divergence_cache: observe::DivergenceCache::default(),
             periodic_diffs: 0,
             tiers: tiers::Tiers::default(),
@@ -722,6 +731,11 @@ impl Daemon {
             #[cfg(any(unix, windows))]
             server: None,
         };
+        // `engine.resources` publishes the mode and, where classes apply, the live pools (D12).
+        daemon.resources.set_power(daemon.power.mode());
+        // A daemon started in saving applies it before the observer exists: `observe` hands it
+        // over when it creates the observer.
+        daemon.apply_power_saving(power_saving);
         // No calm while a `git` of the user runs in the worktree (its reflog comes last); a wait
         // that runs out because of one says so in the log.
         daemon
@@ -748,6 +762,16 @@ impl Daemon {
         // (US-GRP-007). Clients and tests take it as "started".
         daemon.logger.info("daemon_started", &fields);
         Ok(daemon)
+    }
+
+    /// Applies the power-saving mode (TS-GRP-005, D13, A3): the effective tiers are the base
+    /// in that mode, and the observer, if it runs, retimes its reconciliations and safety nets.
+    fn apply_power_saving(&mut self, active: bool) {
+        self.power_saving = active;
+        self.config.tiers = self.tiers_base.with_power_saving(active);
+        if let Some(observer) = &self.observer {
+            observer.set_power_saving(active);
+        }
     }
 
     /// The power-saving mode, for the modules that follow it (TS-GRP-005, D7).
@@ -858,6 +882,7 @@ impl Daemon {
                 }
                 Ok(Control::Observed(batch)) => self.observed(*batch),
                 Ok(Control::Slept(repo_id)) => self.slept(&repo_id),
+                Ok(Control::PowerMode(active)) => self.apply_power_saving(active),
                 Ok(Control::Test(op, reply)) => {
                     if cfg!(debug_assertions) {
                         self.tier_test(op);

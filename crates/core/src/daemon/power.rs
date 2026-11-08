@@ -7,7 +7,7 @@ use std::sync::mpsc::{RecvTimeoutError, Sender, channel};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant, SystemTime};
 
-use super::{Field, Logger};
+use super::{Field, Logger, ShutdownHandle};
 use crate::power::{
     POWER_POLL, PowerMode, PowerMonitor, PowerReading, PowerSavingSetting, PowerSource,
     UnknownPowerSource, resolve,
@@ -51,8 +51,14 @@ pub(super) struct PowerThread {
 impl PowerThread {
     /// Resolves the initial mode from the profile's `engine.powerSaving` and one reading of the
     /// source, then starts the thread that follows both. The mode is final when this returns:
-    /// a consumer never sees a provisional one.
-    pub(super) fn start(config: &PowerConfig, dirs: &ProfileDirs, logger: &Logger) -> Self {
+    /// a consumer never sees a provisional one. Each change is also sent to the daemon's loop
+    /// through `handle` (`Control::PowerMode`).
+    pub(super) fn start(
+        config: &PowerConfig,
+        dirs: &ProfileDirs,
+        logger: &Logger,
+        handle: ShutdownHandle,
+    ) -> Self {
         let mut settings = SettingsWatch::new(dirs.clone());
         let setting = settings.read();
         let reading = config.source.read();
@@ -87,6 +93,7 @@ impl PowerThread {
                         change.active,
                         change.reading,
                     );
+                    handle.power_mode(change.active);
                 }
                 due = monitor.next_tick(now);
             }

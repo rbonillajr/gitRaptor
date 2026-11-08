@@ -335,11 +335,13 @@ impl Daemon {
         let hooks: Arc<dyn crate::watch::ObserverHooks> =
             Arc::new(crate::watch::FanoutHooks(hooks));
         let roots = self.resources.roots_counter();
-        let tiers = self.config.tiers;
+        // The observer gets the base intervals and applies the power mode itself.
+        let tiers = self.tiers_base;
+        let power_saving = self.power_saving;
         let backend = crate::profile::settings::watch_backend(&self.config.dirs);
         let observer = self.observer.get_or_insert_with(|| {
             let handle = self.handle.clone();
-            Observer::start_counted(
+            let observer = Observer::start_counted(
                 WatchConfig {
                     dormant_poll: tiers.sweep_every,
                     dormant_reconcile: tiers.reconcile_every,
@@ -351,7 +353,10 @@ impl Daemon {
                 }),
                 Some(hooks),
                 roots,
-            )
+            );
+            // Before any repo is watched, so its tasks start on the period of the mode.
+            observer.set_power_saving(power_saving);
+            observer
         });
         let start = match read {
             Some(read) => observer.watch_repo(repo_id, common_dir, read),

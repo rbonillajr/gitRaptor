@@ -104,6 +104,11 @@ impl Budget {
         }
     }
 
+    /// A new configured minimum (the power mode changed); the measured costs are kept.
+    pub fn set_minimum(&mut self, minimum: std::time::Duration) {
+        self.minimum = minimum;
+    }
+
     /// The cost of one repo's last reconciliation, with how many repos are
     /// dormant now: the repos never measured count as the average.
     pub fn record(&mut self, repo_id: &str, cost: std::time::Duration, dormant: usize) {

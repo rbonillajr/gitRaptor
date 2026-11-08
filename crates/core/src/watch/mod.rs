@@ -15,6 +15,7 @@
 #[cfg(target_os = "macos")]
 mod exclusions;
 mod repo;
+pub mod schedule;
 mod sweep;
 mod watchers;
 mod worktree;
@@ -69,6 +70,9 @@ pub struct WatchConfig {
     /// Full reconciliation of every worktree (§ 5; at least 60 s outside
     /// tests).
     pub periodic: Duration,
+    /// Period of the full reconciliation while saving power: the period is then
+    /// `max(periodic, saving_periodic)` (ADR-GRP-015 § 2).
+    pub saving_periodic: Duration,
     /// Full poll of a worktree that cannot be watched (§ 5).
     pub degraded_poll: Duration,
     /// Metadata sweep of the dormant repos (Enmienda 2026-10-07, N3).
@@ -98,6 +102,8 @@ impl Default for WatchConfig {
             },
             backup_poll: Duration::from_secs(30),
             periodic: Duration::from_secs(5 * 60),
+            // ⚠️ ASSUMPTION of ADR-GRP-015 § 2.
+            saving_periodic: Duration::from_secs(15 * 60),
             degraded_poll: Duration::from_secs(2),
             dormant_poll: Duration::from_secs(120),
             dormant_reconcile: Duration::from_secs(60 * 60),
@@ -344,6 +350,8 @@ pub(crate) enum WtMsg {
     Reconcile(u64),
     /// An ignore rule file outside the worktree changed.
     IgnoreRules,
+    /// The power-saving mode changed: recompute the next periodic reconciliation.
+    Power,
     /// Flush the window, answer and end (the repo goes dormant).
     Sleep(Sender<Slept>),
     Stop,
@@ -501,6 +509,8 @@ pub(crate) struct Shared {
     sentinel_seen: std::sync::atomic::AtomicU64,
     /// CPU budget of the slow reconciliation (N3).
     budget: Mutex<sweep::Budget>,
+    /// The engine saves power (ADR-GRP-015 § 2): longer periodic reconciliation and safety nets.
+    saving: std::sync::atomic::AtomicBool,
     /// Wall time spent in the safety nets of the dormant repos, and since
     /// when (`engine.resources`).
     net_ns: std::sync::atomic::AtomicU64,
@@ -511,6 +521,26 @@ pub(crate) struct Shared {
 }
 
 impl Shared {
+    /// Whether the engine saves power now.
+    fn saving(&self) -> bool {
+        self.saving.load(std::sync::atomic::Ordering::Acquire)
+    }
+
+    /// The period of the worktrees' full reconciliation in the current mode.
+    fn periodic(&self) -> Duration {
+        schedule::periodic_period(&self.config, self.saving())
+    }
+
+    /// The interval of the dormant sweep in the current mode.
+    fn dormant_poll(&self) -> Duration {
+        schedule::dormant_intervals(
+            self.config.dormant_poll,
+            self.config.dormant_reconcile,
+            self.saving(),
+        )
+        .0
+    }
+
     fn send(&self, batch: ObservedBatch) {
         self.deliver(batch);
     }
@@ -959,6 +989,7 @@ impl Observer {
                 config.dormant_reconcile,
                 config.reconcile_budget_ppm,
             )),
+            saving: std::sync::atomic::AtomicBool::new(false),
             #[cfg(target_os = "macos")]
             exclusions: exclusions_tx,
         });
@@ -1399,6 +1430,44 @@ impl Observer {
             .interval()
     }
 
+    /// Follows the power-saving mode (ADR-GRP-015 § 2; D13): the worktree tasks recompute their
+    /// next periodic reconciliation from the last one (none fires because of the change), the
+    /// dormant sweep is retimed, and the slow reconciliation takes its saving minimum.
+    pub fn set_power_saving(&self, active: bool) {
+        let was = self
+            .shared
+            .saving
+            .swap(active, std::sync::atomic::Ordering::AcqRel);
+        if was == active {
+            return;
+        }
+        let (_, reconcile) = schedule::dormant_intervals(
+            self.shared.config.dormant_poll,
+            self.shared.config.dormant_reconcile,
+            active,
+        );
+        self.shared
+            .budget
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .set_minimum(reconcile);
+        if let Some(tx) = self
+            .shared
+            .sweep_stop
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+        {
+            let _ = tx.send(());
+        }
+        let repos = self.shared.repos.read().unwrap_or_else(|e| e.into_inner());
+        for repo in repos.values() {
+            for wt in &repo.worktrees {
+                let _ = wt.tx.send(WtMsg::Power);
+            }
+        }
+    }
+
     /// The watcher backend that runs: `fsevents` or `notify` on macOS (the setting
     /// `engine.watcher.backend`), `notify` elsewhere.
     pub fn backend_name(&self) -> &'static str {
@@ -1601,7 +1670,7 @@ fn usage(shared: &Shared) -> gitraptor_api::resources::ObservationUsage {
             repos: dormant.repos,
             worktrees: dormant.worktrees,
             watches: dormant.watches,
-            sweep_interval_s: shared.config.dormant_poll.as_secs(),
+            sweep_interval_s: shared.dormant_poll().as_secs(),
             reconcile_interval_s: reconcile.as_secs(),
             safety_net_cpu_pct: (life > 0.0).then(|| net / life * 100.0),
         },
@@ -1685,22 +1754,37 @@ fn sentinel_check(
 }
 
 /// Starts the sweep task of the dormant repos (N3): one task for all of
-/// them, one wake per interval.
+/// them, one wake per interval. A message on its channel retimes it (the power mode changed);
+/// dropping the sender ends it.
 fn start_sweep(shared: &Arc<Shared>) {
+    use std::sync::mpsc::RecvTimeoutError;
+
     let (tx, rx) = channel::<()>();
     *shared.sweep_stop.lock().unwrap_or_else(|e| e.into_inner()) = Some(tx);
     let weak: Weak<Shared> = Arc::downgrade(shared);
-    let every = shared.config.dormant_poll;
     let _ = crate::work_class::spawn(
         crate::work_class::Pool::Reconciliation,
         crate::work_class::WorkClass::Utility,
         "raptor-dormant-sweep",
         move || {
-            while let Err(std::sync::mpsc::RecvTimeoutError::Timeout) = rx.recv_timeout(every) {
-                let Some(shared) = weak.upgrade() else {
+            let mut last = Instant::now();
+            loop {
+                // Read without keeping the observer alive while waiting.
+                let Some(every) = weak.upgrade().map(|s| s.dormant_poll()) else {
                     return;
                 };
-                sweep_once(&shared);
+                let wait = (last + every).saturating_duration_since(Instant::now());
+                match rx.recv_timeout(wait) {
+                    Ok(()) => {}
+                    Err(RecvTimeoutError::Timeout) => {
+                        let Some(shared) = weak.upgrade() else {
+                            return;
+                        };
+                        sweep_once(&shared);
+                        last = Instant::now();
+                    }
+                    Err(RecvTimeoutError::Disconnected) => return,
+                }
             }
         },
     );
