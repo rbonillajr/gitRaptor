@@ -601,6 +601,17 @@ fn plan(
     let Some(oldest_op) = set.first().cloned() else {
         return Err(reject(TmRejectReason::NothingToUndo, &own_scope, vec![]));
     };
+    // An undo that is not by agent never goes below a selective undo in force: it would bring
+    // back what that undo took away (D6). An undo by agent has its own overlap check instead.
+    if !matches!(selection, Selection::Agent { .. })
+        && set.iter().any(|op| stack.is_below_barrier(op))
+    {
+        return Err(reject(
+            TmRejectReason::SelectiveUndoBelow,
+            &own_scope,
+            set.clone(),
+        ));
+    }
     let mut event_seqs: Vec<i64> = raw.events.iter().map(|e| e.seq).collect();
     event_seqs.sort_unstable();
     // Every operation of the set passes the checks the only one passes today; one that cannot be
