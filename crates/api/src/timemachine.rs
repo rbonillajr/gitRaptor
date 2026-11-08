@@ -615,7 +615,7 @@ pub struct UndoParams {
     /// Duration such as `30m`, `2h` or `1d`.
     #[serde(default)]
     pub since: Option<String>,
-    /// Agent whose work to undo (its session id).
+    /// Whose work to undo: a session id or an agent name (D-TMC-32). Combines with `since`.
     #[serde(default)]
     pub agent: Option<String>,
     #[serde(default)]
@@ -999,15 +999,12 @@ fn check_confirmation(token: Option<&str>) -> Result<(), Invalid> {
 impl UndoParams {
     pub fn validate(&self) -> Result<(), Invalid> {
         check_confirmation(self.confirmation.as_ref().map(ConfirmationToken::as_str))?;
-        let selectors = [
-            self.operation_id.is_some(),
-            self.since.is_some(),
-            self.agent.is_some(),
-        ];
-        if selectors.iter().filter(|s| **s).count() > 1 {
+        // `agent` and `since` combine (an agent's work in a period); `operation_id` names one
+        // operation and excludes both.
+        if self.operation_id.is_some() && (self.since.is_some() || self.agent.is_some()) {
             return Err(Invalid::new(
                 "operation_id",
-                "at most one of operation_id, since and agent",
+                "operation_id excludes since and agent",
             ));
         }
         if let Some(id) = &self.operation_id {
@@ -1018,6 +1015,9 @@ impl UndoParams {
         }
         if let Some(agent) = &self.agent {
             check_agent_id(agent)?;
+            if agent == "unattributed" {
+                return Err(Invalid::new("agent", "unattributed is not an agent"));
+            }
         }
         Ok(())
     }
@@ -1224,7 +1224,7 @@ mod tests {
             undo(r#"{"operation_id":"latest"}"#).unwrap_err().field,
             "operation_id"
         );
-        assert!(undo(r#"{"since":"2h","agent":"claude-1"}"#).is_err());
+        assert!(undo(r#"{"since":"2h","agent":"claude-1"}"#).is_ok());
         let restore = RestoreParams {
             worktree: None,
             snapshot_id: "../x".into(),
