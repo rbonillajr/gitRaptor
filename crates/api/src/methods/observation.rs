@@ -14,7 +14,15 @@ pub const CAP_OBSERVATION_TIERS: Capability = Capability::new("observation.tiers
 pub const CAP_OBSERVATION_SPECIAL_STATES: Capability =
     Capability::new("observation.special-states");
 
+/// `WorktreeView::changes_actor`. A connection without it never sees it.
+pub const CAP_OBSERVATION_CHANGE_ATTRIBUTION: Capability =
+    Capability::new("observation.change-attribution");
+
 pub(super) const GROUP: Group = Group {
-    capabilities: &[CAP_OBSERVATION_TIERS, CAP_OBSERVATION_SPECIAL_STATES],
+    capabilities: &[
+        CAP_OBSERVATION_TIERS,
+        CAP_OBSERVATION_SPECIAL_STATES,
+        CAP_OBSERVATION_CHANGE_ATTRIBUTION,
+    ],
     ..Group::new("observation")
 };

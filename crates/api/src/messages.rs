@@ -4,6 +4,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::actor::Actor;
 use crate::event::Event;
 use crate::{Untrusted, UntrustedName};
 
@@ -223,6 +224,14 @@ impl RepoView {
             w.without_special_states();
         }
     }
+
+    /// The repo in the shapes of a connection without
+    /// `observation.change-attribution`.
+    pub fn without_change_attribution(&mut self) {
+        for w in &mut self.worktrees {
+            w.without_change_attribution();
+        }
+    }
 }
 
 /// The base branch of a repo (US-GRP-012, ADR-GRD-004 § 3): the one the
@@ -393,6 +402,13 @@ pub struct WorktreeView {
     /// `observation.special-states`.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub unmerged_paths: u32,
+    /// Who the uncommitted changes of the worktree are attributed to
+    /// (US-GRP-008). Present only when the worktree is `ready` with changes
+    /// and the connection has `observation.change-attribution`. No signal
+    /// attributes them in the MVP, so it is always `unattributed`
+    /// (BR-EDGE-004).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub changes_actor: Option<Actor>,
 }
 
 /// A Git operation left half-way in a worktree, from its marker files
@@ -422,6 +438,12 @@ impl WorktreeView {
     pub fn without_special_states(&mut self) {
         self.operation = None;
         self.unmerged_paths = 0;
+    }
+
+    /// The worktree in the shapes of a connection without
+    /// `observation.change-attribution`.
+    pub fn without_change_attribution(&mut self) {
+        self.changes_actor = None;
     }
 
     /// The listed changes are fewer than the counted ones.
@@ -496,6 +518,14 @@ impl WorktreeStateData {
     pub fn without_special_states(&mut self) {
         for w in &mut self.worktrees {
             w.without_special_states();
+        }
+    }
+
+    /// The data in the shapes of a connection without
+    /// `observation.change-attribution`.
+    pub fn without_change_attribution(&mut self) {
+        for w in &mut self.worktrees {
+            w.without_change_attribution();
         }
     }
 }
@@ -1281,6 +1311,7 @@ mod tests {
                 detached_at: Some("39e852f".into()),
                 operation: None,
                 unmerged_paths: 0,
+                changes_actor: None,
             }],
             fetched_utc_ms: None,
         };
