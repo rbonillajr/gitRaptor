@@ -25,6 +25,7 @@ fn worktree(operation: Option<OperationKindView>, unmerged_paths: u32) -> Worktr
         detached_at: None,
         operation,
         unmerged_paths,
+        changes_actor: None,
     }
 }
 

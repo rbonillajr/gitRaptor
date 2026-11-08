@@ -9,20 +9,11 @@ use serde_json::{Value, json};
 
 const CAPABILITY: &str = "observation.change-attribution";
 
-/// Fallback for a method the contract does not have yet: an inherent
-/// `without_change_attribution` wins over it, so the call keeps its meaning
-/// once T001 lands and fails with a clear message until then.
-trait MissingWithoutChangeAttribution {
-    fn without_change_attribution(&mut self) {
-        panic!("without_change_attribution does not exist yet (US-GRP-008 T001)");
-    }
-}
-impl<T> MissingWithoutChangeAttribution for T {}
-
 fn worktree_json(with_actor: bool) -> Value {
     let mut w = json!({
         "path": {"untrusted": "/w/feat"},
         "main": false,
+        "admin_name": null,
         "status": {
             "state": "ready",
             "head": {"kind": "detached"},
