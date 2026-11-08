@@ -27,7 +27,6 @@ type Entries = BTreeMap<BString, (gix::objs::tree::EntryMode, gix::ObjectId)>;
 
 struct Walk {
     max: usize,
-    deadline: Instant,
     paths: Vec<String>,
     total: u64,
 }
@@ -84,11 +83,19 @@ impl RepoReader {
         let new_tree = self.commit_tree(&target_commit)?;
         let mut walk = Walk {
             max,
-            deadline,
             paths: Vec::new(),
             total: 0,
         };
-        self.diff_trees(old_tree, Some(new_tree), &mut Vec::new(), &mut walk)?;
+        self.diff_trees(
+            old_tree,
+            Some(new_tree),
+            &mut Vec::new(),
+            deadline,
+            &mut |path, _, _| {
+                walk.leaf(path);
+                Ok(())
+            },
+        )?;
         Ok(ChangedPaths {
             paths: walk.paths,
             total: u32::try_from(walk.total).unwrap_or(u32::MAX),
@@ -165,8 +172,8 @@ impl RepoReader {
                 let (before, after) = (old.get(key), new.get(key));
                 (before != after).then(|| Item {
                     key: key.clone(),
-                    before: before.map(|b| b.1),
-                    after: after.map(|a| a.1),
+                    before: before.copied(),
+                    after: after.copied(),
                 })
             })
             .collect())
@@ -174,15 +181,17 @@ impl RepoReader {
 
     /// Compares two trees without recursion: an explicit stack of one frame per directory level,
     /// so a hostile tree of any depth cannot exhaust the thread's stack (H-01). Past
-    /// [`MAX_TREE_DEPTH`] levels it fails: never a partial total.
+    /// [`MAX_TREE_DEPTH`] levels it fails: never a partial total. Each differing non-tree entry
+    /// goes to `leaf` with its whole path and both sides.
     fn diff_trees(
         &self,
         old: Option<gix::ObjectId>,
         new: Option<gix::ObjectId>,
         prefix: &mut Vec<u8>,
-        walk: &mut Walk,
+        deadline: Instant,
+        leaf: &mut Leaf<'_>,
     ) -> Result<(), ReadError> {
-        let root = self.changed_items(old, new, walk.deadline)?;
+        let root = self.changed_items(old, new, deadline)?;
         let mut stack = vec![Frame {
             items: root.into_iter(),
             mark: prefix.len(),
@@ -201,24 +210,34 @@ impl RepoReader {
                         "changed paths: tree too deep".into(),
                     ));
                 }
-                let items = self.changed_items(item.before, item.after, walk.deadline)?;
+                let items = self.changed_items(
+                    item.before.map(|b| b.1),
+                    item.after.map(|a| a.1),
+                    deadline,
+                )?;
                 stack.push(Frame {
                     items: items.into_iter(),
                     mark: prefix.len(),
                 });
             } else {
-                walk.leaf(prefix);
+                leaf(prefix, item.before, item.after)?;
             }
         }
         Ok(())
     }
 }
 
+/// One side of a tree entry: its mode and its object.
+type Side = (gix::objs::tree::EntryMode, gix::ObjectId);
+
+/// What the walk calls for each differing non-tree entry: its whole path and both sides.
+type Leaf<'a> = dyn FnMut(&[u8], Option<Side>, Option<Side>) -> Result<(), ReadError> + 'a;
+
 /// One entry that differs between two trees.
 struct Item {
     key: BString,
-    before: Option<gix::ObjectId>,
-    after: Option<gix::ObjectId>,
+    before: Option<Side>,
+    after: Option<Side>,
 }
 
 /// A directory level being walked: what is left to visit and the prefix that is its own.
@@ -243,15 +262,58 @@ impl RepoReader {
     ///
     /// # Errors
     ///
+    /// Unlike [`RepoReader::changed_paths`] (made to show, capped and cut), every entry is
+    /// returned whole, so a caller may write it back.
+    ///
+    /// # Errors
+    ///
     /// Fails if `deadline` passes or an object cannot be read: never a partial list.
+    /// [`ReadError::InvalidInput`] for an id that is not one, and for an entry that is no file,
+    /// executable or symlink (a submodule): it has no [`Kind`](crate::tm_write::files::Kind).
     pub fn commit_tree_diff(
         &self,
-        _old: &str,
-        _new: &str,
-        _deadline: Instant,
+        old: &str,
+        new: &str,
+        deadline: Instant,
     ) -> Result<Vec<TreeChange>, ReadError> {
-        Ok(Vec::new())
+        let old = self.commit(parse_id(old)?)?;
+        let new = self.commit(parse_id(new)?)?;
+        let old_tree = self.commit_tree(&old)?;
+        let new_tree = self.commit_tree(&new)?;
+        let mut out = Vec::new();
+        self.diff_trees(
+            Some(old_tree),
+            Some(new_tree),
+            &mut Vec::new(),
+            deadline,
+            &mut |path, before, after| {
+                out.push(TreeChange {
+                    path: path.to_vec(),
+                    old: before.map(side_entry).transpose()?,
+                    new: after.map(side_entry).transpose()?,
+                });
+                Ok(())
+            },
+        )?;
+        Ok(out)
     }
+}
+
+/// The kind and id of a non-tree entry; a submodule has no kind the applier can write.
+fn side_entry((mode, id): Side) -> Result<(crate::tm_write::files::Kind, crate::Oid), ReadError> {
+    use crate::tm_write::files::Kind;
+    use gix::objs::tree::EntryKind;
+    let kind = match mode.kind() {
+        EntryKind::Blob => Kind::File,
+        EntryKind::BlobExecutable => Kind::Executable,
+        EntryKind::Link => Kind::Symlink,
+        EntryKind::Commit | EntryKind::Tree => {
+            return Err(ReadError::InvalidInput(
+                "tree diff: an entry that is not a file".into(),
+            ));
+        }
+    };
+    Ok((kind, crate::Oid(id)))
 }
 
 impl Walk {
