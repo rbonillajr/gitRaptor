@@ -152,6 +152,7 @@ fn interrupted(fx: &Fixture) -> (TempProfile, PathBuf, String, String, String) {
             keep: Default::default(),
         }],
         refs: RefScope::All,
+        selective: None,
     };
     let result = Applier::new(
         &store,

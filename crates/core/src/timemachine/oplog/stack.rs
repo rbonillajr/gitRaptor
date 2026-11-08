@@ -38,8 +38,13 @@ pub struct ExternalEvent {
 pub enum StackItem {
     /// Something that changed the scope and can be undone.
     Do(OpRef),
-    /// An undo of `targets`.
-    Undo { undo: String, targets: Vec<OpRef> },
+    /// An undo of `targets`; `selective` when it took back a chosen set (an agent's work)
+    /// instead of the top of the stack.
+    Undo {
+        undo: String,
+        targets: Vec<OpRef>,
+        selective: bool,
+    },
     /// A redo of the undo `undo`.
     Redo { redo: String, undo: String },
 }
@@ -60,7 +65,7 @@ impl UndoStack {
                     stack.done.push(op);
                     stack.redo.clear();
                 }
-                StackItem::Undo { undo, targets } => {
+                StackItem::Undo { undo, targets, .. } => {
                     stack.done.retain(|op| !targets.contains(op));
                     stack.redo.push((undo, targets));
                 }
@@ -79,6 +84,12 @@ impl UndoStack {
     /// next undo takes back.
     pub fn last_operation(&self) -> Option<&OpRef> {
         self.done.last()
+    }
+
+    /// Whether `op` was done when a selective undo still in force ran: undoing it would bring
+    /// back work that undo took away.
+    pub fn is_below_barrier(&self, _op: &OpRef) -> bool {
+        false
     }
 
     /// The operations of the scope that are not undone, oldest first.
@@ -136,6 +147,7 @@ impl Oplog {
                     StackItem::Undo {
                         undo: id,
                         targets: targets.clone(),
+                        selective: false,
                     }
                 }
                 (OperationState::Finished, OperationKind::Redo, Target::Redo(undo))
@@ -170,6 +182,10 @@ impl Oplog {
 mod done_tests;
 
 #[cfg(test)]
+#[path = "stack_barrier_tests.rs"]
+mod barrier_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -185,10 +201,12 @@ mod tests {
             StackItem::Undo {
                 undo: "u1".into(),
                 targets: vec![op("b")],
+                selective: false,
             },
             StackItem::Undo {
                 undo: "u2".into(),
                 targets: vec![op("a")],
+                selective: false,
             },
         ]);
         assert_eq!(stack.last_operation(), None);
@@ -199,10 +217,12 @@ mod tests {
             StackItem::Undo {
                 undo: "u1".into(),
                 targets: vec![op("b")],
+                selective: false,
             },
             StackItem::Undo {
                 undo: "u2".into(),
                 targets: vec![op("a")],
+                selective: false,
             },
             StackItem::Redo {
                 redo: "r1".into(),
@@ -220,6 +240,7 @@ mod tests {
             StackItem::Undo {
                 undo: "u1".into(),
                 targets: vec![op("a")],
+                selective: false,
             },
             StackItem::Do(OpRef::GitEvent(7)),
         ]);

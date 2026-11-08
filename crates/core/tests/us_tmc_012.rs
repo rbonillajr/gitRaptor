@@ -455,6 +455,7 @@ fn a_write_during_the_application_is_the_applier_overlap() {
             keep: BTreeSet::from(["b.txt".to_owned()]),
         }],
         refs: RefScope::All,
+        selective: None,
     };
     let hooks = ApplyHooks {
         before_exchange: Some(Box::new(|root: &Path, rel: &[u8]| {

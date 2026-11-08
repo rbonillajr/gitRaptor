@@ -300,6 +300,10 @@ fn a_raw_event_not_covered_rejects_the_whole_period() {
         branch: Some("main".into()),
         actor: Requester::Unattributed,
         observed_ms: now - 2_000,
+        in_gap: false,
+        inferred: false,
+        old_commit: None,
+        new_commit: None,
     };
     let (b, _) = r.operation("b", now - 1_000, 3);
     let oplog_before = r

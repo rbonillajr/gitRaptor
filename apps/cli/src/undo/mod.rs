@@ -26,6 +26,14 @@ mod since_tests;
 #[path = "since_review_tests.rs"]
 mod since_review_tests;
 
+#[cfg(test)]
+#[allow(
+    unused_imports,
+    reason = "the frozen test file globs super:: without using it"
+)]
+#[path = "agent_tests.rs"]
+mod agent_tests;
+
 use crate::i18n::{Tr, t};
 use crate::{engine, error_text, shown};
 
@@ -306,6 +314,9 @@ fn reason_key(reason: TmRejectReason) -> &'static str {
         TmRejectReason::ConfirmationUnavailable => "undo.reason.confirmation-unavailable-windows",
         TmRejectReason::Overlap => "undo.reason.overlap",
         TmRejectReason::OverlapUnverified => "undo.reason.overlap-unverified",
+        TmRejectReason::NotSelectable => "undo.reason.not-selectable",
+        TmRejectReason::SelectiveUndoBelow => "undo.reason.selective-undo-below",
+        TmRejectReason::AttributionUnavailable => "undo.reason.attribution-unavailable",
     }
 }
 

@@ -73,7 +73,20 @@ pub struct RawGitEvent {
     pub actor: Requester,
     /// When the engine observed it (UTC ms since the epoch): its moment for `undo --since`.
     pub observed_ms: i64,
+    /// The event falls in a gap of the engine's record: its owner is not certain.
+    pub in_gap: bool,
+    /// The engine inferred the event's worktree instead of observing it.
+    pub inferred: bool,
+    /// The commit the event's ref pointed to before it, when the event names one.
+    pub old_commit: Option<String>,
+    /// The commit the event's ref points to after it, when the event names one.
+    pub new_commit: Option<String>,
 }
+
+/// The current attribution of each session the engine knows: session id → requester.
+/// Read once per planning and never stored.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SessionAttribution(pub HashMap<String, Requester>);
 
 /// The engine as the Time Machine sees it.
 pub trait EngineLink: Send + Sync {
@@ -83,6 +96,10 @@ pub trait EngineLink: Send + Sync {
     fn settle(&self, repo_id: &str, worktrees: &[PathBuf], limit: Duration) -> Option<i64>;
     /// The raw Git events of `worktree`, oldest first; `None` if they cannot be read.
     fn raw_events(&self, repo_id: &str, worktree: &Path) -> Option<Vec<RawGitEvent>>;
+    /// The current attribution of every session of the repo; `None` if it cannot be read.
+    fn session_attribution(&self, _repo_id: &str) -> Option<SessionAttribution> {
+        None
+    }
     /// First oplog sequence of the current generation of the repo's engine store: rows before it
     /// carry marks of another numbering (or of the bus, before US-TMC-004).
     fn generation_floor(&self, repo_id: &str) -> i64;

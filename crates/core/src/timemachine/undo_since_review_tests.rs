@@ -245,6 +245,10 @@ fn commit_event(seq: i64, observed_ms: i64, kind: GitEventKind) -> RawGitEvent {
         branch: Some("main".into()),
         actor: Requester::Unattributed,
         observed_ms,
+        in_gap: false,
+        inferred: false,
+        old_commit: None,
+        new_commit: None,
     }
 }
 

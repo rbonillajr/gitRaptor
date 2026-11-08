@@ -162,6 +162,10 @@ fn a_late_echo_bound_by_a_calm_anchor_stays_below_the_restore() {
                 branch: Some("main".into()),
                 actor: Requester::Unattributed,
                 observed_ms: 0,
+                in_gap: false,
+                inferred: false,
+                old_commit: None,
+                new_commit: None,
             })
             .collect(),
         floor: 0,

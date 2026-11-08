@@ -139,7 +139,7 @@ pub struct UndoDone {
 }
 
 /// Which operations of the worktree's stack an undo takes back.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Selection {
     /// The most recent one not undone yet.
     Last,
@@ -149,15 +149,20 @@ pub enum Selection {
     /// with the daemon's clock once it holds the repo and the engine is calm, so waiting for them
     /// never stretches it back.
     Within { span_ms: i64 },
+    /// The operations of the agent `selector` names (a session id or an agent name) in the last
+    /// `span_ms`.
+    Agent { selector: String, span_ms: i64 },
 }
 
 impl Selection {
     /// Where the period starts, now; `None` for the last operation.
-    fn threshold(self) -> Option<i64> {
-        match self {
+    fn threshold(&self) -> Option<i64> {
+        match *self {
             Selection::Last => None,
             Selection::Since { since_ms } => Some(since_ms),
-            Selection::Within { span_ms } => Some(now_ms().saturating_sub(span_ms)),
+            Selection::Within { span_ms } | Selection::Agent { span_ms, .. } => {
+                Some(now_ms().saturating_sub(span_ms))
+            }
         }
     }
 }
@@ -719,7 +724,7 @@ fn plan(
     // undo of the last operation keeps today's hash.
     let taken_back: Vec<&str> = match selection {
         Selection::Last => Vec::new(),
-        Selection::Since { .. } | Selection::Within { .. } => {
+        Selection::Since { .. } | Selection::Within { .. } | Selection::Agent { .. } => {
             undone.iter().map(|u| u.id.as_str()).collect()
         }
     };
@@ -1074,6 +1079,9 @@ pub fn undo_selected(
     env: &UndoEnv<'_>,
     mut selection: Selection,
 ) -> Result<UndoDone, UndoError> {
+    if matches!(selection, Selection::Agent { .. }) {
+        return Err(UndoError::Internal("agent: not built".to_owned()));
+    }
     let oplog = &repo.repo.oplog;
     let worktree = repo.repo.worktree.as_path();
     let repo_id = repo.repo.repo_id.as_str();
@@ -1178,7 +1186,7 @@ pub fn undo_selected(
         &raw_all,
         events_complete,
         overlap_started + OVERLAP_BUDGET,
-        selection,
+        selection.clone(),
     );
     let planned = match planned {
         Ok(p) => p,
@@ -1220,6 +1228,7 @@ pub fn undo_selected(
         prior_snapshot: String::new(),
         worktrees: planned.worktrees.clone(),
         refs: RefScope::Only(planned.refs.clone()),
+        selective: None,
     };
     // Git preconditions before the undo's prior (ADR-TMC-005 § 4); the
     // applier runs them again under its locks.

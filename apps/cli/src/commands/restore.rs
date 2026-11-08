@@ -242,6 +242,10 @@ fn reason_key(reason: TmRejectReason) -> &'static str {
         TmRejectReason::RefInUse => "restore.reason.ref-in-use",
         TmRejectReason::Unsupported => "restore.reason.unsupported",
         TmRejectReason::GitUnavailable => "restore.reason.git-unavailable",
+        // Only an undo by agent rejects with these; a restore never does.
+        TmRejectReason::NotSelectable
+        | TmRejectReason::SelectiveUndoBelow
+        | TmRejectReason::AttributionUnavailable => "restore.reason.unsupported",
     }
 }
 

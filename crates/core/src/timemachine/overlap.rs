@@ -29,6 +29,10 @@ mod tests;
 #[path = "overlap_hardening_tests.rs"]
 mod hardening_tests;
 
+#[cfg(test)]
+#[path = "overlap_selected_tests.rs"]
+mod selected_tests;
+
 /// What the overlap check reads.
 #[derive(Debug, Clone, Copy)]
 pub struct OverlapInput<'a> {
@@ -685,4 +689,35 @@ fn merge(phase1: &OverlapReport, tail: OverlapReport, prior: &str) -> OverlapRep
     out.last_point = Some(prior.to_owned());
     out.unverified = false;
     out
+}
+
+/// What the overlap check of an undo by agent reads: subject by subject instead of a whole
+/// snapshot.
+#[derive(Debug, Clone, Copy)]
+pub struct SelectedInput<'a> {
+    pub worktree_key: &'a str,
+    /// Per subject: the agent's final value and the engine mark of its last change.
+    pub finals: &'a BTreeMap<super::undo_agent::Subject, (super::undo_agent::Value, i64)>,
+    /// Per branch of the target: the mark of the base of the agent's first change.
+    pub first_base: &'a BTreeMap<String, i64>,
+    /// The set: whatever is not here and names a branch counts in the branch rule.
+    pub set: &'a [OpRef],
+    pub events: &'a [super::engine::RawGitEvent],
+    pub last_point: Option<&'a str>,
+    pub deadline: Instant,
+}
+
+/// Phase 1 of the overlap check of an undo by agent: the clean points after the agent's first
+/// change.
+pub fn check_selected(_store: &SnapshotStore, _input: &SelectedInput<'_>) -> OverlapReport {
+    OverlapReport::default()
+}
+
+/// Phase 2 of the overlap check of an undo by agent: from the last point to the undo's `prior`.
+pub fn check_selected_tail(
+    _store: &SnapshotStore,
+    _input: &SelectedInput<'_>,
+    _prior: &str,
+) -> OverlapReport {
+    OverlapReport::default()
 }

@@ -2,6 +2,7 @@
 //! the parts that live in the engine (TQ-2 → a); the write layer on the
 //! user's repo lives in `crates/git` (ADR-TMC-002).
 
+pub mod agent_selector;
 pub mod apply;
 pub mod chaos;
 pub mod confirm;
@@ -23,3 +24,4 @@ pub mod store;
 pub mod sweep;
 pub mod timeline;
 pub mod undo;
+pub mod undo_agent;

@@ -475,6 +475,17 @@ impl TimeMachineBackend {
     }
 }
 
+impl TimeMachineBackend {
+    /// [`UndoBackend::repo_of`] without the trait in scope.
+    ///
+    /// # Errors
+    ///
+    /// As [`UndoBackend::repo_of`].
+    pub fn repo_of(&self, folder: &Path) -> Result<TmRepoHandle, ScopeError> {
+        <Self as UndoBackend>::repo_of(self, folder)
+    }
+}
+
 impl UndoBackend for TimeMachineBackend {
     fn repo_of(&self, folder: &Path) -> Result<TmRepoHandle, ScopeError> {
         let opened = self
