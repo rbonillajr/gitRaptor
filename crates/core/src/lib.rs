@@ -1,6 +1,7 @@
 //! GitRaptor engine: worktree watcher, oplog/snapshots and conflict prediction.
 
 pub mod autostart;
+pub mod change_attribution;
 pub mod channel;
 pub mod client;
 pub mod daemon;

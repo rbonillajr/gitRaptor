@@ -702,6 +702,10 @@ impl Connection<'_> {
         // Nor the operation and unmerged paths without `observation.special-states`.
         self.outbox
             .set_without_special_states(!self.has(methods::CAP_OBSERVATION_SPECIAL_STATES.name));
+        // Nor the actor of the uncommitted changes without `observation.change-attribution`.
+        self.outbox.set_without_change_attribution(
+            !self.has(methods::CAP_OBSERVATION_CHANGE_ATTRIBUTION.name),
+        );
         // Nor the cause `worktree-removed` without `sessions.worktree-removed`.
         self.outbox
             .set_without_worktree_removed(!self.has(methods::CAP_SESSIONS_WORKTREE_REMOVED.name));
@@ -1557,6 +1561,10 @@ impl Connection<'_> {
                 }
                 shape_special_states(
                     self.has(methods::CAP_OBSERVATION_SPECIAL_STATES.name),
+                    std::slice::from_mut(&mut result.repo),
+                );
+                shape_change_attribution(
+                    self.has(methods::CAP_OBSERVATION_CHANGE_ATTRIBUTION.name),
                     std::slice::from_mut(&mut result.repo),
                 );
                 self.kept_temps(std::slice::from_mut(&mut result.repo));
@@ -2595,6 +2603,10 @@ impl Connection<'_> {
                     self.has(methods::CAP_OBSERVATION_SPECIAL_STATES.name),
                     &mut snapshot.repos,
                 );
+                shape_change_attribution(
+                    self.has(methods::CAP_OBSERVATION_CHANGE_ATTRIBUTION.name),
+                    &mut snapshot.repos,
+                );
                 self.kept_temps(&mut snapshot.repos);
                 // The ahead/behind as of now (US-GRP-012, D5).
                 crate::observe::refresh_divergence(
@@ -2718,6 +2730,10 @@ impl Connection<'_> {
                 }
                 shape_special_states(
                     self.has(methods::CAP_OBSERVATION_SPECIAL_STATES.name),
+                    std::slice::from_mut(&mut repo),
+                );
+                shape_change_attribution(
+                    self.has(methods::CAP_OBSERVATION_CHANGE_ATTRIBUTION.name),
                     std::slice::from_mut(&mut repo),
                 );
                 self.kept_temps(std::slice::from_mut(&mut repo));
@@ -4794,6 +4810,15 @@ fn shape_special_states(accepted: bool, repos: &mut [gitraptor_api::messages::Re
     }
 }
 
+/// Same as [`shape_special_states`] for `observation.change-attribution`.
+fn shape_change_attribution(accepted: bool, repos: &mut [gitraptor_api::messages::RepoView]) {
+    if !accepted {
+        repos
+            .iter_mut()
+            .for_each(gitraptor_api::messages::RepoView::without_change_attribution);
+    }
+}
+
 #[cfg(test)]
 #[path = "conn_kept_total_tests.rs"]
 mod kept_total_tests;
@@ -4831,6 +4856,7 @@ mod tests {
                 detached_at: None,
                 operation: Some(OperationKindView::Merge),
                 unmerged_paths: 2,
+                changes_actor: None,
             }],
             fetched_utc_ms: None,
             tier: None,
@@ -4846,6 +4872,60 @@ mod tests {
         }
         let mut new = [repo()];
         shape_special_states(true, &mut new);
+        assert_eq!(new[0], repo());
+    }
+
+    // `repo.add`, `engine.snapshot` and `scope.snapshot` all shape their repos through
+    // `shape_change_attribution`; `worktree.state` goes through the outbox.
+    #[test]
+    fn a_connection_without_the_capability_never_sees_changes_actor() {
+        use gitraptor_api::actor::Actor;
+        use gitraptor_api::messages::{
+            BaseBranchView, BaseStatusView, ChangeCounts, DivergenceView, HeadView, RepoStateView,
+            RepoView, WorktreeStatus, WorktreeView,
+        };
+        let repo = || RepoView {
+            repo_id: "r1".into(),
+            state: RepoStateView::Observed,
+            path: gitraptor_api::Untrusted::new("/r/.git"),
+            base: BaseBranchView {
+                name: None,
+                status: BaseStatusView::Unconfirmed,
+            },
+            worktrees: vec![WorktreeView {
+                path: gitraptor_api::Untrusted::new("/r"),
+                main: true,
+                admin_name: None,
+                status: WorktreeStatus::Ready {
+                    head: HeadView::Detached,
+                    counts: ChangeCounts {
+                        staged: 0,
+                        unstaged: 1,
+                        untracked: 0,
+                    },
+                    changes: Vec::new(),
+                    divergence: DivergenceView::NoCommits,
+                },
+                last_activity_utc_ms: None,
+                last_activity_in_gap: false,
+                detached_at: None,
+                operation: None,
+                unmerged_paths: 0,
+                changes_actor: Some(Actor::Unattributed),
+            }],
+            fetched_utc_ms: None,
+            tier: None,
+            checked_utc_ms: None,
+            kept_temps: None,
+            prediction: None,
+        };
+        let mut old = [repo(), repo()];
+        shape_change_attribution(false, &mut old);
+        for r in &old {
+            assert_eq!(r.worktrees[0].changes_actor, None);
+        }
+        let mut new = [repo()];
+        shape_change_attribution(true, &mut new);
         assert_eq!(new[0], repo());
     }
 

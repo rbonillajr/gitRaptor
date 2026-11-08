@@ -47,6 +47,7 @@ fn worktree(root: &Path, main: bool) -> WorktreeView {
         detached_at: None,
         operation: None,
         unmerged_paths: 0,
+        changes_actor: None,
     }
 }
 

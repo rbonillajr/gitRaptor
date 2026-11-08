@@ -737,6 +737,7 @@ pub fn read_worktree(
         detached_at,
         operation,
         unmerged_paths,
+        changes_actor: None,
     };
     let read =
         || -> Result<(HeadView, Option<String>, Status, Option<OperationKindView>), ReadError> {
@@ -770,20 +771,24 @@ pub fn read_worktree(
                 HeadView::Detached => head_commit.clone(),
                 _ => None,
             };
+            let changes_actor = crate::change_attribution::changes_actor(&counts);
+            let fingerprint = Some(fingerprint(&changes));
+            let mut view = view(
+                WorktreeStatus::Ready {
+                    head,
+                    counts,
+                    changes: bounded(changes),
+                    // Counted by `reconcile` once every head is read.
+                    divergence: DivergenceView::Unreadable,
+                },
+                detached_at,
+                operation,
+                unmerged_paths,
+            );
+            view.changes_actor = changes_actor;
             WorktreeRead {
-                fingerprint: Some(fingerprint(&changes)),
-                view: view(
-                    WorktreeStatus::Ready {
-                        head,
-                        counts,
-                        changes: bounded(changes),
-                        // Counted by `reconcile` once every head is read.
-                        divergence: DivergenceView::Unreadable,
-                    },
-                    detached_at,
-                    operation,
-                    unmerged_paths,
-                ),
+                fingerprint,
+                view,
                 head_commit,
                 in_progress: operation.is_some(),
                 uncommitted,
