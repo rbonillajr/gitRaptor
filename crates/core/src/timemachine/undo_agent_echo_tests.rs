@@ -241,7 +241,7 @@ fn a_move_after_the_anchor_counts_as_it_is() {
     assert_eq!(
         seqs(&read),
         vec![10, 23],
-        "TDTMC003-ECHO-AFTER: outside the window it counts"
+        "TDTMC003-ECHO-AFTER: the own echo (21) is dropped, the move after the anchor (23) counts"
     );
 }
 
@@ -289,7 +289,7 @@ fn another_agents_commit_inside_an_own_echo_window_counts() {
     assert_eq!(
         seqs(&read),
         vec![10, 22],
-        "TDTMC003-ECHO-RAW-ACTOR: claude-2 is not an echo"
+        "TDTMC003-ECHO-RAW-ACTOR: the own echo (21) is dropped, claude-2's commit in its window (22) is not an echo"
     );
     assert_eq!(read[1].actor, agent("claude-2"));
 }
@@ -323,4 +323,157 @@ fn an_operation_below_the_generation_floor_explains_nothing() {
     let read = branch_rule_events(&events, &ops, &snaps, 100, KEY, &set, &own());
 
     assert_eq!(seqs(&read), vec![10, 21], "TDTMC003-ECHO-FLOOR");
+}
+
+#[test]
+fn the_requester_of_an_own_undo_does_not_decide_the_echo() {
+    // Condition 3: the requester is not part of the rule. claude-2 asked for the undo, but it only
+    // moved the set's work, so its anchored echo is still GitRaptor's.
+    let (events, _, snaps, set) = own_undo_world();
+    let ops = vec![op(
+        "U",
+        OperationKind::Undo,
+        Target::Undo(vec![OpRef::GitEvent(10)]),
+        20,
+        OperationState::Finished,
+        agent("claude-2"),
+    )];
+
+    let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, &set, &own());
+
+    assert_eq!(
+        seqs(&read),
+        vec![10],
+        "TDTMC003-ECHO-REQUESTER: an undo of only the set's work drops its echo, whoever asked"
+    );
+}
+
+#[test]
+fn an_echo_whose_raw_actor_is_the_selected_agent_is_dropped() {
+    // Condition 5: the raw actor may be unattributed or one of the selected agent's sessions.
+    let (mut events, ops, snaps, set) = own_undo_world();
+    events[1].actor = agent("claude-1");
+
+    let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, &set, &own());
+
+    assert_eq!(
+        seqs(&read),
+        vec![10],
+        "TDTMC003-ECHO-OWN-SESSION: an echo the engine gave to the agent's own session is still GitRaptor's"
+    );
+}
+
+#[test]
+fn an_echo_of_an_undo_broader_than_the_current_set_counts() {
+    // Condition 3: an earlier undo took back 10 and 11; the current set is only 10.
+    let (mut events, _, snaps, set) = own_undo_world();
+    events.insert(1, event(11, BRANCH, agent("claude-1")));
+    let ops = vec![undo_of("U", &[10, 11], 20, OperationState::Finished)];
+
+    let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, &set, &own());
+
+    assert_eq!(
+        seqs(&read),
+        vec![10, 11, 21],
+        "TDTMC003-ECHO-BROADER: an undo wider than the set moved more than the set"
+    );
+}
+
+#[test]
+fn an_echo_of_an_undo_with_no_refs_counts() {
+    // Condition 3: the undo's refs must not be empty.
+    let (events, _, snaps, set) = own_undo_world();
+    let ops = vec![undo_of("U", &[], 20, OperationState::Finished)];
+
+    let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, &set, &own());
+
+    assert_eq!(
+        seqs(&read),
+        vec![10, 21],
+        "TDTMC003-ECHO-EMPTY-REFS: an undo with no refs explains nothing"
+    );
+}
+
+#[test]
+fn the_echo_of_a_redo_of_an_unfinished_undo_counts_with_its_requester() {
+    // Condition 3: a redo only qualifies when the undo it redoes is Finished and qualifies.
+    let (mut events, _, mut snaps, set) = own_undo_world();
+    events.push(event(31, BRANCH, Requester::Unattributed));
+    let ops = vec![
+        undo_of("U", &[10], 20, OperationState::Interrupted),
+        op(
+            "R",
+            OperationKind::Redo,
+            Target::Redo("U".to_owned()),
+            30,
+            OperationState::Finished,
+            agent("claude-2"),
+        ),
+    ];
+    snaps.push(anchor("R", 32));
+
+    let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, &set, &own());
+
+    assert_eq!(
+        seqs(&read),
+        vec![10, 21, 31],
+        "TDTMC003-ECHO-REDO-UNFINISHED-UNDO: both echoes count"
+    );
+    assert_eq!(
+        read[2].actor,
+        agent("claude-2"),
+        "TDTMC003-ECHO-REDO-UNFINISHED-UNDO: the redo's anchored echo counts with its requester"
+    );
+}
+
+#[test]
+fn the_anchored_echo_of_a_restore_counts_with_its_requester() {
+    // "Any other echo of GitRaptor counts as a move, with the requester of its operation."
+    let (events, _, _, set) = own_undo_world();
+    let ops = vec![op(
+        "S",
+        OperationKind::Restore,
+        Target::Snapshot("p".to_owned()),
+        20,
+        OperationState::Finished,
+        agent("claude-2"),
+    )];
+    let snaps = vec![anchor("S", 22)];
+
+    let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, &set, &own());
+
+    assert_eq!(
+        seqs(&read),
+        vec![10, 21],
+        "TDTMC003-ECHO-RESTORE: it still counts"
+    );
+    assert_eq!(
+        read[1].actor,
+        agent("claude-2"),
+        "TDTMC003-ECHO-RESTORE: the restore's echo counts with its requester"
+    );
+}
+
+#[test]
+fn an_echo_also_in_the_anchored_window_of_a_foreign_undo_counts() {
+    // Condition 4, anchored variant: a finished undo of claude-2's work shares the window.
+    let (mut events, mut ops, mut snaps, set) = own_undo_world();
+    events.insert(1, event(15, BRANCH, agent("claude-2")));
+    ops.push(op(
+        "V",
+        OperationKind::Undo,
+        Target::Undo(vec![OpRef::GitEvent(15)]),
+        19,
+        OperationState::Finished,
+        agent("claude-2"),
+    ));
+    snaps.push(anchor("V", 22));
+
+    let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, &set, &own());
+
+    assert_eq!(
+        seqs(&read),
+        vec![10, 15, 21],
+        "TDTMC003-ECHO-MIXED-ANCHORED: mixed is other"
+    );
 }
