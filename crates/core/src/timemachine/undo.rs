@@ -204,7 +204,7 @@ pub enum UndoError {
 
 /// How long the two phases of the overlap check may take together; past it the undo is
 /// refused as `overlap-unverified`.
-const OVERLAP_BUDGET: Duration = Duration::from_millis(1500);
+pub(super) const OVERLAP_BUDGET: Duration = Duration::from_millis(1500);
 
 /// The overlap part of a refused plan.
 pub(super) struct OverlapRefusal {
@@ -401,7 +401,7 @@ pub fn external_events_in(
 /// The raw events of every registered worktree, by root (a branch is moved from any of them),
 /// and whether that is all of them: `false` without an engine, when the worktrees cannot be
 /// listed or the events of one cannot be read.
-fn raw_of_all(
+pub(super) fn raw_of_all(
     engine: Option<&CaptureDeps>,
     repo_id: &str,
     common_dir: &Path,
@@ -446,7 +446,7 @@ fn raw_of_all(
 /// Settles every registered worktree of the repo plus `worktree`, within [`ANCHOR_SETTLE_LIMIT`]:
 /// the mark then, `None` when one of them did not calm in time. Worktrees that cannot be listed
 /// are left out here; [`raw_of_all`] reports their events as incomplete.
-fn settle_all(
+pub(super) fn settle_all(
     deps: &CaptureDeps,
     repo_id: &str,
     common_dir: &Path,
@@ -752,37 +752,9 @@ fn plan(
     // Next: Guardrails (US-TMC-021). The overlap (US-TMC-012) needs the worktrees and branches
     // of the plan: it runs right after they are known.
 
-    // Each worktree of the scope by its canonical root, as the daemon
-    // recorded it, and still a worktree of this repo (the oplog is
-    // untrusted input when read back, SEC-TMC-09); its key and branch from
-    // the target's meta.
     let registered = registered_worktrees(common_dir)
         .map_err(|_| refuse(TmRejectReason::WorktreeUnavailable))?;
-    let mut worktrees = Vec::new();
-    let mut refs: BTreeSet<String> = scope.refs.iter().cloned().collect();
-    for root in &scope.worktrees {
-        if !registered.iter().any(|(p, _)| p == Path::new(root)) {
-            // Removed, moved or foreign: not recreated yet (US-TMC-009).
-            return Err(refuse(TmRejectReason::WorktreeUnavailable));
-        }
-        let in_meta = meta
-            .worktrees
-            .iter()
-            .find(|w| Path::new(&w.path) == Path::new(root))
-            .ok_or_else(|| refuse(TmRejectReason::TargetUnavailable))?;
-        if let Some(branch) = &in_meta.head_branch {
-            refs.insert(format!("refs/heads/{branch}"));
-        }
-        if let Some(branch) = head_branch(common_dir, Path::new(root)) {
-            refs.insert(format!("refs/heads/{branch}"));
-        }
-        worktrees.push(PlanWorktree {
-            key: in_meta.key.clone(),
-            root: PathBuf::from(root),
-            recreate_id: None,
-            keep: BTreeSet::new(),
-        });
-    }
+    let (mut worktrees, mut refs) = materialize(common_dir, &meta, &scope).map_err(refuse)?;
     // Phase 1 of the overlap check (ADR-TMC-005 § 5), before `ref-in-use`: a branch another
     // actor moved is kept, so it never moves and cannot make the undo `ref-in-use`.
     let report = {
@@ -885,6 +857,50 @@ fn plan(
     })
 }
 
+/// Each worktree of `scope` by its canonical root, as the daemon recorded it, and still a
+/// worktree of this repo (the oplog is untrusted input when read back, SEC-TMC-09); its key from
+/// the target's `meta`. The branches in play: those of `scope`, plus the one `HEAD` names in each
+/// worktree, at the target and now.
+///
+/// # Errors
+///
+/// `worktree-unavailable` when a worktree of the scope is no longer one of this repo, and
+/// `target-unavailable` when the target does not have it.
+pub(super) fn materialize(
+    common_dir: &Path,
+    meta: &super::store::Meta,
+    scope: &Scope,
+) -> Result<(Vec<PlanWorktree>, BTreeSet<String>), TmRejectReason> {
+    let registered =
+        registered_worktrees(common_dir).map_err(|_| TmRejectReason::WorktreeUnavailable)?;
+    let mut worktrees = Vec::new();
+    let mut refs: BTreeSet<String> = scope.refs.iter().cloned().collect();
+    for root in &scope.worktrees {
+        if !registered.iter().any(|(p, _)| p == Path::new(root)) {
+            // Removed, moved or foreign: not recreated yet (US-TMC-009).
+            return Err(TmRejectReason::WorktreeUnavailable);
+        }
+        let in_meta = meta
+            .worktrees
+            .iter()
+            .find(|w| Path::new(&w.path) == Path::new(root))
+            .ok_or(TmRejectReason::TargetUnavailable)?;
+        if let Some(branch) = &in_meta.head_branch {
+            refs.insert(format!("refs/heads/{branch}"));
+        }
+        if let Some(branch) = head_branch(common_dir, Path::new(root)) {
+            refs.insert(format!("refs/heads/{branch}"));
+        }
+        worktrees.push(PlanWorktree {
+            key: in_meta.key.clone(),
+            root: PathBuf::from(root),
+            recreate_id: None,
+            keep: BTreeSet::new(),
+        });
+    }
+    Ok((worktrees, refs))
+}
+
 /// The branch `HEAD` names in the worktree at `root`, if symbolic; `None` too if the repo at
 /// `common_dir` does not register it or own its `.git` (#223 I-03): nothing behind it is read.
 pub(super) fn head_branch(common_dir: &Path, root: &Path) -> Option<String> {
@@ -951,6 +967,9 @@ pub(super) struct UndoStep<'a> {
     /// Why the step refused after the prior, other than an overlap (the operation is already
     /// `rejected`).
     pub(super) refused: Option<TmRejectReason>,
+    /// The subtype the operation is recorded with: the stack reads a selective undo's barrier
+    /// from it.
+    pub(super) subtype: &'static str,
 }
 
 /// What phase 2 of the overlap check needs besides the step's plan.
@@ -1153,12 +1172,7 @@ impl UndoStep<'_> {
 
 impl ProtectedStep for UndoStep<'_> {
     fn subtype(&self) -> &str {
-        // An undo by agent is recorded with its subtype: the stack reads its barrier from it.
-        if self.plan.selective.is_some() {
-            super::oplog::SELECTIVE_UNDO_SUBTYPE
-        } else {
-            "undo"
-        }
+        self.subtype
     }
 
     fn scope(&self) -> StepScope {
@@ -1436,6 +1450,12 @@ pub fn undo_selected(
         }),
         overlap: None,
         refused: None,
+        // An undo by agent is recorded with its subtype: the stack reads its barrier from it.
+        subtype: if planned.selective.is_some() {
+            super::oplog::SELECTIVE_UNDO_SUBTYPE
+        } else {
+            "undo"
+        },
     };
     let protected = ProtectedOperation {
         oplog,

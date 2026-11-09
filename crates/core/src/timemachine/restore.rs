@@ -828,6 +828,7 @@ pub fn restore_to(
         tail: None,
         overlap: None,
         refused: None,
+        subtype: "undo",
     };
     let protected = ProtectedOperation {
         oplog,

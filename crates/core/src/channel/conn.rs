@@ -48,7 +48,8 @@ use gitraptor_api::timemachine::{
     ConfirmationToken, Invalid as TmInvalid, KeptPath, MAX_KEPT_PATHS, MAX_OVERLAP_CONFLICTS,
     MAX_REPORTED_PATHS, MAX_REPORTED_REFS, MAX_SINCE_SECS, McpRequesterView, NotRestored,
     NotRestoredReason, NoticesParams, NoticesResult, OperationRunResult, OverlapConflict,
-    OverlapSubject, OverlapUndone, PriorFailedData, RedoParams, RequestChannel, RequesterView,
+    OverlapSubject, OverlapUndone, PriorFailedData, RedoParams, RedoResult, RequestChannel,
+    RequesterView,
     ResolveParams, RestoreParams, RestoreResult, SnapshotParams, Surface, TIMELINE_DEFAULT_LIMIT,
     TimelineParams, TmConfirmData, TmOverlap, TmRejectReason, TmRejectedData, UndoParams,
     UndoResult, parse_since,
@@ -99,6 +100,7 @@ mod exception;
 
 use crate::timemachine::overlap::{OverlapReport, Subject as OverlapSubjectCore};
 use crate::timemachine::timeline::recorded_actor;
+use crate::timemachine::redo::{RedoDone, RedoError, redo_last};
 use crate::timemachine::undo::TmRepoHandle;
 use crate::timemachine::undo::{
     RawSide, Selection, UndoDone, UndoEnv, UndoError, Undone, tm_scope_for, undo_selected,
@@ -885,6 +887,9 @@ impl Connection<'_> {
                 WriteRoute::Protected => self.operation_run(request),
                 WriteRoute::TimeMachine(_) if spec.name == methods::TM_UNDO => {
                     self.tm_undo(spec, request)
+                }
+                WriteRoute::TimeMachine(_) if spec.name == methods::TM_REDO => {
+                    self.tm_redo(spec, request)
                 }
                 WriteRoute::TimeMachine(_) if spec.name == methods::TM_RESTORE => {
                     self.tm_restore(spec, request)
@@ -3518,6 +3523,57 @@ fn undo_error(e: UndoError, confirm: &Confirmation<'_>, with_detail: bool) -> Er
     }
 }
 
+/// A redo's failures as contract errors, shaped like the undo's. `with_detail` is whether the
+/// connection gets the overlap's detail (`CAP_TM_OVERLAP`).
+fn redo_error(e: RedoError, confirm: &Confirmation<'_>, with_detail: bool) -> ErrorObject {
+    match e {
+        RedoError::Rejected {
+            reason,
+            operation_id,
+        } => ErrorObject::new(code::OPERATION_REJECTED, "redo rejected").with_data(rejection_data(
+            reason,
+            operation_id,
+            confirm,
+        )),
+        RedoError::Prior {
+            reason,
+            operation_id,
+        } => ErrorObject::new(code::PRIOR_SNAPSHOT_FAILED, failure_text(reason)).with_data(
+            PriorFailedData {
+                reason,
+                operation_id,
+            },
+        ),
+        RedoError::Interrupted { operation_id, .. } => {
+            ErrorObject::new(code::OPERATION_FAILED, "the redo was interrupted")
+                .with_data(serde_json::json!({ "operation_id": operation_id }))
+        }
+        RedoError::Internal(_) => ErrorObject::new(code::INTERNAL, "time machine unavailable"),
+        RedoError::Overlap {
+            operation_id,
+            report,
+            undone,
+        } => {
+            let error = ErrorObject::new(code::OPERATION_REJECTED, "redo rejected");
+            if report.unverified {
+                error.with_data(TmRejectedData {
+                    reason: TmRejectReason::OverlapUnverified,
+                    operation_id,
+                })
+            } else if with_detail {
+                let mut data = TmConfirmData::rejected(TmRejectReason::Overlap, operation_id);
+                data.overlap = Some(overlap_detail(&report, &undone));
+                error.with_data(data)
+            } else {
+                error.with_data(TmRejectedData {
+                    reason: TmRejectReason::Overlap,
+                    operation_id,
+                })
+            }
+        }
+    }
+}
+
 /// A restore's failures as contract errors.
 fn restore_error(e: RestoreError, confirm: &Confirmation<'_>) -> ErrorObject {
     match e {
@@ -3609,25 +3665,7 @@ fn not_restored_of(report: &ApplyReport) -> Vec<NotRestored> {
 /// `with_kept` (at most `MAX_KEPT_PATHS`).
 fn undo_result(done: UndoDone, requester: RequesterView, with_kept: bool) -> UndoResult {
     let not_restored = not_restored_of(&done.report);
-    let all_kept = done.report.kept.len();
-    let kept_total = if with_kept && all_kept > MAX_KEPT_PATHS {
-        all_kept as u64
-    } else {
-        0
-    };
-    let kept = if with_kept {
-        done.report
-            .kept
-            .iter()
-            .take(MAX_KEPT_PATHS)
-            .map(|(key, path)| KeptPath {
-                worktree: Untrusted::new(key.clone()),
-                path: Untrusted::new(path.clone()),
-            })
-            .collect()
-    } else {
-        Vec::new()
-    };
+    let (kept, kept_total) = kept_of(&done.report, with_kept);
     UndoResult {
         operation_id: done.operation_id,
         prior_snapshot_id: done.prior_snapshot_id,
@@ -3648,6 +3686,55 @@ fn undo_result(done: UndoDone, requester: RequesterView, with_kept: bool) -> Und
         kept,
         kept_total,
         undone_operation_ids: done.undone_all.into_iter().map(|u| u.id).collect(),
+    }
+}
+
+/// The kept paths of an application, at most `MAX_KEPT_PATHS`, and how many there were in all
+/// when that cuts them (0 otherwise); nothing unless `with_kept`.
+fn kept_of(report: &ApplyReport, with_kept: bool) -> (Vec<KeptPath>, u64) {
+    if !with_kept {
+        return (Vec::new(), 0);
+    }
+    let all_kept = report.kept.len();
+    let kept_total = if all_kept > MAX_KEPT_PATHS {
+        all_kept as u64
+    } else {
+        0
+    };
+    let kept = report
+        .kept
+        .iter()
+        .take(MAX_KEPT_PATHS)
+        .map(|(key, path)| KeptPath {
+            worktree: Untrusted::new(key.clone()),
+            path: Untrusted::new(path.clone()),
+        })
+        .collect();
+    (kept, kept_total)
+}
+
+/// What the client sees of a finished redo, like an undo's. Paths are untrusted text; the kept
+/// ones only when `with_kept`.
+fn redo_result(done: RedoDone, requester: RequesterView, with_kept: bool) -> RedoResult {
+    let (kept, kept_total) = kept_of(&done.report, with_kept);
+    RedoResult {
+        operation_id: done.operation_id,
+        prior_snapshot_id: done.prior_snapshot_id,
+        redone_undo_id: done.redone_undo_id,
+        target_snapshot_id: done.target_snapshot_id,
+        requester,
+        written: done.report.written as u64,
+        removed: done.report.removed as u64,
+        not_restored: not_restored_of(&done.report),
+        kept,
+        kept_total,
+        warnings: done
+            .report
+            .warnings
+            .iter()
+            .map(warning_code)
+            .chain(done.warnings)
+            .collect(),
     }
 }
 
@@ -4307,6 +4394,67 @@ impl Connection<'_> {
             serde_json::to_value(result)
         };
         value.map_err(|_| ErrorObject::new(code::INTERNAL, "serialization"))
+    }
+
+    /// `timemachine.redo` (US-TMC-003): the last undo of the named worktree taken back, as one
+    /// protected operation of the Time Machine. `operation_id` has no story yet. Not offered over
+    /// MCP (the catalog answers `METHOD_NOT_FOUND` there).
+    fn tm_redo(
+        &self,
+        spec: &MethodSpec,
+        request: &Request,
+    ) -> Result<serde_json::Value, ErrorObject> {
+        let p: RedoParams = request.params()?;
+        p.validate().map_err(tm_invalid)?;
+        self.check_confirmation_param(p.confirmation.as_ref().map(ConfirmationToken::as_str))?;
+        if p.operation_id.is_some() {
+            return self.tm_command(spec, request, "unassigned");
+        }
+        let channel = self.request_channel(p.surface)?;
+        let named = self.named_worktree(p.worktree.as_deref())?;
+        let r = self.resolve()?;
+        require_attributed(channel, r.who.is_agent()).map_err(scope_refused)?;
+        let Some(tm) = &self.ctx.time_machine else {
+            return Err(ErrorObject::new(code::NOT_IMPLEMENTED, "no repo layer")
+                .with_data(serde_json::json!({ "implemented_by": "US-TMC-003" })));
+        };
+        let cwd = if self.is_mcp() {
+            process_cwd(self.peer.pid)
+        } else {
+            None
+        };
+        let repo = tm_scope_for(
+            tm.backend.as_ref(),
+            self.is_mcp(),
+            named.as_deref(),
+            cwd.as_deref(),
+        )
+        .map_err(scope_refused)?;
+        let env = UndoEnv {
+            marks: &self.ctx.marks,
+            procs: self.ctx.procs.as_ref(),
+            stopping: &self.ctx.stopping,
+            prior_deadline: tm.prior_deadline,
+            git: tm.git.as_ref(),
+            invoker: &tm.invoker,
+            engine: self.ctx.tm_engine.as_ref(),
+            fallback_mark: i64::try_from(self.ctx.bus.snapshot().0).unwrap_or(i64::MAX),
+        };
+        let eligibility = || self.tm_confirm_refusal();
+        let confirm = self.tm_confirmation(
+            &tm.challenges,
+            p.confirmation.as_ref().map(ConfirmationToken::as_str),
+            &eligibility,
+        );
+        let with_detail = !self.is_mcp() && self.has(methods::CAP_TM_OVERLAP.name);
+        let done = redo_last(&repo, &r.who, oplog_channel(channel), &confirm, &env)
+            .map_err(|e| redo_error(e, &confirm, with_detail))?;
+        serde_json::to_value(redo_result(
+            done,
+            self.requester_view(&r, channel),
+            with_detail,
+        ))
+        .map_err(|_| ErrorObject::new(code::INTERNAL, "serialization"))
     }
 
     /// `timemachine.restore` (US-TMC-009): the named worktree back to a
