@@ -62,11 +62,15 @@ struct FakeClaude {
 }
 
 impl FakeClaude {
-    /// Runs `command` in its shell and waits for it; whether it succeeded.
-    fn run(&mut self, command: &str) -> bool {
+    /// Starts `command` in its shell, without waiting for it.
+    fn send(&mut self, command: &str) {
         let stdin = self.stdin.as_mut().unwrap();
         writeln!(stdin, "{command}").unwrap();
         stdin.flush().unwrap();
+    }
+
+    /// Waits for the command [`FakeClaude::send`] started; whether it succeeded.
+    fn done(&mut self) -> bool {
         let mut line = String::new();
         loop {
             line.clear();
@@ -121,14 +125,19 @@ impl Machine {
         }
         let outside = tempfile::tempdir().unwrap();
         std::fs::create_dir(outside.path().join("bin")).unwrap();
-        // A slow hook, used per command (`git -c core.hooksPath=…`): the repo's hooks are never
-        // touched, and `git` is alive when the engine samples its processes.
+        // A hook used per command (`git -c core.hooksPath=…`), so the repo's hooks are never
+        // touched: once the commit is written, `git` stays alive until the test sees the engine
+        // record the event (the file `$RAPTOR_DEMO_RELEASE` appears), so the engine's S3
+        // sample sees it however late the file events come under load (TD-GRP-005). Bounded
+        // at 30 s.
         let hooks = outside.path().join("slow-hooks");
         std::fs::create_dir(&hooks).unwrap();
         let hook = hooks.join("reference-transaction");
         std::fs::write(
             &hook,
-            "#!/bin/sh\n[ \"$1\" = committed ] && sleep 0.5\nexit 0\n",
+            "#!/bin/sh\n[ \"$1\" = committed ] && [ -n \"$RAPTOR_DEMO_RELEASE\" ] || exit 0\n\
+             i=0\nwhile [ ! -e \"$RAPTOR_DEMO_RELEASE\" ] && [ $i -lt 600 ]; do sleep 0.05; i=$((i+1)); done\n\
+             exit 0\n",
         )
         .unwrap();
         std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
@@ -293,6 +302,33 @@ impl Machine {
         snapshot.repos[0].repo_id.clone()
     }
 
+    /// Waits until the engine recorded `n` commit events of `worktree`, whoever their actor.
+    fn commits_seen(&self, worktree: &Path, n: usize) {
+        let start = Instant::now();
+        loop {
+            let page: EventsHistoryResult = self
+                .client()
+                .call(methods::EVENTS_HISTORY, json!({"repo_id": self.repo_id()}))
+                .unwrap();
+            let seen = page
+                .events
+                .iter()
+                .filter(|e| {
+                    e.kind == GitEventKind::Commit && Path::new(e.worktree.raw()) == worktree
+                })
+                .count();
+            if seen >= n {
+                return;
+            }
+            assert!(
+                start.elapsed() < DEADLINE,
+                "{} has {seen} commits, wanted {n}",
+                worktree.display()
+            );
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    }
+
     /// Waits until `worktree` has `n` commit events attributed to Claude Code (the owner is
     /// asserted before anything relies on it).
     fn agent_commits(&self, worktree: &Path, n: usize) {
@@ -394,15 +430,20 @@ fn four_sessions_and_one_agent_undone() {
         .map(|(name, worktree)| m.launch_claude(name, worktree))
         .collect();
     for ((name, worktree), claude) in m.worktrees.iter().zip(claudes.iter_mut()) {
-        let commit = |claude: &mut FakeClaude, file: &str, body: &str, message: &str| {
-            assert!(
-                claude.run(&format!(
-                    "printf '{body}\\n' > {file} && git add {file} && \
-                     git -c core.hooksPath={} commit -q -m '{message}'",
-                    hooks.display()
-                )),
-                "{name}: the agent's commit failed"
-            );
+        // Each commit's `git` waits in the hook until the engine has its event: then it is let go.
+        let mut commits = 0;
+        let mut commit = |claude: &mut FakeClaude, file: &str, body: &str, message: &str| {
+            let release = m.outside.path().join(format!("release-{name}-{commits}"));
+            claude.send(&format!(
+                "printf '{body}\\n' > {file} && git add {file} && \
+                 RAPTOR_DEMO_RELEASE='{}' git -c core.hooksPath={} commit -q -m '{message}'",
+                release.display(),
+                hooks.display()
+            ));
+            commits += 1;
+            m.commits_seen(worktree, commits);
+            std::fs::write(&release, "").unwrap();
+            assert!(claude.done(), "{name}: the agent's commit failed");
         };
         commit(
             claude,
