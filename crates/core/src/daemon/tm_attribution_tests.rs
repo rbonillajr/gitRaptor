@@ -30,12 +30,18 @@ struct Rig {
 
 fn rig() -> Rig {
     let fx = Fixture::with_commit(&gitraptor_testkit::fixture::git_from_path());
-    let worktree = fx.repo.canonicalize().unwrap();
+    // `canonical_dir`: on Windows `canonicalize` gives a verbatim `\\?\C:\…` path, which the
+    // profile refuses (`InvalidPath`); the testkit strips that prefix.
+    let worktree = gitraptor_testkit::fixture::canonical_dir(&fx.repo);
     let tmp = tempfile::tempdir().unwrap();
     let dirs = ProfileDirs::under_root(tmp.path().join("profile"));
     let (mut profile, _) = crate::profile::Profile::open(dirs.clone()).unwrap();
     let (entry, _) = profile
-        .add_repo(&worktree.join(".git").canonicalize().unwrap(), None, 1)
+        .add_repo(
+            &gitraptor_testkit::fixture::canonical_dir(&worktree.join(".git")),
+            None,
+            1,
+        )
         .unwrap();
     drop(profile);
     let env = DaemonEnv::from_vars(std::env::vars_os());
