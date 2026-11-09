@@ -110,6 +110,9 @@ pub fn exception(raptor: Option<&Path>, entry: &GuardLogEntry) -> Result<String,
 #[must_use]
 pub fn cancel(raptor: Option<&Path>, path: &str) -> Option<String> {
     let raptor = raptor?.to_str()?;
+    if !(Path::new(path).is_absolute() || path.starts_with('/')) {
+        return None;
+    }
     posix(&[raptor, "guard", "cancel", path])
 }
 
