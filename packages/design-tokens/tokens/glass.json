@@ -1,0 +1,539 @@
+{
+  "glass": {
+    "surface": {
+      "window": {
+        "$value": "#26282d",
+        "$type": "color",
+        "$extensions": {
+          "dev.gitraptor": {
+            "light": "#e6e8ec"
+          }
+        }
+      },
+      "panel": {
+        "$value": "#2f3237",
+        "$type": "color",
+        "$extensions": {
+          "dev.gitraptor": {
+            "light": "#f2f3f5"
+          }
+        }
+      },
+      "control": {
+        "$value": "#383b41",
+        "$type": "color",
+        "$extensions": {
+          "dev.gitraptor": {
+            "light": "#ffffff"
+          }
+        }
+      },
+      "raised": {
+        "$value": "#3f4249",
+        "$type": "color",
+        "$extensions": {
+          "dev.gitraptor": {
+            "light": "#f6f7f9"
+          }
+        }
+      },
+      "hover": {
+        "$value": "#464a52",
+        "$type": "color",
+        "$extensions": {
+          "dev.gitraptor": {
+            "light": "#e9ebef"
+          }
+        }
+      },
+      "wall": {
+        "$value": "radial-gradient(1100px 620px at 8% 4%, rgba(92, 150, 190, 0.55), transparent 62%), radial-gradient(900px 700px at 100% 100%, rgba(140, 186, 214, 0.42), transparent 60%), #1a222b",
+        "$extensions": {
+          "dev.gitraptor": {
+            "light": "radial-gradient(1100px 620px at 8% 4%, rgba(120, 175, 210, 0.55), transparent 62%), radial-gradient(900px 700px at 100% 100%, rgba(236, 222, 200, 0.7), transparent 60%), #c9dbe6"
+          }
+        }
+      }
+    },
+    "border": {
+      "subtle": {
+        "$value": "rgba(255, 255, 255, 0.07)",
+        "$type": "color",
+        "$extensions": {
+          "dev.gitraptor": {
+            "light": "rgba(20, 24, 32, 0.07)"
+          }
+        }
+      },
+      "strong": {
+        "$value": "rgba(255, 255, 255, 0.13)",
+        "$type": "color",
+        "$extensions": {
+          "dev.gitraptor": {
+            "light": "rgba(20, 24, 32, 0.13)"
+          }
+        }
+      }
+    },
+    "highlight": {
+      "$value": "inset 0 1px 0 rgba(255, 255, 255, 0.05)",
+      "$extensions": {
+        "dev.gitraptor": {
+          "light": "inset 0 1px 0 rgba(255, 255, 255, 0.8)"
+        }
+      }
+    },
+    "text": {
+      "main": {
+        "$value": "#eceef2",
+        "$type": "color",
+        "$extensions": {
+          "dev.gitraptor": {
+            "light": "#1c1f25"
+          }
+        }
+      },
+      "muted": {
+        "$value": "#b5b9c2",
+        "$type": "color",
+        "$extensions": {
+          "dev.gitraptor": {
+            "light": "#5a606b"
+          }
+        }
+      },
+      "faint": {
+        "$value": "#a0a5ad",
+        "$type": "color",
+        "$extensions": {
+          "dev.gitraptor": {
+            "light": "#63686f"
+          }
+        }
+      },
+      "disabled": {
+        "$value": "#767c88",
+        "$type": "color",
+        "$extensions": {
+          "dev.gitraptor": {
+            "light": "#8a909a"
+          }
+        }
+      },
+      "on-accent": {
+        "$value": "#0b1f1c",
+        "$type": "color",
+        "$extensions": {
+          "dev.gitraptor": {
+            "light": "#ffffff"
+          }
+        }
+      }
+    },
+    "accent": {
+      "DEFAULT": {
+        "$value": "#8ab4ff",
+        "$type": "color",
+        "$extensions": {
+          "dev.gitraptor": {
+            "light": "#2a6be0"
+          }
+        }
+      },
+      "text": {
+        "$value": "#93baff",
+        "$type": "color",
+        "$extensions": {
+          "dev.gitraptor": {
+            "light": "#2762ce"
+          }
+        }
+      },
+      "glow": {
+        "$value": "rgba(138, 180, 255, 0.14)",
+        "$type": "color",
+        "$extensions": {
+          "dev.gitraptor": {
+            "light": "rgba(42, 107, 224, 0.1)"
+          }
+        }
+      },
+      "border": {
+        "$value": "rgba(138, 180, 255, 0.4)",
+        "$type": "color",
+        "$extensions": {
+          "dev.gitraptor": {
+            "light": "rgba(42, 107, 224, 0.35)"
+          }
+        }
+      }
+    },
+    "success": {
+      "DEFAULT": {
+        "$value": "#5fd68e",
+        "$type": "color",
+        "$extensions": {
+          "dev.gitraptor": {
+            "light": "#1d9a52"
+          }
+        }
+      },
+      "text": {
+        "$value": "#5fd68e",
+        "$type": "color",
+        "$extensions": {
+          "dev.gitraptor": {
+            "light": "#177840"
+          }
+        }
+      },
+      "bg": {
+        "$value": "rgba(95, 214, 142, 0.14)",
+        "$type": "color",
+        "$extensions": {
+          "dev.gitraptor": {
+            "light": "rgba(29, 154, 82, 0.1)"
+          }
+        }
+      }
+    },
+    "warning": {
+      "DEFAULT": {
+        "$value": "#f5a524",
+        "$type": "color",
+        "$extensions": {
+          "dev.gitraptor": {
+            "light": "#b8700a"
+          }
+        }
+      },
+      "text": {
+        "$value": "#f6aa2f",
+        "$type": "color",
+        "$extensions": {
+          "dev.gitraptor": {
+            "light": "#955b08"
+          }
+        }
+      },
+      "bg": {
+        "$value": "rgba(245, 165, 36, 0.14)",
+        "$type": "color",
+        "$extensions": {
+          "dev.gitraptor": {
+            "light": "rgba(184, 112, 10, 0.1)"
+          }
+        }
+      }
+    },
+    "danger": {
+      "DEFAULT": {
+        "$value": "#ff8a94",
+        "$type": "color",
+        "$extensions": {
+          "dev.gitraptor": {
+            "light": "#cf3a4c"
+          }
+        }
+      },
+      "text": {
+        "$value": "#ff9ea6",
+        "$type": "color",
+        "$extensions": {
+          "dev.gitraptor": {
+            "light": "#be3546"
+          }
+        }
+      },
+      "bg": {
+        "$value": "rgba(255, 138, 148, 0.14)",
+        "$type": "color",
+        "$extensions": {
+          "dev.gitraptor": {
+            "light": "rgba(207, 58, 76, 0.1)"
+          }
+        }
+      }
+    },
+    "live": {
+      "DEFAULT": {
+        "$value": "#f5a524",
+        "$type": "color",
+        "$extensions": {
+          "dev.gitraptor": {
+            "light": "#c27406"
+          }
+        }
+      },
+      "text": {
+        "$value": "#f6aa2f",
+        "$type": "color",
+        "$extensions": {
+          "dev.gitraptor": {
+            "light": "#975a05"
+          }
+        }
+      }
+    },
+    "agent": {
+      "claude": {
+        "DEFAULT": {
+          "$value": "#e8775a",
+          "$type": "color",
+          "$extensions": {
+            "dev.gitraptor": {
+              "light": "#c9583b"
+            }
+          }
+        },
+        "text": {
+          "$value": "#f0a794",
+          "$type": "color",
+          "$extensions": {
+            "dev.gitraptor": {
+              "light": "#ab4b32"
+            }
+          }
+        }
+      }
+    },
+    "lane": {
+      "1": {
+        "$value": "#e69f00",
+        "$type": "color",
+        "$extensions": {
+          "dev.gitraptor": {
+            "light": "#a35f00"
+          }
+        }
+      },
+      "2": {
+        "$value": "#56b4e9",
+        "$type": "color",
+        "$extensions": {
+          "dev.gitraptor": {
+            "light": "#1f6fa8"
+          }
+        }
+      },
+      "3": {
+        "$value": "#009e73",
+        "$type": "color",
+        "$extensions": {
+          "dev.gitraptor": {
+            "light": "#00704f"
+          }
+        }
+      },
+      "4": {
+        "$value": "#f0e442",
+        "$type": "color",
+        "$extensions": {
+          "dev.gitraptor": {
+            "light": "#7a7200"
+          }
+        }
+      },
+      "5": {
+        "$value": "#4fa3e0",
+        "$type": "color",
+        "$extensions": {
+          "dev.gitraptor": {
+            "light": "#0b4f8a"
+          }
+        }
+      },
+      "6": {
+        "$value": "#d55e00",
+        "$type": "color",
+        "$extensions": {
+          "dev.gitraptor": {
+            "light": "#b83a00"
+          }
+        }
+      },
+      "7": {
+        "$value": "#cc79a7",
+        "$type": "color",
+        "$extensions": {
+          "dev.gitraptor": {
+            "light": "#a8457f"
+          }
+        }
+      },
+      "base": {
+        "$value": "#bc8cff",
+        "$type": "color",
+        "$extensions": {
+          "dev.gitraptor": {
+            "light": "#8250df"
+          }
+        }
+      }
+    },
+    "shadow": {
+      "window": {
+        "$value": "0 40px 90px -30px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--gr-border-strong), var(--gr-highlight)"
+      },
+      "panel": {
+        "$value": "var(--gr-highlight)"
+      },
+      "popover": {
+        "$value": "0 18px 40px rgba(0, 0, 0, 0.45), 0 0 0 1px var(--gr-border-strong)",
+        "$extensions": {
+          "dev.gitraptor": {
+            "light": "0 18px 40px rgba(20, 24, 32, 0.18), 0 0 0 1px var(--gr-border-strong)"
+          }
+        }
+      }
+    },
+    "radius": {
+      "xs": {
+        "$value": "6px",
+        "$type": "dimension"
+      },
+      "sm": {
+        "$value": "8px",
+        "$type": "dimension"
+      },
+      "md": {
+        "$value": "12px",
+        "$type": "dimension"
+      },
+      "lg": {
+        "$value": "20px",
+        "$type": "dimension"
+      },
+      "window": {
+        "$value": "24px",
+        "$type": "dimension"
+      },
+      "pill": {
+        "$value": "999px",
+        "$type": "dimension"
+      }
+    },
+    "gutter": {
+      "$value": "12px",
+      "$type": "dimension"
+    },
+    "window": {
+      "margin": {
+        "$value": "14px",
+        "$type": "dimension"
+      }
+    },
+    "space": {
+      "1": {
+        "$value": "4px",
+        "$type": "dimension"
+      },
+      "2": {
+        "$value": "8px",
+        "$type": "dimension"
+      },
+      "3": {
+        "$value": "12px",
+        "$type": "dimension"
+      },
+      "4": {
+        "$value": "16px",
+        "$type": "dimension"
+      },
+      "5": {
+        "$value": "20px",
+        "$type": "dimension"
+      },
+      "6": {
+        "$value": "24px",
+        "$type": "dimension"
+      }
+    },
+    "size": {
+      "titlebar": {
+        "$value": "56px",
+        "$type": "dimension"
+      },
+      "toolbar": {
+        "$value": "58px",
+        "$type": "dimension"
+      },
+      "sidebar": {
+        "$value": "252px",
+        "$type": "dimension"
+      },
+      "detail": {
+        "$value": "352px",
+        "$type": "dimension"
+      },
+      "graph-header": {
+        "$value": "38px",
+        "$type": "dimension"
+      },
+      "graph-row": {
+        "$value": "44px",
+        "$type": "dimension"
+      },
+      "tree-repo": {
+        "$value": "30px",
+        "$type": "dimension"
+      },
+      "tree-branch": {
+        "$value": "28px",
+        "$type": "dimension"
+      },
+      "tree-group": {
+        "$value": "24px",
+        "$type": "dimension"
+      },
+      "lane-stroke": {
+        "$value": "1.5px",
+        "$type": "dimension"
+      },
+      "target-min": {
+        "$value": "24px",
+        "$type": "dimension"
+      },
+      "target-action": {
+        "$value": "32px",
+        "$type": "dimension"
+      }
+    },
+    "font": {
+      "ui": {
+        "$value": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", \"Segoe UI\", system-ui, sans-serif"
+      },
+      "mono": {
+        "$value": "ui-monospace, \"SF Mono\", \"JetBrains Mono\", Menlo, monospace"
+      }
+    },
+    "type": {
+      "title": {
+        "$value": "600 17px/1.4 var(--gr-font-ui)"
+      },
+      "body-strong": {
+        "$value": "500 13.5px/1.4 var(--gr-font-ui)"
+      },
+      "body": {
+        "$value": "400 13px/1.4 var(--gr-font-ui)"
+      },
+      "secondary": {
+        "$value": "400 12.5px/1.4 var(--gr-font-ui)"
+      },
+      "meta": {
+        "$value": "400 12px/1.4 var(--gr-font-ui)"
+      },
+      "caption": {
+        "$value": "500 11.5px/1.4 var(--gr-font-ui)"
+      },
+      "mono": {
+        "$value": "400 12px/1.4 var(--gr-font-mono)"
+      }
+    },
+    "motion": {
+      "fast": {
+        "$value": "150ms ease"
+      }
+    }
+  }
+}

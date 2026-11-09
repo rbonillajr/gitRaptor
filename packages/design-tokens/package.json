@@ -5,6 +5,9 @@
   "private": true,
   "description": "GitRaptor design tokens (DTCG JSON) built with Style Dictionary",
   "type": "module",
+  "exports": {
+    "./glass.css": "./css/glass.css"
+  },
   "scripts": {
     "build": "node scripts/build.mjs",
     "check": "node scripts/build.mjs --check",
@@ -19,6 +22,7 @@
       "build": {
         "outputs": [
           "{projectRoot}/build",
+          "{projectRoot}/css",
           "{workspaceRoot}/crates/theme/src/generated.rs"
         ]
       },
@@ -44,6 +48,7 @@
   "files": [
     "tokens",
     "build",
+    "css",
     "scripts"
   ]
 }
