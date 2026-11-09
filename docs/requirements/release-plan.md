@@ -333,7 +333,7 @@ Estimada el 2026-11-08 por el Scrum Master y recalculada ese mismo día con la v
 
 **Recalculado el 2026-11-08** con la velocidad nueva de M2 (1,0, 0,6 y 0,50 fichas equivalentes por día; [cálculo](#ruta-crítica-y-fecha)). Es un cambio de fecha que exige el método: la cuenta es la misma y solo cambia la velocidad de entrada. Antes: optimista 2026-12-05, central 2026-12-22, pesimista 2027-01-19 (con 1,25, 0,86 y 0,79). **Decisión del orquestador (2026-11-08), validada por Scrum Master.** Las 12,5 fichas equivalentes no cambian.
 
-**Fichas equivalentes** (completa = 1; la unidad del método, unos 3 PR). Las complejidades de TS-DSK-001 y TS-DSK-002 son medias; las Dev Specs de TS-DSK-001, US-DSK-003 y US-DSK-004 están listas para implementar:
+**Fichas equivalentes** (completa = 1; la unidad del método, unos 3 PR). Las complejidades de TS-DSK-001 y TS-DSK-002 son medias; las Dev Specs de TS-DSK-001, US-DSK-003 y US-DSK-004 están listas para implementar, y desde el 2026-11-09 también las de US-DSK-008, US-DSK-007 y US-DSK-005 (US-DSK-005 solo su nivel 1 hasta que lleguen US-CKP-022 y US-CKP-012):
 
 | Ficha | Equiv. | Por qué |
 |---|---|---|

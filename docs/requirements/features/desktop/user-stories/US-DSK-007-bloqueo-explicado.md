@@ -5,7 +5,7 @@ type: us
 status: ready
 priority: high
 created: 2026-10-28
-updated: 2026-11-08
+updated: 2026-11-09
 feature: desktop
 source: inline
 decision: "Decisión de Rene del 2026-11-08 (aceptación de las recomendaciones, Q-DSK-7 a Q-DSK-20), ver CTX-DSK-001 § 11"
@@ -19,6 +19,7 @@ related:
     - US-GRD-008
     - US-DSK-002
   specs:
+    - DS-US-DSK-007
     - DS-US-CKP-019
   design:
     - DSF-DSK-001
@@ -84,4 +85,4 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 ## Diseño y Dev Spec
 
 - **Diseño:** [design-flow.md](../design/design-flow.md) (DSF-DSK-001), bloqueo explicado.
-- **Dev Spec:** pendiente.
+- **Dev Spec:** [DS-US-DSK-007](../dev-specs/US-DSK-007-bloqueo-explicado.md) (`spec-ready`, 2026-11-09).
