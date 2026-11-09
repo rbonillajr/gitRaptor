@@ -128,7 +128,7 @@
     {
       "id": "D4-CMD",
       "statement": "fleet_open está en commands.json y en la capability; acepta {params:{repoId}} y rechaza campos desconocidos, id vacío, de más de 128 bytes o con control (invalid-params); sin supervisor da not-watching; V2 sigue cerrada",
-      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test commands --test tauri_surface",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test commands -- --list 2>/dev/null | grep -q '^fleet_open_is_in_the_closed_list_and_the_capability: test' && cargo test -p gitraptor-desktop --test commands -- --list 2>/dev/null | grep -q '^fleet_open_accepts_params_and_rejects_bad_ids: test' && cargo test -p gitraptor-desktop --test commands -- --list 2>/dev/null | grep -q '^fleet_open_without_a_supervisor_is_not_watching: test' && cargo test -p gitraptor-desktop --test commands fleet_open_is_in_the_closed_list_and_the_capability -- --exact && cargo test -p gitraptor-desktop --test commands fleet_open_accepts_params_and_rejects_bad_ids -- --exact && cargo test -p gitraptor-desktop --test commands fleet_open_without_a_supervisor_is_not_watching -- --exact && cargo test -p gitraptor-desktop --test tauri_surface",
       "layer": "runtime",
       "origin": "story",
       "tests": [
@@ -139,7 +139,7 @@
     {
       "id": "D4-CMD-TS",
       "statement": "commands.ts declara fleet_open con { repoId } y lo invoca con el envoltorio params",
-      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/client/commands.test.ts",
+      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/client/commands.test.ts -t 'fleet_open'",
       "layer": "runtime",
       "origin": "story",
       "tests": [
@@ -148,8 +148,8 @@
     },
     {
       "id": "D4-WIRE",
-      "statement": "El contrato Rust y TS de los mensajes del repo coincide con la fixture congelada (repo, worktrees, sessions, repoSession, prediction, repoClosed)",
-      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test engine_wire -- --list 2>/dev/null | grep -q '^the_frozen_fixture_matches_the_wire_types: test' && cargo test -p gitraptor-desktop --test engine_wire the_frozen_fixture_matches_the_wire_types -- --exact && pnpm --filter @gitraptor/desktop exec vitest run src/state/engine-cache.test.ts",
+      "statement": "El contrato Rust y TS de los mensajes del repo coincide con la fixture congelada (repo, worktrees, sessions, repoSession, prediction, repoClosed): engine_wire.rs solo compara y el test de la caché lee la misma fixture",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test engine_wire -- --list 2>/dev/null | grep -q '^every_variant_serializes_exactly_as_the_frozen_fixture: test' && cargo test -p gitraptor-desktop --test engine_wire every_variant_serializes_exactly_as_the_frozen_fixture -- --exact && pnpm --filter @gitraptor/desktop exec vitest run src/state/engine-cache.test.ts -t 'fleet fixture'",
       "layer": "runtime",
       "origin": "story",
       "tests": [
@@ -159,9 +159,22 @@
       ]
     },
     {
+      "id": "D4-GATE",
+      "statement": "El gate de seguridad de la DS sigue en verde con el código nuevo: V1 (dependencias), V7 (entorno), V2 (superficie Tauri) y V5 (src/ui no importa client) de ADR-GRP-017",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test boundaries --test environment --test tauri_surface && pnpm --filter @gitraptor/desktop exec vitest run tests/eslint-v5.test.ts",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "apps/desktop/src-tauri/tests/boundaries.rs",
+        "apps/desktop/src-tauri/tests/environment.rs",
+        "apps/desktop/src-tauri/tests/tauri_surface.rs",
+        "apps/desktop/tests/eslint-v5.test.ts"
+      ]
+    },
+    {
       "id": "D4-CACHE",
-      "statement": "applyEngineBatch guarda la flota solo por mensajes y sin mutar: repo vacía sesiones, worktrees reemplaza, sessions y repoSession fusionan con la regla de D3 (una terminada con el mismo stateSince gana), prediction hace upsert y quita removed, repoClosed quita la entrada y deselecciona",
-      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/state/engine-cache.test.ts src/state/ui-store.test.ts",
+      "statement": "applyEngineBatch guarda la flota solo por mensajes y sin mutar: repo vacía sesiones, worktrees reemplaza, sessions y repoSession fusionan con la regla de D3 (una terminada con el mismo stateSince gana), prediction hace upsert y quita removed, repoClosed quita la entrada y deselecciona. El criterion-tester SUSTITUYE la aserción de US-DSK-003 «D3-CACHE: the keys are the Dev Spec's and nothing writes engineKeys.repo» (engine-cache.test.ts) por la regla nueva: solo applyEngineBatch escribe engineKeys.repo y useFleet lo lee sin queryFn de red",
+      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/state/engine-cache.test.ts -t 'fleet cache' && pnpm --filter @gitraptor/desktop exec vitest run src/state/ui-store.test.ts -t 'selectedRepoId'",
       "layer": "runtime",
       "origin": "story",
       "tests": [
@@ -172,7 +185,7 @@
     {
       "id": "D4-USEFLEET",
       "statement": "useFleet elige el repo por defecto (primero por nombre y repoId) cuando llega global sin elegido o el elegido desaparece, llama fleet_open en cada cambio de selectedRepoId y lee la caché sin queryFn de red; selectedRepoId no se persiste",
-      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/fleet/useFleet.test.tsx src/state/ui-store.test.ts",
+      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/fleet/useFleet.test.tsx && pnpm --filter @gitraptor/desktop exec vitest run src/state/ui-store.test.ts -t 'selectedRepoId'",
       "layer": "runtime",
       "origin": "story",
       "tests": [
@@ -182,7 +195,7 @@
     {
       "id": "D4-SHELL",
       "statement": "AppShell monta RepoTree en la barra lateral y EngineCenter pinta FleetView con el repo abierto (esqueleto con aria-busy sin instantánea del repo); la primera pintura útil con repo elegido espera la instantánea",
-      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/shell/AppShell.test.tsx src/app/App.test.tsx",
+      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/shell/AppShell.test.tsx -t 'fleet shell' && pnpm --filter @gitraptor/desktop exec vitest run src/app/App.test.tsx -t 'repo snapshot'",
       "layer": "runtime",
       "origin": "story",
       "tests": [
@@ -193,7 +206,7 @@
     {
       "id": "D4-FRESH",
       "statement": "El lote lleva receivedAt y FleetView mide gr:fleet-delta una sola vez por lote tras el primer requestAnimationFrame y marca gr:fleet-delta-painted; el backend manda perf.backendNs en worktrees, repoSession y prediction",
-      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/fleet/FleetView.test.tsx src/client/engine-stream.test.ts && pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test fleet_supervisor -- --list 2>/dev/null | grep -q '^fleet_deltas_carry_backend_perf: test' && cargo test -p gitraptor-desktop --test fleet_supervisor fleet_deltas_carry_backend_perf -- --exact",
+      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/fleet/FleetView.test.tsx -t 'measures each fleet delta once' && pnpm --filter @gitraptor/desktop exec vitest run src/client/engine-stream.test.ts -t 'receivedAt' && pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test fleet_supervisor -- --list 2>/dev/null | grep -q '^fleet_deltas_carry_backend_perf: test' && cargo test -p gitraptor-desktop --test fleet_supervisor fleet_deltas_carry_backend_perf -- --exact",
       "layer": "runtime",
       "origin": "story",
       "tests": [
