@@ -18,6 +18,12 @@ const HTML_SINKS = [
     selector: "CallExpression[callee.object.name='document'][callee.property.name='write']",
     message: "No HTML from text (V5, ADR-GRP-017).",
   },
+  // Beyond the Dev Spec's list (security review L-03, 2026-11-08): the other parsers of HTML strings.
+  { selector: "JSXAttribute[name.name='srcDoc']", message: "No HTML from text (V5, ADR-GRP-017)." },
+  {
+    selector: "CallExpression[callee.property.name=/^(setHTMLUnsafe|createContextualFragment|parseFromString)$/]",
+    message: "No HTML from text (V5, ADR-GRP-017).",
+  },
 ];
 
 const BASE_IMPORTS = {
