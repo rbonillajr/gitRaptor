@@ -33,7 +33,11 @@ use gitraptor_api::messages::{
     WorktreeView,
 };
 use gitraptor_api::methods;
-use gitraptor_api::prediction::{LimitCode, PredictionSummary};
+use gitraptor_api::prediction::{
+    self, ConflictFileView, ConflictKindView, ConflictView, LimitCode, LineRange,
+    ListPredictionParams, MergeBaseKind, PairDetail, PairLevel, PairReason, PairSideView,
+    PairStateView, PairSummary, PredictionSummary,
+};
 use gitraptor_api::rpc::{ErrorObject, Id, Notification, Request, Response, code};
 use gitraptor_api::scope::{
     AttentionView, AutostartView, ConnectionRequester, GlobalSnapshot, RepoSnapshot,
@@ -73,6 +77,14 @@ pub struct Script {
     /// answers `(true, [])`.
     pub sessions: HashMap<String, (bool, Vec<SessionView>)>,
     pub candidates: Vec<CandidateView>,
+    /// `prediction.list` per repo: the details the fake pages with `prediction::page`, in order
+    /// (DS-US-DSK-008 T001). A repo without an entry answers an empty page.
+    pub prediction: HashMap<String, Vec<PairDetail>>,
+    /// Answer `prediction.list` with `METHOD_NOT_FOUND`, like a daemon that lacks it.
+    pub refuse_list: bool,
+    /// Push `scope.resync` (slow consumer) of the repo of the `nth` (1-based) `prediction.list`
+    /// call right before answering it.
+    pub resync_during_list: Option<usize>,
 }
 
 impl Default for Script {
@@ -107,6 +119,9 @@ impl Default for Script {
             repos: HashMap::new(),
             sessions: HashMap::new(),
             candidates: Vec::new(),
+            prediction: HashMap::new(),
+            refuse_list: false,
+            resync_during_list: None,
         }
     }
 }
@@ -428,6 +443,25 @@ fn serve(shared: &Shared, writer: &Arc<Mutex<UnixStream>>, stream: UnixStream) {
         let params = request.params.clone().unwrap_or(Value::Null);
         lock(&shared.calls).push((request.method.clone(), params.clone()));
         shared.changed.notify_all();
+        if request.method == methods::PREDICTION_LIST {
+            let nth = lock(&shared.calls)
+                .iter()
+                .filter(|(m, _)| m == methods::PREDICTION_LIST)
+                .count();
+            if lock(&shared.script).resync_during_list == Some(nth) {
+                let repo_id = params["repo_id"].as_str().unwrap_or_default().to_owned();
+                let resync = Notification::new(
+                    methods::NOTIFY_SCOPE_RESYNC,
+                    ScopeResyncNotification {
+                        scope: Scope::Repo { repo_id },
+                        reason: ResyncReason::SlowConsumer,
+                    },
+                );
+                if !write_line(writer, &resync) {
+                    return;
+                }
+            }
+        }
         let response = answer(shared, &request, params);
         if !write_line(writer, &response) {
             return;
@@ -551,6 +585,29 @@ fn answer(shared: &Shared, request: &Request, params: Value) -> Response {
                 id,
                 json!({"detection_available": detection, "sessions": sessions}),
             )
+        }
+        methods::PREDICTION_LIST => {
+            if script.refuse_list {
+                return Response::err(
+                    Some(id),
+                    ErrorObject::new(code::METHOD_NOT_FOUND, "method not found"),
+                );
+            }
+            let Ok(p) = serde_json::from_value::<ListPredictionParams>(params) else {
+                return invalid(&id);
+            };
+            if prediction::validate_list(&p).is_err() {
+                return invalid(&id);
+            }
+            let mut details = script
+                .prediction
+                .get(&p.repo_id)
+                .cloned()
+                .unwrap_or_default();
+            if let Some(ids) = &p.pair_ids {
+                details.retain(|d| ids.contains(&d.summary.pair_id));
+            }
+            Response::ok(id, prediction::page(details, p.cursor.as_deref()))
         }
         methods::EVENTS_UNSUBSCRIBE => match serde_json::from_value::<UnsubscribeParams>(params) {
             Ok(_) => Response::ok(id, json!({})),
@@ -828,4 +885,176 @@ pub fn script_tienda_and_notas(s: &mut Script) {
         ),
     );
     s.sessions.insert("notas".to_owned(), (true, Vec::new()));
+}
+
+// ------------------------------------------------------------ DS-US-DSK-008 scripts
+
+/// `rev` of the pairs the "tienda" prediction scripts publish in their snapshot.
+pub const PAIR_REV: u64 = REPO_SEQ;
+/// `computed_at_utc_ms` of those pairs.
+pub const PAIR_COMPUTED: i64 = 1_700_000_300_000;
+
+fn side(root: &str) -> PairSideView {
+    PairSideView::Worktree {
+        root: Untrusted::new(root),
+    }
+}
+
+/// The id of the pair `a` against `b` (the base when `None`) of `repo_id`.
+pub fn pair_id_of(repo_id: &str, a: &str, b: Option<&str>) -> String {
+    prediction::pair_id(
+        repo_id,
+        std::path::Path::new(a),
+        b.map(std::path::Path::new),
+    )
+}
+
+/// A summary in `current` with this `level`.
+pub fn summary_of(
+    repo_id: &str,
+    a: &str,
+    b: Option<&str>,
+    rev: u64,
+    level: PairLevel,
+) -> PairSummary {
+    let conflict = level == PairLevel::Conflict;
+    PairSummary {
+        pair_id: pair_id_of(repo_id, a, b),
+        rev,
+        a: side(a),
+        b: b.map_or(PairSideView::Base {}, side),
+        state: PairStateView::Current,
+        reason: None,
+        level: Some(level),
+        computed_at_utc_ms: Some(PAIR_COMPUTED),
+        overlap_files: u32::from(!conflict),
+        overlap_partial: false,
+        conflict_files: u32::from(conflict),
+        conflict_truncated: false,
+    }
+}
+
+/// A pair that has no result: `state` with this `reason`.
+pub fn pending_summary(repo_id: &str, a: &str, rev: u64, reason: PairReason) -> PairSummary {
+    PairSummary {
+        state: PairStateView::Pending,
+        reason: Some(reason),
+        level: None,
+        computed_at_utc_ms: None,
+        overlap_files: 0,
+        conflict_files: 0,
+        ..summary_of(repo_id, a, None, rev, PairLevel::Clean)
+    }
+}
+
+/// The detail of a conflict pair: `pagos.rs`, `ours` lines 40..59 and `theirs` lines 44..62.
+pub fn conflict_detail(summary: PairSummary, path: &str) -> PairDetail {
+    PairDetail {
+        summary,
+        overlap: Vec::new(),
+        conflict: Some(ConflictView {
+            merge_base: MergeBaseKind::Single,
+            files: vec![ConflictFileView {
+                path: Untrusted::new(path),
+                kind: ConflictKindView::Content,
+                ours: vec![LineRange { start: 40, len: 19 }],
+                theirs: vec![LineRange { start: 44, len: 18 }],
+                hunks_truncated: false,
+                has_merge_rule: false,
+            }],
+            truncated: false,
+            rewrites_escalated: false,
+        }),
+    }
+}
+
+/// The detail of an overlap pair: the files both sides touch.
+pub fn overlap_detail(summary: PairSummary, files: &[&str]) -> PairDetail {
+    PairDetail {
+        summary,
+        overlap: files.iter().map(|f| Untrusted::new(*f)).collect(),
+        conflict: None,
+    }
+}
+
+/// Sets what the snapshot and `prediction.list` of `repo_id` say: the summaries in the
+/// snapshot are the first `in_snapshot` of `details` (the rest only reach `prediction.list`;
+/// `pairs_truncated` is then `true`).
+pub fn script_prediction(
+    s: &mut Script,
+    repo_id: &str,
+    details: Vec<PairDetail>,
+    in_snapshot: usize,
+) {
+    let repo = s
+        .repos
+        .get_mut(repo_id)
+        .expect("script_prediction: unknown repo");
+    repo.repo.prediction = Some(PredictionSummary {
+        limits: LimitCode::ALL.to_vec(),
+        pairs: details
+            .iter()
+            .take(in_snapshot)
+            .map(|d| d.summary.clone())
+            .collect(),
+        pairs_truncated: in_snapshot < details.len(),
+    });
+    s.prediction.insert(repo_id.to_owned(), details);
+}
+
+/// The ⚡ `feat-pagos` <-> `feat-login` with `pagos.rs` (ours 40+19, theirs 44+18) at `rev`.
+pub fn pagos_login_conflict(rev: u64) -> PairDetail {
+    conflict_detail(
+        summary_of(
+            "tienda",
+            TIENDA_PAGOS,
+            Some(TIENDA_LOGIN),
+            rev,
+            PairLevel::Conflict,
+        ),
+        "pagos.rs",
+    )
+}
+
+/// The ⚠ `feat-pagos` <-> base with `README.md` at `rev`.
+pub fn pagos_base_overlap(rev: u64) -> PairDetail {
+    overlap_detail(
+        summary_of("tienda", TIENDA_PAGOS, None, rev, PairLevel::Overlap),
+        &["README.md"],
+    )
+}
+
+/// "tienda" with the ⚡ `feat-pagos` <-> `feat-login` and the ⚠ `feat-pagos` <-> base, both in
+/// the snapshot and in `prediction.list`.
+pub fn script_tienda_with_predictions(s: &mut Script) {
+    script_tienda_and_notas(s);
+    script_prediction(
+        s,
+        "tienda",
+        vec![pagos_login_conflict(PAIR_REV), pagos_base_overlap(PAIR_REV)],
+        2,
+    );
+}
+
+/// "tienda-pendiente": the base is unconfirmed, the pair `feat-pagos` <-> base is `pending` with
+/// `base-unconfirmed`, and the ⚡ between the two worktrees is still there.
+pub fn script_tienda_pending(s: &mut Script) {
+    script_tienda_and_notas(s);
+    s.repos.get_mut("tienda").expect("tienda").repo.base.status = BaseStatusView::Unconfirmed;
+    let pending = pending_summary(
+        "tienda",
+        TIENDA_PAGOS,
+        PAIR_REV,
+        PairReason::BaseUnconfirmed,
+    );
+    let repo = s.repos.get_mut("tienda").expect("tienda");
+    repo.repo.prediction = Some(PredictionSummary {
+        limits: LimitCode::ALL.to_vec(),
+        pairs: vec![pagos_login_conflict(PAIR_REV).summary, pending.clone()],
+        pairs_truncated: false,
+    });
+    s.prediction.insert(
+        "tienda".to_owned(),
+        vec![pagos_login_conflict(PAIR_REV), overlap_detail(pending, &[])],
+    );
 }

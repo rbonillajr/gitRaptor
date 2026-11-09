@@ -164,3 +164,16 @@ describe("TS003-OVERLAYS Toast", () => {
     expect(results.violations.map((v) => `${v.id}: ${v.help}`)).toEqual([]);
   });
 });
+
+describe("D18 consumed Esc (DS-US-DSK-008)", () => {
+  it("the Esc that closes it is marked as consumed", () => {
+    mount();
+    show({ kind: "info", message: "FYI", action: { label: "View", onAction: () => {} } });
+    const button = screen.getByRole("button", { name: "View" });
+    act(() => button.focus());
+    const event = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    act(() => void button.dispatchEvent(event));
+    expect(screen.queryByText("FYI"), "Esc closes the toast").toBeNull();
+    expect(event.defaultPrevented, "the Esc it consumed is marked with preventDefault").toBe(true);
+  });
+});

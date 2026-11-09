@@ -7,10 +7,12 @@ use std::path::Path;
 
 use gitraptor_desktop::engine::wire::{
     AgentDto, AttentionDto, Autostart, BaseDto, BaseStatus, BoundedCountDto, CandidateDto,
-    ConnState, CountDto, CountsDto, DaemonDto, DivergenceDto, EndCause, EngineDto, EngineMessage,
-    EngineStateDto, FleetPerf, GlobalDto, HeadDto, PairDto, PairLevel, PairState, ReadyDto,
-    RepoFleetDto, RepoStateDto, RepoSummaryDto, ResyncReason, SessionDto, SessionOrigin,
-    SessionState, Tier, UnavailableReason, WorktreeDto, WorktreeStatusDto,
+    ConfirmCommandDto, ConflictFileDto, ConflictFilesDto, ConflictKind, ConnState, CountDto,
+    CountsDto, DaemonDto, DivergenceDto, EndCause, EngineDto, EngineMessage, EngineStateDto,
+    FleetPerf, GlobalDto, HeadDto, LimitCode, LineRangeDto, PairDetailDto, PairDto, PairLevel,
+    PairReason, PairState, ReadyDto, RepoFleetDto, RepoStateDto, RepoSummaryDto, ResyncReason,
+    SessionDto, SessionOrigin, SessionState, Tier, UnavailableReason, WorktreeDto,
+    WorktreeStatusDto,
 };
 use serde_json::{Map, Value};
 
@@ -187,12 +189,36 @@ fn session(id: &str, key: &str, agent: AgentDto, state: SessionState) -> Session
 }
 
 fn pair(id: &str, a: &str, b: &str, state: PairState, level: Option<PairLevel>) -> PairDto {
+    let pending = state == PairState::Pending;
     PairDto {
         pair_id: id.to_owned(),
+        rev: if pending { 11 } else { 12 },
         a: a.to_owned(),
         b: b.to_owned(),
         state,
+        reason: pending.then_some(PairReason::BaseUnconfirmed),
         level,
+        computed_at_utc_ms: (!pending).then_some(1_762_697_200_000),
+        overlap_files: u32::from(!pending),
+        overlap_partial: false,
+        conflict_files: u32::from(level == Some(PairLevel::Conflict)),
+        conflict_truncated: false,
+    }
+}
+
+fn recalculating_pair() -> PairDto {
+    PairDto {
+        rev: 13,
+        computed_at_utc_ms: Some(1_762_697_300_000),
+        overlap_files: 2,
+        conflict_files: 0,
+        ..pair(
+            "pair-1",
+            "3333333333333333",
+            "2222222222222222",
+            PairState::Recalculating,
+            Some(PairLevel::Overlap),
+        )
     }
 }
 
@@ -337,6 +363,11 @@ fn examples() -> Vec<(&'static str, EngineMessage)> {
                         ),
                     ],
                     pairs_truncated: false,
+                    limits: vec![LimitCode::OverlapIncludesUncommitted, LimitCode::LocalOnly],
+                    confirm_command: ConfirmCommandDto::Offered {
+                        command: "'/Applications/GitRaptor.app/Contents/MacOS/raptor' 'guard' 'confirm' '/Users/me/code/tienda'".to_owned(),
+                        with_path: true,
+                    },
                 },
             },
         ),
@@ -396,16 +427,35 @@ fn examples() -> Vec<(&'static str, EngineMessage)> {
             "prediction",
             EngineMessage::Prediction {
                 repo_id: "repo-alpha".to_owned(),
-                pairs: vec![pair(
-                    "pair-1",
-                    "3333333333333333",
-                    "2222222222222222",
-                    PairState::Recalculating,
-                    Some(PairLevel::Overlap),
-                )],
+                pairs: vec![recalculating_pair()],
                 removed: vec!["pair-old".to_owned()],
                 perf: FleetPerf {
                     backend_ns: 600_000,
+                },
+            },
+        ),
+        (
+            "pairDetails",
+            EngineMessage::PairDetails {
+                repo_id: "repo-alpha".to_owned(),
+                details: vec![PairDetailDto {
+                    pair: recalculating_pair(),
+                    overlap: vec!["README.md".to_owned()],
+                    conflict: Some(ConflictFilesDto {
+                        files: vec![ConflictFileDto {
+                            path: "pagos.rs".to_owned(),
+                            kind: ConflictKind::Content,
+                            ours: vec![LineRangeDto { start: 40, len: 19 }],
+                            theirs: vec![LineRangeDto { start: 44, len: 18 }],
+                            hunks_truncated: false,
+                            has_merge_rule: true,
+                        }],
+                        truncated: false,
+                    }),
+                }],
+                filled: true,
+                perf: FleetPerf {
+                    backend_ns: 700_000,
                 },
             },
         ),

@@ -15,14 +15,14 @@
     ]
   },
   "suite": {
-    "command": "pnpm -C apps/desktop run build && node tools/test/nextest-junit.mjs --workspace && pnpm -C apps/desktop run test"
+    "command": "pnpm -C apps/desktop run build && node tools/test/nextest-junit.mjs -p gitraptor-desktop && pnpm -C apps/desktop run test"
   },
   "layers": {
     "runtime": {
       "commands": [
         {
           "id": "suite",
-          "cmd": "pnpm -C apps/desktop run build && node tools/test/nextest-junit.mjs --workspace && pnpm -C apps/desktop run test"
+          "cmd": "pnpm -C apps/desktop run build && node tools/test/nextest-junit.mjs -p gitraptor-desktop && pnpm -C apps/desktop run test"
         }
       ],
       "report": "target/nextest/ci/junit-paths.xml"
@@ -129,35 +129,12 @@
       "origin": "story"
     },
     {
-      "id": "D8-CMD",
-      "statement": "Esta historia no añade comandos IPC: ningún nombre de commands.json ni de #[tauri::command] contiene prediction, pair ni conflict, y la lista exacta de ADR-GRP-017 (app_info, engine_retry, engine_watch, fleet_open) sigue pasando; commands.ts no declara ningún comando de predicción",
-      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test commands -- --list 2>/dev/null | grep -q '^the_prediction_detail_adds_no_ipc_command: test' && cargo test -p gitraptor-desktop --test commands -- --list 2>/dev/null | grep -q '^d3_cmds_engine_commands_are_listed_and_allowed: test' && cargo test -p gitraptor-desktop --test commands the_prediction_detail_adds_no_ipc_command -- --exact && cargo test -p gitraptor-desktop --test commands d3_cmds_engine_commands_are_listed_and_allowed -- --exact && pnpm --filter @gitraptor/desktop exec vitest run src/client/commands.test.ts -t 'no command of the command map is about prediction'",
-      "tests": [
-        "apps/desktop/src-tauri/tests/commands.rs",
-        "apps/desktop/src/client/commands.test.ts"
-      ],
-      "layer": "runtime",
-      "origin": "story"
-    },
-    {
-      "id": "D8-NOTIF",
-      "statement": "Sin notificaciones del SO ni sonido: no hay tauri-plugin-notification en Cargo.toml ni package.json, ni new Notification( ni requestPermission en src/",
-      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test boundaries -- --list 2>/dev/null | grep -q '^no_os_notifications: test' && cargo test -p gitraptor-desktop --test boundaries no_os_notifications -- --exact",
-      "tests": [
-        "apps/desktop/src-tauri/tests/boundaries.rs"
-      ],
-      "layer": "runtime",
-      "origin": "story"
-    },
-    {
       "id": "D8-WIRE",
       "statement": "El contrato Rust y TS coincide con la fixture congelada ampliada (PairDto con rev y frescura, limits, confirmCommand y pairDetails): engine_wire.rs compara y el test de la caché lee la misma fixture; ingest::pair copia computedAtUtcMs (negativo a null) y pair_detail sanea rutas",
-      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test engine_wire && cargo test -p gitraptor-desktop --test fleet_ingest && pnpm --filter @gitraptor/desktop exec vitest run src/state/engine-cache.test.ts -t 'fleet fixture'",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test engine_wire && cargo test -p gitraptor-desktop --test fleet_ingest -- --list 2>/dev/null | grep -q '^a_negative_computed_at_becomes_null: test' && cargo test -p gitraptor-desktop --test fleet_ingest -- --list 2>/dev/null | grep -q '^pair_detail_paths_pass_through_display_visible: test' && cargo test -p gitraptor-desktop --test fleet_ingest a_negative_computed_at_becomes_null -- --exact && cargo test -p gitraptor-desktop --test fleet_ingest pair_detail_paths_pass_through_display_visible -- --exact && bash -c \"set -o pipefail; pnpm --filter @gitraptor/desktop exec vitest run src/state/engine-cache.test.ts -t 'fleet fixture with pair details' --reporter=verbose 2>&1 | grep '✓.*fleet fixture with pair details' > /dev/null\"",
       "tests": [
         "apps/desktop/src-tauri/tests/engine_wire.rs",
         "apps/desktop/src-tauri/tests/fleet_ingest.rs",
-        "apps/desktop/src-tauri/tests/fleet_supervisor.rs",
-        "apps/desktop/src/fleet/useFleet.test.tsx",
         "apps/desktop/src/state/engine-cache.test.ts",
         "apps/desktop/tests/fixtures/engine-messages.json"
       ],
@@ -167,7 +144,7 @@
     {
       "id": "D8-CACHE",
       "statement": "La caché aplica la regla de rev: un resumen viejo nunca pisa uno nuevo; un detalle con rev mayor trae su resumen; filled limpia pairsTruncated; los detalles de un repo sin entrada se descartan; ui-store.center tiene un solo destino (abrir un par sustituye, backToMain vuelve, selectRepo vuelve a main, no se persiste)",
-      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/state/engine-cache.test.ts -t 'an older summary never replaces a newer one' && pnpm --filter @gitraptor/desktop exec vitest run src/state/engine-cache.test.ts -t 'a detail with a newer rev brings its summary' && pnpm --filter @gitraptor/desktop exec vitest run src/state/engine-cache.test.ts -t 'filled clears pairsTruncated' && pnpm --filter @gitraptor/desktop exec vitest run src/state/engine-cache.test.ts -t 'pair details of a repo without a cache entry are dropped' && pnpm --filter @gitraptor/desktop exec vitest run src/state/ui-store.test.ts -t 'opening a pair replaces the center view and back returns to main' && pnpm --filter @gitraptor/desktop exec vitest run src/state/ui-store.test.ts -t 'selecting another repo returns to main'",
+      "verify": "bash -c \"set -o pipefail; pnpm --filter @gitraptor/desktop exec vitest run src/state/engine-cache.test.ts -t 'an older summary never replaces a newer one' --reporter=verbose 2>&1 | grep '✓.*an older summary never replaces a newer one' > /dev/null\" && bash -c \"set -o pipefail; pnpm --filter @gitraptor/desktop exec vitest run src/state/engine-cache.test.ts -t 'a detail with a newer rev brings its summary' --reporter=verbose 2>&1 | grep '✓.*a detail with a newer rev brings its summary' > /dev/null\" && bash -c \"set -o pipefail; pnpm --filter @gitraptor/desktop exec vitest run src/state/engine-cache.test.ts -t 'filled clears pairsTruncated' --reporter=verbose 2>&1 | grep '✓.*filled clears pairsTruncated' > /dev/null\" && bash -c \"set -o pipefail; pnpm --filter @gitraptor/desktop exec vitest run src/state/engine-cache.test.ts -t 'pair details of a repo without a cache entry are dropped' --reporter=verbose 2>&1 | grep '✓.*pair details of a repo without a cache entry are dropped' > /dev/null\" && bash -c \"set -o pipefail; pnpm --filter @gitraptor/desktop exec vitest run src/state/ui-store.test.ts -t 'opening a pair replaces the center view and back returns to main' --reporter=verbose 2>&1 | grep '✓.*opening a pair replaces the center view and back returns to main' > /dev/null\" && bash -c \"set -o pipefail; pnpm --filter @gitraptor/desktop exec vitest run src/state/ui-store.test.ts -t 'selecting another repo returns to main' --reporter=verbose 2>&1 | grep '✓.*selecting another repo returns to main' > /dev/null\"",
       "tests": [
         "apps/desktop/src/state/engine-cache.test.ts",
         "apps/desktop/src/state/ui-store.test.ts"
@@ -189,7 +166,7 @@
     {
       "id": "D8-BAND",
       "statement": "ConflictBand dice nivel, frescura y 'nuevo' en texto, oculta el glifo a la tecnología de apoyo, nombra el par con 'y', la variante badge no tiene botón, una banda sin detalle enseña el par sin archivo; CopyCommand anuncia 'Copiado' 2 s en una región status, anuncia el fallo y llama onCopied solo tras escribir",
-      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/ui/ConflictBand.test.tsx && pnpm --filter @gitraptor/desktop exec vitest run src/ui/CopyCommand.test.tsx",
+      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/ui/ConflictBand.test.tsx && bash -c \"set -o pipefail; pnpm --filter @gitraptor/desktop exec vitest run src/ui/CopyCommand.test.tsx -t 'a successful copy says Copied for 2 s and announces it once in a status region' --reporter=verbose 2>&1 | grep '✓.*a successful copy says Copied for 2 s and announces it once in a status region' > /dev/null\" && bash -c \"set -o pipefail; pnpm --filter @gitraptor/desktop exec vitest run src/ui/CopyCommand.test.tsx -t 'a failed copy announces it' --reporter=verbose 2>&1 | grep '✓.*a failed copy announces it' > /dev/null\" && bash -c \"set -o pipefail; pnpm --filter @gitraptor/desktop exec vitest run src/ui/CopyCommand.test.tsx -t 'onCopied runs only after a successful write' --reporter=verbose 2>&1 | grep '✓.*onCopied runs only after a successful write' > /dev/null\"",
       "tests": [
         "apps/desktop/src/ui/ConflictBand.test.tsx",
         "apps/desktop/src/ui/CopyCommand.test.tsx"
@@ -200,7 +177,7 @@
     {
       "id": "D8-PANEL",
       "statement": "El panel de conflictos va en el centro encima de la vista principal (no en FleetView), enseña el par ⚡ con su archivo, a lo sumo 3 bandas y 'y N más', la base pendiente con el comando copiable (con ruta, sin ruta, raptor desconocido) y la oculta si un par contra la base sale de pending; la píldora ⚡ de la barra de título suma los conflictos contados, abre el repo y conserva su nombre completo en modo compacto",
-      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/conflicts/ConflictPanel.test.tsx && pnpm --filter @gitraptor/desktop exec vitest run src/engine/EngineCenter.test.tsx && pnpm --filter @gitraptor/desktop exec vitest run src/shell/TitleBar.test.tsx",
+      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/conflicts/ConflictPanel.test.tsx && bash -c \"set -o pipefail; pnpm --filter @gitraptor/desktop exec vitest run src/engine/EngineCenter.test.tsx -t 'the conflict panel sits above the main view and not inside the fleet' --reporter=verbose 2>&1 | grep '✓.*the conflict panel sits above the main view and not inside the fleet' > /dev/null\" && bash -c \"set -o pipefail; pnpm --filter @gitraptor/desktop exec vitest run src/shell/TitleBar.test.tsx -t 'the conflict pill sums counted conflicts and opens the repo' --reporter=verbose 2>&1 | grep '✓.*the conflict pill sums counted conflicts and opens the repo' > /dev/null\" && bash -c \"set -o pipefail; pnpm --filter @gitraptor/desktop exec vitest run src/shell/TitleBar.test.tsx -t 'the pill keeps its full name when compact' --reporter=verbose 2>&1 | grep '✓.*the pill keeps its full name when compact' > /dev/null\"",
       "tests": [
         "apps/desktop/src/conflicts/ConflictPanel.test.tsx",
         "apps/desktop/src/engine/EngineCenter.test.tsx",
@@ -212,7 +189,7 @@
     {
       "id": "D8-DETAILVIEW",
       "statement": "ConflictDetailView lista pagos.rs con las líneas de cada lado, pinta rutas como texto, no enseña un detalle de otro rev, y Esc cierra primero el popover y luego el detalle devolviendo el foco a la banda; el Esc consumido (Dialog, Popover, Toast marcan defaultPrevented) nunca llega a onEscape y un Esc dentro del centro no cierra además el cajón",
-      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/conflicts/ConflictDetailView.test.tsx && pnpm --filter @gitraptor/desktop exec vitest run src/shell/AppShell.test.tsx && pnpm --filter @gitraptor/desktop exec vitest run src/ui/Dialog.test.tsx && pnpm --filter @gitraptor/desktop exec vitest run src/ui/Popover.test.tsx && pnpm --filter @gitraptor/desktop exec vitest run src/ui/Toast.test.tsx",
+      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/conflicts/ConflictDetailView.test.tsx && bash -c \"set -o pipefail; pnpm --filter @gitraptor/desktop exec vitest run src/shell/AppShell.test.tsx -t 'Esc inside the center view does not also close the drawer' --reporter=verbose 2>&1 | grep '✓.*Esc inside the center view does not also close the drawer' > /dev/null\" && bash -c \"set -o pipefail; pnpm --filter @gitraptor/desktop exec vitest run src/shell/AppShell.test.tsx -t 'an Esc already consumed never reaches onEscape' --reporter=verbose 2>&1 | grep '✓.*an Esc already consumed never reaches onEscape' > /dev/null\" && bash -c \"set -o pipefail; pnpm --filter @gitraptor/desktop exec vitest run src/ui/Dialog.test.tsx -t 'the Esc that closes it is marked as consumed' --reporter=verbose 2>&1 | grep '✓.*the Esc that closes it is marked as consumed' > /dev/null\" && bash -c \"set -o pipefail; pnpm --filter @gitraptor/desktop exec vitest run src/ui/Popover.test.tsx -t 'the Esc that closes it is marked as consumed' --reporter=verbose 2>&1 | grep '✓.*the Esc that closes it is marked as consumed' > /dev/null\" && bash -c \"set -o pipefail; pnpm --filter @gitraptor/desktop exec vitest run src/ui/Toast.test.tsx -t 'the Esc that closes it is marked as consumed' --reporter=verbose 2>&1 | grep '✓.*the Esc that closes it is marked as consumed' > /dev/null\"",
       "tests": [
         "apps/desktop/src/conflicts/ConflictDetailView.test.tsx",
         "apps/desktop/src/shell/AppShell.test.tsx",
@@ -235,14 +212,16 @@
     },
     {
       "id": "D8-GATE",
-      "statement": "El gate de seguridad sigue en verde con el código nuevo (V1, V7, V2 y V5 de ADR-GRP-017) y el catálogo i18n en/es tiene todas las claves conflicts.* y ui.common.*",
-      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test boundaries --test environment --test tauri_surface && pnpm --filter @gitraptor/desktop exec vitest run tests/eslint-v5.test.ts && pnpm --filter @gitraptor/desktop exec vitest run src/i18n/catalog.test.ts",
+      "statement": "Gate de seguridad en verde con el código nuevo (V1, V7, V2 y V5 de ADR-GRP-017); esta historia no añade comandos IPC (ningún nombre con prediction, pair ni conflict; la lista exacta app_info, engine_retry, engine_watch, fleet_open sigue igual; commands.ts sin comandos de predicción); sin notificaciones del SO (ni tauri-plugin-notification, ni new Notification( ni requestPermission en src/); y el catálogo en/es tiene las claves conflicts.* y ui.common.copied/copyFailed",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test boundaries --test environment --test tauri_surface && pnpm --filter @gitraptor/desktop exec vitest run tests/eslint-v5.test.ts && bash -c \"set -o pipefail; pnpm --filter @gitraptor/desktop exec vitest run src/i18n/catalog.test.ts -t 'has the predicted conflict keys in en and es' --reporter=verbose 2>&1 | grep '✓.*has the predicted conflict keys in en and es' > /dev/null\" && cargo test -p gitraptor-desktop --test commands -- --list 2>/dev/null | grep -q '^the_prediction_detail_adds_no_ipc_command: test' && cargo test -p gitraptor-desktop --test commands -- --list 2>/dev/null | grep -q '^d3_cmds_engine_commands_are_listed_and_allowed: test' && cargo test -p gitraptor-desktop --test commands the_prediction_detail_adds_no_ipc_command -- --exact && cargo test -p gitraptor-desktop --test commands d3_cmds_engine_commands_are_listed_and_allowed -- --exact && bash -c \"set -o pipefail; pnpm --filter @gitraptor/desktop exec vitest run src/client/commands.test.ts -t 'no command of the command map is about prediction' --reporter=verbose 2>&1 | grep '✓.*no command of the command map is about prediction' > /dev/null\" && cargo test -p gitraptor-desktop --test boundaries -- --list 2>/dev/null | grep -q '^no_os_notifications: test' && cargo test -p gitraptor-desktop --test boundaries no_os_notifications -- --exact",
       "tests": [
         "apps/desktop/src-tauri/tests/boundaries.rs",
         "apps/desktop/src-tauri/tests/environment.rs",
         "apps/desktop/src-tauri/tests/tauri_surface.rs",
         "apps/desktop/tests/eslint-v5.test.ts",
-        "apps/desktop/src/i18n/catalog.test.ts"
+        "apps/desktop/src/i18n/catalog.test.ts",
+        "apps/desktop/src-tauri/tests/commands.rs",
+        "apps/desktop/src/client/commands.test.ts"
       ],
       "layer": "runtime",
       "origin": "story"

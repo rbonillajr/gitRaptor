@@ -347,3 +347,24 @@ fn fleet_open_without_a_supervisor_is_not_watching() {
         "D4-CMD: NotWatching serialises as not-watching"
     );
 }
+
+/// D8-CMD (DS-US-DSK-008 D1, I-01): the predicted-conflict detail travels by the `Channel` the
+/// supervisor already has, so no command name is about predictions, pairs or conflicts.
+#[test]
+fn the_prediction_detail_adds_no_ipc_command() {
+    let about = |name: &String| {
+        ["prediction", "pair", "conflict"]
+            .iter()
+            .any(|w| name.contains(w))
+    };
+    let listed: Vec<String> = commands_json().into_iter().filter(about).collect();
+    assert!(
+        listed.is_empty(),
+        "D8-CMD: commands.json names a prediction command: {listed:?}"
+    );
+    let declared: Vec<String> = command_fns().into_iter().filter(about).collect();
+    assert!(
+        declared.is_empty(),
+        "D8-CMD: a #[tauri::command] is about predictions: {declared:?}"
+    );
+}

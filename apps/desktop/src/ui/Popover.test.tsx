@@ -82,3 +82,14 @@ describe("TS003-OVERLAYS Popover", () => {
     expect(results.violations.map((v) => `${v.id}: ${v.help}`)).toEqual([]);
   });
 });
+
+describe("D18 consumed Esc (DS-US-DSK-008)", () => {
+  it("the Esc that closes it is marked as consumed", () => {
+    render(<Settings />);
+    fireEvent.click(trigger());
+    const event = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    act(() => void (document.activeElement ?? document.body).dispatchEvent(event));
+    expect(dialog(), "Esc closes the popover").toBeNull();
+    expect(event.defaultPrevented, "the Esc it consumed is marked with preventDefault").toBe(true);
+  });
+});

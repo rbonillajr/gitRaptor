@@ -68,3 +68,103 @@ describe("TS003-I18N ui.* keys", () => {
     expect(text("es", "ui.pill.reversible")).toBe("Recuperable");
   });
 });
+
+// D8-GATE (DS-US-DSK-008 § Textos del catálogo): the predicted-conflict texts in en and es.
+const CONFLICT_KEYS: Record<string, [string, string]> = {
+  "conflicts.panel.title": ["Predicted conflicts", "Conflictos previstos"],
+  "conflicts.panel.list": ["Predicted conflicts in {{repo}}", "Conflictos previstos en {{repo}}"],
+  "conflicts.band.conflict": ["⚡ predicted conflict", "⚡ conflicto previsto"],
+  "conflicts.band.overlap": ["⚠ same files, not committed yet", "⚠ mismos archivos sin guardar en commit"],
+  "conflicts.band.pair": ["{{a}} ↔ {{b}}", "{{a}} ↔ {{b}}"],
+  "conflicts.band.more_one": ["and {{count}} more", "y {{count}} más"],
+  "conflicts.band.more_other": ["and {{count}} more", "y {{count}} más"],
+  "conflicts.band.moreTruncated": ["and more", "y más"],
+  "conflicts.band.new": ["new", "nuevo"],
+  "conflicts.band.open": ["View", "Ver"],
+  "conflicts.band.openLabel": ["View the conflict between {{a}} and {{b}}", "Ver el conflicto entre {{a}} y {{b}}"],
+  "conflicts.band.a11y": ["{{level}} between {{a}} and {{b}}, {{file}}, {{freshness}}", "{{level}} entre {{a}} y {{b}}, {{file}}, {{freshness}}"],
+  "conflicts.side.base": ["{{base}} (main branch)", "{{base}} (rama principal)"],
+  "conflicts.freshness.ago": ["{{age}} ago", "hace {{age}}"],
+  "conflicts.freshness.stale": ["outdated · {{age}} ago · recalculating", "desactualizado · hace {{age}} · recalculando"],
+  "conflicts.freshness.clear": ["No predicted conflicts · {{age}} ago", "Sin conflictos previstos · hace {{age}}"],
+  "conflicts.freshness.calculating_one": ["Calculating {{n}} of 1 pair", "Calculando {{n}} de 1 par"],
+  "conflicts.freshness.calculating_other": ["Calculating {{n}} of {{count}} pairs", "Calculando {{n}} de {{count}} pares"],
+  "conflicts.freshness.calculatingSince_one": ["Calculating {{n}} of 1 pair · last result {{age}} ago", "Calculando {{n}} de 1 par · último resultado hace {{age}}"],
+  "conflicts.freshness.calculatingSince_other": ["Calculating {{n}} of {{count}} pairs · last result {{age}} ago", "Calculando {{n}} de {{count}} pares · último resultado hace {{age}}"],
+  "conflicts.freshness.pending_one": ["Pending: {{reason}} (1 pair)", "Pendiente: {{reason}} (1 par)"],
+  "conflicts.freshness.pending_other": ["Pending: {{reason}} ({{count}} pairs)", "Pendiente: {{reason}} ({{count}} pares)"],
+  "conflicts.freshness.notComputable_one": ["Not computable: {{reason}} (1 pair)", "No calculable: {{reason}} (1 par)"],
+  "conflicts.freshness.notComputable_other": ["Not computable: {{reason}} ({{count}} pairs)", "No calculable: {{reason}} ({{count}} pares)"],
+  "conflicts.base.pending": ["Base branch waiting for confirmation ({{base}})", "Rama base pendiente de confirmar ({{base}})"],
+  "conflicts.base.hint": [
+    "Run it in your own terminal (not an agent's). It shows what it will do and asks before doing it.",
+    "Ejecútalo en tu propia terminal (no en la de un agente). Te enseñará qué va a hacer y te preguntará antes.",
+  ],
+  "conflicts.base.hintFolder": [
+    "Run it in your own terminal, in the folder of {{repo}}. It shows what it will do and asks before doing it.",
+    "Ejecútalo en tu propia terminal, en la carpeta de {{repo}}. Te enseñará qué va a hacer y te preguntará antes.",
+  ],
+  "conflicts.limits.open": ["Limits (?)", "Límites (?)"],
+  "conflicts.limits.title": ["Prediction limits", "Límites de la predicción"],
+  "conflicts.range.line": ["line {{start}}", "línea {{start}}"],
+  "conflicts.range.lines": ["lines {{start}}–{{end}}", "líneas {{start}}–{{end}}"],
+  "conflicts.range.more": ["and more ranges", "y más rangos"],
+  "conflicts.range.a11y": ["lines {{start}} to {{end}}", "líneas {{start}} a {{end}}"],
+  "conflicts.detail.title": ["⚡ {{a}} ↔ {{b}} are going to collide", "⚡ {{a}} ↔ {{b}} van a chocar"],
+  "conflicts.detail.titleOverlap": ["⚠ {{a}} and {{b}} are editing the same files", "⚠ {{a}} y {{b}} están editando los mismos archivos"],
+  "conflicts.detail.titleBase": ["⚡ {{a}} is going to collide with {{base}}", "⚡ {{a}} va a chocar con {{base}}"],
+  "conflicts.detail.computed": ["{{a}} ↔ {{b}} · computed {{age}} ago", "{{a}} ↔ {{b}} · calculado hace {{age}}"],
+  "conflicts.detail.back": ["Back to the fleet", "Volver a la flota"],
+  "conflicts.detail.calculating": ["Calculating…", "Calculando…"],
+  "conflicts.detail.gone": ["This pair is no longer predicted.", "Este par ya no se calcula."],
+  "conflicts.toast.noFile": ["⚡ Predicted conflict: {{a}} ↔ {{b}}", "⚡ Conflicto previsto: {{a}} ↔ {{b}}"],
+  "conflicts.toast.withFile_one": ["⚡ Predicted conflict: {{a}} ↔ {{b}} in {{file}}", "⚡ Conflicto previsto: {{a}} ↔ {{b}} en {{file}}"],
+  "conflicts.toast.withFile_other": [
+    "⚡ Predicted conflict: {{a}} ↔ {{b}} in {{file}} and {{count}} more",
+    "⚡ Conflicto previsto: {{a}} ↔ {{b}} en {{file}} y {{count}} más",
+  ],
+  "conflicts.toast.otherRepo": ["⚡ New predicted conflict in {{repo}}", "⚡ Nuevo conflicto previsto en {{repo}}"],
+  "conflicts.toast.many": ["⚡ {{count}} new predicted conflicts", "⚡ {{count}} nuevos conflictos previstos"],
+  "conflicts.toast.open": ["View", "Ver"],
+  "conflicts.pill_one": ["⚡ {{count}} predicted conflict", "⚡ {{count}} conflicto previsto"],
+  "conflicts.pill_other": ["⚡ {{count}} predicted conflicts", "⚡ {{count}} conflictos previstos"],
+  "conflicts.pill.label": ["{{count}} predicted conflicts across your repos. Open them", "{{count}} conflictos previstos en tus repos. Abrirlos"],
+  "conflicts.pill.compact": ["⚡ {{count}}", "⚡ {{count}}"],
+  "ui.common.copied": ["Copied", "Copiado"],
+  "ui.common.copyFailed": ["Couldn't copy. Select the command and copy it by hand.", "No se pudo copiar. Selecciona el comando y cópialo a mano."],
+};
+const REASONS = ["baseUnconfirmed", "operationInProgress", "powerSaving", "dormant", "baseMissing", "missingObject", "shallow", "limitExceeded", "error"];
+const LIMITS = ["overlapIncludesUncommitted", "conflictCommittedOnly", "noMergeDriversOrAttributes", "renameLimit", "insertionsMayMerge", "joinedHunks", "pairIgnoresBaseMoves", "localOnly"];
+const KINDS = ["content", "addAdd", "modifyDelete", "rename", "directoryFile", "binary", "submodule"];
+
+describe("D8-GATE predicted conflict keys", () => {
+  it("has the predicted conflict keys in en and es", () => {
+    const entries = { en: new Map(flatten(en)), es: new Map(flatten(es)) };
+    for (const lang of ["en", "es"] as const) {
+      const index = lang === "en" ? 0 : 1;
+      for (const [key, texts] of Object.entries(CONFLICT_KEYS)) {
+        expect(entries[lang].get(key), `${lang} lacks ${key} or its text differs from the Dev Spec`).toBe(texts[index]);
+      }
+      const nested = [
+        ...REASONS.map((r) => `conflicts.reason.${r}`),
+        ...LIMITS.map((l) => `conflicts.limit.${l}`),
+        ...KINDS.map((k) => `conflicts.kind.${k}`),
+        "conflicts.a11y.conflict",
+        "conflicts.a11y.overlap",
+        "conflicts.tooltip.conflict",
+        "conflicts.tooltip.overlap",
+        "conflicts.detail.sideA11y",
+        "conflicts.detail.todo",
+        "conflicts.detail.todoTitle",
+        "conflicts.limits.line",
+        "conflicts.panel.less",
+        "conflicts.panel.more_one",
+        "conflicts.panel.more_other",
+      ];
+      for (const key of nested) {
+        const value = entries[lang].get(key);
+        expect(typeof value === "string" && value.trim().length > 0, `${lang} lacks ${key}`).toBe(true);
+      }
+    }
+  });
+});
