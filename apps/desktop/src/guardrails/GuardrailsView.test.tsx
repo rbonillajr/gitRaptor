@@ -269,6 +269,7 @@ describe("D7-VIEW GuardrailsView", () => {
         const { container } = showView({ copied: { repoId: "tienda", operation: { kind: "commit" }, rules: ["x"] } });
         await flush();
         expect(container.querySelectorAll("li, tr, button").length, "painted before axe").toBeGreaterThan(1);
+        vi.useRealTimers();
         const results = await axe.run(container, { rules: { "color-contrast": { enabled: false } } });
         expect(results.violations.map((v) => `${v.id}: ${v.help}`)).toEqual([]);
       });
@@ -360,11 +361,12 @@ describe("D7-VIEW toast of a new block (EngineCenter)", () => {
   it("D7-VIEW: opening the view dismisses it", async () => {
     await mountCenter();
     await apply(guard([old]));
-    await apply(guard([old, fresh("n1")]));
+    const novel = entry("n1", { lastMs: NOW + 1_000, atMs: NOW + 1_000, operation: { kind: "push", remote: "origin", refs: [{ name: "release", change: "force" }] } });
+    await apply(guard([old, novel]));
     expect(alerts(), "precondition: the toast is there").toHaveLength(1);
     act(() => useUiStore.getState().openGuardrails());
     await flush();
     expect(alerts(), "opening the Guardrails view retires the toast").toHaveLength(0);
-    expect(screen.getByRole("button", { name: /Blocked: Claude Code tried to rewrite/ }), "and the view shows the rows").toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /history of release on the server/ }), "and the view shows the new row").toBeInTheDocument();
   });
 });
