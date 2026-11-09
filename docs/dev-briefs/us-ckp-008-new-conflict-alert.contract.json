@@ -87,7 +87,7 @@
     },
     {
       "id": "S7",
-      "statement": "La alerta no es intrusiva y respeta NO_COLOR y ASCII: el toast se ancla en la región de la lista, nunca tapa la región de alertas (la línea de límites sigue visible), se legible sin color y en ASCII sin Unicode fuera del plegado de símbolos propios de la alerta, en en y es, en 80x24",
+      "statement": "La alerta no es intrusiva y respeta NO_COLOR y ASCII: el toast se ancla en la región de la lista, nunca tapa la región de alertas (la línea de límites sigue visible), se lee sin color y en ASCII sin Unicode fuera del plegado de símbolos propios de la alerta, en en y es, en 80x24",
       "verify": "cargo test -p gitraptor-cli --test tui_conflict_alert s7_the_alert_is_not_intrusive_and_legible_without_color_and_in_ascii",
       "layer": "runtime",
       "tests": [
