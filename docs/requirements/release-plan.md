@@ -311,7 +311,7 @@ Lo que cambió respecto del 2026-10-08 (27 PR y 8,8 fichas equivalentes por día
 | TS-GRP-009 | Clase de cliente `desktop` y perfil de lectura `mcp` cuando un agente abre la app | Must | Pend (`draft`) | Bloquea la primera escritura de la app (US-DSK-001, 002 y 006), no las lecturas: hasta entonces la app lee lo mismo que un agente que ejecuta `raptor` (revisión de seguridad del 2026-11-08) |
 | US-DSK-001 | Añadir un repo sin terminal | Must | Pend (`ready`) | Factor del SO (SPIKE-GRD-002); mientras tanto, comando para copiar |
 | US-DSK-002 | Proteger un repo con un clic | Must | Pend (`ready`) | Factor del SO; mientras tanto, comando para copiar |
-| US-DSK-003 | Estado del motor | Must | Pend (`ready`) | DEP-DSK-5 |
+| US-DSK-003 | Estado del motor | Must | Hecho (PR #336; falta la verificación manual en macOS) | DEP-DSK-5 |
 | US-DSK-004 | Flota en vivo | Must | Pend (`ready`) | US-DSK-003. DEP-DSK-2 ya no bloquea (perfil provisional `Cli`, TS-GRP-009) |
 | US-DSK-005 | Grafo de carriles | Must | Pend (`ready`) | Lo que falte de US-CKP-022 |
 | US-DSK-006 | Deshacer de un botón | Must | Pend (`ready`) | Factor del SO para confirmar trabajo ajeno |
