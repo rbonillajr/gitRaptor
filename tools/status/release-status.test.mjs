@@ -105,6 +105,29 @@ describe('parsers', () => {
       'US-ALP-002': 'M2',
     });
   });
+
+  test('a parallel milestone with a suffix is its own milestone, not the base one', () => {
+    const plan = parseReleasePlan(
+      [
+        '## M2: MVP',
+        '| US-ALP-001 | x |',
+        '## Hito paralelo M2-UI: app',
+        '| US-DSK-001 | y |',
+        '| US-ALP-001 | repetida |',
+        '### Composición',
+        '| TS-DSK-001 | z |',
+        '## M3',
+        '| US-ALP-003 | w |',
+      ].join('\n'),
+    );
+    assert.deepEqual(Object.fromEntries(plan.byId), {
+      'US-ALP-001': 'M2',
+      'US-DSK-001': 'M2-UI',
+      'TS-DSK-001': 'M2-UI',
+      'US-ALP-003': 'M3',
+    });
+    assert.deepEqual(plan.order, ['M2', 'M2-UI', 'M3']);
+  });
 });
 
 describe('model and report', () => {
