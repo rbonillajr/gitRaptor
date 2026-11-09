@@ -2,10 +2,10 @@
 id: US-DSK-004
 title: "El usuario ve en vivo qué agente trabaja en cada copia de su repo y cuál pide atención"
 type: us
-status: ready
+status: implemented
 priority: high
 created: 2026-10-28
-updated: 2026-11-08
+updated: 2026-11-09
 feature: desktop
 source: inline
 decision: "Decisión de Rene del 2026-11-08 (aceptación de las recomendaciones, Q-DSK-7 a Q-DSK-20), ver CTX-DSK-001 § 11"
@@ -84,3 +84,7 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 
 - **Diseño:** [design-flow.md](../design/design-flow.md) (DSF-DSK-001), vista de la flota.
 - **Dev Spec:** [DS-US-DSK-004](../dev-specs/US-DSK-004-flota-en-vivo.md) (`spec-ready`, 2026-11-08).
+
+## Estado de implementación
+
+Implementado en: PR #341 (T001 a T006 de la Dev Spec). Pendiente de la verificación manual en macOS con el motor real (T007): dos worktrees con dos sesiones de Claude Code, un commit que cambia su tarjeta sin recargar, un repo sin agentes y el cambio de repo en el árbol.
