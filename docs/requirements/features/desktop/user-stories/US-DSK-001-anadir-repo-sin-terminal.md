@@ -2,12 +2,13 @@
 id: US-DSK-001
 title: "El novato añade su repo a GitRaptor desde la app sin abrir una terminal"
 type: us
-status: draft
+status: ready
 priority: high
 created: 2026-10-28
-updated: 2026-10-28
+updated: 2026-11-08
 feature: desktop
 source: inline
+decision: "Decisión de Rene del 2026-11-08 (aceptación de las recomendaciones, Q-DSK-7 a Q-DSK-20), ver CTX-DSK-001 § 11"
 related:
   context:
     - CTX-DSK-001
@@ -31,7 +32,7 @@ tags:
 
 **Como** desarrollador novato que trabaja con agentes, **quiero** elegir una carpeta de mi disco o un repo que GitRaptor ya encontró y que pase a estar observado, **para** tener historial y "Deshacer" de todo lo que pase en él desde el primer minuto.
 
-**Valor**: BR-27 (UI-1, Must); BR-01. Nivel **UI-1**.
+**Valor**: BR-27 (UI-1, Must); BR-01. Nivel **UI-1**. Plataforma: macOS (Q-DSK-12, decisión de Rene del 2026-11-08; Windows en M3).
 
 ## Reglas
 
@@ -43,7 +44,7 @@ tags:
 
 - **Reutiliza**: US-GRP-001 (añadir y ver el estado), US-GRP-015 (primer repo tras instalar), US-GRP-020 y US-GRP-022 (repos descubiertos); `repo.add`, `repo.locate`, `scope.snapshot`.
 - **Qué falta en el motor**: DEP-DSK-1, la prueba de presencia humana para un comando reservado lanzado desde la app (sin ella, la app muestra y deja copiar `raptor repo add <ruta>` y detecta el repo cuando aparece); DEP-DSK-2, la identidad de la app ante el daemon. Ambas transversal (lo define el Arquitecto).
-- **Decisión pendiente**: Q-DSK-15.
+- **Decisión de Rene (2026-11-08, Q-DSK-15 y Q-DSK-17)**: "sin terminal" espera al factor del SO (SPIKE-GRD-002 se ejecuta ya, dentro de UI-1); mientras tanto, la app muestra el comando para copiar.
 
 ## Criterios de Aceptación
 

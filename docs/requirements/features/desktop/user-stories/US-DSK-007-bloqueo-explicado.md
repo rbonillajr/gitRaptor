@@ -2,12 +2,13 @@
 id: US-DSK-007
 title: "El usuario entiende por qué GitRaptor frenó una operación y cómo hacerla a conciencia"
 type: us
-status: draft
+status: ready
 priority: high
 created: 2026-10-28
-updated: 2026-10-28
+updated: 2026-11-08
 feature: desktop
 source: inline
+decision: "Decisión de Rene del 2026-11-08 (aceptación de las recomendaciones, Q-DSK-7 a Q-DSK-20), ver CTX-DSK-001 § 11"
 related:
   context:
     - CTX-DSK-001
@@ -34,20 +35,20 @@ tags:
 
 **Como** desarrollador novato con un repo protegido, **quiero** ver cada operación que GitRaptor frenó, quién la intentó, qué regla la frenó y qué puedo hacer, **para** confiar en la protección sin quedarme atascado cuando la operación sí era la que yo quería.
 
-**Valor**: BR-27 (UI-1, Must); BR-11, BR-12. Nivel **UI-1**.
+**Valor**: BR-27 (UI-1, Must); BR-11, BR-12. Nivel **UI-1**. Plataforma: macOS (Q-DSK-12, decisión de Rene del 2026-11-08; Windows en M3).
 
 ## Reglas
 
 - Las de US-CKP-019: el motivo se explica en lenguaje llano con la regla que lo frenó y quién lo intentó.
 - La excepción consciente es un comando reservado al humano que relaja una regla, con anuncio, ventana cancelable y auditoría (D5, D10; ADR-GRD-007). La app no la hace con un control más débil que la terminal (Q-DSK-3).
-- En UI-1 la app explica el bloqueo y entrega el comando exacto de la excepción para la terminal (recomendación de Q-DSK-9, **pendiente de Rene**).
+- En UI-1 la app explica el bloqueo y muestra el comando exacto `raptor guard exec` para copiarlo en la terminal (decisión de Rene del 2026-11-08, Q-DSK-9); la excepción dentro de la app llega cuando exista el factor del SO.
 - Un agente nunca obtiene una excepción a través de la app.
 
 ## Dependencias
 
 - **Reutiliza**: US-CKP-019 (DS-US-CKP-019), US-GRD-005 (registro de bloqueos), US-GRD-006 (excepción consciente, `raptor guard exec`), US-GRD-008 (ramas y rutas protegidas); `guard.log`, `guard.status`, `audit.list`, `reserved.audit`.
 - **Historias**: US-DSK-002 (el repo está protegido).
-- **Qué falta en el motor**: si Rene elige hacer la excepción dentro de la app (Q-DSK-9 opción a), DEP-DSK-1. transversal (lo define el Arquitecto).
+- **Qué falta en el motor**: DEP-DSK-1, el factor del SO, para hacer la excepción dentro de la app, que llega después de UI-1. transversal (lo define el Arquitecto).
 
 ## Criterios de Aceptación
 

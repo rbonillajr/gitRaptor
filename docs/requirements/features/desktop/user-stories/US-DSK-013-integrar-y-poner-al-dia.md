@@ -2,12 +2,13 @@
 id: US-DSK-013
 title: "El usuario integra o pone al día la rama de un agente desde la app y puede deshacerlo"
 type: us
-status: draft
+status: ready
 priority: high
 created: 2026-10-28
-updated: 2026-10-28
+updated: 2026-11-08
 feature: desktop
 source: inline
+decision: "Decisión de Rene del 2026-11-08 (aceptación de las recomendaciones, Q-DSK-7 a Q-DSK-20), ver CTX-DSK-001 § 11"
 related:
   context:
     - CTX-DSK-001
@@ -35,7 +36,7 @@ tags:
 
 **Como** usuario que revisó el trabajo de un agente, **quiero** integrarlo en la rama base o ponerlo al día sobre ella desde la app, viendo antes qué va a pasar, **para** cerrar el ciclo del agente sin la terminal y con la opción de volver atrás.
 
-**Valor**: BR-27 (UI-2, Must); BR-07. Nivel **UI-2**. Imprescindible.
+**Valor**: BR-27 (UI-2, Must); BR-07. Nivel **UI-2**. Imprescindible. Entra antes de v0.1.0 (Q-DSK-10, decisión de Rene del 2026-11-08).
 
 ## Reglas
 

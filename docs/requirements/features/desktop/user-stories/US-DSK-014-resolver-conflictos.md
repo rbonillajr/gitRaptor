@@ -2,12 +2,13 @@
 id: US-DSK-014
 title: "El usuario resuelve un conflicto de merge dentro de la app y termina la integración"
 type: us
-status: draft
+status: ready
 priority: medium
 created: 2026-10-28
-updated: 2026-10-28
+updated: 2026-11-08
 feature: desktop
 source: inline
+decision: "Decisión de Rene del 2026-11-08 (aceptación de las recomendaciones, Q-DSK-7 a Q-DSK-20), ver CTX-DSK-001 § 11"
 related:
   context:
     - CTX-DSK-001

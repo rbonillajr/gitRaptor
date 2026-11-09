@@ -3,7 +3,7 @@
 > Índice maestro de GitRaptor. Agrupa las Épicas y, dentro de ellas, las Features. Cada Feature enlaza a su `context.md` en `docs/requirements/features/<feature>/`.
 > Fuente del alcance: [BRD-GRP-001](../business/gitraptor-documento-de-negocio.md) § 6.
 > Estado de cada ficha, por feature y por hito: [release-status.md](release-status.md), generado con `node tools/status/release-status.mjs` desde el frontmatter de las fichas (no se edita a mano; docs-lint falla si está desactualizado).
-> Hitos y control de estado: [plan de releases](release-plan.md) (M1, M2, M3 y M4 = v0.1.0, con criterio de salida, avance y fecha estimada por velocidad real; propuesto el 2026-10-08, pendiente de la aprobación de Rene Bonilla).
+> Hitos y control de estado: [plan de releases](release-plan.md) (M1, M2, M2-UI, M3 y M4 = v0.1.0, con criterio de salida, avance y fecha estimada por velocidad real; propuesto el 2026-10-08, pendiente de la aprobación de Rene Bonilla).
 
 ---
 
@@ -51,6 +51,13 @@
     -   **Historias**: [user-stories.md](features/mcp/user-stories.md) (19 historias expandidas en `features/mcp/user-stories/`, 2026-10-04, en 5 olas según Q-MCP-19; requerimiento aprobado por Rene Bonilla el 2026-10-05. 18 esperan ADR-MCP-001 (bloqueo de arquitectura, DEP-MCP-1; US-MCP-002 solo espera DEP-MCP-3 y DEP-MCP-4); las escrituras esperan además ADR-CKP-002 (propuesto). Bloqueo de producto: US-MCP-014 por la cola de confirmación US-GRD-015. Desbloquean US-GRD-016)
     -   **Implementación (2026-10-08)**: US-MCP-001, 002, 003, 005 y 008 implementadas; US-MCP-004 implementada (#216 y, para la base "pendiente de confirmar", el PR de US-GRD-014 del 2026-10-21; Linux y Windows pendientes, XP-39); INF-MCP-001 parcialmente (#224: corpus, arnés y gate; casos de herramientas futuras pendientes); US-MCP-013 parcialmente (#267: contrato y ejecutor hechos; aceptación de extremo a extremo en US-MCP-009); US-MCP-009 y US-MCP-010 parcialmente (2026-10-27, PR #289: `safe_commit` y sus rutas hechos; abiertos US-MCP-007 y US-MCP-011, que se liberan con ellas, y Linux y Windows, XP-47 y XP-46). US-MCP-016 implementada (2026-11-08, PR #321, sin certificar: `check_conflicts`, con 15 casos nuevos en el corpus; Linux y Windows pendientes). Detalle y PR en la sección "Estado de la implementación" de cada ficha.
     -   **Status**: In Progress
+
+*   **F-001-06**: App de escritorio para novatos (BR-27, D7)
+    -   **Contexto**: [context.md](features/desktop/context.md) (CTX-DSK-001; decisiones Q-DSK-7 a Q-DSK-20 aceptadas por Rene el 2026-11-08, en `ready`). La app (Tauri + React) es un cliente más del motor por el mismo canal que la TUI y la CLI; plataforma macOS en UI-1, Windows en M3.
+    -   **Historias**: [user-stories.md](features/desktop/user-stories.md) (18 historias en `features/desktop/user-stories/`: UI-1 = US-DSK-001 a 008; UI-2 = US-DSK-009 a 018, con 009, 010, 012, 013 y 015 antes de v0.1.0). Diseño de UI-1: [design-flow.md](features/desktop/design/design-flow.md) (propuesta B1, "grafito glass").
+    -   **Hito**: M2-UI, paralelo a M2 y sin bloquear su cierre ([release-plan.md](release-plan.md#hito-paralelo-m2-ui-app-de-escritorio-ui-1)). SPIKE-GRD-002 (macOS) se ejecuta ya, dentro de UI-1.
+    -   **Pendiente de Rene**: comprar la cuenta de Apple Developer para v0.1.0 (Q-DSK-16).
+    -   **Status**: Ready (historias en `ready`, sin Dev Spec; faltan las enablers del Arquitecto, DEP-DSK-1 a 7)
 
 ---
 
@@ -223,7 +230,7 @@ flowchart LR
 
 **Alcance.** Sin fichas nuevas: el pipeline extiende INF-GRP-003 e INF-GRP-004 (que siguen en M4 para la release firmada) y se documenta en la enmienda del 2026-10-28 de ADR-GRP-014. La experiencia mínima está en [`docs/guia/primeros-pasos.md`](../guia/primeros-pasos.md) y su [versión en inglés](../guia/primeros-pasos.en.md).
 
-**Recorte de Shoulds de M2 (propuesto, pendiente de Rene).** Para absorber la app de escritorio y las alphas sin mover la fecha de M2, el PO y el Scrum Master proponen aplazar a después de v0.1.0 la tanda A (US-GRD-015, US-CKP-023, US-MCP-014, US-GRD-013, US-CKP-011, US-TMC-008, US-TMC-014 y US-TMC-022, unos 9,3 días centrales) y, solo si hace falta, la tanda B (US-CKP-004, US-CKP-013 y US-GRP-006, unos 3,5 días). Ninguna ficha sale del plan hasta que Rene decida; el detalle y el impacto en días están en [release-plan.md](release-plan.md#propuesta-de-recorte-de-shoulds-de-m2-pendiente-de-rene).
+**Recorte de Shoulds de M2 (aplicado el 2026-11-08, decisión de Rene).** Rene aceptó la tanda 1 de [context.md de la app § 10](features/desktop/context.md) (la tanda 2 no se aplica). Salen de M2: la cola de confirmación (US-GRD-015, US-CKP-023, US-MCP-014) a después de v0.1.0 (Fase 2); US-GRD-013, US-TMC-022 y US-GRP-016 a M3; US-CKP-011, US-TMC-008, US-GRP-006 y US-GRP-013 a v0.1.0 (M4). US-TMC-010 no se mueve: está implementada (#319). M2 pasa de 112 a 102 fichas y su criterio de salida 1 dice "o Rene lo sacó **de M2**". Detalle, dudas abiertas y estado comprobado en `main`: [release-plan.md](release-plan.md#recorte-de-shoulds-de-m2-aplicado).
 
 ### Decisiones registradas
 

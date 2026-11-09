@@ -2,12 +2,13 @@
 id: US-DSK-005
 title: "El usuario ve crecer la rama de cada agente como un carril sobre la rama base"
 type: us
-status: draft
+status: ready
 priority: high
 created: 2026-10-28
-updated: 2026-10-28
+updated: 2026-11-08
 feature: desktop
 source: inline
+decision: "Decisión de Rene del 2026-11-08 (aceptación de las recomendaciones, Q-DSK-7 a Q-DSK-20), ver CTX-DSK-001 § 11"
 related:
   context:
     - CTX-DSK-001
@@ -31,7 +32,7 @@ tags:
 
 **Como** usuario con varios agentes en paralelo, **quiero** ver un carril por agente que nace en la rama base y crece con cada commit, **para** entender de un vistazo cuánto se ha alejado cada agente y cuándo conviene integrar su trabajo.
 
-**Valor**: BR-27 (UI-1, Must); BR-05. Nivel **UI-1**.
+**Valor**: BR-27 (UI-1, Must); BR-05. Nivel **UI-1**. Plataforma: macOS (Q-DSK-12, decisión de Rene del 2026-11-08; Windows en M3).
 
 ## Reglas
 

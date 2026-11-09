@@ -2,12 +2,13 @@
 id: US-DSK-004
 title: "El usuario ve en vivo qué agente trabaja en cada copia de su repo y cuál pide atención"
 type: us
-status: draft
+status: ready
 priority: high
 created: 2026-10-28
-updated: 2026-10-28
+updated: 2026-11-08
 feature: desktop
 source: inline
+decision: "Decisión de Rene del 2026-11-08 (aceptación de las recomendaciones, Q-DSK-7 a Q-DSK-20), ver CTX-DSK-001 § 11"
 related:
   context:
     - CTX-DSK-001
@@ -32,7 +33,7 @@ tags:
 
 **Como** usuario que deja a varios agentes trabajando, **quiero** una tarjeta por copia de trabajo con su agente, su estado, lo que cambió y cuánto se aleja de la base, actualizada sola, **para** saber sin preguntar a cada agente cuál terminó, cuál sigue y cuál necesita que yo mire.
 
-**Valor**: BR-27 (UI-1, Must); BR-04. Nivel **UI-1**. Patrón P4 del [benchmark](../research/benchmark-2026-10.md).
+**Valor**: BR-27 (UI-1, Must); BR-04. Nivel **UI-1**. Patrón P4 del [benchmark](../research/benchmark-2026-10.md). Plataforma: macOS (Q-DSK-12, decisión de Rene del 2026-11-08; Windows en M3).
 
 ## Reglas
 

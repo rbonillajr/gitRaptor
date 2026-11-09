@@ -2,12 +2,13 @@
 id: US-DSK-002
 title: "El novato protege su repo con un clic, sabe qué se instaló y puede quitarlo"
 type: us
-status: draft
+status: ready
 priority: high
 created: 2026-10-28
-updated: 2026-10-28
+updated: 2026-11-08
 feature: desktop
 source: inline
+decision: "Decisión de Rene del 2026-11-08 (aceptación de las recomendaciones, Q-DSK-7 a Q-DSK-20), ver CTX-DSK-001 § 11"
 related:
   context:
     - CTX-DSK-001
@@ -32,7 +33,7 @@ tags:
 
 **Como** desarrollador novato, **quiero** activar la protección de mi repo sabiendo qué cambia en él y cómo deshacerlo, **para** que un agente no pueda hacer force-push ni tocar las ramas protegidas sin que yo lo decida.
 
-**Valor**: BR-27 (UI-1, Must); BR-11 y BR-12. Nivel **UI-1**.
+**Valor**: BR-27 (UI-1, Must); BR-11 y BR-12. Nivel **UI-1**. Plataforma: macOS (Q-DSK-12, decisión de Rene del 2026-11-08; Windows en M3).
 
 ## Reglas
 
@@ -47,7 +48,7 @@ tags:
 - **Reutiliza**: US-GRD-001 (bloqueo del force-push), US-GRD-003 (retirar sin rastro), US-GRD-004 (aviso de protección caída), US-GRD-020 (estado de la protección); `guard.plan`, `guard.status`, `guard.install`, `guard.decline`.
 - **Historias**: US-DSK-001 (el repo ya está observado).
 - **Qué falta en el motor**: DEP-DSK-1 (prueba de presencia humana desde la app); retirar la protección también es comando reservado. transversal (lo define el Arquitecto).
-- **Decisión pendiente**: Q-DSK-15.
+- **Decisión de Rene (2026-11-08, Q-DSK-15 y Q-DSK-17)**: "sin terminal" espera al factor del SO (SPIKE-GRD-002 se ejecuta ya, dentro de UI-1); mientras tanto, la app muestra el comando para copiar.
 
 ## Criterios de Aceptación
 
