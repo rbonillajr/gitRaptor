@@ -158,9 +158,14 @@ fn since_is_served_and_agent_is_still_not_implemented() {
         "TMC010-SERVED: with nothing in the stack, since is rejected as nothing-to-undo"
     );
 
-    // `agent` is served since US-TMC-011; `operation_id` still has no story.
+    // `agent` is served since US-TMC-011; `operation_id` still has no story. The id is one the
+    // repo knows (the rejected request above): an unknown one is `NOT_FOUND` first.
+    let known = served.data.as_ref().expect("the rejection carries data")["operation_id"]
+        .as_str()
+        .expect("the rejected request is in the oplog")
+        .to_owned();
     let mut p = params(&r.worktree, None);
-    p["operation_id"] = json!("0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0");
+    p["operation_id"] = json!(known);
     let by_id = rpc_error(c.call(gitraptor_api::methods::TM_UNDO, p));
     assert_eq!(by_id.code, code::NOT_IMPLEMENTED);
     assert_eq!(by_id.data.unwrap()["implemented_by"], "unassigned");

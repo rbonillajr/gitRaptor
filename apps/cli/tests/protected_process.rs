@@ -60,7 +60,7 @@ fn rpc_client_entry() {
         answers.push(
             match client.call::<_, Value>(call[0].as_str().unwrap(), call[1].clone()) {
                 Ok(v) => json!({ "ok": v }),
-                Err(ClientError::Rpc(e)) => json!({ "code": e.code }),
+                Err(ClientError::Rpc(e)) => json!({ "code": e.code, "message": e.message }),
                 Err(e) => json!({ "other": e.to_string() }),
             },
         );
@@ -222,7 +222,7 @@ fn a_declared_identity_changes_nothing() {
             [methods::TM_UNDO, { "human": true }],
             [methods::REQUESTER_RESOLVE, {}],
             // Attributed over MCP: an undo by operation id passes the requester
-            // check and stops where it has no story yet.
+            // check; it stops later (this client's folder is no observed repo).
             [methods::TM_UNDO, { "operation_id": "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0" }],
         ]),
         true,
@@ -232,7 +232,7 @@ fn a_declared_identity_changes_nothing() {
     assert!(is_claude(
         &serde_json::from_value(answers[2]["ok"]["actor"].clone()).unwrap()
     ));
-    assert_eq!(answers[3]["code"], code::NOT_IMPLEMENTED);
+    let attributed = answers[3].clone();
 
     // Unattributed over MCP, the same undo is refused (TQ-7 → a).
     let answers = fx.ask(
@@ -241,4 +241,8 @@ fn a_declared_identity_changes_nothing() {
         false,
     );
     assert_eq!(answers[0]["code"], code::SCOPE_REFUSED);
+    assert!(
+        attributed["code"] != code::SCOPE_REFUSED || attributed["message"] != answers[0]["message"],
+        "the attributed requester is not refused as unattributed: {attributed}"
+    );
 }
