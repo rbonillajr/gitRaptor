@@ -1,0 +1,176 @@
+{
+  "source": [
+    "docs/requirements/features/desktop/dev-specs/TS-DSK-003-primitivas-design-system-escritorio.md",
+    "docs/requirements/features/desktop/technical-stories/TS-DSK-003-primitivas-design-system-escritorio.md"
+  ],
+  "goal": {
+    "intent": "Que US-DSK-003 a 008 compongan sus pantallas con un juego común de 14 primitivas del design system B1, accesibles y hechas solo con los tokens de glass.css, sin que cada historia invente sus controles.",
+    "endState": "apps/desktop/src/ui exporta Button, IconButton, Chip, Pill, StatusDot, RepoBadge, SegmentedControl, Toggle, Tree, Menu, Popover, Toast, Dialog, Tooltip y Table con sus estados, teclado, roles, i18n en/es, reduced motion y axe sin violaciones; glass.css trae los tokens y el tema acotado nuevos; un catálogo ?catalog solo de desarrollo muestra todo en claro y oscuro y no existe en el build de release.",
+    "nonGoals": [
+      "No crear packages/ui, packages/ui-kit ni Storybook (UI-2).",
+      "No añadir dependencias de UI ni tocar apps/desktop/package.json ni pnpm-lock.yaml.",
+      "No tocar la CSP, la lista de comandos IPC (ADR-GRP-017), src-tauri ni crates/.",
+      "No construir la toolbar, SplitButton, virtualización de árbol/grilla ni las pantallas de US-DSK."
+    ]
+  },
+  "criteria": [
+    {
+      "id": "TS003-TOKENS",
+      "statement": "glass.css se genera con los tokens nuevos (scrim, accent-hover, live-bg, size-ring, size-dialog-width, z-*) y los bloques acotados [data-theme] coherentes con :root, y los pares de contraste de la spec cumplen su umbral en claro y oscuro",
+      "verify": "node --test packages/design-tokens/test/glass.test.mjs packages/design-tokens/test/glass-pairs.test.mjs",
+      "layer": "runtime",
+      "tests": [
+        "packages/design-tokens/test/glass.test.mjs",
+        "packages/design-tokens/test/glass-pairs.test.mjs"
+      ]
+    },
+    {
+      "id": "TS003-HOOKS",
+      "statement": "Los hooks useFocusTrap, useRovingFocus, useDismiss, useAnchoredPosition y useTypeahead cumplen su comportamiento (trampa de foco, foco itinerante, cierre por Escape y clic fuera, posición, búsqueda por letras)",
+      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/ui/hooks/hooks.test.tsx",
+      "layer": "runtime",
+      "tests": [
+        "apps/desktop/src/ui/hooks/hooks.test.tsx"
+      ]
+    },
+    {
+      "id": "TS003-BASICS",
+      "statement": "Button, IconButton, Chip, Pill, StatusDot y RepoBadge exponen rol, nombre, variantes y estados (deshabilitado enfocable, pendiente, seleccionado, quitable) en en/es, sin violaciones de axe",
+      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/ui/Button.test.tsx src/ui/IconButton.test.tsx src/ui/Chip.test.tsx src/ui/Pill.test.tsx src/ui/StatusDot.test.tsx src/ui/RepoBadge.test.tsx",
+      "layer": "runtime",
+      "tests": [
+        "apps/desktop/src/ui/Button.test.tsx",
+        "apps/desktop/src/ui/IconButton.test.tsx",
+        "apps/desktop/src/ui/Chip.test.tsx",
+        "apps/desktop/src/ui/Pill.test.tsx",
+        "apps/desktop/src/ui/StatusDot.test.tsx",
+        "apps/desktop/src/ui/RepoBadge.test.tsx"
+      ]
+    },
+    {
+      "id": "TS003-CONTROLS",
+      "statement": "SegmentedControl (radiogroup con una parada de Tab y flechas) y Toggle (switch con etiqueta, descripción y desactivado) cumplen su teclado y sus roles, sin violaciones de axe",
+      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/ui/SegmentedControl.test.tsx src/ui/Toggle.test.tsx",
+      "layer": "runtime",
+      "tests": [
+        "apps/desktop/src/ui/SegmentedControl.test.tsx",
+        "apps/desktop/src/ui/Toggle.test.tsx"
+      ]
+    },
+    {
+      "id": "TS003-TREE-TABLE",
+      "statement": "Tree implementa la navegación por teclado WAI-ARIA del árbol (niveles, chevron, type-ahead) y Table la del grid con columnas configurables y grid desactivado (aria-disabled, Enter no selecciona), sin violaciones de axe",
+      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/ui/Tree.test.tsx src/ui/Table.test.tsx",
+      "layer": "runtime",
+      "tests": [
+        "apps/desktop/src/ui/Tree.test.tsx",
+        "apps/desktop/src/ui/Table.test.tsx"
+      ]
+    },
+    {
+      "id": "TS003-OVERLAYS",
+      "statement": "Tooltip, Menu, Popover, Dialog y Toast cumplen foco, cierre y teclado: el Dialog confirm abre con el foco en Cancelar y Enter ahí no confirma, atrapa Tab, cierra con Escape y devuelve el foco; el Toast no roba el foco y respeta la pausa; sin violaciones de axe",
+      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/ui/Tooltip.test.tsx src/ui/Menu.test.tsx src/ui/Popover.test.tsx src/ui/Dialog.test.tsx src/ui/Toast.test.tsx",
+      "layer": "runtime",
+      "tests": [
+        "apps/desktop/src/ui/Tooltip.test.tsx",
+        "apps/desktop/src/ui/Menu.test.tsx",
+        "apps/desktop/src/ui/Popover.test.tsx",
+        "apps/desktop/src/ui/Dialog.test.tsx",
+        "apps/desktop/src/ui/Toast.test.tsx"
+      ]
+    },
+    {
+      "id": "TS003-TOKEN-LINT",
+      "statement": "Ningún archivo de apps/desktop/src/ui contiene colores, medidas ni radios literales ni ramas por tema, y con prefers-reduced-motion toda transición queda anulada",
+      "verify": "pnpm --filter @gitraptor/desktop exec vitest run tests/ui-tokens-lint.test.ts tests/ui-motion.test.ts",
+      "layer": "runtime",
+      "tests": [
+        "apps/desktop/tests/ui-tokens-lint.test.ts",
+        "apps/desktop/tests/ui-motion.test.ts"
+      ]
+    },
+    {
+      "id": "TS003-BOUNDARIES",
+      "statement": "ESLint mantiene src/ui puro (sin client, state ni Tauri) y solo main.tsx puede importar src/dev",
+      "verify": "pnpm --filter @gitraptor/desktop exec vitest run tests/eslint-v5.test.ts",
+      "layer": "runtime",
+      "tests": [
+        "apps/desktop/tests/eslint-v5.test.ts"
+      ]
+    },
+    {
+      "id": "TS003-I18N",
+      "statement": "Las 21 claves ui.* de la Dev Spec existen en en y es con la misma forma (paridad)",
+      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/i18n/catalog.test.ts",
+      "layer": "runtime",
+      "tests": [
+        "apps/desktop/src/i18n/catalog.test.ts"
+      ]
+    },
+    {
+      "id": "TS003-CATALOG",
+      "statement": "El catálogo de desarrollo pinta todas las primitivas en un panel oscuro y otro claro a la vez, sin violaciones de axe, con conmutador de reduced motion y cambio de idioma",
+      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/dev/catalog/Catalog.test.tsx",
+      "layer": "runtime",
+      "tests": [
+        "apps/desktop/src/dev/catalog/Catalog.test.tsx"
+      ]
+    },
+    {
+      "id": "TS003-CATALOG-EXCLUDED",
+      "statement": "El build de producción de apps/desktop no contiene el catálogo: ningún archivo de dist lleva el centinela gr-dev-catalog ni un nombre con catalog",
+      "verify": "pnpm --filter @gitraptor/desktop exec vitest run tests/catalog-excluded.test.ts",
+      "layer": "runtime",
+      "tests": [
+        "apps/desktop/tests/catalog-excluded.test.ts"
+      ]
+    }
+  ],
+  "constraints": {
+    "deny_paths": [
+      "apps/desktop/package.json",
+      "pnpm-lock.yaml",
+      "apps/desktop/src-tauri/**",
+      "crates/**",
+      "Cargo.lock",
+      "docs/ARTIFACTS.md"
+    ],
+    "allow_dependency_changes": false
+  },
+  "suite": {
+    "command": "pnpm --filter @gitraptor/tokens test && pnpm --filter @gitraptor/desktop test"
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 300000,
+    "suiteTimeoutMs": 900000,
+    "maxOutsidePlan": 5
+  },
+  "hops": {
+    "design": {
+      "agent": "nassa-dev-web:web-architect",
+      "model": "sonnet"
+    },
+    "critic": {
+      "agent": "nassa-core:plan-critic",
+      "model": "opus"
+    },
+    "tester": {
+      "agent": "nassa-core:criterion-tester",
+      "model": "sonnet"
+    },
+    "build": {
+      "agent": "nassa-dev-web:web-expert",
+      "model": "sonnet"
+    },
+    "review": {
+      "agent": "nassa-dev-web:web-code-reviewer",
+      "model": "opus"
+    },
+    "conformance": {
+      "agent": "nassa-dev-web:web-code-reviewer",
+      "model": "sonnet"
+    }
+  }
+}
