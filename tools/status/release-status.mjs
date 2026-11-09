@@ -19,7 +19,9 @@
 // Milestones: a card's `milestone` frontmatter wins. Otherwise, when the release plan exists, a
 // card belongs to the first milestone whose section lists its id in a table row. A milestone
 // section is a `##`/`###` heading that starts with "M<n>" or "Hito M<n>"; it ends at the next
-// heading of the same or higher level. Prose mentions ("fuera de M1") do not count: only rows.
+// heading of the same or higher level. A parallel milestone keeps its suffix (`## Hito paralelo
+// M2-UI` is `M2-UI`, never `M2`) and sorts right after its base milestone. Prose mentions
+// ("fuera de M1") do not count: only rows.
 // Without a plan and without `milestone` fields, the report groups by feature and status only.
 //
 // `--check` (and the write) also fail on a status outside STATUS_ORDER, a likely typo; a status
@@ -109,7 +111,7 @@ export function parseReleasePlan(text) {
     const h = /^(#{1,6})\s+(.*)$/.exec(line);
     if (h) {
       const level = h[1].length;
-      const ms = /^(?:Hito\s+)?(M\d+)\b/i.exec(h[2].trim());
+      const ms = /^(?:Hito\s+(?:paralelo\s+)?)?(M\d+(?:-[A-Z][A-Z0-9]*)?)(?![\w-])/i.exec(h[2].trim());
       if (ms && level >= 2 && level <= 3) {
         current = { name: ms[1].toUpperCase(), level };
         if (!order.includes(current.name)) order.push(current.name);
@@ -152,7 +154,7 @@ function compareStatus(a, b) {
 }
 
 function compareMilestone(a, b) {
-  return Number(a.slice(1)) - Number(b.slice(1)) || a.localeCompare(b);
+  return parseInt(a.slice(1), 10) - parseInt(b.slice(1), 10) || a.localeCompare(b);
 }
 
 function countByStatus(items) {
