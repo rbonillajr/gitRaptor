@@ -324,6 +324,10 @@ fn nothing_to_redo_changes_nothing() {
 /// The undone work is an agent's commit taken back by an undo by agent: in this world a plain undo
 /// of a raw commit has no captured point to go back to. The commit that follows is the test's own.
 #[test]
+#[cfg_attr(
+    target_os = "macos",
+    ignore = "intermittent on the macOS CI runner: the simulated agent commit is not attributed under load (TD-GRP-007); still runs on Linux and Windows"
+)]
 fn a_new_commit_invalidates_the_redo() {
     let w = us_tmc_011_common::world();
     let mut claude1 = w.spawn_agent();
@@ -447,6 +451,10 @@ fn an_undo_after_a_redo_takes_back_the_operation_again() {
 /// claude-1 itself undoes its own work and redoes it, then asks to redo again (its own session: the
 /// requester write burst is per requester).
 #[test]
+#[cfg_attr(
+    target_os = "macos",
+    ignore = "intermittent on the macOS CI runner: the simulated agent commit is not attributed under load (TD-GRP-007); still runs on Linux and Windows"
+)]
 fn a_redo_right_after_an_undo_is_not_invalidated_by_its_echo() {
     let w = us_tmc_011_common::world();
     let mut claude1 = w.spawn_agent();
