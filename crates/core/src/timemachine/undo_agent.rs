@@ -420,6 +420,7 @@ pub(super) fn plan(input: &AgentPlanInput<'_, '_>) -> Result<Planned, PlanRefusa
                 snaps,
                 input.raw.floor,
                 &key,
+                &wt_key,
                 &set,
                 &own_sessions,
             );
@@ -827,7 +828,8 @@ pub(super) fn is_excluded(exclusions: &[super::oplog::Exclusion], key: &str, pat
 /// any other anchored echo of GitRaptor attributed to the requester of its operation.
 ///
 /// An event is dropped only when it falls in the anchored window of such an operation, in no
-/// window (anchored or not) of any other operation of `key` from `floor` on, and its raw actor
+/// window (anchored or not) of any other operation of `key` (snapshots name the worktree by
+/// `wt_key`) from `floor` on, and its raw actor
 /// is unattributed or one of `own_sessions`. Anything in doubt counts as it is, so the rule
 /// refuses more, never less. The order of `events` is kept.
 pub(super) fn branch_rule_events(
@@ -836,6 +838,7 @@ pub(super) fn branch_rule_events(
     snaps: &[super::oplog::SnapshotView],
     floor: i64,
     key: &str,
+    wt_key: &str,
     set: &[OpRef],
     own_sessions: &BTreeSet<String>,
 ) -> Vec<RawGitEvent> {
@@ -843,7 +846,10 @@ pub(super) fn branch_rule_events(
 
     let mut anchors: HashMap<&str, i64> = HashMap::new();
     for s in snaps {
+        // A tampered or unavailable point anchors nothing: without an anchor the echo counts.
         if s.record.level == SnapshotLevel::Observation
+            && s.state.is_available()
+            && !s.tampered
             && let (Some(cause), Some(mark)) =
                 (s.record.cause_operation.as_deref(), s.record.engine_mark)
         {
@@ -853,7 +859,8 @@ pub(super) fn branch_rule_events(
     }
     let only_set = |refs: &[OpRef]| !refs.is_empty() && refs.iter().all(|r| set.contains(r));
     let qualifies = |o: &super::oplog::OperationView| -> bool {
-        if o.state != OperationState::Finished {
+        // A tampered record is never trusted as GitRaptor's own (it still counts as another).
+        if o.state != OperationState::Finished || o.tampered {
             return false;
         }
         match (&o.record.kind, &o.record.target) {
@@ -861,6 +868,7 @@ pub(super) fn branch_rule_events(
             (OperationKind::Redo, Target::Redo(undo_id)) => ops.iter().any(|u| {
                 u.record.operation_id == *undo_id
                     && u.state == OperationState::Finished
+                    && !u.tampered
                     && matches!(
                         (&u.record.kind, &u.record.target),
                         (OperationKind::Undo, Target::Undo(refs)) if only_set(refs)
@@ -889,7 +897,7 @@ pub(super) fn branch_rule_events(
                     .iter()
                     .filter(|s| {
                         s.record.seq > o.record.seq
-                            && s.record.worktrees.iter().any(|w| w == key)
+                            && s.record.worktrees.iter().any(|w| w == wt_key)
                             && s.record.cause_operation.as_deref() != Some(&o.record.operation_id)
                     })
                     .filter_map(|s| s.record.engine_mark)

@@ -12,6 +12,8 @@ use crate::timemachine::oplog::{
 
 const KEY: &str = "/repo/feat-login";
 const BRANCH: &str = "feat-login";
+/// The worktree as snapshots name it (`SnapshotRecord.worktrees`), not its path.
+const WT: &str = "wt";
 
 fn agent(name: &str) -> Requester {
     Requester::Agent {
@@ -75,7 +77,7 @@ fn anchor(cause: &str, mark: i64) -> SnapshotView {
             snapshot_id: format!("snap-{cause}"),
             seq: mark,
             level: SnapshotLevel::Observation,
-            worktrees: vec!["wt".to_owned()],
+            worktrees: vec![WT.to_owned()],
             store_ref: String::new(),
             engine_mark: Some(mark),
             cause_operation: Some(cause.to_owned()),
@@ -130,7 +132,7 @@ fn own_undo_world() -> (
 fn the_anchored_echo_of_an_undo_of_the_sets_own_work_is_dropped() {
     let (events, ops, snaps, set) = own_undo_world();
 
-    let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, &set, &own());
+    let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, WT, &set, &own());
 
     assert_eq!(
         seqs(&read),
@@ -153,7 +155,7 @@ fn the_anchored_echo_of_a_redo_of_that_undo_is_dropped_too() {
     ));
     snaps.push(anchor("R", 32));
 
-    let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, &set, &own());
+    let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, WT, &set, &own());
 
     assert_eq!(
         seqs(&read),
@@ -176,7 +178,7 @@ fn an_echo_of_another_agents_work_counts_with_its_requester() {
         agent("claude-2"),
     )];
 
-    let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, &set, &own());
+    let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, WT, &set, &own());
 
     assert_eq!(
         seqs(&read),
@@ -196,7 +198,7 @@ fn an_echo_of_an_undo_that_also_took_back_foreign_work_counts() {
     events.insert(1, event(15, BRANCH, agent("claude-2")));
     let ops = vec![undo_of("U", &[10, 15], 20, OperationState::Finished)];
 
-    let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, &set, &own());
+    let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, WT, &set, &own());
 
     assert_eq!(seqs(&read), vec![10, 15, 21], "TDTMC003-ECHO-MIXED");
 }
@@ -205,7 +207,7 @@ fn an_echo_of_an_undo_that_also_took_back_foreign_work_counts() {
 fn an_echo_without_anchor_counts_as_a_move() {
     let (events, ops, _, set) = own_undo_world();
 
-    let read = branch_rule_events(&events, &ops, &[], 0, KEY, &set, &own());
+    let read = branch_rule_events(&events, &ops, &[], 0, KEY, WT, &set, &own());
 
     assert_eq!(
         seqs(&read),
@@ -221,7 +223,7 @@ fn the_echo_of_an_unfinished_undo_counts_as_a_move() {
         let (events, _, snaps, set) = own_undo_world();
         let ops = vec![undo_of("U", &[10], 20, state)];
 
-        let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, &set, &own());
+        let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, WT, &set, &own());
 
         assert_eq!(
             seqs(&read),
@@ -236,7 +238,7 @@ fn a_move_after_the_anchor_counts_as_it_is() {
     let (mut events, ops, snaps, set) = own_undo_world();
     events.push(event(23, BRANCH, Requester::Unattributed));
 
-    let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, &set, &own());
+    let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, WT, &set, &own());
 
     assert_eq!(
         seqs(&read),
@@ -263,7 +265,7 @@ fn a_redo_of_an_undo_of_foreign_work_counts_with_its_requester() {
     ];
     snaps.push(anchor("R", 32));
 
-    let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, &set, &own());
+    let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, WT, &set, &own());
 
     assert_eq!(seqs(&read), vec![10, 15, 21, 31], "TDTMC003-ECHO-OTHER");
     assert_eq!(read[3].actor, agent("claude-2"));
@@ -274,7 +276,7 @@ fn an_operation_of_another_worktree_explains_nothing_here() {
     let (events, mut ops, snaps, set) = own_undo_world();
     ops[0].record.scope.worktrees = vec!["/repo/other".to_owned()];
 
-    let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, &set, &own());
+    let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, WT, &set, &own());
 
     assert_eq!(seqs(&read), vec![10, 21], "TDTMC003-ECHO-WORKTREE");
 }
@@ -284,7 +286,7 @@ fn another_agents_commit_inside_an_own_echo_window_counts() {
     let (mut events, ops, snaps, set) = own_undo_world();
     events.push(event(22, BRANCH, agent("claude-2")));
 
-    let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, &set, &own());
+    let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, WT, &set, &own());
 
     assert_eq!(
         seqs(&read),
@@ -307,7 +309,7 @@ fn an_echo_also_in_the_window_of_another_operation_counts() {
         agent("claude-2"),
     ));
 
-    let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, &set, &own());
+    let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, WT, &set, &own());
 
     assert_eq!(
         seqs(&read),
@@ -320,7 +322,7 @@ fn an_echo_also_in_the_window_of_another_operation_counts() {
 fn an_operation_below_the_generation_floor_explains_nothing() {
     let (events, ops, snaps, set) = own_undo_world();
 
-    let read = branch_rule_events(&events, &ops, &snaps, 100, KEY, &set, &own());
+    let read = branch_rule_events(&events, &ops, &snaps, 100, KEY, WT, &set, &own());
 
     assert_eq!(seqs(&read), vec![10, 21], "TDTMC003-ECHO-FLOOR");
 }
@@ -339,7 +341,7 @@ fn the_requester_of_an_own_undo_does_not_decide_the_echo() {
         agent("claude-2"),
     )];
 
-    let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, &set, &own());
+    let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, WT, &set, &own());
 
     assert_eq!(
         seqs(&read),
@@ -354,7 +356,7 @@ fn an_echo_whose_raw_actor_is_the_selected_agent_is_dropped() {
     let (mut events, ops, snaps, set) = own_undo_world();
     events[1].actor = agent("claude-1");
 
-    let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, &set, &own());
+    let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, WT, &set, &own());
 
     assert_eq!(
         seqs(&read),
@@ -370,7 +372,7 @@ fn an_echo_of_an_undo_broader_than_the_current_set_counts() {
     events.insert(1, event(11, BRANCH, agent("claude-1")));
     let ops = vec![undo_of("U", &[10, 11], 20, OperationState::Finished)];
 
-    let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, &set, &own());
+    let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, WT, &set, &own());
 
     assert_eq!(
         seqs(&read),
@@ -385,7 +387,7 @@ fn an_echo_of_an_undo_with_no_refs_counts() {
     let (events, _, snaps, set) = own_undo_world();
     let ops = vec![undo_of("U", &[], 20, OperationState::Finished)];
 
-    let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, &set, &own());
+    let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, WT, &set, &own());
 
     assert_eq!(
         seqs(&read),
@@ -412,7 +414,7 @@ fn the_echo_of_a_redo_of_an_unfinished_undo_counts_with_its_requester() {
     ];
     snaps.push(anchor("R", 32));
 
-    let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, &set, &own());
+    let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, WT, &set, &own());
 
     assert_eq!(
         seqs(&read),
@@ -440,7 +442,7 @@ fn the_anchored_echo_of_a_restore_counts_with_its_requester() {
     )];
     let snaps = vec![anchor("S", 22)];
 
-    let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, &set, &own());
+    let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, WT, &set, &own());
 
     assert_eq!(
         seqs(&read),
@@ -469,11 +471,92 @@ fn an_echo_also_in_the_anchored_window_of_a_foreign_undo_counts() {
     ));
     snaps.push(anchor("V", 22));
 
-    let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, &set, &own());
+    let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, WT, &set, &own());
 
     assert_eq!(
         seqs(&read),
         vec![10, 15, 21],
         "TDTMC003-ECHO-MIXED-ANCHORED: mixed is other"
     );
+}
+
+// ----- Review of the build (2026-11-09): window end and tampered records -----------------------
+
+/// A plain capture of the worktree (no cause) at `mark`: it ends an unanchored window.
+fn capture(mark: i64) -> SnapshotView {
+    let mut s = anchor("none", mark);
+    s.record.snapshot_id = format!("capture-{mark}");
+    s.record.cause_operation = None;
+    s
+}
+
+#[test]
+fn an_unanchored_window_ends_at_the_next_capture_of_the_worktree() {
+    let (events, mut ops, mut snaps, set) = own_undo_world();
+    // An interrupted operation long before, closed by a capture of the worktree at 8.
+    let mut old = undo_of("X", &[3], 5, OperationState::Interrupted);
+    old.record.seq = 5;
+    ops.insert(0, old);
+    snaps.insert(0, capture(8));
+
+    let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, WT, &set, &own());
+
+    assert_eq!(
+        seqs(&read),
+        vec![10],
+        "TDTMC003-REVIEW-WINDOW: the old window ended at 8, the echo at 21 is still the undo's"
+    );
+}
+
+#[test]
+fn a_tampered_undo_is_never_gitraptors_own() {
+    let (events, mut ops, snaps, set) = own_undo_world();
+    ops[0].tampered = true;
+
+    let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, WT, &set, &own());
+
+    assert_eq!(
+        seqs(&read),
+        vec![10, 21],
+        "TDTMC003-REVIEW-TAMPERED: it counts"
+    );
+}
+
+#[test]
+fn a_redo_of_a_tampered_undo_is_never_gitraptors_own() {
+    let (mut events, mut ops, mut snaps, set) = own_undo_world();
+    events.push(event(31, BRANCH, Requester::Unattributed));
+    ops.push(op(
+        "R",
+        OperationKind::Redo,
+        Target::Redo("U".to_owned()),
+        30,
+        OperationState::Finished,
+        agent("claude-1"),
+    ));
+    snaps.push(anchor("R", 32));
+    ops[0].tampered = true;
+
+    let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, WT, &set, &own());
+
+    assert_eq!(seqs(&read), vec![10, 21, 31], "TDTMC003-REVIEW-TAMPERED");
+}
+
+#[test]
+fn a_tampered_or_unavailable_anchor_anchors_nothing() {
+    for spoil in [
+        |s: &mut SnapshotView| s.tampered = true,
+        |s: &mut SnapshotView| s.state = SnapshotState::Discarded,
+    ] {
+        let (events, ops, mut snaps, set) = own_undo_world();
+        spoil(&mut snaps[0]);
+
+        let read = branch_rule_events(&events, &ops, &snaps, 0, KEY, WT, &set, &own());
+
+        assert_eq!(
+            seqs(&read),
+            vec![10, 21],
+            "TDTMC003-REVIEW-ANCHOR: without an anchor it counts"
+        );
+    }
 }
