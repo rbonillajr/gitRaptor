@@ -77,6 +77,7 @@ DSK-005 ─► DSK-017 ─► DSK-018
 ```
 
 - **Paralelo en UI-1**: tras DSK-004, las ramas DSK-005, DSK-006, DSK-007 y DSK-008 son independientes. DSK-001 y DSK-002 van en paralelo con la flota, pero su versión "sin terminal" espera al factor del SO (DEP-DSK-1, Q-DSK-15); SPIKE-GRD-002 se ejecuta ya.
+- **Habilitadoras (2026-11-08)**: TS-DSK-001 → TS-DSK-002 → US-DSK-003 → US-DSK-004. US-DSK-001, 002 y 006 (las primeras que escriben) esperan además a TS-GRP-009, la clase de cliente `desktop` con el perfil `mcp` cuando un agente abre la app (`blocked_by` en su frontmatter; revisión de seguridad del 2026-11-08). US-DSK-005, 007 y 008 solo leen y no la esperan.
 - **Paralelo en UI-2**: tres cadenas independientes (revisar y commitear, integrar, ramas y remoto).
 - **Orden de UI-1 si sobra poco tiempo**: 003 → 004 → 006 → 008 → 007 → 001 → 002 → 005 (primero los diferenciales; el grafo lo tiene GitKraken).
 

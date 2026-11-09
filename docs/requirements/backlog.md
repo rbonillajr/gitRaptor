@@ -58,7 +58,7 @@
     -   **Hito**: M2-UI, paralelo a M2 y sin bloquear su cierre ([release-plan.md](release-plan.md#hito-paralelo-m2-ui-app-de-escritorio-ui-1)). SPIKE-GRD-002 (macOS) se ejecuta ya, dentro de UI-1.
     -   **Pendiente de Rene**: comprar la cuenta de Apple Developer para v0.1.0 (Q-DSK-16).
     -   **Habilitadoras (2026-11-08)**: [technical-stories.md](features/desktop/technical-stories.md). TS-DSK-001 (andamiaje de `apps/desktop`, con Dev Spec `spec-ready`) y TS-DSK-002 (arranque del motor y binarios en el bundle, DEP-DSK-5); SPIKE-DSK-001 (identidad firmada de la app) y SPIKE-DSK-002 (`open -a` lanzado por un agente); SPIKE-GRD-002 ampliado. Canal: TS-GRP-009 (clase `desktop` y perfil de lectura), TS-CKP-010 (agentes en vivo por repo) y, para UI-2, TS-CKP-006 a 009 (DEP-DSK-3 y DEP-DSK-4). NFR de la app: NFR-13.
-    -   **Status**: Ready. Dev Specs `spec-ready` de TS-DSK-001, US-DSK-003 y US-DSK-004; las demás historias, sin Dev Spec. DEP-DSK-3 a 7 cerradas; DEP-DSK-1 y 2 esperan a SPIKE-GRD-002 y SPIKE-DSK-001. Fecha central de M2-UI: 2026-12-22 ([release-plan.md](release-plan.md#hito-paralelo-m2-ui-app-de-escritorio-ui-1))
+    -   **Status**: Ready. Dev Specs `spec-ready` de TS-DSK-001, TS-DSK-002, US-DSK-003 y US-DSK-004; las demás historias, sin Dev Spec. DEP-DSK-3 a 7 cerradas; DEP-DSK-1 y 2 esperan a SPIKE-GRD-002 y SPIKE-DSK-001. Fecha central de M2-UI: 2026-12-22 ([release-plan.md](release-plan.md#hito-paralelo-m2-ui-app-de-escritorio-ui-1))
 
 ---
 

@@ -390,12 +390,13 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### M2-UI
 
-10 fichas: 10 listo.
+11 fichas: 11 listo.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
 | [TS-DSK-001](features/desktop/technical-stories/TS-DSK-001-andamiaje-app-escritorio.md) | Andamiaje de apps/desktop: proyecto Tauri del monorepo, frontera de seguridad y ventana B1 vacía | Listo (`ready`) | — | — |
 | [TS-DSK-002](features/desktop/technical-stories/TS-DSK-002-arranque-motor-binarios-bundle.md) | Arranque del motor desde la app y binarios del motor dentro del bundle | Listo (`ready`) | — | — |
+| [TS-GRP-009](features/motor-local/technical-stories/TS-GRP-009-clase-desktop-perfil-lectura.md) | Clase de cliente de la app de escritorio y perfil de lectura mcp con un agente en su ascendencia | Listo (`ready`) | — | — |
 | [US-DSK-001](features/desktop/user-stories/US-DSK-001-anadir-repo-sin-terminal.md) | El novato añade su repo a GitRaptor desde la app sin abrir una terminal | Listo (`ready`) | — | — |
 | [US-DSK-002](features/desktop/user-stories/US-DSK-002-proteger-repo-con-un-clic.md) | El novato protege su repo con un clic, sabe qué se instaló y puede quitarlo | Listo (`ready`) | — | — |
 | [US-DSK-003](features/desktop/user-stories/US-DSK-003-estado-del-motor.md) | El usuario sabe si GitRaptor está funcionando y qué hacer cuando no | Listo (`ready`) | — | — |
@@ -435,7 +436,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### Sin hito
 
-33 fichas sin hito asignado.
+32 fichas sin hito asignado.
 
 ## Implementadas en parte: lo que falta
 
