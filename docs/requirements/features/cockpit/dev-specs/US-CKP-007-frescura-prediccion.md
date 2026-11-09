@@ -2,7 +2,7 @@
 id: DS-US-CKP-007
 title: "Dev Spec — US-CKP-007: una predicción vieja nunca se presenta como actual"
 type: dev-spec
-status: draft
+status: implemented
 created: 2026-10-27
 updated: 2026-11-09
 story: US-CKP-007
@@ -334,3 +334,5 @@ Datos: pares construidos en memoria con la forma de A2; sin daemon, sin repos (n
 | N1 | ⚠️ **ASSUMPTION**: no hay `architecture-constitution.md` en el repo. Las restricciones salen de `AGENTS.md` y de los ADR citados (ADR-GRP-001, ADR-GRP-016, ADR-CKP-003) | Validar o crear la constitución | Rene |
 | N2 | Con un reloj muy adelantado la antigüedad crece sin límite y dice "hace N d"; es honesto (el resultado puede ser viejo) y no se corrige | Ninguna | — |
 | N3 | Solo se verificará en macOS; Linux y Windows siguen la etapa de validación multiplataforma | Etapa de validación | Rene |
+
+Implementado en: PR #339 (2026-11-09).
