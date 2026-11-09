@@ -16,7 +16,7 @@
 | Listo (`ready`) | 25 |
 | Borrador (`draft`) | 56 |
 | Bloqueado (`blocked`) | 1 |
-| **Total** | **183** |
+| **Total** | **184** |
 
 ## Por feature
 
@@ -27,7 +27,7 @@
 | [guardrails](#guardrails) | 14 | 0 | 7 | 1 | 3 | 0 | 25 |
 | [mcp](#mcp) | 7 | 0 | 4 | 0 | 9 | 0 | 20 |
 | [motor-local](#motor-local) | 18 | 2 | 9 | 3 | 12 | 0 | 44 |
-| [time-machine](#time-machine) | 15 | 1 | 2 | 1 | 13 | 0 | 32 |
+| [time-machine](#time-machine) | 16 | 1 | 2 | 1 | 13 | 0 | 33 |
 
 ### cockpit
 
@@ -217,7 +217,7 @@
 
 ### time-machine
 
-32 fichas: 15 implementado, 1 hecho, 2 implementado en parte, 1 listo, 13 borrador.
+33 fichas: 16 implementado, 1 hecho, 2 implementado en parte, 1 listo, 13 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -227,6 +227,7 @@
 | [TS-TMC-004](features/time-machine/technical-stories/TS-TMC-004-operacion-protegida-solicitante.md) | Operación protegida y resolución del solicitante en el canal | Implementado (`implemented`) | #40 | — |
 | [US-TMC-001](features/time-machine/user-stories/US-TMC-001-snapshot-previo-operaciones-gitraptor.md) | El desarrollador recupera su trabajo sin commitear tras cualquier operación lanzada por GitRaptor | Implementado (`implemented`) | #61 | — |
 | [US-TMC-002](features/time-machine/user-stories/US-TMC-002-undo-ultima-operacion.md) | El desarrollador deshace con un comando la última operación de su worktree | Implementado (`implemented`) | #90, #127, #146, #156 | — |
+| [US-TMC-003](features/time-machine/user-stories/US-TMC-003-redo.md) | El desarrollador rehace lo que deshizo por error | Implementado (`implemented`) | #335 | — |
 | [US-TMC-004](features/time-machine/user-stories/US-TMC-004-captura-continua-git-crudo.md) | El trabajo hecho fuera de GitRaptor queda capturado como punto recuperable | Implementado (`implemented`) | #120, #127, #146 | — |
 | [US-TMC-005](features/time-machine/user-stories/US-TMC-005-snapshot-previo-hooks-guardrails.md) | El borrado de ramas y el rebase con Git crudo tienen punto previo cuando el repo usa los hooks de Guardrails | Implementado (`implemented`) | #248 | — |
 | [US-TMC-006](features/time-machine/user-stories/US-TMC-006-timeline-que-cuando-quien.md) | El desarrollador sabe qué cambió en su repo, cuándo y quién lo hizo | Implementado (`implemented`) | #198 | — |
@@ -238,10 +239,10 @@
 | [US-TMC-023](features/time-machine/user-stories/US-TMC-023-timeline-legible-restaurar-id-corto.md) | El desarrollador lee el timeline de un vistazo y restaura un punto con el id corto que ve en la misma línea | Implementado (`implemented`) | — | — |
 | [SPIKE-TMC-001](features/time-machine/technical-stories/SPIKE-TMC-001-repo-mediano-overhead.md) | Repo mediano de referencia y viabilidad del snapshot en menos de 200 ms | Hecho (`done`) | — | — |
 | [INF-TMC-001](features/time-machine/technical-stories/INF-TMC-001-arnes-caos-recuperable.md) | Arnés de caos y de garantías de los snapshots en los tres SO | Implementado en parte (`partially-implemented`) | — | — |
-| [US-TMC-011](features/time-machine/user-stories/US-TMC-011-undo-por-agente.md) | El desarrollador deshace solo lo que hizo un agente en un periodo | Implementado en parte (`partially-implemented`) | #325 | — |
+| [US-TMC-011](features/time-machine/user-stories/US-TMC-011-undo-por-agente.md) | El desarrollador deshace solo lo que hizo un agente en un periodo | Implementado en parte (`partially-implemented`) | #325, #335 | — |
 | [TS-TMC-005](features/time-machine/technical-stories/TS-TMC-005-undo-espera-punto-base.md) | El undo espera, con plazo propio, la captura que da su punto base B en vez de responder `overlap-unverified` de inmediato | Listo (`ready`) | — | — |
 | [TD-TMC-001](features/time-machine/technical-stories/TD-TMC-001-previo-hook-plazo-y-cupo-sin-atribuir.md) | Previo de hook: plazo real, cupo barato y cubo «sin atribuir» acotado, antes de que un fallo deniegue (US-GRD-017) | Borrador (`draft`) | — | — |
-| [US-TMC-003](features/time-machine/user-stories/US-TMC-003-redo.md) | El desarrollador rehace lo que deshizo por error | Borrador (`draft`) | — | — |
+| [TD-TMC-003](features/time-machine/technical-stories/TD-TMC-003-solape-agente-ecos-de-gitraptor.md) | El solape del undo por agente cuenta los ecos anclados de GitRaptor como movimientos sin atribuir | Borrador (`draft`) | — | — |
 | [US-TMC-007](features/time-machine/user-stories/US-TMC-007-timeline-filtros-huecos.md) | El desarrollador filtra el timeline por worktree, agente o periodo y ve lo que no se observó | Borrador (`draft`) | — | — |
 | [US-TMC-008](features/time-machine/user-stories/US-TMC-008-timeline-atribucion-vigente.md) | El timeline refleja las correcciones de atribución sin reescribir quién deshizo qué | Borrador (`draft`) | — | — |
 | [US-TMC-014](features/time-machine/user-stories/US-TMC-014-undo-ya-empujado.md) | El desarrollador sabe cuándo lo que deshizo sigue en el remoto | Borrador (`draft`) | — | — |
@@ -324,6 +325,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-MCP-005](features/mcp/user-stories/US-MCP-005-respuestas-acotadas-y-seguras.md) | Un agente recibe respuestas acotadas que no pueden darle órdenes ni filtrar secretos | Implementado (`implemented`) | #157, #159 | — |
 | [US-MCP-008](features/mcp/user-stories/US-MCP-008-snapshot-manual.md) | Un agente guarda por MCP un punto de recuperación antes de un cambio arriesgado | Implementado (`implemented`) | #213 | — |
 | [US-MCP-016](features/mcp/user-stories/US-MCP-016-check-conflicts.md) | Un agente sabe con quién va a chocar antes de que choque | Implementado (`implemented`) | — | — |
+| [US-TMC-003](features/time-machine/user-stories/US-TMC-003-redo.md) | El desarrollador rehace lo que deshizo por error | Implementado (`implemented`) | #335 | — |
 | [US-TMC-005](features/time-machine/user-stories/US-TMC-005-snapshot-previo-hooks-guardrails.md) | El borrado de ramas y el rebase con Git crudo tienen punto previo cuando el repo usa los hooks de Guardrails | Implementado (`implemented`) | #248 | — |
 | [US-TMC-006](features/time-machine/user-stories/US-TMC-006-timeline-que-cuando-quien.md) | El desarrollador sabe qué cambió en su repo, cuándo y quién lo hizo | Implementado (`implemented`) | #198 | — |
 | [US-TMC-009](features/time-machine/user-stories/US-TMC-009-restaurar-punto-timeline.md) | El desarrollador devuelve su worktree a cualquier punto del timeline | Implementado (`implemented`) | #212, #219 | — |
@@ -355,7 +357,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-MCP-009](features/mcp/user-stories/US-MCP-009-safe-commit.md) | Un agente commitea por MCP con las reglas del repo y con un punto de recuperación previo | Implementado en parte (`partially-implemented`) | #289 | — |
 | [US-MCP-010](features/mcp/user-stories/US-MCP-010-safe-commit-rutas.md) | Un agente commitea solo los archivos que nombra y nunca fuera de su worktree | Implementado en parte (`partially-implemented`) | #289 | — |
 | [US-MCP-013](features/mcp/user-stories/US-MCP-013-confirmacion-sin-cola.md) | Un agente sabe que una acción necesita al desarrollador y a quién acudir | Implementado en parte (`partially-implemented`) | #267 | — |
-| [US-TMC-011](features/time-machine/user-stories/US-TMC-011-undo-por-agente.md) | El desarrollador deshace solo lo que hizo un agente en un periodo | Implementado en parte (`partially-implemented`) | #325 | — |
+| [US-TMC-011](features/time-machine/user-stories/US-TMC-011-undo-por-agente.md) | El desarrollador deshace solo lo que hizo un agente en un periodo | Implementado en parte (`partially-implemented`) | #325, #335 | — |
 | [SPIKE-GRD-002](features/guardrails/technical-stories/SPIKE-GRD-002-factor-so-daemon.md) | Factor de autenticación del SO invocado desde el daemon en los tres SO | Listo (`ready`) | — | — |
 | [TD-GRP-002](features/motor-local/technical-stories/TD-GRP-002-motor-bajo-rafaga.md) | Frescura y memoria del motor bajo una ráfaga de archivos | Listo (`ready`) | — | — |
 | [TD-GRP-003](features/motor-local/technical-stories/TD-GRP-003-nfr04-maquina-referencia.md) | Presupuesto de NFR-04 sin gate automático: medirlo en una máquina de referencia | Listo (`ready`) | — | — |
@@ -386,7 +388,6 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-MCP-017](features/mcp/user-stories/US-MCP-017-explain-history.md) | Un agente entiende qué pasó en su repo sin ver mensajes ni contenido | Borrador (`draft`) | — | — |
 | [US-MCP-018](features/mcp/user-stories/US-MCP-018-safe-rebase-atomico.md) | Un agente se pone al día con la rama base y, si choca, su rama queda como estaba | Borrador (`draft`) | — | — |
 | [US-MCP-019](features/mcp/user-stories/US-MCP-019-create-worktree.md) | Un agente prepara un worktree nuevo desde la rama base para otro trabajo | Borrador (`draft`) | — | — |
-| [US-TMC-003](features/time-machine/user-stories/US-TMC-003-redo.md) | El desarrollador rehace lo que deshizo por error | Borrador (`draft`) | — | — |
 | [US-TMC-007](features/time-machine/user-stories/US-TMC-007-timeline-filtros-huecos.md) | El desarrollador filtra el timeline por worktree, agente o periodo y ve lo que no se observó | Borrador (`draft`) | — | — |
 | [US-TMC-014](features/time-machine/user-stories/US-TMC-014-undo-ya-empujado.md) | El desarrollador sabe cuándo lo que deshizo sigue en el remoto | Borrador (`draft`) | — | — |
 | [US-TMC-015](features/time-machine/user-stories/US-TMC-015-operacion-git-en-curso.md) | El desarrollador no rompe un rebase o un merge a medias al deshacer o restaurar | Borrador (`draft`) | — | — |
@@ -443,7 +444,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### Sin hito
 
-35 fichas sin hito asignado.
+36 fichas sin hito asignado.
 
 ## Implementadas en parte: lo que falta
 
@@ -639,7 +640,7 @@ Arnés de caos y de garantías de los snapshots en los tres SO
 
 - *La ficha no lista los pendientes en "Estado de la implementación".*
 
-### [US-TMC-011](features/time-machine/user-stories/US-TMC-011-undo-por-agente.md) — #325
+### [US-TMC-011](features/time-machine/user-stories/US-TMC-011-undo-por-agente.md) — #325, #335
 
 El desarrollador deshace solo lo que hizo un agente en un periodo
 
