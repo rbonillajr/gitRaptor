@@ -31,7 +31,14 @@ pub fn raptor_path(
 ) -> Option<PathBuf> {
     let daemon = daemon_exe.and_then(|exe| {
         let canonical = exe.canonicalize().ok()?;
-        let inside = watched.iter().any(|root| {
+        // A Git common dir (`<repo>/.git`) stands for its main worktree as well.
+        let roots = watched.iter().flat_map(|root| {
+            let work = (root.file_name() == Some(std::ffi::OsStr::new(".git")))
+                .then(|| root.parent())
+                .flatten();
+            std::iter::once(*root).chain(work)
+        });
+        let inside = roots.into_iter().any(|root| {
             root.canonicalize().map_or_else(
                 |_| exe.starts_with(root),
                 |root| canonical.starts_with(root),
