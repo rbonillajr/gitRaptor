@@ -23,7 +23,7 @@ related: [BRD-GRP-001, INF-GRP-003, INF-GRP-004, ADR-GRP-005, ADR-GRP-014]
 |---|---|---|---|---|
 | **M1** Dogfooding | 6 criterios del [backlog](backlog.md#hito-m1--dogfooding): 10 días de uso real, detección ≥ 90 %, un `undo` real, force-push bloqueado, recursos y frescura | Construido 100 %; criterios 50 % (2 cumplidos, 2 en parte, 1 en curso, 1 sin cumplir) | 2026-10-22 a 2026-11-06 | Rene: racha de 10 días con registro diario |
 | **M2** MVP completo en macOS | Las 102 fichas Must y Should del MVP que no son de M1, implementadas (112 antes del recorte del 2026-11-08); gates del MVP obligatorios en CI, rendimiento medido en la máquina de referencia y la demo del BRD § 13 en macOS. US-MCP-009 se libera junto con US-MCP-010 y US-MCP-011 (G2 y G4 de DS-US-MCP-009) | 42,0 % al 2026-10-28 sobre 112 (34 implementadas, 3 hechas y 20 en parte); se recalcula sobre 102 al regenerar `release-status.md`; solo historias 34,5 % | Central 2027-01-14; rango 2026-12-21 a 2027-01-28 | La flota y las ventanas de revisión; cierre de M1 |
-| **M2-UI** App de escritorio, UI-1 (hito paralelo) | Las 8 historias de UI-1 (US-DSK-001 a 008) implementadas en macOS y la demo del novato: añadir, proteger, ver un choque previsto y deshacer lo de un agente, sin terminal. Lo mínimo de UI-2 (US-DSK-009, 010, 012, 013 y 015) entra antes de v0.1.0. No bloquea el cierre de M2 | 0 % | Por calcular (lo estima el Scrum Master cuando el Arquitecto cierre las enablers de la app) | SPIKE-GRD-002 (macOS), ADR-GRP-017, las enablers DEP-DSK-2 a 6 |
+| **M2-UI** App de escritorio, UI-1 (hito paralelo) | Las 8 historias de UI-1 (US-DSK-001 a 008) implementadas en macOS y la demo del novato: añadir, proteger, ver un choque previsto y deshacer lo de un agente, sin terminal. Lo mínimo de UI-2 (US-DSK-009, 010, 012, 013 y 015) entra antes de v0.1.0. No bloquea el cierre de M2 | 0 % (de 10 fichas) | Central 2026-12-22; rango 2026-12-05 a 2027-01-19 ([cálculo](#fecha)) | SPIKE-GRD-002 (macOS), ADR-GRP-017, las enablers DEP-DSK-2 a 6 |
 | **EA** Acceso anticipado (alpha semanal) | Hito continuo, sin fichas propias: cada viernes un tag `v0.1.0-alpha.N` desde `main` (solo macOS, sin firmar) si cumple el [criterio de cada alpha](#ea-acceso-anticipado-alpha-semanal). Se cierra con la primera `v0.1.0-beta.N` | Pipeline y guía en el PR `chore/weekly-alpha`; la primera alpha está por cortar | Primera: 2026-11-06; luego cada viernes | M1 cerrado en lo que afecte a NFR-01 (W116 y W117) |
 | **M3** Beta multiplataforma | Sobre un tag `v0.1.0-beta.N`: los XP Must de `xplat-pendientes.md` cerrados, `cargo test` y "repo intacto" en verde en Linux y Windows reales, humo de punta a punta instalado | 37,5 % (8 hechos y 8 en parte de 32) | Por recalcular (no antes del cierre de M2); la del 2026-10-08 era 2026-11-02 a 2026-12-01 | Cierre de M2; rondas manuales de Rene; una máquina con Windows 11 |
 | **M4** v0.1.0: primera release instalable (piloto interno) | Release firmada en macOS y Windows, instalación y actualización verificadas en los tres SO, primera experiencia en una máquina nueva | 14,3 % (2 en parte de 7) | Por recalcular (no antes del cierre de M2); la del 2026-10-08 era 2026-11-09 a 2026-12-15 | Cierre de M3; cuentas de firma (externos); decisión D1 |
@@ -264,7 +264,7 @@ Lo que cambió respecto del 2026-10-08 (27 PR y 8,8 fichas equivalentes por día
 
 ## Hito paralelo M2-UI: app de escritorio (UI-1)
 
-> Decisión de Rene (2026-11-08, Q-DSK-7), tomada al aceptar las recomendaciones del [contexto de la app](features/desktop/context.md) (CTX-DSK-001, § 11). El nombre `M2-UI` es de este plan: el generador de estado solo reconoce hitos `M<n>`, así que las fichas DSK no suman a ningún hito en [release-status.md](release-status.md) hasta que se decida otra cosa (hueco 13).
+> Decisión de Rene (2026-11-08, Q-DSK-7), tomada al aceptar las recomendaciones del [contexto de la app](features/desktop/context.md) (CTX-DSK-001, § 11). El generador de estado reconoce este encabezado como el hito `M2-UI` (hueco 13, cerrado el 2026-11-08): las fichas listadas en la tabla de Composición suman a M2-UI en [release-status.md](release-status.md); una ficha que ya lista M2 (como SPIKE-GRD-002) sigue contando en M2.
 
 **Objetivo.** Un novato, sin abrir una terminal, pone su repo bajo GitRaptor desde la app de escritorio (Tauri + React, D7, BR-27) y ve lo que nadie más le da: el choque antes de que pase, el "Deshacer" y el bloqueo explicado. Corre **en paralelo a M2** y **no bloquea su cierre**; el recorte de M2 libera la capacidad.
 
@@ -279,6 +279,8 @@ Lo que cambió respecto del 2026-10-08 (27 PR y 8,8 fichas equivalentes por día
 
 | Id | Qué | MoSCoW | Estado | Qué le falta |
 |---|---|---|---|---|
+| TS-DSK-001 | Andamiaje de `apps/desktop`: proyecto Tauri del monorepo, frontera de seguridad y ventana vacía | Must | Pend (`ready`) | Nada: es el primer eslabón. Dev Spec lista |
+| TS-DSK-002 | Arranque del motor desde la app y binarios del motor dentro del bundle | Must | Pend (`ready`) | TS-DSK-001 |
 | US-DSK-001 | Añadir un repo sin terminal | Must | Pend (`ready`) | Factor del SO (SPIKE-GRD-002); mientras tanto, comando para copiar |
 | US-DSK-002 | Proteger un repo con un clic | Must | Pend (`ready`) | Factor del SO; mientras tanto, comando para copiar |
 | US-DSK-003 | Estado del motor | Must | Pend (`ready`) | DEP-DSK-5 |
@@ -289,11 +291,53 @@ Lo que cambió respecto del 2026-10-08 (27 PR y 8,8 fichas equivalentes por día
 | US-DSK-008 | Conflictos previstos | Must | Pend (`ready`) | Lo que falte de TS-CKP-001 |
 | SPIKE-GRD-002 | Factor del SO en macOS (Q-DSK-17) | Must | R (ready) | **Se ejecuta ya, dentro de UI-1.** Sigue contando en M2 (primer hito que lo lista); aquí se registra su papel |
 
-Lo mínimo de UI-2 antes de v0.1.0 (US-DSK-009, 010, 012, 013 y 015) se cuenta en el criterio 3 y no en esta composición. US-DSK-011, 014, 016, 017 y 018 quedan para después de v0.1.0 salvo que Rene diga otra cosa.
+TS-CKP-006, 007 y 009 son enablers de UI-2 que deben estar antes de v0.1.0 (criterio 3), y SPIKE-DSK-001 y SPIKE-DSK-002 son los de la presencia de sesión de v0.1.0; ninguno entra en esta composición. Lo mínimo de UI-2 antes de v0.1.0 (US-DSK-009, 010, 012, 013 y 015) se cuenta en el criterio 3 y no en esta composición. US-DSK-011, 014, 016, 017 y 018 quedan para después de v0.1.0 salvo que Rene diga otra cosa.
 
 ### Fecha
 
-Por calcular. S-DSK-1 supone unas 3 semanas de flota (⚠️ **ASSUMPTION**); la estima el Scrum Master cuando el Arquitecto cierre las enablers de la app. El cuello de botella son la revisión de Rene y el CI de macOS (R-DSK-1): el recorte libera flota, no horas de revisión.
+Estimada el 2026-11-08 por el Scrum Master, con el [método](#velocidad-observada-y-método-de-estimación) y la misma cuenta que la [ruta crítica de M2](#ruta-crítica-y-fecha). **Decisión del orquestador (2026-11-08), validada por Scrum Master.**
+
+| Caso | Fecha | Cuenta |
+|---|---|---|
+| Optimista | **2026-12-05** | 12,5 / (1,25 × 0,40) = 25 días, más 2 de demo |
+| **Central** | **2026-12-22** | 12,5 / (0,86 × 0,35) = 42 días, más 2 de demo |
+| Pesimista | **2027-01-19** | 12,5 / (0,79 × 0,25) × 1,1 = 70 días, más 2 de demo |
+
+**Fichas equivalentes** (completa = 1; la unidad del método, unos 3 PR). Las complejidades de TS-DSK-001 y TS-DSK-002 son medias; las Dev Specs de TS-DSK-001, US-DSK-003 y US-DSK-004 están listas para implementar:
+
+| Ficha | Equiv. | Por qué |
+|---|---|---|
+| TS-DSK-001 andamiaje | 1,0 | Proyecto Tauri, frontera de seguridad y job `desktop` en ubuntu |
+| TS-DSK-002 arranque del motor y bundle | 1,0 | `externalBin` y arranque del daemon; sin firma (va en v0.1.0) |
+| US-DSK-003 estado del motor | 1,0 | Primera pantalla con el canal real |
+| US-DSK-004 flota en vivo | 1,5 | Flujo de eventos y saneador SEC-12 compartido |
+| US-DSK-005 grafo de carriles | 1,5 | Pantalla nueva |
+| US-DSK-008 conflictos previstos | 1,0 | TS-CKP-001 ya está implementada: solo se consume `prediction.*` |
+| US-DSK-007 bloqueo explicado | 1,0 | Lectura de `guard.log` y `audit.list` |
+| US-DSK-006 deshacer | 1,5 | Línea de tiempo, deshacer y rehacer, avisos de purga |
+| US-DSK-001 y US-DSK-002 | 2,0 | Versión de copiar el comando (Q-DSK-15) |
+| Motor de US-CKP-022 (`graph.lanes`) | 1,0 | La historia sigue en borrador; su Dev Spec está aprobada. US-DSK-005 no cierra sin ella |
+| **Total** | **12,5** | |
+
+**Capacidad en paralelo.** M2 tiene prioridad y no se retrasa. M2-UI toma una parte de la flota y de la revisión de Rene: 40 % en el optimista, 35 % en el central y 25 % en el pesimista, sobre la velocidad de 1,25 (p75 de 14 días), 0,86 (media de 14 días) y 0,79 (media de 7 días) fichas equivalentes por día natural que usa M2. Con esa parte, M2-UI absorbe 0,50, 0,30 y 0,20 fichas por día.
+
+**Ruta crítica, en el orden fijado por el orquestador:** TS-DSK-001 → TS-DSK-002 → US-DSK-003 y US-DSK-004 → US-DSK-005 y US-DSK-008 → US-DSK-007 → US-DSK-006, US-DSK-001 y US-DSK-002. Son 6 eslabones de 2 a 4 días: unos 12 a 24 días de cadena, por debajo de la fecha por capacidad en los tres casos, así que la fecha la fija la capacidad y no la cadena. SPIKE-GRD-002 corre en paralelo (la ejecuta Rene en su Mac) y no está en esa cadena.
+
+**Supuestos** (⚠️ **ASSUMPTION** del Scrum Master):
+
+- Las equivalencias de arriba son estimación mía sobre las complejidades del Arquitecto; no las he cambiado. 5 y 8 PR por ficha no se esperan: si una historia de pantalla pasa de 1,5 se parte.
+- La velocidad de M2 sigue siendo la medida el 2026-10-28; desde entonces solo hubo unos 6 PR mergeados (2026-10-30 al 2026-11-08, casi todo documentos), así que la flota estuvo parada y el dato real puede ser peor. Se recalcula con la ventana de 7 días en cuanto haya PR de código.
+- El CI de la app corre en ubuntu; la demo y el gate NFR-13 se ejecutan a mano en macOS y caben en los 2 días de cierre. Hay una máquina Mac (la de Rene).
+- No hay trabajo de firma ni de cuenta Apple en M2-UI: las alphas siguen sin firmar y la cuenta se necesita solo para v0.1.0.
+- US-DSK-005 espera el motor de US-CKP-022 (1,0 incluida); si otro carril de M2 lo entrega antes, el total baja a 11,5 y la fecha central a 2026-12-17.
+
+**Qué la movería:**
+
+- **SPIKE-GRD-002 negativo o sin ejecutar.** No retrasa: el criterio 2 se cumple con la versión de copiar el comando (Q-DSK-15). Positivo: se abre el trabajo de "sin terminal" en US-DSK-001, 002 y 006 (presencia humana desde la app, DEP-DSK-1), unas 1,5 fichas más, y la fecha central pasa a 2026-12-27. Hace falta que Rene lo ejecute antes de que empiecen esas tres historias (unas 4 semanas desde hoy en el central).
+- **Capacidad de revisión de Rene (R-DSK-1).** Es lo más sensible: pasar del 35 % al 25 % de la revisión lleva el central a la fecha pesimista. Una semana sin merges como la del 2026-10-23 al 26 desplaza todo 7 días.
+- **Un hallazgo de seguridad** en la frontera de la app (Q-DSK-2 y Q-DSK-3) abre retrabajo no contado.
+
+**S-DSK-1 corregida.** "Unas 3 semanas" no se cumple ni en el optimista (25 días más la demo, unas 4 semanas). El supuesto pasa a **unas 4 semanas en el mejor caso y unas 6 en el central**, contando TS-DSK-001 y TS-DSK-002, que S-DSK-1 no incluía.
 
 ### Acciones pendientes de Rene
 
@@ -557,7 +601,7 @@ Ninguna se ha tomado en su nombre. Hasta que decida, el plan aplica la recomenda
 | 14 | **TD-GRP-002** (NFR-04 y NFR-05 no se cumplen bajo ráfaga en macOS): ¿bloquea v0.1.0 o sale como limitación conocida? | Bloquea M2 (criterio 4) | — |
 | 15 | **Pendientes de Guardrails:** Q-GRD-32 (relajación personal pendiente), adopción del factor por D8, desinstalar y la excepción de OQ-GRD-008-3: ¿entran al MVP? | Decidir antes de la ola de Guardrails de M2 | Pueden añadir historias a M2 |
 | 16 | ~~**Recorte de Shoulds de M2**~~ **Decidida (2026-11-08):** se aplica la tanda 1 de [context.md de la app § 10](features/desktop/context.md), sin la tanda 2 ([detalle](#recorte-de-shoulds-de-m2-aplicado)) | — | M2 pasa de 112 a 102 fichas |
-| 17 | **Alpha semanal:** repo público (el `curl` anónimo falla si es privado), activar `RELEASE_ATTEST` desde `alpha.1` (las attestations son públicas e irreversibles), aprobar el filtro de solo macOS del borrador, y crear el tap `rbonillajr/homebrew-gitraptor` si quiere Homebrew además del script | Repo público; `RELEASE_ATTEST` sí desde la primera alpha; script como canal primario | Define cómo se instala la alpha y si hay autenticidad verificable |
+| 17 | **Alpha semanal:** repo público (el `curl` anónimo falla si es privado), activar `RELEASE_ATTEST` desde `alpha.1` (las attestations son públicas e irreversibles), aprobar el filtro de solo macOS del borrador, y crear el tap `rbonillajr/homebrew-tap` si quiere Homebrew además del script (corregido el 2026-11-08: el tap es el único de ADR-GRP-014 § 5, ajuste C7, el que ya usan `release-channels.yml` e INF-GRP-004; `homebrew-gitraptor` era un nombre antiguo) | Repo público; `RELEASE_ATTEST` sí desde la primera alpha; script como canal primario | Define cómo se instala la alpha y si hay autenticidad verificable |
 
 ## Huecos y limpieza
 
@@ -577,7 +621,7 @@ Ninguna se ha tomado en su nombre. Hasta que decida, el plan aplica la recomenda
 | 10 | Gate de i18n en/es (NFR-10): ningún workflow lo comprueba (⚠️ **ASSUMPTION** del PO) | M2, si se quiere como criterio | Arquitecto |
 | 11 | No hay `architecture-constitution.md` en el repo; el Arquitecto usó AGENTS.md y los ADR-GRP como restricciones | — | Arquitecto (`/aadd-architect --init-constitution`) |
 | 12 | ⚠️ **RIESGO NFR-01 abierto (calma ante un `git` en curso)**: la calma de la Time Machine ve un `git` en curso por la lista de procesos (D15 del brief `docs/dev-briefs/tm-restore-calm-mark.md`). (1) **Windows**: el código lee el `cwd` de otro proceso por el PEB, así que D15 queda activo, pero **sin validar en máquina real**; si esa lectura falla, D15 no ve un `git` sin hooks y un `reset --hard` en pleno vuelo puede quedar en un punto con marca anterior (el undo restauraría sin el trabajo). Lo mitiga, solo en parte, la regla de "llamada de hook en vuelo" (D18). (2) **`git` ilegible**: un `git` vivo con los argumentos ilegibles cuenta solo si su carpeta se lee y está en este repo (otro worktree o el directorio común), y solo durante la ventana de gracia de `settle` (2 s); después se registra `tm_calm_probe_unreadable` una vez por `(pid, inicio)` y deciden el reflog, las ramas (D1) y las llamadas de hook (D18). **Riesgo residual, más estrecho**: un `git` con `-C` o `GIT_DIR` hacia este repo lanzado desde una carpeta de fuera del repo, con los argumentos ilegibles, no se ve; lo cubren solo D1 y D18. Tampoco se ve uno cuya carpeta no se puede leer. Se cierra cuando D15 se valide en Windows en máquina real y se mida cuánto dura en uso real un `git` ilegible | M3 (criterios 4 y 5) | Arquitecto |
-| 13 | Decidir cómo cuenta `release-status.md` el hito M2-UI: hoy el generador solo reconoce `M<n>` y las fichas US-DSK no suman a ningún hito | M2-UI | Orquestador |
+| 13 | ~~Decidir cómo cuenta `release-status.md` el hito M2-UI~~. **Cerrado el 2026-11-08** (PR de las enablers de la app): el generador reconoce `## Hito paralelo M2-UI` como el hito `M2-UI`, distinto de M2 y ordenado justo detrás; las fichas DSK de la composición suman a M2-UI. Test en `tools/status/release-status.test.mjs` | M2-UI | Orquestador |
 
 **Estados obsoletos detectados** (limpieza fuera del alcance de este PR):
 
