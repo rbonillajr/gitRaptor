@@ -14,9 +14,9 @@
 | Hecho (`done`) | 3 |
 | Implementado en parte (`partially-implemented`) | 29 |
 | Listo (`ready`) | 27 |
-| Borrador (`draft`) | 57 |
+| Borrador (`draft`) | 58 |
 | Bloqueado (`blocked`) | 1 |
-| **Total** | **182** |
+| **Total** | **183** |
 
 ## Por feature
 
@@ -26,7 +26,7 @@
 | [desktop](#desktop) | 2 | 0 | 1 | 20 | 0 | 0 | 23 |
 | [guardrails](#guardrails) | 14 | 0 | 7 | 1 | 3 | 0 | 25 |
 | [mcp](#mcp) | 7 | 0 | 4 | 0 | 9 | 0 | 20 |
-| [motor-local](#motor-local) | 18 | 2 | 9 | 3 | 11 | 0 | 43 |
+| [motor-local](#motor-local) | 18 | 2 | 9 | 3 | 12 | 0 | 44 |
 | [time-machine](#time-machine) | 15 | 1 | 2 | 1 | 13 | 0 | 32 |
 
 ### cockpit
@@ -166,7 +166,7 @@
 
 ### motor-local
 
-43 fichas: 18 implementado, 2 hecho, 9 implementado en parte, 3 listo, 11 borrador.
+44 fichas: 18 implementado, 2 hecho, 9 implementado en parte, 3 listo, 12 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -203,6 +203,7 @@
 | [TD-GRP-003](features/motor-local/technical-stories/TD-GRP-003-nfr04-maquina-referencia.md) | Presupuesto de NFR-04 sin gate automático: medirlo en una máquina de referencia | Listo (`ready`) | — | — |
 | [TS-GRP-009](features/motor-local/technical-stories/TS-GRP-009-clase-desktop-perfil-lectura.md) | Clase de cliente de la app de escritorio y perfil de lectura mcp con un agente en su ascendencia | Listo (`ready`) | — | — |
 | [TD-GRP-004](features/motor-local/technical-stories/TD-GRP-004-corroborar-ambito-worktree-s3.md) | Corroborar con el reflog de HEAD el ámbito worktree de S3 y blindar la lectura de la redirección | Borrador (`draft`) | — | — |
+| [TD-GRP-006](features/motor-local/technical-stories/TD-GRP-006-bajo-carga-los-eventos-de-fsevents.md) | Bajo carga, los eventos de FSEvents del directorio Git llegan tarde o no llegan y us_grp_010 falla también en main | Borrador (`draft`) | — | — |
 | [TS-GRP-007](features/motor-local/technical-stories/TS-GRP-007-factor-so-reservados-windows.md) | Factor del SO (Windows Hello) para los comandos reservados de alto riesgo en Windows | Borrador (`draft`) | — | — |
 | [US-GRP-006](features/motor-local/user-stories/US-GRP-006-retirar-y-volver-a-anadir.md) | El desarrollador recupera el historial de un repo que retiró y volvió a añadir | Borrador (`draft`) | — | — |
 | [US-GRP-011](features/motor-local/user-stories/US-GRP-011-worktree-compartido.md) | El desarrollador ve todas las sesiones de un worktree compartido | Borrador (`draft`) | — | — |
@@ -442,7 +443,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### Sin hito
 
-34 fichas sin hito asignado.
+35 fichas sin hito asignado.
 
 ## Implementadas en parte: lo que falta
 

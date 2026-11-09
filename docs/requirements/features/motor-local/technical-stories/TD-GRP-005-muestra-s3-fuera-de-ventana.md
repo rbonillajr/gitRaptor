@@ -81,15 +81,25 @@ tags: [motor-local, deuda-tecnica, deteccion, atribucion, s3, carga, tests-inest
 
 | Riesgo | Escenario | Consecuencia | Mitigación | Cómo se mide |
 |---|---|---|---|---|
-| Lectura posterior al aviso en cola | Un `git` ajeno escribe y termina entre el aviso en cola y la lectura de procesos, en el mismo worktree que un `git` vivo de la sesión que escribe | El commit ajeno se atribuye al agente (una muestra inmediata lo habría visto y lo dejaría `ambiguous`) | `raptor undo --agent` (US-TMC-011) pide confirmación interactiva y muestra antes los commits que va a deshacer | Commits del humano que `raptor events` muestra atribuidos a un agente en el dogfooding, con su `s3_evidence` (`sessions_wt`, `foreign_*`). Es el riesgo de ADR-GRP-012 (fila «Riesgo residual de S3» y Enmienda 2026-11-09), ahora en más ventanas |
+| Lectura posterior al aviso en cola o a la escritura | Un `git` ajeno escribe y termina entre el aviso en cola (o la escritura que encuentra la lectura del repo, hasta 3 s antes) y la lectura de procesos, en el mismo worktree que un `git` vivo de la sesión que escribe y que empezó antes | El commit ajeno se atribuye al agente (una muestra inmediata lo habría visto y lo dejaría `ambiguous`) | `raptor undo --agent` (US-TMC-011) pide confirmación interactiva y muestra antes los commits que va a deshacer | Commits del humano que `raptor events` muestra atribuidos a un agente en el dogfooding, con su `s3_evidence` (`sessions_wt`, `foreign_*`) y `s3_read_notice` (`age_ms`, `kept`). Es el riesgo de ADR-GRP-012 (fila «Riesgo residual de S3» y Enmienda 2026-11-09), ahora en más ventanas |
 
 ## Estado de la implementación (2026-11-09)
 
 Implementado en: PR #__PR__.
 
-- **Arreglo** (opción a, validada por el Arquitecto; ADR-GRP-012, Enmienda 2026-11-09): `sample_loop` ya no descarta avisos en cola. Una sola lectura de procesos da un avistamiento por aviso, con su `t_recv` y su «empezó antes». Los avisos con la misma respuesta comparten avistamiento (`t_recvs`), para que una ráfaga no expulse del anillo uno que vio un `git` ajeno.
-- **`probed`** (`watch/mod.rs`) no se tocó: avisa por cada evento del SO, no por lote, y el aviso que faltaba era el que la cola descartaba.
-- **Tests**: `crates/core/src/detect/tests/queued_notices.rs`, por señal y sin `sleep`, con un `ProcLister` que bloquea `list()` hasta que el test lo libera. Ninguna espera de los tests de la CLI era un rodeo de esta carrera; se quedan.
+- **Arreglo (1), la causa de esta TD** (opción a, validada por el Arquitecto; ADR-GRP-012, Enmienda 2026-11-09):
+  - `sample_loop` ya no descarta avisos en cola. Una sola lectura de procesos da un avistamiento por aviso, con su `t_recv` y su «empezó antes».
+  - Los avisos con la misma respuesta comparten avistamiento (`t_recvs`), para que una ráfaga no expulse del anillo uno que vio un `git` ajeno.
+- **Dos causas más, medidas bajo carga ~35–40 con instrumentación temporal** (decisión del orquestador, validada por el Arquitecto con ajustes; misma enmienda):
+  - (2) **Barrera de muestreo**: el daemon clasificaba el evento antes de que estuviera guardada la muestra de un aviso ya enviado. Ahora `evidence` espera esas muestras, con un tope de 200 ms (NFR-04).
+  - (3) **Aviso de escritura de la lectura del repo**: los eventos FS del directorio Git llegaban más de 500 ms tarde, o nunca por separado, así que la lectura que clasificaba la escritura (vaciado de la ventana, sondeo de respaldo o `poll_repo` de la Time Machine) llegaba antes que cualquier aviso. Ahora esa lectura emite `git_dir_written`, con «empezó antes» medido contra el mtime del reflog de `HEAD`. Solo cuenta si la escritura tiene como mucho 3 s; la traza `s3_read_notice age_ms/kept` sirve para ajustar ese tope en dogfooding.
+  - Un worktree cuenta como movido si cambia su commit resuelto, su reflog de `HEAD` o su fingerprint: un commit en un worktree enlazado puede no cambiar su fingerprint.
+- **`probed`** (`watch/mod.rs`) no se tocó: avisa por cada evento del SO, no por lote.
+- **Tests**:
+  - Del detector, por señal y sin `sleep`, con un `ProcLister` que bloquea `list()` hasta que el test lo libera: `crates/core/src/detect/tests/queued_notices.rs` (contrato) y `sample_barrier.rs`.
+  - De la lectura: `watch/repo.rs`, `the_write_mark_is_the_head_reflogs_mtime`.
+- **Demo de M2** (`apps/cli/tests/m2_demo_undo_agent.rs`): el hook que retenía el `git` del commit 0,5 s fijos ahora lo retiene hasta que el test ve el evento en el motor (señal, con tope de 30 s). Con carga ~40, la lectura llegaba hasta 1,4 s después de la escritura, y un `git` ya terminado no se puede muestrear: es la carrera de commit corto que acepta ADR-GRP-012. Los demás tests de la CLI conservan sus esperas.
 - **Diferido**: el contador del retraso entre aviso y lectura en `s3_evidence` (cambia el test SEC-04 de esa línea).
+- **Fuera de alcance**: `us_grp_010::the_time_machine_sees_the_current_attribution` falla 2 de 10 también en `main` bajo carga, porque los eventos FS del directorio Git no llegan. Va a [TD-GRP-006](./TD-GRP-006-bajo-carga-los-eventos-de-fsevents.md).
 - Sin certificar (modo rápido); el detalle de la verificación está en el PR.
 

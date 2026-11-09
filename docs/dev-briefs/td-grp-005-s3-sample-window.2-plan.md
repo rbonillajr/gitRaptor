@@ -131,3 +131,16 @@ Ninguna.
 - Tope de `t_recvs` por muestra: añadirlo cuando la cola de avisos tenga límite.
 - Contador entero del retraso máximo entre aviso y muestra en `s3_evidence` (ajuste 2 del Arquitecto): diferido. Cambia el conjunto de campos que fija el test SEC-04 `daemon/sessions_s3_tests.rs` («nothing else»), y la TD deja fuera cambiar tests previos. Va a una TD de diagnóstico si la medida de TD-GRP-005 bajo carga no basta.
 - Ensanchar la ventana o sellar con el último aviso (opción b): descartado. Sellar con el último marcaría como «empezó antes» un `git` que empezó después de los avisos anteriores del lote.
+
+## Desviaciones durante la construcción (2026-11-09)
+
+Tras aprobar el plan, la suite bajo carga (~35–40) mostró que T001 no bastaba. Con instrumentación temporal (fuera del commit) aparecieron dos causas más. **Decisión del orquestador, validada por el Arquitecto con ajustes, todos incorporados.** Detalle en ADR-GRP-012, Enmienda 2026-11-09, y en TD-GRP-005, «Estado de la implementación».
+
+| Cambio | Ficheros | Prueba |
+|---|---|---|
+| Barrera de muestreo en `Detector::evidence` (`SessionConfig::sample_barrier`, 200 ms) | `crates/core/src/detect/mod.rs` | `detect/tests/sample_barrier.rs` (en rojo sin la barrera, comprobado) |
+| `ObserverHooks::git_dir_written`: aviso cortado en el mtime del reflog de `HEAD`, tope de 3 s en el detector (`READ_WRITE_MAX_AGE`) | `watch/mod.rs`, `watch/repo.rs`, `detect/mod.rs` | `sample_barrier.rs`: `a_read_notice_*`; `watch/repo.rs`: `the_write_mark_is_the_head_reflogs_mtime` |
+| Traza `s3_read_notice age_ms/kept` (condición del Arquitecto) | `daemon/sessions.rs` | revisión en dogfooding |
+| La demo de M2 retiene el `git` del commit por señal, no 0,5 s fijos | `apps/cli/tests/m2_demo_undo_agent.rs` | 10 de 10 con carga ~40 |
+
+`crates/core/src/watch/` estaba en `deny_paths`. El contrato quedó sin congelar, porque P0 se abortó en modo rápido, así que esto no es una violación medida. Aun así, se sale de lo que se aprobó y se declara en el PR.
