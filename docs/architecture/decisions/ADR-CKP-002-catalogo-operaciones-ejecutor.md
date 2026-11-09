@@ -5,7 +5,7 @@ type: adr
 status: accepted
 accepted: 2026-10-04
 created: 2026-10-04
-updated: 2026-10-28
+updated: 2026-11-08
 date: 2026-10-04
 domain: GRP
 feature: cockpit
@@ -117,7 +117,7 @@ sequenceDiagram
 
 - **Capa** (M-03): la fija el daemon según el solicitante resuelto, sea cual sea el cliente:
   - `mcp` si el solicitante es un agente, también desde la TUI, la CLI o un cliente JSON-RPC directo;
-  - `cockpit` solo para un "sin atribuir" que pasa los controles 1 a 3 de ADR-GRP-005 § 6, incluido `daemon-descendant`;
+  - `cockpit` solo para un "sin atribuir" que pasa los controles 1 a 3 de ADR-GRP-005 § 6, incluido `daemon-descendant`. Enmienda (2026-11-08, ADR-GRP-017): también para la app de escritorio (clase `desktop`) con **presencia de sesión**, limitada a las operaciones que se revierten en local; ver el bloque al final;
   - un "sin atribuir" que no pasa esos controles recibe `mcp`, la más restrictiva, y por tanto se rechaza (§ 3). En Windows, donde no hay controles equivalentes (TQ-14), esto deja el Cockpit sin capa `cockpit`. **Pendiente: etapa de validación multiplataforma**.
   - un descendiente de un hijo del ejecutor lleva la capa del plan solo para la atribución y el registro (§ 3);
   - **Cancelar** (§ 6) y **recibir la salida de Git** (§ 2) exigen capa `cockpit`, que un descendiente del daemon nunca tiene.
@@ -148,7 +148,7 @@ sequenceDiagram
 - **Se neutraliza**, con `-c` y variables fijas:
   - Los ejecutables de ADR-GRD-007 § 3.5: `core.fsmonitor`, `core.pager`, `core.editor`, `sequence.editor`, diff externo y `textconv`.
   - **Editor de rechazo** (L-01): `GIT_EDITOR`, `GIT_SEQUENCE_EDITOR`, `core.editor` y `sequence.editor` apuntan a un **ejecutable sin argumentos**: el enlace multillamada `raptor-no-editor`, que instala GitRaptor junto a `raptor` y que termina con error y un mensaje fijo, o `/usr/bin/false` si ese enlace no existe o su ruta tiene espacios o metacaracteres. Con una ruta absoluta limpia, Git lo ejecuta sin shell. **Nunca `:`**, que Git trata como "aceptar sin editar". Además, `GIT_MERGE_AUTOEDIT=no`, merge con `--no-edit` y un mensaje con plantilla fija que solo lleva el nombre de la rama validado.
-  - **Red** (M-02): `-c protocol.allow=never -c credential.helper= -c submodule.recurse=false`, `GIT_TERMINAL_PROMPT=0` y sin `GIT_ASKPASS` ni `SSH_ASKPASS`. Ninguna operación del catálogo usa la red y **nunca hay push ni fetch** (BR-CKP-CONS-002). En un *partial clone* (`extensions.partialClone` o algún `remote.*.promisor`), un objeto ausente hace fallar la operación con "objeto ausente", sin descarga y sin red. SPIKE-CKP-001 lo confirma.
+  - **Red** (M-02): `-c protocol.allow=never -c credential.helper= -c submodule.recurse=false`, `GIT_TERMINAL_PROMPT=0` y sin `GIT_ASKPASS` ni `SSH_ASKPASS`. Ninguna operación **local** del catálogo usa la red y **nunca hay push ni fetch** dentro de ellas (BR-CKP-CONS-002). Enmienda (2026-11-08, Q-DSK-14): push, pull y fetch pueden entrar como **operaciones de red** propias del catálogo, solo pedidas por el humano desde la app o la TUI y nunca por el MCP ni por un agente; su entorno de red lo fija su Dev Spec (bloque al final). En un *partial clone* (`extensions.partialClone` o algún `remote.*.promisor`), un objeto ausente hace fallar la operación con "objeto ausente", sin descarga y sin red. SPIKE-CKP-001 lo confirma.
   - **Historia sustituida** (L-04): `-c core.useReplaceRefs=false`, para que Git ejecute sobre los mismos objetos que leyó `gix` al preparar. Un repo con `info/grafts` se rechaza (§ 1).
   - `gc.auto=0` y `maintenance.auto=false`: el `gc` desacoplado escaparía del árbol de procesos del ejecutor. El usuario lo tendrá en su siguiente `git`.
   - **Rebase** (DEP-MCP-2): `--no-update-refs`, `--no-autosquash` y `--no-autostash` (y `rebase.updateRefs=false`, `rebase.autoStash=false`), y nunca `--exec`. El rebase no mueve otras ramas, que pueden ser de otros actores.
@@ -178,7 +178,7 @@ sequenceDiagram
 - **Con un worktree que tiene la base sacada** (es único): `git merge` del oid del plan en ese worktree, con las precondiciones de BR-CKP-ELIG-002.
 - **Sin ninguno**: solo **avance rápido**. Si el oid desciende de la punta esperada de la base, el ejecutor actualiza `refs/heads/<base>` con el valor viejo esperado, en una sola transacción de ref. Antes comprueba, bajo el cerrojo, que ningún worktree tiene la base sacada. No hay working tree que actualizar. El hook `reference-transaction` sí corre, y Guardrails ve la transición.
 - **Sin ninguno y sin avance rápido**: rechazo con el motivo y la acción "saca la base en un worktree para integrar".
-- Respeta "nunca push" y "nunca escribir fuera de la operación protegida": no crea worktrees temporales ni escribe objetos fuera de Git.
+- Respeta "nunca push" (el merge nunca usa la red; push solo existe como operación de red propia, Enmienda 2026-11-08) y "nunca escribir fuera de la operación protegida": no crea worktrees temporales ni escribe objetos fuera de Git.
 
 ### 8. Descartar: confirmación que nombra lo no recuperable, sin cuarentena (R-CKP-6)
 
@@ -314,7 +314,9 @@ Repos y perfiles temporales; nunca este repo.
 13. **Trabajo ajeno**: "sin atribuir" en macOS confirma el descarte de un worktree de claude-2 con el reto ligado. El reto reutilizado o el de un plan cambiado se rechazan. claude-1 sobre trabajo de claude-2: rechazo. En Windows: rechazo con motivo.
 14. **Editor**: `code --wait`, `vim` y `vim; rm -rf ~` (este último rechazado). `cockpit.editor` en la configuración del equipo, ignorado con diagnóstico. El MCP no ofrece `open-in-editor`. El editor recibe la ruta absoluta (I-03).
 15. **MCP**: un "sin atribuir" se rechaza; un agente que no enumera los avisos se rechaza; las respuestas no llevan la salida de Git (instantánea de la respuesta); una rama con U+202E, U+2028, U+2061 o un carácter de la tabla de Tags sale escapada y recortada a 100 caracteres (L-03).
-16. **Nunca push ni descargas**: captura de red durante todo el catálogo: 0 conexiones. En un *partial clone* con un objeto ausente y un remoto *promisor* local (`file://`), el merge falla con "objeto ausente", sin conexiones ni lectura del remoto (M-02).
+16. **Red solo por petición del humano** (enmendada el 2026-11-08, Q-DSK-14; el texto original era "Nunca push ni descargas: captura de red durante todo el catálogo: 0 conexiones"):
+    - **Operaciones locales**: captura de red durante todas las operaciones locales del catálogo: 0 conexiones. En un *partial clone* con un objeto ausente y un remoto *promisor* local (`file://`), el merge falla con "objeto ausente", sin conexiones ni lectura del remoto (M-02).
+    - **Operaciones de red** (`push`, `pull`, `fetch`, cuando existan): con capa `mcp`, con un agente como solicitante (también desde la TUI, la CLI o JSON-RPC directo) o desde `raptor-mcp`, se rechazan con `not-available-for-layer` y 0 conexiones. Con capa `cockpit`, solo conectan a la URL del remoto configurado que nombra el plan, y una denegación de Guardrails deja 0 conexiones. Desde la app, `push` sin factor por acción se rechaza sin conexión.
 17. **Descendientes (H-01, DEP-MCP-3, D21)**: un hook bajo el plan de claude-1 que se conecta al canal se atribuye a claude-1. Si pide un comando reservado, el canal lo rechaza con `daemon-descendant` y la auditoría lo registra como claude-1; si pide una confirmación, la excepción o Cancelar, se rechaza; también si abre una pty con `script`. Un hook con doble fork: en Linux, con el daemon como *subreaper*, se rechaza; en macOS es el riesgo residual (Pendiente: etapa de validación multiplataforma para Linux). Si pide una operación del catálogo, se rechaza sin esperar al cerrojo. Bajo un plan de "sin atribuir", el hook tampoco puede confirmar.
 18. **Barrera (I-02)**: un hook que se conecta en cuanto arranca encuentra al hijo ya registrado. ~~Si el registro falla (fallo inyectado), el hijo muere sin ejecutar ningún hook y el resultado es `failed-unchanged`.~~ Enmienda (2026-10-27, US-CKP-014): si el registro falla (fallo inyectado), el hijo muere; con la barrera del lector el hook puede haber corrido antes, así que el desenlace se clasifica por el estado real (`failed-unchanged` o `failed-changed`), con el snapshot previo intacto. El fin de la espera de 2 s deja la marca de auditoría `barrier-timeout`, distinta de `IdentityUnverified`.
 19. **Ruta nueva (H-02)**: se rechazan un padre con un componente enlace simbólico, un padre escribible por el grupo, una ruta dentro de `.git`, del perfil o de un worktree observado, y una ruta que aparece entre preparar y ejecutar (`lstat` bajo el cerrojo). La rama `feat/x` da `<repo>-feat-x`; una rama que se sanea a `.` o a vacío se rechaza. Por MCP, una petición con `ruta` falla por esquema.
@@ -500,3 +502,25 @@ De § 3, trabajo afectado de `commit`. Origen: [DS-US-MCP-009](../../requirement
 **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO.** Origen: [DS-US-CKP-018](../../requirements/features/cockpit/dev-specs/US-CKP-018-crear-worktree.md) C3. Precisa § 1 ("Ruta nueva de `create-worktree`"). El `status` sigue en `accepted`.
 
 - La ruta explícita solo la acepta la capa `cockpit`: el ejecutor rechaza `create-worktree` con `path` para cualquier otra capa con `not-available-for-layer`, además del esquema MCP sin `path` (DS-US-CKP-018 C3).
+
+## Enmienda (2026-11-08, ADR-GRP-017 y Q-DSK-14): capa `cockpit` para la app de escritorio y operaciones de red
+
+Origen: [ADR-GRP-017](./ADR-GRP-017-app-escritorio-cliente-daemon.md) § 3 y § 4 (D7, BR-27) y Q-DSK-14, opción (b) ([contexto de desktop](../../requirements/features/desktop/context.md), "Decisiones de alcance para Rene"). **Decisión del orquestador (2026-11-08), decidida por Rene.** El `status` sigue en `accepted`.
+
+**§ 4, capa `cockpit` con presencia de sesión**:
+
+- La capa `cockpit` también se concede a la app de escritorio (clase de cliente `desktop`) con ascendencia limpia, sin `daemon-descendant`, **identidad firmada verificada** y **presencia de sesión** vigente (ADR-GRP-017 § 3 y § 4). Solo cubre las operaciones del catálogo que **se revierten en local** con la Time Machine (NFR-01): las locales de este catálogo y las de UI-2 que se añadan.
+- Con identidad por ruta (alphas sin firmar) nunca hay presencia de sesión: cada operación pide el **factor por acción** de ADR-GRD-008, que concede la capa `cockpit` solo para ese plan, ligado a su huella.
+- La confirmación de trabajo ajeno (§ 3), la excepción consciente (§ 4), Cancelar una operación (§ 6, con presencia de sesión, B-2) y todo efecto remoto o no recuperable piden siempre el **factor por acción** desde la app. La presencia de sesión nunca los cubre.
+- Sin factor, la app recibe la capa `mcp` para escribir, es decir, rechazo, y muestra el comando de terminal equivalente (ADR-GRP-017 § 5).
+- No se crea una capa `desktop`: la diferencia está en cómo se prueba la presencia, no en lo que se permite (ADR-GRP-017, Alternativas).
+
+**Operaciones de red: push, pull y fetch** (BR-CKP-CONS-002 enmendada, Validación 16 enmendada):
+
+- **Quién**: solo el humano, con capa `cockpit`, desde la app o la TUI. **Nunca** con capa `mcp`, nunca con un agente como solicitante (aunque use la TUI o JSON-RPC directo) y nunca desde `raptor-mcp`: no tienen marca MCP y no hay herramienta MCP para ellas (allowlist de NFR-02, BR-14). Un descendiente del ejecutor no las pide (`daemon-descendant`).
+- **Cómo**: son operaciones propias del catálogo, separadas de las locales, y suben la versión menor del catálogo (§ 1). Pasan por el flujo de dos fases (§ 2), el cerrojo (§ 5) y la **decisión de Guardrails** registrada una sola vez (§ 4). Las locales siguen sin red (§ 6).
+- **Punto previo**: `pull` (y `fetch`, si mueve refs de seguimiento que la Time Machine guarda) llevan el snapshot `previo_garantizado` de la Time Machine antes de cambiar nada (NFR-01). `push` no tiene vuelta atrás en el remoto: desde la app pide **factor por acción** (ADR-GRP-017 § 4) y desde la TUI, la confirmación ligada al plan.
+- **Desde la app**: `push`, factor por acción. `pull` y `fetch`, presencia de sesión solo si la Dev Spec demuestra que el punto previo cubre todas las refs que mueven; si no, factor por acción.
+- **Parámetros**: el remoto es un **nombre** de remoto ya configurado en el repo, nunca una URL. Las ramas se validan como en § 1 (L-02). Sin `--force`; `--force-with-lease`, `--mirror`, `--tags` y borrar ramas remotas quedan fuera hasta otra enmienda.
+- **Entorno de red**: lo fija la Dev Spec de US-DSK-015, con revisión del security-expert. Al menos: credenciales del usuario por su `credential.helper` (las operaciones locales siguen con `credential.helper=`), `GIT_TERMINAL_PROMPT=0` y sin `GIT_ASKPASS` ni `SSH_ASKPASS` (sin diálogo de credenciales lanzado por el ejecutor), protocolos limitados a los de la URL del remoto, `submodule.recurse=false` y los hooks del usuario respetados (`pre-push`, NFR-07).
+- **Validación 16** queda enmendada en su sitio. Hasta que exista la Dev Spec, no hay operaciones de red en el catálogo y la parte local de la Validación 16 sigue vigente sin cambios.

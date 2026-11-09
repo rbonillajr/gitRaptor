@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-05
 date: 2026-10-05
 created: 2026-10-05
-updated: 2026-10-27
+updated: 2026-11-08
 deciders: [Orquestador (delegación de Rene Bonilla, 2026-10-04)]
 domain: MCP
 feature: mcp
@@ -458,3 +458,12 @@ El `status` sigue en `accepted`. Aplica D1 y D3 de DS-US-GRD-016.
 - **`policy-denied` con `reasons`.** El cuerpo lleva, además de `rules` y `decision_id`, `reasons: [{rule, level}]`: un par por regla, con el primer nivel que la decisión le da (los niveles vienen por precedencia), en el orden de la decisión, como mucho cuatro. Cada campo se valida (código de regla ASCII de 64 bytes como mucho; `level` de `minimum`, `floor`, `worktree`, `profile`, `local`, `system`); un par inválido se descarta, no la respuesta, y sin pares válidos `reasons` no se escribe. Los `params` del motivo (texto del repo) no se reenvían. El texto nombra el nivel de la primera regla con las palabras de la CLI.
 - **Contrato de herramienta de escritura (§ 4.1).** Toda herramienta que escribe está en `WRITE_TOOLS` con la operación del catálogo que la decide el ejecutor: tiene `mcp: true` y está gobernada por Guardrails, salvo `snapshot` (§ 4.4). Ninguna herramienta edita la configuración ni decide la cola, y el perfil MCP no recibe ningún método `guard.*`. Lo fijan pruebas de `apps/mcp/src/server.rs` y `crates/api/src/methods/mod.rs`.
 - **Presupuesto (RES-MCP-03).** `policy-denied` ≤ 221 tokens (antes 125) porque lleva `rules`, `decision_id` y `reasons` (≤ 4 pares, `MAX_DENIED_RULES`); peor caso medido 658 B en es (cuatro códigos de regla de los más largos con el nivel `worktree`). Decisión del orquestador (2026-10-28), validada por el Arquitecto: el tope es el peor caso medido más uno. El caso típico (una regla, en es) sigue ≤ 125 y lo fija una prueba. Subir `MAX_DENIED_RULES` exige una enmienda nueva.
+
+## Enmienda (2026-11-08, ADR-GRP-017: app de escritorio)
+
+Origen: [ADR-GRP-017](./ADR-GRP-017-app-escritorio-cliente-daemon.md) § 3 (D7, BR-27) y Q-DSK-14. **Decisión del orquestador (2026-11-08), decidida por Rene.** El `status` sigue en `accepted`.
+
+- **§ 2, perfil de lectura completa para la app de escritorio.** Un "sin atribuir" sin terminal de control solo conservaba el perfil completo si pasaba los controles 1 a 3. Ahora también lo recibe la app de escritorio (clase de cliente `desktop`) con **ascendencia limpia**, sin `daemon-descendant` y con **identidad verificada**: firmada (`SecCodeCopyGuestWithAttributes` por audit token y requisito con bundle id y Team ID) o, solo en las alphas sin firmar, por ruta (`/Applications` o `~/Applications`, sin traslocación). El diff bajo demanda va solo a esa conexión.
+- **Lectura no es escritura**: el perfil completo de lectura no concede la capa `cockpit`; la escritura sigue las reglas de ADR-GRP-017 § 4 y ADR-CKP-002 § 4 (Enmienda 2026-11-08).
+- **Lo demás no cambia**: con un agente en la ascendencia (p. ej. el agente lanza el binario de la app), la app recibe el perfil `mcp` por solicitante (S-01) y muestra "abierta por un agente: vista restringida". Sin ninguna de las dos identidades, la app sigue las reglas de un cliente sin terminal. Dentro de una conexión el perfil solo se endurece. La clase `desktop` no se declara: la deduce el daemon del ejecutable del par.
+- **El MCP no gana operaciones de red**: push, pull y fetch (Q-DSK-14) no tienen herramienta MCP ni marca MCP y se rechazan con capa `mcp` (ADR-CKP-002, Enmienda 2026-11-08).
