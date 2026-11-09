@@ -43,6 +43,7 @@ Los nombres CSS llevan el prefijo `--gr-`. La columna «Mock» conserva el nombr
 | `glass.surface.control` | `--gr-surface-control` | `#383b41` | `#ffffff` | `--bg-surface` |
 | `glass.surface.raised` | `--gr-surface-raised` | `#3f4249` | `#f6f7f9` | `--bg-surface-elevated` |
 | `glass.surface.hover` | `--gr-surface-hover` | `#464a52` | `#e9ebef` | `--bg-surface-hover` |
+| `glass.surface.scrim` (fondo del Dialog) | `--gr-surface-scrim` | `rgba(0,0,0,0.55)` | `rgba(20,24,32,0.35)` | — **[nuevo, DS-TS-DSK-003]** |
 | `glass.border.subtle` | `--gr-border-subtle` | `rgba(255,255,255,0.07)` | `rgba(20,24,32,0.07)` | `--border-subtle` |
 | `glass.border.strong` | `--gr-border-strong` | `rgba(255,255,255,0.13)` | `rgba(20,24,32,0.13)` | `--border-strong` |
 | `glass.highlight` | `--gr-highlight` | `inset 0 1px 0 rgba(255,255,255,0.05)` | `inset 0 1px 0 rgba(255,255,255,0.8)` | `--hi` |
@@ -88,6 +89,7 @@ Cada color de estado tiene dos tokens: el **relleno** (valor del mock, para punt
 |---|---|---|---|---|
 | `glass.accent` | `--gr-accent` | `#8ab4ff` | `#2a6be0` | `--accent-teal` (el nombre es heredado; el valor ya es azul) |
 | `glass.accent.text` (enlaces, texto accionable) | `--gr-accent-text` | `#93baff` **[nuevo]** | `#2762ce` **[nuevo]** | — |
+| `glass.accent.hover` (hover y pressed del Button primary) | `--gr-accent-hover` | `#a3c4ff` | `#1f5bc4` | — **[nuevo, DS-TS-DSK-003]** |
 | `glass.accent.glow` | `--gr-accent-glow` | `rgba(138,180,255,0.14)` | `rgba(42,107,224,0.10)` | `--accent-teal-glow` |
 | `glass.accent.border` | `--gr-accent-border` | `rgba(138,180,255,0.40)` | `rgba(42,107,224,0.35)` | `--accent-teal-border` |
 | `glass.success` | `--gr-success` | `#5fd68e` | `#1d9a52` | `--status-success` |
@@ -101,6 +103,7 @@ Cada color de estado tiene dos tokens: el **relleno** (valor del mock, para punt
 | `glass.danger.bg` | `--gr-danger-bg` | `rgba(255,138,148,0.14)` | `rgba(207,58,76,0.10)` | `--status-danger-bg` |
 | `glass.live` («en vivo», n.º de agentes) | `--gr-live` | `#f5a524` | `#c27406` | `--live` |
 | `glass.live.text` | `--gr-live-text` | `#f6aa2f` **[nuevo]** | `#975a05` **[nuevo]** | — |
+| `glass.live.bg` (fondo del Pill «en vivo») | `--gr-live-bg` | `rgba(245,165,36,0.14)` | `rgba(194,116,6,0.06)` | — **[nuevo, DS-TS-DSK-003]** |
 | `glass.agent.claude` (✳) | `--gr-agent-claude` | `#e8775a` | `#c9583b` | `--claude` |
 | `glass.agent.claude.text` | `--gr-agent-claude-text` | `#f0a794` **[nuevo]** | `#ab4b32` **[nuevo]** | — |
 
@@ -162,6 +165,20 @@ Las filas del árbol usan 9 px y los grupos 7 px (valores observados en el mock)
 | Fila del árbol: repo, rama, grupo | 30 px, 28 px, 24 px |
 | Trazo de los carriles | 1.5 px |
 | Objetivo mínimo de clic | 24 × 24 px (WCAG 2.5.8); los botones de acción, 32 px |
+| Anillo de foco (grosor y separación; barra de selección) | 2 px, `glass.size.ring` → `--gr-size-ring` **[nuevo, DS-TS-DSK-003]** |
+| Ancho del Dialog | 480 px, `glass.size.dialogWidth` → `--gr-size-dialog-width` **[nuevo, DS-TS-DSK-003]** |
+
+**Capas (z)** **[nuevo, DS-TS-DSK-003]**: números sin unidad, iguales en oscuro y claro.
+
+| Token | CSS | Valor | Capa |
+|---|---|---|---|
+| `glass.z.sticky` | `--gr-z-sticky` | 10 | Cabeceras fijas |
+| `glass.z.drawer` | `--gr-z-drawer` | 20 | Cajón del detalle |
+| `glass.z.popover` | `--gr-z-popover` | 40 | Menu y Popover |
+| `glass.z.scrim` | `--gr-z-scrim` | 50 | Fondo del Dialog |
+| `glass.z.dialog` | `--gr-z-dialog` | 51 | Dialog |
+| `glass.z.toast` | `--gr-z-toast` | 60 | Toast |
+| `glass.z.tooltip` | `--gr-z-tooltip` | 70 | Tooltip |
 
 ## 6. Sombras
 
