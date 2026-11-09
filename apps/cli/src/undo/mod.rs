@@ -8,9 +8,12 @@ use std::process::ExitCode;
 
 use gitraptor_api::methods;
 use gitraptor_api::rpc::code;
-use gitraptor_api::timemachine::{NotRestoredReason, TmConfirmData, TmRejectReason, UndoResult};
+use gitraptor_api::timemachine::{
+    MAX_SINCE_SECS, NotRestoredReason, TmConfirmData, TmRejectReason, UndoResult, parse_since,
+};
 use gitraptor_api::untrusted::sanitize;
 use gitraptor_core::client::ClientError;
+use gitraptor_core::timemachine::overlap::local_utc_offset_s;
 use gitraptor_core::timemachine::restore::KEPT_REF_IN_RECREATED_WORKTREE;
 use serde_json::json;
 
@@ -48,9 +51,42 @@ pub fn worktree_root(dir: &Path) -> Option<PathBuf> {
         .map(Path::to_path_buf)
 }
 
-/// `raptor undo [--since <duration>]`. The duration goes to the engine as typed: the engine
-/// validates it and counts the period with its own clock.
-pub fn run(json_out: bool, since: Option<&str>) -> ExitCode {
+/// Whose work an undo by agent takes back and since when, as the person reads it.
+struct AgentAsk {
+    /// The text of `--agent`, as typed.
+    agent: String,
+    /// Local time of now minus `--since` (or minus the 30 days of retention without it).
+    since: String,
+}
+
+impl AgentAsk {
+    fn new(agent: &str, since: Option<&str>) -> Self {
+        Self::at(agent, since, now_ms(), local_utc_offset_s())
+    }
+
+    fn at(agent: &str, since: Option<&str>, now_ms: i64, offset_s: i32) -> Self {
+        // An invalid duration is the engine's to refuse; the text then never shows the period.
+        let secs = since
+            .and_then(|s| parse_since(s).ok())
+            .unwrap_or(MAX_SINCE_SECS);
+        let span_ms = i64::try_from(secs.saturating_mul(1_000)).unwrap_or(i64::MAX);
+        Self {
+            agent: sanitize(agent),
+            since: crate::events::local_time(now_ms.saturating_sub(span_ms), offset_s),
+        }
+    }
+}
+
+fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))
+}
+
+/// `raptor undo [--since <duration>] [--agent <id>]`. The duration and the agent go to the
+/// engine as typed: the engine validates them and counts the period with its own clock.
+pub fn run(json_out: bool, since: Option<&str>, agent: Option<&str>) -> ExitCode {
+    let ask = agent.map(|a| AgentAsk::new(a, since));
     let cwd = std::env::current_dir()
         .and_then(gitraptor_cli::paths::canonicalize)
         .ok();
@@ -66,6 +102,9 @@ pub fn run(json_out: bool, since: Option<&str>) -> ExitCode {
     let mut params = json!({ "worktree": worktree.to_string_lossy(), "surface": "cli" });
     if let Some(since) = since {
         params["since"] = json!(since);
+    }
+    if let Some(agent) = agent {
+        params["agent"] = json!(agent);
     }
     let answer = match confirm::call(
         &mut client,
@@ -85,7 +124,7 @@ pub fn run(json_out: bool, since: Option<&str>) -> ExitCode {
             }
             match serde_json::from_value::<UndoResult>(value) {
                 Ok(result) => {
-                    print_done(&result, &worktree, since);
+                    print_done(&result, &worktree, since, ask.as_ref());
                     ExitCode::SUCCESS
                 }
                 Err(err) => {
@@ -110,7 +149,7 @@ pub fn run(json_out: bool, since: Option<&str>) -> ExitCode {
                 println!("{data}");
                 return ExitCode::FAILURE;
             }
-            for line in failure_text(err, &worktree, since).lines() {
+            for line in agent_failure_text(err, &worktree, since, ask.as_ref()).lines() {
                 eprintln!("{CMD}: {line}");
             }
             ExitCode::FAILURE
@@ -166,8 +205,24 @@ fn plan_text(data: &TmConfirmData, since: Option<&str>) -> String {
     )
 }
 
-fn print_done(result: &UndoResult, worktree: &Path, since: Option<&str>) {
-    if let Some(since) = since {
+fn print_done(result: &UndoResult, worktree: &Path, since: Option<&str>, ask: Option<&AgentAsk>) {
+    if let Some(ask) = ask {
+        // Only the agent's work was taken back: how much, whose, since when, and the prior.
+        let count = result.undone_operation_ids.len().max(1).to_string();
+        println!(
+            "{CMD}: {}",
+            t(
+                "undo.done-agent",
+                &[
+                    ("count", &count),
+                    ("agent", &ask.agent),
+                    ("since", &ask.since),
+                    ("worktree", &shown(worktree)),
+                    ("id", &sanitize(&result.prior_snapshot_id)),
+                ],
+            )
+        );
+    } else if let Some(since) = since {
         // A period may take back one operation or many: the count, the oldest and the prior.
         let count = result.undone_operation_ids.len().max(1).to_string();
         println!(
@@ -230,8 +285,26 @@ fn print_done(result: &UndoResult, worktree: &Path, since: Option<&str>) {
 
 /// The message for a failed undo: a rejection with its reason, a scope the
 /// engine does not observe, an interruption, or the common errors.
+#[cfg(test)]
 fn failure_text(err: ClientError, worktree: &Path, since: Option<&str>) -> String {
+    agent_failure_text(err, worktree, since, None)
+}
+
+/// [`failure_text`] for an undo by agent: `ask` names the agent and the period.
+fn agent_failure_text(
+    err: ClientError,
+    worktree: &Path,
+    since: Option<&str>,
+    ask: Option<&AgentAsk>,
+) -> String {
     match err {
+        ClientError::Rpc(err)
+            if err.code == code::INVALID_PARAMS
+                && ask.is_some()
+                && err.message.starts_with("agent:") =>
+        {
+            t("undo.invalid-agent", &[])
+        }
         // With --since the period is the only parameter the person typed.
         // The engine names the field first (`since: ...`); another invalid field keeps its text.
         ClientError::Rpc(err)
@@ -257,6 +330,17 @@ fn failure_text(err: ClientError, worktree: &Path, since: Option<&str>) -> Strin
                 {
                     overlap::rejection_lines(Tr::current(), d.reason, d.overlap.as_ref()).join("\n")
                 }
+                Some(d) if d.reason == TmRejectReason::NothingToUndo && ask.is_some() => {
+                    let (agent, since) = ask.map_or(("", ""), |a| (&a.agent, &a.since));
+                    t(
+                        "undo.reason.nothing-of-agent",
+                        &[("agent", &agent), ("since", &since)],
+                    )
+                }
+                Some(d) if d.reason == TmRejectReason::NotSelectable => t(
+                    "undo.reason.not-selectable",
+                    &[("agent", &ask.map_or("", |a| a.agent.as_str()))],
+                ),
                 Some(d) => match (d.reason, since) {
                     (TmRejectReason::NothingToUndo, Some(since)) => t(
                         "undo.reason.nothing-in-period",
@@ -357,6 +441,9 @@ mod tests {
             TmRejectReason::ConfirmationUnavailable,
             TmRejectReason::Overlap,
             TmRejectReason::OverlapUnverified,
+            TmRejectReason::NotSelectable,
+            TmRejectReason::SelectiveUndoBelow,
+            TmRejectReason::AttributionUnavailable,
         ] {
             let key = reason_key(reason);
             assert!(has_key(key), "{key}");
@@ -383,9 +470,23 @@ mod tests {
             "undo.not-in-worktree",
             "undo.not-observed",
             "undo.interrupted",
+            "undo.done-agent",
+            "undo.reason.nothing-of-agent",
+            "undo.invalid-agent",
         ] {
             assert!(has_key(key), "{key}");
         }
+    }
+
+    /// The period of an undo by agent is local now minus `--since`, or minus 30 days.
+    #[test]
+    fn the_agent_period_is_counted_back_from_now() {
+        let day = 86_400_000;
+        let ask = AgentAsk::at("codex\u{1b}-1", Some("1d"), 40 * day, 3_600);
+        assert_eq!(ask.since, "1970-02-09 01:00:00");
+        assert!(!ask.agent.contains('\u{1b}'), "{}", ask.agent);
+        let ask = AgentAsk::at("codex-1", None, 40 * day, 0);
+        assert_eq!(ask.since, "1970-01-11 00:00:00");
     }
 
     #[test]
