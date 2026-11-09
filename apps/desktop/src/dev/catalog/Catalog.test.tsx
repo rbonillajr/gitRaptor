@@ -31,7 +31,7 @@ describe("TS003-CATALOG dev catalog", () => {
   it("TS003-CATALOG: each panel paints the primitives (one section per primitive with its heading)", () => {
     render(<Catalog />);
     for (const panel of [dark(), light()]) {
-      for (const name of ["Button", "IconButton", "Chip", "Pill", "StatusPill", "StatePanel", "CopyCommand", "Skeleton", "StatusDot", "RepoBadge", "SegmentedControl", "Toggle", "Tree", "Menu", "Popover", "Toast", "Dialog", "Tooltip", "Table"]) {
+      for (const name of ["Button", "IconButton", "Chip", "Pill", "StatusPill", "StatePanel", "CopyCommand", "Skeleton", "WorktreeCard", "CardSkeleton", "StatusDot", "RepoBadge", "SegmentedControl", "Toggle", "Tree", "Menu", "Popover", "Toast", "Dialog", "Tooltip", "Table"]) {
         expect(within(panel).getByRole("heading", { name }), `${name} heading in ${panel.getAttribute("data-theme")}`).toBeInTheDocument();
       }
     }

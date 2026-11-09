@@ -1,6 +1,8 @@
 import { useState, type ReactNode } from "react";
 import {
   Button,
+  CardSkeleton,
+  WorktreeCard,
   Chip,
   CopyCommand,
   Dialog,
@@ -286,6 +288,57 @@ export function CatalogGrid() {
       <Section name="Skeleton">
         <Surface>
           <Skeleton />
+        </Surface>
+      </Section>
+
+      <Section name="WorktreeCard">
+        <Surface>
+          <ul className="m-0 flex list-none flex-col gap-(--gr-space-2) p-0">
+            <li>
+              <WorktreeCard
+                symbol="●"
+                agentLabel="Claude Code · feat-pagos"
+                colorSlot={1}
+                muted={false}
+                shared={false}
+                stateText="active"
+                main={false}
+                branchText="feat-pagos"
+                branchCommit={null}
+                filesText="2 changed files"
+                syncText="3 ahead and 1 behind main"
+                activityText="2 min ago"
+                attentionText="⚡ predicted conflict with feat-login"
+                unavailableText={null}
+                a11yLabel="Claude Code · feat-pagos, active, feat-pagos, 2 changed files, 3 ahead and 1 behind main, 2 min ago, predicted conflict with feat-login"
+              />
+            </li>
+            <li>
+              <WorktreeCard
+                symbol="○"
+                agentLabel="No agent · tienda"
+                colorSlot={null}
+                muted
+                shared={false}
+                stateText=""
+                main
+                branchText="abc1234 (no branch)"
+                branchCommit="abc1234"
+                filesText="no changes"
+                syncText="not computable"
+                activityText="–"
+                attentionText={null}
+                unavailableText={null}
+                a11yLabel="main worktree, No agent · tienda, abc1234 (no branch), no changes, not computable, –"
+              />
+            </li>
+          </ul>
+        </Surface>
+      </Section>
+
+      <Section name="CardSkeleton">
+        <Surface>
+          <CardSkeleton />
         </Surface>
       </Section>
 
