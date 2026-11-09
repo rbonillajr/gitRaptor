@@ -242,7 +242,7 @@ sequenceDiagram
 | `PairStateView`, `PairReason`, `PairLevel` | `gitraptor_api::prediction` | **CREATE** en DS-TS-CKP-001 T009 |
 | `Msg::Tick { now_ms }`, `TICK` | `apps/cli/src/tui/app.rs:30`, `:113`; `update.rs:58` | existe |
 | `Model.now_ms` (reloj de pared, ms UTC: `app.rs:221`, `wall_ms`) | `apps/cli/src/model.rs` | existe |
-| `fn age(ms) -> (i64, &str)` | `apps/cli/src/present/i18n.rs:92` | **MODIFY** a `pub(crate)` (E2) |
+| `fn age(ms) -> (i64, &str)` | `apps/cli/src/present/i18n.rs:93` | **MODIFY** a `pub(crate)` (E2) |
 | `FreshnessText` | `apps/cli/src/present/freshness_text.rs` | **CREATE** (T001, E1) |
 | `tui::freshness` | `apps/cli/src/tui/freshness.rs` | **CREATE** (T002); firmas libres, puras, sin E/S |
 
