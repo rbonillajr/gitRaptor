@@ -2,14 +2,27 @@
 # Uso local:  cargo nextest run --workspace
 # Uso CI/certificación (escribe JUnit):  cargo nextest run --workspace --profile ci
 
+[test-groups]
+# Los tests de `us_tmc_011` comparten daemons a través de un mutex estático del harness; nextest
+# corre cada test en su propio proceso, así que el mutex no los serializa: uno a la vez.
+us-tmc-011 = { max-threads = 1 }
+
 [profile.default]
 # Un test se marca lento a los 60 s y se mata a los 4 períodos (240 s):
 # ningún test puede colgarse sin fin (lección del cuelgue de `q_quits`).
 slow-timeout = { period = "60s", terminate-after = 4 }
 
+[[profile.default.overrides]]
+filter = 'binary(us_tmc_011)'
+test-group = 'us-tmc-011'
+
 [profile.ci]
 fail-fast = false
 slow-timeout = { period = "60s", terminate-after = 4 }
+
+[[profile.ci.overrides]]
+filter = 'binary(us_tmc_011)'
+test-group = 'us-tmc-011'
 
 [profile.ci.junit]
 # Ruta relativa a target/nextest/ci/
