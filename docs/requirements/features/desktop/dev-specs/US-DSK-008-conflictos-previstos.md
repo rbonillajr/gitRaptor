@@ -17,7 +17,7 @@ blocked_by: [US-DSK-004]
 related:
   context: ../context.md
   story: ../user-stories/US-DSK-008-conflictos-previstos.md
-  stories: [US-DSK-008, US-DSK-004, US-DSK-005, US-DSK-003, TS-DSK-003, US-CKP-006, US-CKP-007, US-CKP-008, US-CKP-009, TS-CKP-001, US-GRD-014, US-GRP-016]
+  stories: [US-DSK-008, US-DSK-004, US-DSK-005, US-DSK-007, US-DSK-003, TS-DSK-003, US-CKP-006, US-CKP-007, US-CKP-008, US-CKP-009, TS-CKP-001, US-GRD-014, US-GRP-016]
   adrs: [ADR-GRP-017, ADR-GRP-004, ADR-GRP-003, ADR-CKP-001, ADR-GRP-016]
   nfrs: [NFR-04, NFR-09, NFR-13, SEC-12]
   api_spec: null
@@ -29,6 +29,7 @@ must_read:
   - ./US-DSK-003-estado-del-motor.md
   - ./TS-DSK-003-primitivas-design-system-escritorio.md
   - ../design/design-flow.md
+  - ../design/primitives-spec.md
   - ../../cockpit/dev-specs/TS-CKP-001-predictor-conflictos.md
   - ../../cockpit/dev-specs/US-CKP-006-conflictos-previstos.md
   - ../../cockpit/dev-specs/US-CKP-007-frescura-prediccion.md
@@ -46,9 +47,15 @@ must_read:
   - ../../../../../apps/desktop/src-tauri/src/engine/supervisor.rs
   - ../../../../../apps/desktop/src-tauri/src/engine/ingest.rs
   - ../../../../../apps/desktop/src-tauri/src/engine/wire.rs
+  - ../../../../../apps/desktop/src-tauri/src/engine/launcher.rs
+  - ../../../../../apps/desktop/src-tauri/src/engine/link.rs
+  - ../../../../../apps/cli/src/guard/confirm.rs
+  - ../../../../../crates/core/src/guardrails/confirm.rs
   - ../../../../../apps/desktop/src/state/engine-cache.ts
   - ../../../../../apps/desktop/src/fleet/fleet-model.ts
   - ../../../../../apps/desktop/src/ui/Toast.tsx
+  - ../../../../../apps/desktop/src/ui/CopyCommand.tsx
+  - ../../../../../apps/desktop/src/shell/useShortcuts.ts
   - ../../../../../apps/cli/src/present/freshness_text.rs
   - ../../../../../apps/cli/src/present/prediction_text.rs
   - ../../../../../apps/cli/src/present/conflict_alert_text.rs
@@ -65,7 +72,7 @@ validation:
   blocked_tasks: []
   gaps_release: 0
   ready_to_release: true
-tags: [desktop, ui-1, prediccion-conflictos, banda-de-conflicto, frescura, alerta-conflicto-nuevo, base-pendiente, sec-12, sin-notificaciones-so]
+tags: [desktop, ui-1, prediccion-conflictos, banda-de-conflicto, frescura, alerta-conflicto-nuevo, base-pendiente, sec-12, sin-notificaciones-so, comando-copiable, contrato-publico-banda, esc-consumido]
 ---
 
 # DS-US-DSK-008 · Los conflictos previstos en la app
@@ -94,21 +101,23 @@ Las reglas de la predicción son las de la TUI y no se reabren: el panel y el `r
 | D3 | `PairDto` gana `rev`, `reason`, `computedAtUtcMs`, `overlapFiles`, `overlapPartial`, `conflictFiles` y `conflictTruncated`; `RepoFleetDto` gana `limits`. El detalle viaja aparte (`pairDetails`) con rutas saneadas por `display::visible` y rangos numéricos. `merge_base` y `rewrites_escalated` no viajan | Son los campos que piden la frescura (DS-US-CKP-007 A4) y el aviso; la TUI tampoco pinta los dos que se quedan fuera | Mandar `PairDetail` entero: más texto no confiable sin uso |
 | D4 | La caché del frontend guarda el resumen con el `rev` mayor que ha visto: un `prediction` o un `pairDetails` con `rev` menor que el guardado no lo pisa. Un detalle con `rev` mayor que el resumen trae su propio resumen (`PairDetail` lo aplana) y se adoptan los dos. El detalle se pinta solo si `detail.rev === pair.rev`; si no, la vista dice "cargando detalle" y el supervisor lo vuelve a pedir | Es la regla de `rev` de DS-US-CKP-006 (A2) sin el búfer `early`: el `PairDetail` ya lleva el resumen de su `rev` (`crates/api/src/prediction.rs:126-135`) | Guardar el adelantado aparte como la TUI: más estado para el mismo resultado |
 | D5 | **Dónde se pinta la banda.** Un panel "Conflictos previstos" **en el centro**, montado por `EngineCenter` encima de la vista principal (las tarjetas de la flota hoy; el grafo de US-DSK-005 cuando exista), con una `ConflictBand` por par ⚡ (primero) y ⚠, las líneas de frescura, el aviso de base pendiente y la línea de límites. Sin pares no se pinta el panel, solo la línea de límites. El panel **no** vive en `FleetView`: con US-DSK-005 la flota pasa al detalle, que es un cajón cerrado entre 1000 y 1359 px, y el ⚡ es la señal de más prioridad. Con el grafo, el panel se queda: el lienzo es `aria-hidden`, así que la lista de filas es la versión textual de la línea y la insignia del dibujo. La tarjeta conserva su fila ⚡ de US-DSK-004. **Decisión del orquestador (2026-11-09), validada por Diseñador UX** | Las dos tarjetas de un par no son contiguas en el orden de atención: una línea entre tarjetas mentiría. El panel es el de la TUI (AD6 de DS-US-CKP-006) y en el centro se ve a cualquier anchura | Pintar la banda entre tarjetas: depende de un orden que no la respeta. Dejar el panel en `FleetView`: desaparece del centro cuando la flota pasa al detalle |
-| D6 | **Contrato para US-DSK-005**: la banda es un modelo puro (`ConflictBandModel`, de `predictionView`) y un componente de presentación (`ConflictBand` en `src/ui`, variantes `row` y `badge`). US-DSK-005 coloca la línea entre los carriles cuyas claves son `a` y `b` (o sobre la línea de la base), en `glass.danger`, discontinua si `stale` o si los carriles no son contiguos, y pinta `ConflictBand variant="badge"` como insignia. Un ⚠ es solo insignia, sin línea (D-8 de DSF-DSK-001). El panel de D5 se queda en el centro encima del grafo (decisión de UX, D5); US-DSK-005 no reescribe el modelo | Una sola fuente para la banda en las dos superficies; esta historia no depende de US-DSK-005 | Que US-DSK-005 derive la banda de los `PairDto`: duplicaría frescura, nombres y orden |
-| D7 | El detalle de un par se abre **en el centro** en lugar de la flota (como la vista completa de Time Machine, DSF-DSK-001 § 2.2), con "Volver a la flota" y `Esc`. Lo abren el botón "Ver" de la banda, la acción del aviso y la píldora de la barra de título. El par abierto vive en `ui-store` (`openPair`), sin persistir; cambiar de repo lo cierra. **El centro tiene un solo destino a la vez** (flota o grafo, par abierto, Guardrails de US-DSK-007, Time Machine): abrir un par pone `centerView` en la vista principal y abrir otro destino pone `openPair` en `null`; cada "Volver" lleva a la vista principal, no al destino anterior (D-17). **Decisión del orquestador (2026-11-09), validada por Diseñador UX** | A 1000–1359 px el detalle derecho es un cajón cerrado; la maqueta § 4.e pone el par en el centro | Un `Dialog`: tapa la flota y el aviso de un ⚡ nuevo |
+| D6 | **Contrato público para US-DSK-005** (esta historia entra antes: orden 008 → 007 → 005). La banda es un modelo puro (`ConflictBandModel`, de `predictionView`) y un componente de presentación (`ConflictBand` en `src/ui`, variantes `row` y `badge`). Lo único que otra carpeta puede importar de `src/conflicts` es su **módulo público** `src/conflicts/index.ts`: los tipos `ConflictBandModel`, `SideRef` y `PredictionViewModel` y el hook `usePredictionView(fleet, cards, nowMs)` (el mismo modelo que pinta el panel, con `isNew` ya resuelto desde `AlertState`). US-DSK-005 monta la línea entre los carriles cuyas claves son `a` y `b` (o sobre la línea de la base) como capa en su slot `layers`, en `glass.danger`, discontinua si `stale` o si los carriles no son contiguos, y pinta `ConflictBand variant="badge"` como insignia en `laneBadge`; un ⚠ es solo insignia, sin línea (D-8 de DSF-DSK-001). El panel de D5 se queda en el centro encima del grafo; US-DSK-005 no reescribe el modelo ni importa `prediction-model.ts`, `alerts.ts` ni `PairDto`. **Decisión del orquestador (2026-11-09), validada por Arquitecto** | Una sola fuente para la banda en las dos superficies; esta historia no depende de US-DSK-005 y la que llega después consume un contrato fijado | Que US-DSK-005 derive la banda de los `PairDto`: duplicaría frescura, nombres y orden. Que 008 escriba la capa del lienzo: el grafo aún no existe cuando 008 se implementa |
+| D7 | El detalle de un par se abre **en el centro** en lugar de la flota (como la vista completa de Time Machine, DSF-DSK-001 § 2.2), con "Volver a la flota" y `Esc`. Lo abren el botón "Ver" de la banda, la acción del aviso y la píldora de la barra de título. **El centro tiene un solo destino a la vez** y esta historia crea su estado: `ui-store.center` es una unión `{ view: "main" } \| { view: "pair"; repoId; pairId }`, sin persistir, con `openPairDetail(p)` y `backToMain()`; US-DSK-007 le añade `{ view: "guardrails" }` y Time Machine el suyo. Abrir un destino sustituye al anterior por construcción; cada "Volver" lleva a la vista principal (flota hoy, grafo con US-DSK-005), no al destino anterior (D-15 de DSF-DSK-001); cambiar de repo vuelve a `main`. **Decisión del orquestador (2026-11-09), validada por Diseñador UX**; la unión como dueña única del centro: **Decisión del orquestador (2026-11-09), validada por Arquitecto** | A 1000–1359 px el detalle derecho es un cajón cerrado; la maqueta § 4.e pone el par en el centro | Un `Dialog`: tapa la flota y el aviso de un ⚡ nuevo |
 | D8 | Nombre de cada lado: la etiqueta del agente de su tarjeta (`CardModel.agent.label`, p. ej. "claude-1 · feat-pagos"); un lado sin tarjeta, su carpeta; la base, "{{base}} (rama principal)". `↔` se lee "y" en el nombre accesible | P5 de DS-US-CKP-006 (cada lado se nombra como encabeza su fila) y § 4.e de DSF-DSK-001 | — |
 | D9 | Frescura con los textos de DS-US-CKP-007: "hace N s/min/h/d" por par `current`; "desactualizado · hace N · recalculando" por par `recalculating` (banda discontinua y rangos atenuados); una línea "Calculando N de M pares"; una línea por motivo de `pending` y de `not-computable`; "Sin conflictos previstos · hace N" solo con todo `current` y sin ⚡ ni ⚠ (la antigüedad del más antiguo). Un `current` o `recalculating` sin `computedAtUtcMs` cuenta como `calculating` (E4 de DS-US-CKP-007) | BR-CKP-CALC-003: ningún par sin resultado dice "sin conflictos" | — |
 | D10 | **Base movida** (escenario 3): el motor pasa los pares contra la base a `calculating` y borra su resultado (`crates/core/src/predict/state.rs:79-84`, `:99-117`). La app recuerda en memoria el último `computedAtUtcMs` de cada par antes de pasar a `calculating` y la línea dice "Calculando N de M pares · último resultado hace 40 s", **sin** su nivel. Si no hay ninguno recordado (la app se abrió después), dice solo "Calculando N de M pares" | El escenario pide "ve la antigüedad del último resultado"; enseñar el nivel viejo contradiría al motor, que ya no lo publica como vigente | Enseñar el ⚡ viejo atenuado: una predicción vieja presentada como resultado |
-| D11 | **Base sin confirmar** (escenario 4): un par contra la base en `pending` con `reason: base-unconfirmed` (`crates/core/src/predict/pairs.rs:80`) se agrupa en "Pendiente: confirma la rama base (N pares)" y el panel enseña el aviso "Rama base pendiente de confirmar ({{base}})" con `CopyCommand` de `raptor guard confirm` y la pista "ejecútalo en la carpeta de {{repo}}". El aviso sale si algún par tiene ese motivo o si `repo.base.status` es `unconfirmed`. Los ⚡ entre worktrees siguen a la vista | US-CKP-009 escenario 1; el comando es el de US-GRD-014 (implementada). El comando no lleva la ruta: ningún texto no confiable llega al portapapeles (V6 de ADR-GRP-017) | Copiar el comando con la ruta saneada: el texto saneado puede no ser la ruta real |
+| D11 | **Base sin confirmar** (escenario 4): un par contra la base en `pending` con `reason: base-unconfirmed` (`crates/core/src/predict/pairs.rs:80`) se agrupa en "Pendiente: confirma la rama base (N pares)" y el panel enseña el aviso "Rama base pendiente de confirmar ({{base}})" con `CopyCommand` del comando de confirmar y su pista. El aviso sale si algún par tiene ese motivo, o si `repo.base.status` es `unconfirmed` y ningún par contra la base ha salido ya de `pending`/`base-unconfirmed` (la confirmación no tiene evento, G2: un par contra la base que pasa a calcularse prueba que ya está confirmada). Los ⚡ entre worktrees siguen a la vista. **El comando** (M-01 de security-expert) lo construye el backend en `ingest::repo` como `RepoFleetDto.confirmCommand` con `shell_command::posix` y la ruta de `raptor` de D21: `'<raptor>' 'guard' 'confirm' '<ruta cruda del repo>'` (la CLI acepta la ruta, `apps/cli/src/commands/guard.rs:45-48`). Si la ruta tiene un carácter de `display::must_escape`, el comando va sin la ruta (`withPath: false`) y la pista dice "ejecútalo en la carpeta de {{repo}}"; sin `raptor` conocido, no se ofrece (`raptor-unknown`) y se dice por qué. Nunca `raptor` a secas (`PATH`). **Verificado el 2026-11-09:** `raptor guard confirm` confirma la línea base del equipo de la rama principal, y esa confirmación incluye la rama base: `guard.confirm` aplica el plan con `set_confirmed_team_baseline` (`crates/core/src/guardrails/confirm.rs:138-158`, `crates/core/src/profile/team_baseline.rs:47-60`), el daemon lee esa confirmación para la base del repo (`crates/core/src/daemon/mod.rs:1360-1365`) y `observe::base_branch` la publica como `confirmed` (`crates/core/src/observe.rs:326-341`); el mismo dato lo fija `raptor guard install` al proteger (`crates/core/src/guardrails/install.rs:1170-1176`). Es un método reservado: la terminal enseña el plan y pregunta, y un agente no lo obtiene por ascendencia. **Decisión del orquestador (2026-11-09), validada por Arquitecto y security-expert** | US-CKP-009 escenario 1; el comando es el de US-GRD-014 (implementada). ADR-GRP-017 § 5 pide la ruta absoluta del `raptor` que sirve al daemon, como D9 de DS-US-DSK-007; la ruta del repo hace que el comando funcione pegado en cualquier carpeta | Copiar `raptor guard confirm` sin ruta ni `raptor` absoluto: depende del `PATH` y de la carpeta de la terminal, que pueden ser otro binario y otro repo |
 | D12 | **Alerta** con las reglas de DS-US-CKP-008 (A5, E1–E5, E7): nuevo = `pairId` que pasa a `level: conflict` con `state: current` y no está en el conjunto del repo; la primera instantánea del repo en esta ejecución siembra; `removed`, un `current` sin ⚡ o la ausencia en una instantánea sin `pairsTruncated` lo sacan; `repoClosed` olvida el repo. El conjunto vive en memoria por repo (`engine-store`) y sobrevive al cambio de repo | Alineación con US-CKP-008; volver a un repo con un ⚡ que apareció mientras no se miraba avisa, porque es nuevo para quien mira | Olvidar el conjunto al cambiar de repo: cada vuelta avisaría de todo |
 | D13 | El aviso es un toast de la primitiva (`useToast`, `kind: "info"`, `role="status"`, 5 s) con el texto de P5 ("⚡ Conflicto previsto: claude-1 · feat-pagos ↔ claude-2 · feat-login en pagos.rs") y la acción "Ver". Espera al primer archivo hasta 2 s y, si no llega, sale sin él (E3). Si el par deja de ser ⚡ antes de los 5 s, el toast se retira (E4). La marca "nuevo" de la banda dura lo que dura el ⚡ (E5) | `info` no pinta glifo propio: con `warning` saldría el icono de aviso junto al ⚡ (E6 de DS-US-CKP-008). La primitiva ya da `aria-live` cortés, pausa al pasar el ratón y cierre con `Esc` | Una variante `conflict` en `Toast`: toca una primitiva de TS-DSK-003 para un caso que `info` cubre |
 | D14 | **Sin notificaciones del SO.** Ni `tauri-plugin-notification` ni la API `Notification` del webview; tampoco sonido. La opción de activarlas (R-3 de DSF-DSK-001: opcionales, apagadas por defecto) es de otra historia | BR-CKP-WF-007 y la petición de esta historia | Activarlas apagadas por defecto ya aquí: pide una pantalla de Ajustes que no existe |
 | D15 | Otros repos: cuando el `attention.conflicts` contado de un repo que **no** está abierto sube, la app muestra un toast "⚡ Nuevo conflicto previsto en {{repo}}" con "Ver" (abre ese repo). Sin nombres del par: el ámbito global no los lleva. La primera instantánea global siembra los recuentos | "Dentro de la app" sin abrir el ámbito de cada repo (NFR-13.8) | Suscribirse a todos los repos para tener los pares: tráfico por repos que nadie mira |
 | D16 | La píldora de la barra de título "⚡ N conflictos previstos" (DSF-DSK-001 § 2.2) suma los `attention.conflicts` contados de todos los repos y solo sale con N > 0. Es un `Button variant="danger" size="sm"` (sin `shape="pill"`: primitives-spec § 2.1 lo reserva a "Integrar cambios" y con `size="sm"` el radio es `radius-sm`; el borde `danger` y el ⚡ la distinguen). Abre el repo con más conflictos (empate: el abierto, luego por nombre) y, si ese repo tiene un único par ⚡, su detalle; si no, lleva el foco al panel de conflictos. Por debajo de 1000 px de ventana muestra solo "⚡ N" (`conflicts.pill.compact`) y el nombre accesible sigue completo; va a la derecha del buscador y de la píldora del motor y nunca la desplaza. **Decisión del orquestador (2026-11-09), validada por Diseñador UX** | La maqueta la pone; los datos ya están en `global` (US-DSK-004). El número va siempre en texto (NFR-09) | — |
 | D17 | **Una pasada de avisos, como mucho un toast por oleada.** Si una misma pasada de `nextAlerts` levanta 3 o más ids (p. ej. al volver a un repo o al mover la base), sale un solo toast `conflicts.toast.many` con "Ver" (lleva el foco al panel) en lugar de uno por par. Con 1 o 2 ids, uno por par. El toast de otros repos (D15) sigue la misma regla. **Decisión del orquestador (2026-11-09), validada por Diseñador UX** | El visor aguanta 3 toasts y comparte sitio con el bloqueo ⛔ de US-DSK-007 (persistente): una ráfaga taparía el resto | Un toast por par: con 5 pares nuevos, la cola esconde el bloqueo |
-| D18 | **Teclado de las vistas del centro.** `Esc` actúa sobre una sola capa por pulsación, en este orden: diálogo, popover abierto (p. ej. "Límites (?)"), toast con foco, cajón del detalle, vista del centro (el detalle del par vuelve a la flota). El manejador de `Esc` del par solo actúa con el foco dentro del centro y sin otra capa abierta; `useShortcuts.onEscape` no cierra el cajón si el foco está en una vista del centro que va a consumir el `Esc`. Sin atajos nuevos en esta historia. **Decisión del orquestador (2026-11-09), validada por Diseñador UX** | Hoy `useShortcuts` escucha `Esc` en `window` para el cajón: un solo `Esc` cerraría el cajón y el detalle a la vez | Un atajo propio para el par: choca con § 5 de DSF-DSK-001 |
+| D18 | **Teclado de las vistas del centro.** `Esc` actúa sobre una sola capa por pulsación, en este orden: diálogo, popover abierto (p. ej. "Límites (?)"), toast con foco, cajón del detalle, vista del centro (el detalle del par vuelve a la flota). El manejador de `Esc` del par solo actúa con el foco dentro del centro y sin otra capa abierta. **Mecanismo, de esta historia por ser la primera que lo necesita** (T006): quien consume un `Esc` llama `event.preventDefault()` (las primitivas `Dialog`, `Popover` y `Toast`, que hoy lo escuchan en `document`, en el propio elemento o en `window`, y las vistas del centro en su `onKeyDown`), y `useShortcuts` sale sin hacer nada si `event.defaultPrevented` antes de llamar `onEscape`. US-DSK-007 (`GuardrailsView`) y US-DSK-005 lo reutilizan sin cambiar `useShortcuts`. Sin atajos nuevos en esta historia. **Decisión del orquestador (2026-11-09), validada por Diseñador UX**; el mecanismo y su dueño: **Decisión del orquestador (2026-11-09), validada por Arquitecto** | Hoy `useShortcuts` escucha `Esc` en `window` para el cajón: un solo `Esc` cerraría el cajón y el detalle a la vez | Un atajo propio para el par: choca con § 5 de DSF-DSK-001 |
 | D19 | **Glifos y nombres accesibles.** ⚡ y ⚠ van en un `<span aria-hidden="true">` cuando el texto de al lado ya dice el nivel (banda, títulos del detalle, píldora); el nombre accesible usa `conflicts.a11y.*` sin glifo. Cada botón "Ver" lleva `aria-label` `conflicts.band.openLabel` ("Ver el conflicto entre {{a}} y {{b}}"), que empieza por el texto visible (WCAG 2.5.3). El texto atenuado de un par `recalculating` usa `text-text-muted` (5.90:1 sobre `raised`, C14), nunca `opacity` ni `text-disabled` (primitives-spec § 1.2). El toast `info` lleva el ⚡ dentro del mensaje porque la primitiva no pinta glifo en `info` (D13). **Decisión del orquestador (2026-11-09), validada por Diseñador UX** | Un lector de pantalla diría "signo de alto voltaje" antes de cada banda; varios "Ver" iguales no se distinguen en una lista de botones | Quitar el ⚡ del texto del toast: pierde la marca visual que pide DSF § 4.b |
 | D20 | **Panel con tope.** El panel muestra a lo sumo 3 bandas; si hay más, un `Button variant="link" size="sm"` "y {{count}} más" (`aria-expanded`, `aria-controls`) las despliega y "Mostrar menos" las recoge. Las líneas de frescura y la de límites siempre visibles. **Decisión del orquestador (2026-11-09), validada por Diseñador UX** | Con 8 agentes pueden salir 10 pares; el panel no puede empujar el grafo fuera de la pantalla a 1440 × 900 | Panel con desplazamiento propio: un segundo scroll dentro del centro |
+| D21 | **Comandos copiables: un módulo del backend, de esta historia.** `src-tauri/src/engine/shell_command.rs` (T002) tiene `posix(args)` (cada argumento entre comillas simples POSIX con `'` escrita `'\''`; `None` si alguno tiene un carácter de `display::must_escape`) y `raptor_path(...)`: el ejecutable que sirve al daemon según el último informe `ready` de `raptor daemon ensure` (`daemon_path`), canonicalizado y aceptado por `installed::is_installed_raptor`; si no lo hay, o si está **dentro de un repo o worktree observado** (L-02 de security-expert sobre D9 de DS-US-DSK-007: un agente podría dejar ahí su propio `raptor`), el del bundle (`launcher::bundled_raptor`); si tampoco, `None`. Nunca `PATH`. `wire::stop_command` pasa a usar `posix` sin cambiar su salida. US-DSK-007 construye sobre este módulo su comando de excepción y de cancelar (su D6–D9) sin duplicarlo. **Decisión del orquestador (2026-11-09), validada por Arquitecto y security-expert** | El primer comando copiable del orden (D11) ya necesita la regla de D9 de DS-US-DSK-007; escribirla dos veces es la copia que se desfasa | Dejar la regla en 007, que entra después: 008 tendría que copiar `raptor` a secas |
+| D22 | **`CopyCommand` anuncia el resultado** (WCAG 4.1.3; G10 resuelto). Enmienda aditiva de la primitiva (primitives-spec § 2.16), hecha en esta historia porque es la primera del orden que la usa (T005): tras `writeText` correcto, el botón dice "Copiado" (`ui.common.copied`) 2 s con el ✔ y una región `role="status"` solo para lectores lo anuncia una vez; si falla, la región anuncia `ui.common.copyFailed` y el botón vuelve a "Copiar". Prop opcional nueva `onCopied?: (command: string) => void`, llamada solo tras un `writeText` correcto (la usa US-DSK-007 para su aviso de excepción distinta). Sin props nuevas, el comportamiento visible no cambia salvo el texto de 2 s. **Decisión del orquestador (2026-11-09), validada por Arquitecto** | Un cambio de icono no se anuncia; tres historias usan la primitiva y una sola tarea la enmienda | Una TS nueva para la enmienda: el cambio es de una primitiva y cabe en una tarea con su test |
 
 ---
 
@@ -260,22 +269,29 @@ graph LR
 
 **Ubicación.**
 - `apps/desktop/src-tauri/src/engine/prediction.rs` (**CREATE**: `PredictionTracker`)
-- `apps/desktop/src-tauri/src/engine/mod.rs` (**MODIFY**: una línea `mod prediction;`)
+- `apps/desktop/src-tauri/src/engine/shell_command.rs` (**CREATE**: `posix`, `raptor_path`, `confirm`; D11, D21)
+- `apps/desktop/src-tauri/src/engine/mod.rs` (**MODIFY**: dos líneas, `mod prediction;` y `pub mod shell_command;`)
 - `apps/desktop/src-tauri/src/engine/supervisor.rs` (**MODIFY**)
-- `apps/desktop/src-tauri/src/engine/ingest.rs` (**MODIFY**: `pair` ampliado, `pair_detail`, `limits`)
+- `apps/desktop/src-tauri/src/engine/launcher.rs` (**MODIFY**: guarda el `daemon_path` del último informe `ready`)
+- `apps/desktop/src-tauri/src/engine/link.rs` (**MODIFY**: `Link::daemon_exe(&self) -> Option<&Path>`)
+- `apps/desktop/src-tauri/src/engine/ingest.rs` (**MODIFY**: `pair` ampliado, `pair_detail`, `limits`, `confirm_command`)
+- `apps/desktop/src-tauri/src/engine/wire.rs` (**MODIFY**: `stop_command` usa `shell_command::posix`)
+- `apps/desktop/src-tauri/tests/shell_command.rs` (**CREATE**)
 - `apps/desktop/src-tauri/tests/engine_wire.rs` (**MODIFY**: fixture congelada con los campos nuevos)
-- `apps/desktop/src-tauri/tests/commands.rs` (**MODIFY**: un test que fija que la lista sigue cerrada)
+- `apps/desktop/src-tauri/tests/commands.rs` (**MODIFY**: un test que fija que esta historia no añade comandos)
 
 **Reglas**
 - `PredictionTracker` (uno por repo abierto, dentro de `RepoScope`): `reset(&[PairSummary])` con la instantánea; `apply(&PredictionChanged)`; `adopt(&[PairDetail])`; `wanted() -> Vec<String>` = ids con `level` ⚡ o ⚠ en `current` o `recalculating` cuyo `detail_rev` no es su `rev`, ⚡ primero, como mucho 50; `needs_fill()` = la instantánea trajo `pairs_truncated` y el recorrido no ha terminado.
-- Al abrir el repo (`take_repo`) y tras cada `prediction.changed` aplicado, el supervisor marca la hora del primer id pendiente. En el bucle de `stream`, cuando `link.next` vuelve sin notificación o pasaron 100 ms desde esa marca, llama `prediction.list { repo_id, pair_ids }` con `wanted()` y manda `pairDetails` (D2). Con `needs_fill()`, recorre `prediction.list { repo_id, cursor }` hasta que no haya `next_cursor` o hasta 20 páginas; cada página sale como `pairDetails` y la última lleva `filled: true`.
+- Al abrir el repo (`take_repo`) y tras cada `prediction.changed` aplicado, el supervisor marca la hora del primer id pendiente. En el bucle de `stream`, cuando `link.next` vuelve sin notificación o pasaron 100 ms desde esa marca, llama `prediction.list { repo_id, pair_ids }` con `wanted()` y manda `pairDetails` (D2). Con `needs_fill()`, recorre `prediction.list { repo_id, cursor }` hasta que no haya `next_cursor`, hasta 20 páginas o hasta sumar 2 MiB de respuestas, lo que llegue antes; cada página sale como `pairDetails` y la última lleva `filled: true` solo si el recorrido terminó por `next_cursor` ausente.
+- **Un solo recorrido de cursor por `RepoScope`** (L-01 de security-expert): una instantánea truncada nueva (resync) mientras hay un recorrido en curso no inicia otro; el que está en curso se abandona en su página actual y empieza uno nuevo **después**, desde la nueva instantánea. Nunca dos recorridos a la vez. **Decisión del orquestador (2026-11-09), validada por Arquitecto y security-expert**.
 - Errores: `LinkError::Refused` (un daemon sin `prediction.list`, o el repo que ya no existe) deja los pares sin detalle y no se reintenta hasta el siguiente cambio de `rev`; `LinkError::Lost` termina la sesión con `End::Reconnect`, como las demás llamadas.
-- `ingest::pair` añade los campos de D3 (`computedAtUtcMs` negativo → `null`). `ingest::pair_detail`: cada `path` pasa por `display::visible(_, TEXT_MAX_CHARS)`; `kind`, `ours`, `theirs`, `hunks_truncated`, `has_merge_rule` y `truncated` tal cual; `overlap` saneado igual. `ingest::repo` añade `limits`.
-- **La lista cerrada no cambia**: `commands.json` sigue siendo exactamente `app_info`, `engine_retry`, `engine_watch`, `fleet_open`; ningún `#[tauri::command]` nuevo.
+- `ingest::pair` añade los campos de D3 (`computedAtUtcMs` negativo → `null`). `ingest::pair_detail`: cada `path` pasa por `display::visible(_, TEXT_MAX_CHARS)`; `kind`, `ours`, `theirs`, `hunks_truncated`, `has_merge_rule` y `truncated` tal cual; `overlap` saneado igual. `ingest::repo` añade `limits` y `confirmCommand` (`ingest::confirm_command(raw_repo_path, raptor)`, D11): `shell_command::confirm` con la ruta cruda de `RepoView.path`; la ruta cruda nunca viaja aparte.
+- `shell_command` (D21): `posix(&[&str]) -> Option<String>`; `raptor_path(daemon_exe: Option<&Path>, bundled: Option<&Path>, watched: &[&Path]) -> Option<PathBuf>`, que descarta `daemon_exe` si cuelga de alguna ruta de `watched` (las rutas crudas de los repos y worktrees de la última instantánea global y del repo abierto) o si no es un `raptor` instalado; `confirm(raptor: Option<&Path>, repo: &str) -> ConfirmCommandDto`. El supervisor llama `raptor_path` con el `daemon_exe()` del `Link` y `launcher::bundled_raptor()`.
+- **Esta historia no añade comandos IPC** (I-01 de security-expert): `commands.json` y los `#[tauri::command]` no cambian. El test nuevo no fija la lista absoluta (la fija el test existente de DS-US-DSK-004 T002, que actualiza quien añade un comando, US-DSK-007): afirma que ningún nombre de `commands.json` ni de `#[tauri::command]` en `src/commands/` contiene `prediction`, `pair` ni `conflict`.
 
 - **Depende:** T001
-- **Refs:** D1–D3; DS-US-CKP-006 AD3 y AD4; ADR-CKP-001 § 2
-- **Aceptación:** `cargo test -p gitraptor-desktop --test prediction_supervisor --test fleet_supervisor --test engine_wire --test commands` en verde.
+- **Refs:** D1–D3, D11, D21; DS-US-CKP-006 AD3 y AD4; ADR-CKP-001 § 2; ADR-GRP-017 § 5
+- **Aceptación:** `cargo test -p gitraptor-desktop --test prediction_supervisor --test shell_command --test engine_stop_command --test fleet_supervisor --test engine_wire --test commands` en verde.
 
 ### T003 — Guardar pares y detalles en la caché con la regla de `rev`
 
@@ -285,15 +301,15 @@ graph LR
 - `apps/desktop/src/client/engine-types.ts` (**MODIFY**)
 - `apps/desktop/src/state/engine-cache.ts` (**MODIFY**)
 - `apps/desktop/src/state/engine-cache.test.ts` (**MODIFY**)
-- `apps/desktop/src/state/ui-store.ts` (**MODIFY**: `openPair`)
+- `apps/desktop/src/state/ui-store.ts` (**MODIFY**: `center`)
 - `apps/desktop/src/state/ui-store.test.ts` (**MODIFY**)
 - `apps/desktop/src/state/engine-store.ts` (**MODIFY**: conjunto de alertas por repo y recuentos sembrados, T007)
 
 **Reglas**
 - `RepoFleet` gana `details: Map<string, PairDetailDto>` y `lastComputed: Map<string, number>`. `repo` (instantánea) los vacía, salvo `lastComputed`, que conserva las horas de los `pairId` que siguen en la instantánea.
 - `prediction`: upsert por `pairId` **solo si** `incoming.rev >= stored.rev` (D4); `removed` quita el par, su detalle y su hora. Antes de pisar un par que tenía `computedAtUtcMs` con uno que no lo tiene, guarda la hora vieja en `lastComputed` (D10).
-- `pairDetails`: por cada detalle, si su `rev` es mayor que el del resumen guardado (o el par no estaba), adopta también su resumen; si es igual, guarda el detalle; si es menor, lo descarta. Con `filled: true`, `repo.pairsTruncated = false`.
-- `ui-store.ts`: `openPair: { repoId: string; pairId: string } | null`, `openPairDetail(p)` y `closePairDetail()`; `selectRepo` lo pone a `null`. No se persiste: `partialize` no cambia y el test de las cuatro claves sigue en verde.
+- `pairDetails`: si no hay entrada de caché para su `repoId` (repo cerrado o nunca abierto), el mensaje entero se descarta sin crear la entrada (L-02 de security-expert, **Decisión del orquestador (2026-11-09), validada por Arquitecto y security-expert**). Si la hay, por cada detalle: si su `rev` es mayor que el del resumen guardado (o el par no estaba), adopta también su resumen; si es igual, guarda el detalle; si es menor, lo descarta. Con `filled: true`, `repo.pairsTruncated = false`.
+- `ui-store.ts` (D7): `center: CenterView` con `CenterView = { view: "main" } | { view: "pair"; repoId: string; pairId: string }` (US-DSK-007 añade `{ view: "guardrails" }`), por defecto `main`; acciones `openPairDetail(p)` y `backToMain()` (`closePairDetail` es un alias de `backToMain`); `selectRepo` vuelve a `main`. No se persiste: `partialize` no cambia y el test de las cuatro claves sigue en verde.
 - Nunca muta el objeto anterior.
 
 - **Depende:** T002
@@ -309,8 +325,11 @@ graph LR
 - `apps/desktop/src/conflicts/prediction-model.test.ts` (**CREATE**)
 - `apps/desktop/src/conflicts/alerts.ts` (**CREATE**)
 - `apps/desktop/src/conflicts/alerts.test.ts` (**CREATE**)
+- `apps/desktop/src/conflicts/index.ts` (**CREATE**: módulo público de D6)
+- `apps/desktop/src/conflicts/usePredictionView.ts` (**CREATE**)
 
 **Reglas**
+- `index.ts` exporta solo `type ConflictBandModel`, `type SideRef`, `type PredictionViewModel` y `usePredictionView` (D6); `usePredictionView(fleet, cards, nowMs)` llama `predictionView` con `t` y el `isNew` de `AlertState`. Es el contrato que consume US-DSK-005: cambiarlo es cambiar el de las dos historias.
 - `predictionView(fleet, cards, nowMs, t)`: `bands` = un `ConflictBandModel` por par ⚡ o ⚠ en `current` o `recalculating` con `computedAtUtcMs`, ⚡ primero y luego por `pairId`; `lines` = las líneas de frescura de D9 y D10 en este orden: calculando, pendientes por motivo, no calculables por motivo, "sin conflictos"; `basePending` según D11; `limits` = los `LimitCode` recibidos.
 - Banda: nombres según D8 (`cards` es la salida de `fleetCards`); `firstFile` = el primer `path` de `detail.conflict.files` (⚡) o de `detail.overlap` (⚠) cuando `detail.rev === pair.rev`, si no `null`; `moreFiles` = `conflictFiles − 1` (o `overlapFiles − 1`), más el `+` de `conflictTruncated`/`overlapPartial`; `stale` = `state === "recalculating"`; `isNew` lo pasa quien llama desde `AlertState`.
 - Detalle: `pairDetailView(fleet, cards, pairId, nowMs, t)` → cabecera, frescura, estado de la vista (`default`, `overlap-only`, `against-base`, `loading`, `stale`, `calculating`, `pending`, `resolved`, `gone`) y archivos con sus rangos: `len ≤ 1` → `conflicts.range.line`; si no, `conflicts.range.lines` con `start` y `start + len − 1`; `hunksTruncated` añade `conflicts.range.more`.
@@ -328,6 +347,8 @@ graph LR
 - `apps/desktop/src/ui/ConflictBand.tsx` (**CREATE**)
 - `apps/desktop/src/ui/ConflictBand.test.tsx` (**CREATE**)
 - `apps/desktop/src/ui/index.ts` (**MODIFY**: una línea de export)
+- `apps/desktop/src/ui/CopyCommand.tsx` (**MODIFY**: enmienda aditiva de D22)
+- `apps/desktop/src/ui/CopyCommand.test.tsx` (**MODIFY**)
 - `apps/desktop/src/conflicts/ConflictPanel.tsx` (**CREATE**)
 - `apps/desktop/src/conflicts/ConflictPanel.test.tsx` (**CREATE**)
 - `apps/desktop/src/engine/EngineCenter.tsx` (**MODIFY**: monta `ConflictPanel` encima de la vista principal del centro; T006 añade el detalle)
@@ -339,15 +360,16 @@ graph LR
 
 **Reglas**
 - `ConflictBand` (en `src/ui`, sin `client`): props de § Contratos compartidos. `variant="row"`: glifo `⚡` (en `text-danger-text`) o `⚠` (en `text-warning-text`), "A ↔ B", primer archivo en `<code>`, "y N más", frescura, la marca "nuevo" como texto (no solo color) y un `Button size="sm"` "Ver" con `onOpen`. Borde izquierdo de 2 px en `danger` (⚡) o `warning` (⚠), **discontinuo** si `stale`. `variant="badge"`: glifo, primer archivo y frescura en una píldora, sin botón (la activa el carril). El nombre accesible es `a11yLabel`. Ningún color, radio ni tamaño literal.
-- `ConflictPanel`: `<section aria-labelledby>` con encabezado `conflicts.panel.title` (que recibe el foco programático de D16, `tabIndex={-1}`), aviso de base pendiente (D11) con `CopyCommand`, `<ul aria-label={conflicts.panel.list}>` de `ConflictBand` con el tope de 3 filas de D20, las líneas de frescura y la línea de límites con un `Popover` "Límites (?)" que lista los ocho textos. Sin pares, solo la línea de límites. Con la predicción aún no recibida (instantánea sin `prediction`), no se pinta: mientras llega, el centro enseña su propio esqueleto y el panel no deja un hueco. Las líneas de frescura van en `<p role="status">` (polite: cambian solas, § 7 de DSF-DSK-001) y no se anuncian si el texto no cambió. Con el motor `stale` (desconectado), el panel se atenúa como el resto del centro (`data-stale`) y sus botones quedan `aria-disabled` con el motivo.
+- `CopyCommand` (D22, primitives-spec § 2.16): tras `writeText` correcto, texto del botón `ui.common.copied` durante 2 s con el ✔ y una región `role="status"` (`sr-only`, presente desde el montaje y vacía) que recibe `ui.common.copied` una vez; si falla, la región recibe `ui.common.copyFailed`. `onCopied?.(command)` solo tras un `writeText` correcto. El temporizador se limpia al desmontar. Sin `onCopied`, ningún llamador existente cambia.
+- `ConflictPanel`: `<section aria-labelledby>` con encabezado `conflicts.panel.title` (que recibe el foco programático de D16, `tabIndex={-1}`), aviso de base pendiente (D11) con `CopyCommand` de `confirmCommand.command` y `conflicts.base.hint` (con ruta) o `conflicts.base.hintFolder` (`withPath: false`); con `not-offered`, sin `CopyCommand` y con `conflicts.base.raptorUnknown`; `<ul aria-label={conflicts.panel.list}>` de `ConflictBand` con el tope de 3 filas de D20, las líneas de frescura y la línea de límites con un `Popover` "Límites (?)" que lista los ocho textos. Sin pares, solo la línea de límites. Con la predicción aún no recibida (instantánea sin `prediction`), no se pinta: mientras llega, el centro enseña su propio esqueleto y el panel no deja un hueco. Las líneas de frescura van en `<p role="status">` (polite: cambian solas, § 7 de DSF-DSK-001) y no se anuncian si el texto no cambió. Con el motor `stale` (desconectado), el panel se atenúa como el resto del centro (`data-stale`) y sus botones quedan `aria-disabled` con el motivo.
 - Estados del panel (§ 4.b de DSF-DSK-001): cargando (sin predicción), calculando ("Calculando N de M pares"), desactualizado (banda discontinua y `conflicts.freshness.stale`), sin conflictos (`conflicts.freshness.clear`, solo con todo al día), base pendiente (D11), degradado (un `prediction.list` rechazado: bandas sin archivo, sin aviso de error), vacío (solo la línea de límites) y desconectado. Ningún estado dice "sin conflictos" sin resultado (BR-CKP-CALC-003).
 - Píldora (D16): `Button variant="danger" size="sm"` (sin `shape`) con `⚡` (`aria-hidden`) y `conflicts.pill_one`/`_other` (`conflicts.pill.compact` bajo 1000 px); nombre accesible `conflicts.pill.label`. Objetivo de 24 px (WCAG 2.5.8, primitives-spec § 1.6). Con la ventana a 720 px la barra de título no desborda: el buscador cede ancho antes que la píldora.
 - `EngineCenter` pasa a `ConflictPanel` las `cards` que calcula `fleetCards` y el `nowMs` de `useNow`; el panel y la vista principal comparten `fleet`.
 - `ConflictBand` (D19): glifo en `aria-hidden`, `Tooltip` del glosario en el glifo (solo con puntero, sin parada de tabulador extra por fila: la misma definición está como texto visible en el detalle, bajo cada sección), botón "Ver" con `aria-label` `conflicts.band.openLabel`. Con `prefers-reduced-motion` no hay transición al aparecer la fila ni la marca "nuevo".
 
 - **Depende:** T004
-- **Refs:** DSF-DSK-001 § 2.2, § 4.b, § 7, § 8, § 12; NFR-09; ADR-GRP-003; D5, D6, D11, D16, D19, D20
-- **Aceptación:** `ConflictBand.test.tsx`, `ConflictPanel.test.tsx`, `TitleBar.test.tsx` y `EngineCenter.test.tsx` en verde, `axe-core` sin violaciones a 1440 y 1200 px en en y es; `catalog.test.ts` en verde.
+- **Refs:** DSF-DSK-001 § 2.2, § 4.b, § 7, § 8, § 12; primitives-spec § 2.16; NFR-09; ADR-GRP-003; D5, D6, D11, D16, D19, D20, D22
+- **Aceptación:** `ConflictBand.test.tsx`, `CopyCommand.test.tsx`, `ConflictPanel.test.tsx`, `TitleBar.test.tsx` y `EngineCenter.test.tsx` en verde, `axe-core` sin violaciones a 1440 y 1200 px en en y es; `catalog.test.ts` en verde.
 
 ### T006 — Pintar el detalle del par en el centro
 
@@ -356,19 +378,24 @@ graph LR
 **Ubicación.**
 - `apps/desktop/src/conflicts/ConflictDetailView.tsx` (**CREATE**)
 - `apps/desktop/src/conflicts/ConflictDetailView.test.tsx` (**CREATE**)
-- `apps/desktop/src/engine/EngineCenter.tsx` (**MODIFY**: `FleetContent` pinta `ConflictDetailView` cuando `openPair` es del repo abierto)
+- `apps/desktop/src/engine/EngineCenter.tsx` (**MODIFY**: `FleetContent` pinta `ConflictDetailView` cuando `center` es `pair` del repo abierto)
+- `apps/desktop/src/shell/useShortcuts.ts` (**MODIFY**: `Esc` consumido, D18)
+- `apps/desktop/src/shell/AppShell.test.tsx` (**MODIFY**)
+- `apps/desktop/src/ui/Dialog.tsx`, `apps/desktop/src/ui/Popover.tsx`, `apps/desktop/src/ui/Toast.tsx` (**MODIFY**: `preventDefault()` del `Esc` que consumen)
+- `apps/desktop/src/ui/Dialog.test.tsx`, `apps/desktop/src/ui/Popover.test.tsx`, `apps/desktop/src/ui/Toast.test.tsx` (**MODIFY**)
 
 **Reglas**
+- `Esc` consumido (D18, primitives-spec § 1.7): `useShortcuts` comprueba `event.defaultPrevented` antes de `handlers.onEscape()` y no hace nada si lo está. `Dialog`, `Popover` y `Toast` llaman `event.preventDefault()` en el `keydown` de `Esc` que cierra su capa (los tres ya lo escuchan: `Dialog` en `document`, `Toast` en su elemento, `Popover` en su superficie). `ConflictDetailView` lo llama en el `onKeyDown` del contenedor del centro cuando cierra el detalle. Es el mecanismo que reutilizan US-DSK-007 y US-DSK-005.
 - Cabecera: `<h2 tabIndex={-1}>` con `conflicts.detail.title` (⚡) o `conflicts.detail.titleOverlap` (⚠) o `conflicts.detail.titleBase`, y debajo "carpeta A ↔ carpeta B · calculado hace N". Recibe el foco al abrir.
 - Sección "Conflicto previsto (trabajo ya en commits)": un bloque por archivo con la ruta en `<code>`, el tipo (`conflicts.kind.*`), una línea por lado ("claude-1 · feat-pagos — líneas 40–58") y la marca `conflicts.detail.mergeRule` si `hasMergeRule`. Sección "Solape (cambios aún sin commit)": las rutas de `overlap`. Si `conflictTruncated`/`overlapPartial`, `conflicts.detail.truncated`.
 - Columna "Qué hacer" (a la derecha cuando el centro mide 640 px o más, medido con el contenedor y no con la ventana; debajo si no): `conflicts.detail.todo` y la línea de límites con su `Popover`. El detalle no tiene botones de escritura ni "Copiar aviso para los agentes" (fuera de alcance, H-5).
 - Accesibilidad: `<h2>` con el glifo en `aria-hidden`; cada lado se lee "claude-1 · feat-pagos, líneas 40 a 58" (`conflicts.detail.sideA11y`) y `↔` se lee "y"; las rutas van en `<code>` y con `overflow-wrap: anywhere` (una ruta larga no desborda el centro); los rangos atenuados de `stale` usan `text-text-muted`; la lista de archivos es un `<ul>` y cada archivo un `<li>` con su ruta como encabezado de grupo. El foco al abrir va al `<h2>` (`tabIndex={-1}`), no al botón "Volver", para que el lector de pantalla lea el par primero.
 - Estados: `loading` → `Skeleton` en la lista de archivos y la cabecera ya pintada; `stale` → banda `conflicts.freshness.stale` y rangos en `text-text-muted`; `calculating` → `conflicts.detail.calculating`, nunca "sin conflictos"; `pending` → el motivo, y con `base-unconfirmed` el aviso de D11; `resolved` → `conflicts.detail.resolved` con su antigüedad; `gone` → `conflicts.detail.gone`. En `resolved` y `gone`, botón "Volver a la flota".
-- "Volver a la flota" (`Button variant="link"`) y `Esc` (con la precedencia de D18) llaman `closePairDetail()` y devuelven el foco al botón "Ver" de la banda que lo abrió, o al encabezado del panel si ya no existe. Con el motor desconectado, la vista se atenúa como el resto del centro (`data-stale`).
+- "Volver a la flota" (`Button variant="link"`) y `Esc` (con la precedencia de D18) llaman `backToMain()` y devuelven el foco al botón "Ver" de la banda que lo abrió, o al encabezado del panel si ya no existe. Con el motor desconectado, la vista se atenúa como el resto del centro (`data-stale`).
 
 - **Depende:** T005
-- **Refs:** DSF-DSK-001 § 4.e, § 5, § 7; D7, D8
-- **Aceptación:** `ConflictDetailView.test.tsx` en verde (§ 9.4) y `axe-core` sin violaciones en en y es.
+- **Refs:** DSF-DSK-001 § 4.e, § 5, § 7; primitives-spec § 1.7; D7, D8, D18
+- **Aceptación:** `ConflictDetailView.test.tsx`, `AppShell.test.tsx`, `Dialog.test.tsx`, `Popover.test.tsx` y `Toast.test.tsx` en verde (§ 9.4) y `axe-core` sin violaciones en en y es.
 
 ### T007 — Avisar de los conflictos nuevos dentro de la app
 
@@ -400,7 +427,7 @@ graph LR
 1. Un repo temporal con dos worktrees y dos sesiones de Claude Code que cambian las mismas líneas de `pagos.rs` y hacen commit: la banda ⚡ entre los dos, con `pagos.rs` y su antigüedad; "Ver" abre el detalle con los rangos de cada lado.
 2. Con la app abierta y sin ⚡, provocar uno nuevo: sale el toast con el par en menos de 2 s después del ⚡ en la flota; no aparece ninguna notificación del SO ni suena nada.
 3. Hacer un commit en la base: los pares contra la base dicen "Calculando… · último resultado hace N" y luego su resultado.
-4. Con la base sin confirmar (repo recién añadido sin `raptor guard confirm`): "Pendiente: confirma la rama base" y el aviso con el comando; tras confirmarlo por la CLI, los pares pasan a calcularse.
+4. Con la base sin confirmar (repo recién añadido sin `raptor guard confirm`): "Pendiente: confirma la rama base" y el aviso con el comando, que empieza por la ruta absoluta del `raptor` del daemon y acaba con la ruta del repo. Pegado en una terminal propia abierta en otra carpeta, enseña el plan y pregunta; tras aceptarlo, los pares pasan a calcularse y el aviso desaparece sin reabrir el repo. VoiceOver dice "Copiado" al pulsar "Copiar".
 
 - **Depende:** T007
 - **Refs:** escenarios de US-DSK-008
@@ -413,12 +440,16 @@ graph LR
 ```text
 apps/desktop/src-tauri/
 ├── src/engine/prediction.rs                       # PredictionTracker (T002)
-├── src/engine/{supervisor,ingest,wire,mod}.rs     # detalle y relleno (T001, T002)
-└── tests/prediction_supervisor.rs                 # (T001)
+├── src/engine/shell_command.rs                    # posix, raptor_path, confirm (T002; lo reutiliza US-DSK-007)
+├── src/engine/{supervisor,ingest,wire,mod,launcher,link}.rs   # detalle, relleno y comando de confirmar (T001, T002)
+└── tests/{prediction_supervisor,shell_command}.rs # (T001, T002)
 apps/desktop/src/
 ├── conflicts/{prediction-model,alerts}.ts         # puros (T004)
+├── conflicts/{index,usePredictionView}.ts         # módulo público para US-DSK-005 (T004)
 ├── conflicts/ConflictPanel.tsx, ConflictDetailView.tsx, useConflictAlerts.ts   # (T005–T007)
 ├── ui/ConflictBand.tsx                            # pieza compartida con el grafo (T005)
+├── ui/CopyCommand.tsx                             # anuncia «Copiado» (T005, D22)
+├── ui/{Dialog,Popover,Toast}.tsx, shell/useShortcuts.ts   # Esc consumido (T006, D18)
 ├── shell/TitleBar.tsx, engine/EngineCenter.tsx                                 # cableado (T005, T006)
 └── state/{engine-cache,ui-store,engine-store}.ts  # (T003)
 ```
@@ -434,22 +465,26 @@ apps/desktop/src/
 | `PairDto` (ampliado) | `wire.rs` ↔ `engine-types.ts` | `{ pairId, rev: number, a: string /* clave */, b: string \| "base", state: PairState, reason: PairReason \| null, level: "none" \| "overlap" \| "conflict" \| null, computedAtUtcMs: number \| null, overlapFiles: number, overlapPartial: boolean, conflictFiles: number, conflictTruncated: boolean }` |
 | `PairReason` | ídem | `"base-unconfirmed" \| "operation-in-progress" \| "power-saving" \| "dormant" \| "base-missing" \| "missing-object" \| "shallow" \| "limit-exceeded" \| "error"` |
 | `LimitCode` | ídem | los ocho de `crates/api/src/prediction.rs:102-111`, en kebab-case |
-| `RepoFleetDto` (ampliado) | ídem | gana `limits: LimitCode[]` |
+| `RepoFleetDto` (ampliado) | ídem | gana `limits: LimitCode[]` y `confirmCommand: ConfirmCommandDto` |
+| `ConfirmCommandDto` | ídem | `{ state: "offered", command: string, withPath: boolean } \| { state: "not-offered", reason: "raptor-unknown" }` (D11; `command` sale de `shell_command::posix`) |
 | `PairDetailDto` | ídem | `{ pair: PairDto, overlap: string[], conflict: { files: ConflictFileDto[], truncated: boolean } \| null }` |
 | `ConflictFileDto` | ídem | `{ path: string, kind: "content" \| "add-add" \| "modify-delete" \| "rename" \| "directory-file" \| "binary" \| "submodule", ours: LineRangeDto[], theirs: LineRangeDto[], hunksTruncated: boolean, hasMergeRule: boolean }` |
 | `LineRangeDto` | ídem | `{ start: number, len: number }` (1-based) |
 | `RepoFleet` (ampliado) | `src/state/engine-cache.ts` | gana `details: Map<string, PairDetailDto>` y `lastComputed: Map<string, number>` |
 | `ConflictBandModel` | `src/conflicts/prediction-model.ts` | `{ pairId, level: "conflict" \| "overlap", a: SideRef, b: SideRef, aLabel, bLabel, firstFile: string \| null, moreText: string \| null, freshnessText: string, stale: boolean, isNew: boolean, a11yLabel }` |
 | `SideRef` | ídem | `{ kind: "worktree"; key: string } \| { kind: "base" }` (lo que el grafo usa para elegir carriles) |
-| `PredictionViewModel` | ídem | `{ bands: ConflictBandModel[], lines: string[], basePending: { base: string; repo: string } \| null, limits: LimitCode[] }` |
+| `PredictionViewModel` | ídem | `{ bands: ConflictBandModel[], lines: string[], basePending: { base: string; repo: string; command: ConfirmCommandDto } \| null, limits: LimitCode[] }` |
 | `AlertState` | `src/conflicts/alerts.ts` | `ReadonlyMap<repoId, ReadonlyMap<pairId, "seeded" \| "alerted">>` |
 | `ConflictBandProps` | `src/ui/ConflictBand.tsx` | `{ variant: "row" \| "badge", level, aLabel, bLabel, firstFile, moreText, freshnessText, stale, isNew, a11yLabel, onOpen?: () => void, openRef?: Ref<HTMLButtonElement> }` |
-| `openPair` | `src/state/ui-store.ts` | `{ repoId: string; pairId: string } \| null`, sin persistir |
+| `CenterView` | `src/state/ui-store.ts` | `{ view: "main" } \| { view: "pair"; repoId: string; pairId: string }` en `center`, sin persistir; US-DSK-007 añade `{ view: "guardrails" }` (D7) |
+| Módulo público de `src/conflicts` | `src/conflicts/index.ts` | `type ConflictBandModel`, `type SideRef`, `type PredictionViewModel`, `usePredictionView(fleet, cards, nowMs): PredictionViewModel` (D6). Lo único que importa US-DSK-005 |
+| `CopyCommandProps` (de DS-US-DSK-003, ampliada) | `src/ui/CopyCommand.tsx` | `{ command: string; className?: string; onCopied?: (command: string) => void }` (D22) |
+| `ShellCommand` | `src-tauri/src/engine/shell_command.rs` | `posix`, `raptor_path`, `confirm` (D11, D21); lo reutiliza US-DSK-007 |
 | `Supervisor` (de DS-US-DSK-003 y DS-US-DSK-004) | `src-tauri/src/engine/supervisor.rs` | Gana el `PredictionTracker` en `RepoScope`, las llamadas a `prediction.list` y el mensaje `pairDetails` (T002) |
 | `ConflictPanel` | `src/conflicts/ConflictPanel.tsx` | `{ fleet: RepoFleet; cards: readonly CardModel[]; nowMs: number }`: lee `AlertState` y `openPairDetail`; pinta `PredictionViewModel` (T005) |
 | `ConflictDetailView` | `src/conflicts/ConflictDetailView.tsx` | `{ fleet: RepoFleet; cards: readonly CardModel[]; pairId: string; nowMs: number }`: pinta `PairDetailViewModel` (T006) |
-| `PairDetailViewModel` | `src/conflicts/prediction-model.ts` | `{ status: "default" \| "overlap-only" \| "against-base" \| "loading" \| "stale" \| "calculating" \| "pending" \| "resolved" \| "gone", title, subtitle, freshnessText, conflictFiles: Array<{ path, kindText, aText, bText, mergeRule: boolean }>, overlapFiles: string[], truncated: boolean, basePending: { base: string; repo: string } \| null }` |
-| `EngineCenter` (de DS-US-DSK-003) | `src/engine/EngineCenter.tsx` | Monta `ConflictPanel` encima de la vista principal y `ConflictDetailView` cuando `openPair` es del repo abierto (T005, T006). `FleetView` no cambia |
+| `PairDetailViewModel` | `src/conflicts/prediction-model.ts` | `{ status: "default" \| "overlap-only" \| "against-base" \| "loading" \| "stale" \| "calculating" \| "pending" \| "resolved" \| "gone", title, subtitle, freshnessText, conflictFiles: Array<{ path, kindText, aText, bText, mergeRule: boolean }>, overlapFiles: string[], truncated: boolean, basePending: { base: string; repo: string; command: ConfirmCommandDto } \| null }` |
+| `EngineCenter` (de DS-US-DSK-003) | `src/engine/EngineCenter.tsx` | Monta `ConflictPanel` encima de la vista principal y `ConflictDetailView` cuando `center` es `pair` del repo abierto (T005, T006). `FleetView` no cambia |
 
 Mensajes nuevos del `Channel` (`EngineMessage`, `type`):
 
@@ -466,7 +501,8 @@ Mensajes nuevos del `Channel` (`EngineMessage`, `type`):
 | `PredictionTracker` | Dentro de `RepoScope`: nace con la instantánea del repo, se reinicia en cada reapertura y muere con `repoClosed` o al cambiar de repo |
 | Detalles y `lastComputed` | En la entrada de caché del repo; `repoClosed` los quita con ella |
 | `AlertState` y recuentos sembrados | `engine-store` (Zustand, sin persistir): toda la ejecución de la app |
-| `openPair` | `ui-store`, sin persistir; `selectRepo` lo cierra |
+| `center` | `ui-store`, sin persistir; `selectRepo` lo devuelve a `main` |
+| Ruta de `raptor` (D21) | `daemon_path` del último informe `ready`; sobrevive a reconexiones sin `ensure`; se vuelve a comprobar contra las rutas observadas en cada `ingest::repo` |
 | Toasts de conflicto | Los de la primitiva (5 s, 3 visibles); el hook guarda sus ids para retirarlos |
 
 ### Firmas del stack
@@ -484,6 +520,11 @@ impl PredictionTracker {
 // apps/desktop/src-tauri/src/engine/ingest.rs
 pub fn pair(summary: &gitraptor_api::prediction::PairSummary) -> PairDto;   // ampliado
 pub fn pair_detail(detail: &gitraptor_api::prediction::PairDetail) -> PairDetailDto;
+pub fn confirm_command(raw_repo_path: &str, raptor: Option<&std::path::Path>) -> ConfirmCommandDto;
+// apps/desktop/src-tauri/src/engine/shell_command.rs
+pub fn posix(args: &[&str]) -> Option<String>;
+pub fn raptor_path(daemon_exe: Option<&std::path::Path>, bundled: Option<&std::path::Path>, watched: &[&std::path::Path]) -> Option<std::path::PathBuf>;
+pub fn confirm(raptor: Option<&std::path::Path>, repo: &str) -> ConfirmCommandDto;
 ```
 
 ```ts
@@ -498,6 +539,9 @@ export type AlertInput =
 export function nextAlerts(state: ReadonlyMap<string, "seeded" | "alerted">, input: AlertInput): { state: Map<string, "seeded" | "alerted">; raised: string[] };
 // apps/desktop/src/conflicts/useConflictAlerts.ts
 export function useConflictAlerts(): void;
+// apps/desktop/src/conflicts/index.ts (módulo público, D6)
+export type { ConflictBandModel, SideRef, PredictionViewModel } from "./prediction-model";
+export function usePredictionView(fleet: RepoFleet, cards: readonly CardModel[], nowMs: number): PredictionViewModel;
 ```
 
 ### Textos del catálogo
@@ -526,7 +570,9 @@ Claves nuevas bajo `conflicts.*` (`age.*` es de US-DSK-004). Cadenas enteras por
 | `conflicts.freshness.notComputable_one` / `_other` | Not computable: {{reason}} (1 pair) / Not computable: {{reason}} ({{count}} pairs) | No calculable: {{reason}} (1 par) / No calculable: {{reason}} ({{count}} pares) |
 | `conflicts.reason.baseUnconfirmed` … `.error` | los nueve textos en de `freshness_text.rs:156-166` | los nueve textos es de `freshness_text.rs:170-180` |
 | `conflicts.base.pending` | Base branch waiting for confirmation ({{base}}) | Rama base pendiente de confirmar ({{base}}) |
-| `conflicts.base.hint` | Run it in the folder of {{repo}}. The terminal shows what it will do and asks before doing it. | Ejecútalo en la carpeta de {{repo}}. La terminal te enseñará qué va a hacer y te preguntará antes. |
+| `conflicts.base.hint` | Run it in your own terminal (not an agent's). It shows what it will do and asks before doing it. | Ejecútalo en tu propia terminal (no en la de un agente). Te enseñará qué va a hacer y te preguntará antes. |
+| `conflicts.base.hintFolder` | Run it in your own terminal, in the folder of {{repo}}. It shows what it will do and asks before doing it. | Ejecútalo en tu propia terminal, en la carpeta de {{repo}}. Te enseñará qué va a hacer y te preguntará antes. |
+| `conflicts.base.raptorUnknown` | GitRaptor can't find its own `raptor` to write the command. Confirm the base branch from GitRaptor's terminal tools. | GitRaptor no encuentra su propio `raptor` para escribir el comando. Confirma la rama base con las herramientas de terminal de GitRaptor. |
 | `conflicts.limits.line` | Uncommitted work counts as overlap; predicted conflicts only use committed work. | La predicción incluye lo sin commitear como solape; el conflicto previsto solo usa lo commiteado. |
 | `conflicts.limits.open` | Limits (?) | Límites (?) |
 | `conflicts.limits.title` | Prediction limits | Límites de la predicción |
@@ -569,6 +615,13 @@ Claves nuevas bajo `conflicts.*` (`age.*` es de US-DSK-004). Cadenas enteras por
 | `conflicts.toast.many` | ⚡ {{count}} new predicted conflicts | ⚡ {{count}} nuevos conflictos previstos |
 | `conflicts.detail.sideA11y` | {{side}}, {{ranges}} | {{side}}, {{ranges}} |
 | `conflicts.detail.conflictHint` / `.overlapHint` | (texto de `conflicts.tooltip.conflict` / `.overlap`) | (texto de `conflicts.tooltip.conflict` / `.overlap`) |
+
+Claves nuevas de la primitiva (`ui.*`, primitives-spec § 4, D22):
+
+| Clave | en | es |
+|---|---|---|
+| `ui.common.copied` | Copied | Copiado |
+| `ui.common.copyFailed` | Couldn't copy. Select the command and copy it by hand. | No se pudo copiar. Selecciona el comando y cópialo a mano. |
 
 Los dos tooltips son los del glosario de DSF-DSK-001 § 12 y van en el glifo de la banda (`Tooltip`); los mismos textos se pintan como línea visible bajo cada sección del detalle (`conflicts.detail.conflictHint`, `conflicts.detail.overlapHint`), para quien no usa puntero.
 
@@ -657,12 +710,16 @@ El guion "tienda" de DS-US-DSK-004 ampliado en T001 y fixtures de `RepoFleet` co
 | Escenario 1: dos agentes van a chocar | `a_conflict_pair_gets_its_files_and_ranges_without_any_command` | `ConflictPanel.test.tsx` › `shows a predicted conflict between feat-pagos and feat-login with pagos.rs`; `ConflictDetailView.test.tsx` › `lists pagos.rs with the lines of each side` |
 | Escenario 2: aviso de un conflicto nuevo | `a_new_conflict_event_asks_for_its_detail` | `useConflictAlerts.test.tsx` › `a new conflict shows a toast with the pair of agents`; `alerts.test.ts` › `conflicts already there when the repo opens do not alert` |
 | Escenario 3: se está recalculando | `a_base_move_reaches_the_webview_as_calculating_pairs` | `prediction-model.test.ts` › `a moved base says calculating with the age of the last result`; `a recalculating pair says outdated with its age` |
-| Escenario 4: base sin confirmar | `a_pending_base_pair_reaches_the_webview_with_its_reason` | `ConflictPanel.test.tsx` › `a pending base says so, offers raptor guard confirm and keeps the worktree conflict` |
+| Escenario 4: base sin confirmar | `a_pending_base_pair_reaches_the_webview_with_its_reason`; `the_repo_message_carries_the_confirm_command_with_the_daemon_raptor_and_the_repo_path` | `ConflictPanel.test.tsx` › `a pending base says so, offers the confirm command and keeps the worktree conflict`; `a base pair that leaves pending hides the warning even if the snapshot still says unconfirmed` |
+| Comando de confirmar (D11, M-01) | `tests/shell_command.rs` › `the_confirm_command_quotes_the_daemon_raptor_and_the_raw_repo_path`; `a_repo_path_with_unsafe_text_gives_the_command_without_path`; `without_a_known_raptor_the_confirm_command_is_not_offered`; `a_quote_is_written_as_posix_escape`; `stop_command_output_is_unchanged` (`tests/engine_stop_command.rs`, existente) | `ConflictPanel.test.tsx` › `without a path the hint names the repo folder`; `raptor unknown shows why and no copy button` |
+| Ruta de `raptor` (D21, L-02) | `tests/shell_command.rs` › `the_daemon_raptor_of_the_ready_report_is_used`; `a_daemon_raptor_inside_a_watched_worktree_falls_back_to_the_bundle`; `never_path` (sin `raptor` conocido, `None`) | — |
 | Regla de `rev` (D4) | `a_detail_is_asked_again_when_the_rev_moves` | `engine-cache.test.ts` › `an older summary never replaces a newer one`; `a detail with a newer rev brings its summary`; `ConflictDetailView.test.tsx` › `a detail of another rev is not shown` |
 | Agrupación de peticiones (D2) | `a_burst_of_changes_asks_for_details_once_with_at_most_50_ids` | — |
 | Relleno de pares truncados (D1) | `a_truncated_snapshot_walks_the_cursor_and_ends_filled` | `engine-cache.test.ts` › `filled clears pairsTruncated` |
+| Un recorrido a la vez y tope (L-01) | `a_resync_during_a_walk_never_runs_two_walks`; `a_walk_stops_at_2_mib_without_filled` | — |
+| Detalle de un repo sin caché (L-02 de 008) | — | `engine-cache.test.ts` › `pair details of a repo without a cache entry are dropped` |
 | Daemon sin `prediction.list` | `a_refused_list_leaves_pairs_without_detail_and_keeps_streaming` | `ConflictBand.test.tsx` › `a band without detail shows the pair without a file` |
-| Lista cerrada sin cambios | `tests/commands.rs` › `the_prediction_detail_adds_no_ipc_command` (lista exacta de cuatro y ningún `#[tauri::command]` más) | `commands.test.ts` › `the command map has exactly four commands` |
+| Esta historia no añade comandos (D1, I-01) | `tests/commands.rs` › `the_prediction_detail_adds_no_ipc_command` (ningún nombre con `prediction`, `pair` o `conflict` en `commands.json` ni en un `#[tauri::command]`; la lista exacta la sigue fijando el test existente) | `commands.test.ts` › `no command of the command map is about prediction` |
 | Solo lectura | `a_prediction_run_never_sends_reserved_or_writing_methods` (`assert_read_only`) | — |
 | Texto no confiable (SEC-12) | `untrusted_conflict_paths_reach_the_webview_escaped` (ruta con `\u{1b}]52;` y U+202E) | `ConflictDetailView.test.tsx` › `paths are rendered as text` |
 | Ninguna predicción vieja como actual (BR-CKP-CALC-003) | — | `prediction-model.test.ts` › `no pair without a result says no conflicts`; `zero pairs show only the limits` |
@@ -674,11 +731,12 @@ El guion "tienda" de DS-US-DSK-004 ampliado en T001 y fixtures de `RepoFleet` co
 | Teclado y foco (D7) | — | `ConflictDetailView.test.tsx` › `Esc goes back and returns focus to the band` |
 | No solo color (NFR-09, WCAG 1.4.1) | — | `ConflictBand.test.tsx` › `level, staleness and new are said in text`; axe sin violaciones |
 | Lector de pantalla | — | `ConflictBand.test.tsx` › `the accessible name reads the pair with and`; el toast tiene `role="status"` |
-| Contrato con el grafo (D6) | — | `ConflictBand.test.tsx` › `the badge variant has no button and the same text` |
+| Contrato con el grafo (D6) | — | `ConflictBand.test.tsx` › `the badge variant has no button and the same text`; `prediction-model.test.ts` › `the public module exports only the band model, the side ref, the view model and usePredictionView` |
+| `CopyCommand` anuncia (D22, WCAG 4.1.3) | — | `CopyCommand.test.tsx` › `a successful copy says Copied for 2 s and announces it once in a status region`; `a failed copy announces it`; `onCopied runs only after a successful write` |
 | Panel en el centro (D5) | — | `EngineCenter.test.tsx` › `the conflict panel sits above the main view and not inside the fleet`; `ConflictPanel.test.tsx` › `shows at most 3 bands and expands the rest` |
 | Una oleada, un toast (D17) | — | `useConflictAlerts.test.tsx` › `three or more new conflicts in one pass show a single toast` |
-| `Esc` por capas (D18) | — | `ConflictDetailView.test.tsx` › `Esc closes the open popover first, then the detail`; `AppShell.test.tsx` › `Esc inside the center view does not also close the drawer` |
-| Un solo destino en el centro (D7) | — | `ui-store.test.ts` › `opening a pair resets the center view and opening another view clears the pair` |
+| `Esc` por capas (D18) | — | `ConflictDetailView.test.tsx` › `Esc closes the open popover first, then the detail`; `AppShell.test.tsx` › `Esc inside the center view does not also close the drawer`; `an Esc already consumed never reaches onEscape`; `Dialog.test.tsx`, `Popover.test.tsx`, `Toast.test.tsx` › `the Esc that closes it is marked as consumed` |
+| Un solo destino en el centro (D7) | — | `ui-store.test.ts` › `opening a pair replaces the center view and back returns to main`; `selecting another repo returns to main` |
 | Glifos y nombres (D19) | — | `ConflictBand.test.tsx` › `the glyph is hidden from assistive tech and View names its pair`; `TitleBar.test.tsx` › `the pill keeps its full name when compact` |
 
 ### 9.5 Plataformas
@@ -694,11 +752,12 @@ macOS (T008) y ubuntu (job `desktop`). Windows: **Pendiente: etapa de validació
 - Toda ruta del detalle pasa por `display::visible` en `ingest.rs`; los rangos son números; ningún contenido de archivo viaja (`LineRange`, `prediction.rs:180-186`).
 - El webview no elige qué pares pide el backend: los ids salen de los datos del motor (D1).
 - `prediction.list` solo lee: `assert_read_only` sobre las llamadas del daemon falso.
-- `CopyCommand` copia un texto fijo (`raptor guard confirm`), sin texto del repo (D11, V6).
+- `CopyCommand` copia solo el `confirmCommand` construido en el backend con `shell_command::posix` (comillas simples POSIX, sin caracteres de `must_escape`), con la ruta absoluta de `raptor` de D21 y nunca `PATH`; el webview no compone comandos (D11, V6; M-01 de security-expert). El `raptor` del daemon que cuelga de un repo o worktree observado se descarta (L-02).
+- `CopyCommand` escribe el portapapeles tras un clic y nunca lo lee.
 - Sin notificaciones del SO ni sonido (D14).
 - `ConflictBand` está en `src/ui` y V5 le impide importar `client`; ningún `dangerouslySetInnerHTML`.
 
-Corre `/security-review --scope devspec docs/requirements/features/desktop/dev-specs/US-DSK-008-conflictos-previstos.md` antes de mezclar.
+Revisión de `security-expert` hecha el 2026-11-09 sobre esta DS: M-01, L-01, L-02 e I-01 aplicados (D11, D21, T002, T003). Corre `/security-review --scope devspec docs/requirements/features/desktop/dev-specs/US-DSK-008-conflictos-previstos.md` sobre el código antes de mezclar.
 
 ---
 
@@ -706,7 +765,7 @@ Corre `/security-review --scope devspec docs/requirements/features/desktop/dev-s
 
 | Ítem / no-objetivo | Historia que lo cubre | Gate (cómo se verifica) |
 |---|---|---|
-| La línea de la banda entre carriles y su posición en el grafo | US-DSK-005 (consume `ConflictBand` y `ConflictBandModel`, D6) | `src/graph/` no existe en esta entrega |
+| La línea de la banda entre carriles y la insignia en el grafo | US-DSK-005, tarea de la capa de conflictos (consume el módulo público `src/conflicts/index.ts` y `ConflictBand variant="badge"`, D6) | `src/graph/` no existe en esta entrega |
 | "Copiar aviso para los agentes" (§ 4.e) | Pendiente de PO (H-5 de DSF-DSK-001) | `ConflictDetailView` no tiene ese botón |
 | "Ver en el grafo" | US-DSK-005 | `ConflictDetailView` no tiene ese botón |
 | Abrir el archivo en el editor | US-DSK-009 (o la historia de acciones por archivo) | sin `opener` ni `shell` en `src-tauri` (V2) |
@@ -714,7 +773,6 @@ Corre `/security-review --scope devspec docs/requirements/features/desktop/dev-s
 | Confirmar la base desde la app | US-CKP-009 / US-CKP-019 (comando reservado) | sin comando IPC nuevo |
 | Integrar o rebasar desde el detalle | UI-2 (US-DSK-013) | sin botones de escritura en `src/conflicts` |
 | ⛔ por tarjeta | US-DSK-007 | `ConflictBandModel.level` solo admite `conflict` y `overlap` |
-| Aviso "copiado" anunciado por `CopyCommand` | Enmienda de TS-DSK-003 (G10) | `CopyCommand` no cambia en esta entrega |
 
 ---
 
@@ -723,15 +781,45 @@ Corre `/security-review --scope devspec docs/requirements/features/desktop/dev-s
 | ID | Nota | Acción | Owner |
 |----|------|--------|-------|
 | G1 | US-CKP-009 pide "Rama base pendiente de confirmar (main → develop)", pero `BaseBranchView` solo trae `name` y `status` (`crates/api/src/messages.rs:241-245`): el motor no publica la base anterior. La app dice "Rama base pendiente de confirmar (develop)" | Publicar la base confirmada anterior junto a la pendiente | US-GRP-016 (draft) / US-CKP-009 (draft) |
-| G2 | Ningún evento publica el cambio de `base.status`: la app lo ve en la siguiente instantánea del repo. No bloquea: el aviso de D11 también sale por el `reason` de los pares, que sí llega con `prediction.changed` | Publicar el cambio de base en el ámbito del repo | US-GRP-016 |
+| G2 | Ningún evento publica el cambio de `base.status`: la app lo ve en la siguiente instantánea del repo. No bloquea: el aviso de D11 sale por el `reason` de los pares, que sí llega con `prediction.changed`, y se retira en cuanto un par contra la base sale de `pending`/`base-unconfirmed` aunque la instantánea siga diciendo `unconfirmed`. Sin pares contra la base, el aviso sigue hasta la siguiente instantánea | Publicar el cambio de base en el ámbito del repo | US-GRP-016 |
 | G3 | Cierra el G3 de DS-US-DSK-004 (`pairsTruncated`): el recorrido de D1 completa los pares | Ninguna | — |
 | G4 | Los avisos de otros repos (D15) no nombran el par: el ámbito global solo lleva el recuento. Si el recuento baja y vuelve a subir por el mismo par, avisa otra vez | Publicar los pares nuevos en el ámbito global si se quiere nombrarlos | TS-CKP-010 |
 | G5 | `merge_base` y `rewrites_escalated` del detalle no viajan ni se pintan (D3); la TUI tampoco los pinta | Ninguna aquí | — |
 | G6 | D10 recuerda la hora del último resultado en el cliente: la TUI no lo hace. Si el motor publicara la hora del resultado anterior de un par contra la base movida, D10 se borraría | Ninguna; revisarlo si cambia DS-TS-CKP-001 | Arquitecto |
-| G7 | Archivos compartidos con US-DSK-005 y US-DSK-007 (en paralelo): `wire.rs`, `ingest.rs`, `supervisor.rs`, `engine-cache.ts`, `ui-store.ts`, `engine-store.ts`, `EngineCenter.tsx`, `FleetView.tsx`, `TitleBar.tsx`, `ui/index.ts`, `en.json`, `es.json` y la fixture de `engine_wire.rs`. Lo nuevo va en archivos propios (`engine/prediction.rs`, `src/conflicts/`, `ui/ConflictBand.tsx`), con una línea de registro en los compartidos (ADR-GRP-016) | Integrar en orden y rebasar | Orquestador |
+| G7 | Archivos compartidos con US-DSK-007 y US-DSK-005: orden y responsabilidad en [Archivos compartidos](#archivos-compartidos-entre-008-007-y-005), tabla idéntica en las tres DS. Esta historia entra primera y crea `shell_command.rs`, `center` en `ui-store` y el `Esc` consumido | Integrar en el orden 008 → 007 → 005 y rebasar | Orquestador |
 | G8 | La regla de D12 es por repo y en memoria: al reiniciar la app, los ⚡ existentes se siembran sin avisar (igual que la TUI al abrirse) | Ninguna | — |
-| G9 | **Nadie dibuja la banda en el grafo.** DS-US-DSK-005 D13 deja `layers` y `laneBadge` "para US-DSK-008" y no registra ninguna capa; esta DS (D6, Fuera de alcance) deja "la línea entre carriles" en US-DSK-005. Cada una espera a la otra y el ⚡ quedaría sin línea ni insignia en el dibujo (solo existiría el panel de D5) | Decidir el dueño: propuesta de UX, que 008 escriba la capa `conflictLayer` (`src/conflicts/graph-layer.ts`) y el `laneBadge` con `ConflictBand variant="badge"`, montados por `GraphContent` sin que `src/graph` importe `prediction` (el gate de 005 se mantiene); 008 entra después de T005 de 005 | Arquitecto y orquestador |
-| G10 | `CopyCommand` cambia el icono a un ✔ al copiar, pero no anuncia nada: un lector de pantalla no sabe si se copió (WCAG 4.1.3). Lo usan el aviso de D11, US-DSK-007 (d4) y US-DSK-005 | Añadir a la primitiva una región `role="status"` solo para lectores con `ui.common.copied` ("Copiado") y el texto del botón "Copiado" 2 s. Cambio aditivo de TS-DSK-003, con su test | Arquitecto |
+| G9 | **Resuelto (2026-11-09)**: la banda en el grafo la monta US-DSK-005, que llega después, en su slot `layers` (capa de conflictos) y en `laneBadge`, consumiendo solo el módulo público `src/conflicts/index.ts` de esta historia (D6). Esta historia fija el contrato; no escribe la capa. **Decisión del orquestador (2026-11-09), validada por Arquitecto** | Ninguna aquí | — |
+| G10 | **Resuelto (2026-11-09)** en D22 y T005: enmienda aditiva de `CopyCommand` (primitives-spec § 2.16) con su test; la reutilizan US-DSK-007 y US-DSK-005 | Ninguna | — |
 | G11 | `Button` con `size="sm"` ignora `shape="pill"` y primitives-spec § 2.1 reserva la forma a "Integrar cambios": la píldora ⚡ de D16 es un botón de radio `radius-sm`, no una píldora redonda como dibuja el mock | Si Rene la quiere redonda, ampliar `shape="pill"` a otro uso en primitives-spec; si no, queda como botón | PO / Rene |
-| G12 | `useShortcuts.onEscape` cierra el cajón del detalle con cualquier `Esc` en `window`: hay que dejar que las vistas del centro lo consuman antes (D18) | Ajustar `useShortcuts` (`event.defaultPrevented`) en la tarea que lo toque primero (US-DSK-005 T005 o esta T006) | Arquitecto |
+| G12 | **Resuelto (2026-11-09)** en D18 y T006: `useShortcuts` ignora un `Esc` con `defaultPrevented` y las capas que lo consumen lo marcan (primitives-spec § 1.7); US-DSK-007 y US-DSK-005 lo reutilizan | Ninguna | — |
+| G13 | `raptor guard confirm` es el comando correcto (verificado en el código, D11): confirmar la línea base del equipo fija la rama base confirmada que publica `RepoView.base`. Misma afirmación en DS-US-DSK-005 (G4 y D19). Si el plan relaja algo, la CLI espera su ventana; si no hay nada que confirmar (`NothingToConfirm`), la terminal lo dice | Ninguna | — |
+| G14 | El `raptor` del daemon (`daemon_path`) se descarta si cuelga de un repo o worktree observado (D21, L-02): con un daemon arrancado desde un `raptor` compilado dentro de un repo observado (desarrollo de GitRaptor), los comandos usan el del bundle o no se ofrecen | Ninguna | — |
 
+### Archivos compartidos entre 008, 007 y 005
+
+Tabla idéntica en DS-US-DSK-008, DS-US-DSK-007 y DS-US-DSK-005. Orden de integración fijado por el orquestador: 008, después 007, después 005; cada una rebasa sobre la anterior ya en `main`. En los archivos compartidos cada historia solo añade variantes, campos o líneas de registro al final (ADR-GRP-016); lo nuevo va en archivos propios (`src/conflicts/`, `src/guardrails/`, `src/graph/`). **Decisión del orquestador (2026-11-09), validada por Arquitecto**.
+
+| Archivo compartido | US-DSK-008 (1.º) | US-DSK-007 (2.º) | US-DSK-005 (3.º) |
+|---|---|---|---|
+| `src-tauri/commands.json`, `src-tauri/src/commands/mod.rs`, `src-tauri/capabilities/main.json` | sin cambios | añade `guard_blocks` y `allow-guard-blocks` | sin cambios |
+| `src-tauri/tests/commands.rs` (lista exacta de DS-US-DSK-004 T002) | test «esta historia no añade comandos», sin fijar la lista | pasa la lista exacta a cinco y añade los tests de `guard_blocks` | test «esta historia no añade comandos», sin fijar la lista |
+| `src/client/commands.ts` y `commands.test.ts` | test «ningún comando de predicción» | añade `guard_blocks` | test «ningún comando del grafo» |
+| `supervisor.rs`: `HubCmd` | sin variantes | `HubCmd::GuardBlocks` | sin variantes |
+| `supervisor.rs`: `RepoScope` y bucle | `PredictionTracker`, recorrido de cursor, `prediction.list` | `raw_path`, `last_guard_read`, lectura en vuelo y relectura por `reserved.audit` | `GraphTrack`, `graph.lanes` asíncrono |
+| `src-tauri/src/engine/mod.rs` | `mod prediction;`, `pub mod shell_command;` | `pub mod exception_command;`, `EngineHub::guard_blocks` | sin cambios |
+| `engine/link.rs`, `engine/launcher.rs` | `Link::daemon_exe`, `daemon_path` del informe `ready` | sin cambios (los reutiliza) | `Link::submit`, `reply`, `cancel` |
+| `engine/shell_command.rs` (nuevo en 008) | crea `posix`, `raptor_path`, `confirm`; `wire::stop_command` lo usa | lo usa desde `exception_command` sin cambiarlo | sin cambios |
+| `engine/wire.rs` (`EngineMessage` y DTO) | `PairDto` ampliado, `PairDetails`, `limits`, `confirmCommand` | `GuardBlocks`, `GuardBlocksUnavailable` y sus DTO | `Graph`, `GraphUnavailable` y sus DTO |
+| `engine/ingest.rs` | `pair`, `pair_detail`, `limits`, `confirm_command` | `guard_blocks`, `guard_entry`, `protection`, `pending` | `graph`, `graph_trigger` |
+| `tests/engine_wire.rs` (fixture) y `tests/support/fake_daemon.rs` | casos de predicción; `Script.prediction` | casos de guard; `guard.status` y `guard.log` | casos del grafo; `graph.lanes` asíncrono |
+| `src/client/engine-types.ts`, `src/client/queries.ts` | `pairDetails` y campos nuevos | `guardBlocks*`, `engineKeys.guard` | `graph*`, `engineKeys.graph` |
+| `src/state/engine-cache.ts` | `details`, `lastComputed`, regla de `rev` | entrada `engineKeys.guard` | entrada `engineKeys.graph` |
+| `src/state/ui-store.ts` | crea `center` (`main`, `pair`) | añade `{ view: "guardrails" }` | sin cambios |
+| `src/state/engine-store.ts` | `AlertState` y recuentos sembrados | sin cambios | sin cambios |
+| `src/engine/EngineCenter.tsx` | `ConflictPanel` encima de la vista principal; destino `pair` | destino `guardrails`; monta `useGuardBlocks` | `FleetContent` → `GraphContent`; conserva panel y destinos; pasa `layers`, `laneBadge`, `laneA11y` |
+| `src/fleet/FleetView.tsx` | sin cambios | sin cambios | pasa al detalle; huecos de `useAgentSlot` |
+| `src/shell/AppShell.tsx` | sin cambios (su test de `Esc`) | `GuardrailsNavRow` al pie de la barra lateral | detalle con `FleetView` |
+| `src/shell/useShortcuts.ts` | `Esc` consumido (`defaultPrevented`) | sin cambios | `⌥⌘T` |
+| `src/shell/TitleBar.tsx` | píldora ⚡ | sin cambios | sin cambios |
+| Primitivas de `src/ui` | `CopyCommand` (anuncio, `onCopied`), `Esc` consumido en `Dialog`, `Popover` y `Toast`; `ConflictBand` nuevo y su línea en `index.ts` | `Toast` (`srLabel`) | `Table` (props aditivas) |
+| `src/i18n/locales/{en,es}.json` | `conflicts.*`, `ui.common.copied`, `ui.common.copyFailed` | `grd.*` | `graph.*`, `detail.agents.*`; reescribe `grd.view.back` y `conflicts.detail.back` |

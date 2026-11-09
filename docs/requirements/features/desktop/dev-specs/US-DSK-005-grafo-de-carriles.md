@@ -13,12 +13,12 @@ frontend_surface: true
 stack: react
 profile: frontend-feature
 tooling: [cargo, pnpm, node]
-blocked_by: [US-CKP-022, US-CKP-012]
+blocked_by: [US-CKP-022, US-CKP-012, US-DSK-008]
 related:
   context: ../context.md
   story: ../user-stories/US-DSK-005-grafo-de-carriles.md
   stories: [US-DSK-005, US-DSK-004, US-DSK-003, US-DSK-008, US-DSK-010, US-DSK-011, US-DSK-018, TS-DSK-001, TS-DSK-003, US-CKP-022, US-CKP-012, TS-GRP-004]
-  specs: [DS-US-DSK-004, DS-US-DSK-003, DS-US-CKP-022, DS-US-CKP-012, DS-TS-DSK-003]
+  specs: [DS-US-DSK-004, DS-US-DSK-003, DS-US-DSK-008, DS-US-DSK-007, DS-US-CKP-022, DS-US-CKP-012, DS-TS-DSK-003]
   adrs: [ADR-GRP-017, ADR-GRP-003, ADR-GRP-004, ADR-GRP-013, ADR-GRP-016, ADR-CKP-003]
   nfrs: [NFR-04, NFR-09, NFR-13, SEC-12]
   api_spec: null
@@ -28,6 +28,7 @@ must_read:
   - ../user-stories/US-DSK-005-grafo-de-carriles.md
   - ./US-DSK-004-flota-en-vivo.md
   - ./US-DSK-003-estado-del-motor.md
+  - ./US-DSK-008-conflictos-previstos.md
   - ./TS-DSK-001-andamiaje-app-escritorio.md
   - ./TS-DSK-003-primitivas-design-system-escritorio.md
   - ../design/design-flow.md
@@ -64,10 +65,10 @@ validation:
   must_read_resolved: true
   gaps_blocking: 0
   ready_to_implement: true
-  blocked_tasks: [T007, T008, T009, T010]
+  blocked_tasks: [T007, T008, T009, T010, T011]
   gaps_release: 1
   ready_to_release: false
-tags: [desktop, ui-1, grafo, carriles, wip, column-settings, canvas, accesibilidad, solo-lectura, dep-ckp-2]
+tags: [desktop, ui-1, grafo, carriles, wip, column-settings, canvas, accesibilidad, solo-lectura, dep-ckp-2, banda-de-conflicto]
 ---
 
 # DS-US-DSK-005 · El grafo de carriles en la app
@@ -76,7 +77,7 @@ tags: [desktop, ui-1, grafo, carriles, wip, column-settings, canvas, accesibilid
 
 Al terminar, quien abre un repo en la app ve en el centro un grafo con un carril por rama de agente que sale de la rama base, con el nombre y el color de su agente, una fila WIP con lo que cada copia de trabajo aún no ha commiteado y una cabecera cuyas columnas elige con "Column settings" y que la app recuerda. El carril crece solo: cuando un agente hace un commit, el commit aparece sin recargar. Si la rama base no existe, no hay carriles y la vista dice qué rama falta. Hoy no puede: el centro de la app pinta las tarjetas de la flota (DS-US-DSK-004 D1) y el motor no publica los commits de una rama.
 
-La entrega tiene dos niveles. El primero se construye ya con lo que el motor publica hoy en la instantánea del repo: carriles, ↑↓, fila WIP, base ausente o sin confirmar, cabecera configurable y vista en tabla. El segundo pinta los commits de cada carril con la consulta `graph.lanes` de DS-US-CKP-022, que todavía no existe en el motor: sus tareas quedan en `blocked_tasks` hasta que US-CKP-022 y US-CKP-012 estén en `main`. Las reglas del grafo (qué es un carril, qué base cuenta, ventana de 50 commits, "sin atribuir", topes) son las de DS-US-CKP-022 y no se reabren aquí.
+Entra la tercera del orden del orquestador (008 → 007 → 005): el panel de conflictos, la unión `center` de `ui-store`, el `Esc` consumido y `CopyCommand` con su anuncio ya están en `main` con DS-US-DSK-008, y la vista Guardrails con DS-US-DSK-007. La entrega tiene dos niveles. El primero se construye ya con lo que el motor publica hoy en la instantánea del repo: carriles, ↑↓, fila WIP, base ausente o sin confirmar, cabecera configurable y vista en tabla. El segundo pinta los commits de cada carril con la consulta `graph.lanes` de DS-US-CKP-022, que todavía no existe en el motor: sus tareas quedan en `blocked_tasks` hasta que US-CKP-022 y US-CKP-012 estén en `main`. Las reglas del grafo (qué es un carril, qué base cuenta, ventana de 50 commits, "sin atribuir", topes) son las de DS-US-CKP-022 y no se reabren aquí.
 
 | Término | Qué es aquí |
 |---|---|
@@ -86,14 +87,14 @@ La entrega tiene dos niveles. El primero se construye ya con lo que el motor pub
 | Fila resumen | La fila de un carril cuando sus commits aún no llegaron o no se pueden calcular: rama, agente, ↑↓ y motivo |
 | Clave del worktree | La de DS-US-DSK-004: FNV-1a de 64 bits en hex de la ruta cruda; casa carriles, tarjetas y filas WIP |
 | Column settings | El popover del engranaje de la cabecera que elige qué columnas se ven (primitives-spec § 2.11) |
-| Capa del grafo | Una función de pintado que otra historia registra sobre el lienzo, entre las líneas de los carriles y sus nodos (D13) |
+| Capa del grafo | Una función de pintado registrada sobre el lienzo, entre las líneas de los carriles y sus nodos (D13); la de conflictos la registra esta historia (T011) |
 
 **Decisiones de esta Dev Spec**: todas son **Decisión del orquestador (2026-11-09), validada por Arquitecto**.
 
 | # | Decisión | Por qué | Alternativa descartada |
 |---|---|---|---|
 | D1 | **Dos niveles.** Nivel 1, ya: carriles, filas resumen con ↑↓, filas WIP y estados de la base, todo desde `RepoFleet` (instantánea y `worktrees` de DS-US-DSK-004), en vivo por construcción. Nivel 2, bloqueado: los commits de cada carril con `graph.lanes`. La fila resumen se sustituye por los commits del carril cuando llegan | Es D1 de DS-US-CKP-022 llevado a la app: la mitad de los escenarios (1 a nivel de carril, 4, la fila WIP y las columnas) no necesitan la consulta | Esperar a `graph.lanes` para todo: la historia entera quedaría bloqueada por US-CKP-022 y US-CKP-012 |
-| D2 | **Sin comando IPC nuevo.** El supervisor del backend pide `graph.lanes` del repo abierto y empuja el resultado por el `Channel` como mensaje `graph`. La lista cerrada de ADR-GRP-017 sigue siendo `app_info`, `engine_retry`, `engine_watch` y `fleet_open` | El repo abierto ya lo fija `fleet_open`; el supervisor es quien sabe cuándo el grafo envejece (D3). Menos superficie y la misma disciplina que la flota | Un comando `graph_lanes { repoId }` de petición y respuesta: suma un comando, deja al webview decidir el ritmo de consultas al pool del daemon y duplica el estado del repo abierto |
+| D2 | **Sin comando IPC nuevo.** El supervisor del backend pide `graph.lanes` del repo abierto y empuja el resultado por el `Channel` como mensaje `graph`. Esta historia no añade comandos a la lista cerrada de ADR-GRP-017 (la de `main` al entrar, con `guard_blocks` de US-DSK-007) | El repo abierto ya lo fija `fleet_open`; el supervisor es quien sabe cuándo el grafo envejece (D3). Menos superficie y la misma disciplina que la flota | Un comando `graph_lanes { repoId }` de petición y respuesta: suma un comando, deja al webview decidir el ritmo de consultas al pool del daemon y duplica el estado del repo abierto |
 | D3 | **Refresco del grafo en el supervisor** (D9 de DS-US-CKP-022): se marca desactualizado al abrir o reabrir el repo, con un `git.event` del repo abierto y con un `worktree.state` que cambie el conjunto de claves, la cabeza o la divergencia de algún worktree. Una sola consulta en vuelo; la siguiente sale cuando han pasado `max(1 s, 2 × duración de la última)`. Al cambiar o cerrar el repo, la consulta en vuelo se cancela con `query.cancel` y su respuesta se descarta. Sin temporizadores si no hay nada pendiente | Coste acotado en el pool de un hilo de DS-US-CKP-012 D4 y NFR-13.8 (sin bucles en reposo). `git.event` es el único aviso de un `--amend` (el stream no lleva el oid de `HEAD`) | Pedir el grafo con cada `worktree.state`: cada archivo guardado por un agente sería una consulta |
 | D4 | **Filas intercaladas por fecha**, como el mock B1 y GitKraken: arriba las filas WIP; después la fila de la base; después las filas resumen (en orden de columna) y los commits de todos los carriles por `committedUtcMs` descendente (empate: columna y posición en el carril). Tras el commit más antiguo mostrado de cada carril van su fila "N commits más" (si hay más) y su fila de salida ("sale de main en a1b2c3d") | Es la forma del grafo de B1 (DSF-DSK-001 § 2.2 y § 4.b) y deja ver qué agente avanzó último | Filas agrupadas por carril: más simple, pero esconde el orden temporal y no se parece al grafo que Rene eligió |
 | D5 | **Columnas de carril estables**: orden por carpeta, ruta y clave del worktree; nunca por el orden de atención de la flota | En la app la flota no está al lado de cada carril (va en el detalle, D15): reordenar columnas cuando sale un ⚡ haría saltar los carriles y la banda de US-DSK-008 | El orden de la flota (D3 de DS-US-CKP-022): sirve en la TUI porque carril y fila comparten altura |
@@ -102,15 +103,15 @@ La entrega tiene dos niveles. El primero se construye ya con lo que el motor pub
 | D8 | **Base** (D5 de DS-US-CKP-022 y BR-CKP-EDGE-001), con lo que trae `RepoFleet.repo.base` y la divergencia: `confirmed` → carriles; `unconfirmed` → sin carriles y "Base main sin confirmar: confirma la rama base para ver los carriles"; `invalid` → "Sin rama base: no calculable"; algún worktree con `divergence` `base-missing` (o `graph.base` `base-missing`) → sin carriles y "Rama base develop no encontrada: no calculable". Nunca se usa otra rama. Sin botón "Elegir rama principal" | Panel y vista no pueden discrepar (D5 de DS-US-CKP-022). El botón del mock escribe la configuración del repo: no es de esta historia | Dibujar contra la base resuelta sin confirmar |
 | D9 | **Autor = "Tú u otro (sin atribuir)"** en cada commit mientras el motor no publique `graph.commit-actor`; tooltip "GitRaptor aún no sabe qué agente hizo este commit". Nunca autor ni correo de Git. La celda va en `text-text-muted`; el significado completo ("GitRaptor aún no sabe qué agente hizo este commit") entra también en el nombre accesible de la fila (`graph.a11y.commit`), porque el `Tooltip` solo se ve con puntero. La columna sigue visible por defecto (primitives-spec § 2.15) y es la primera en plegarse después de Sha (D11). **Decisión del orquestador (2026-11-09), validada por Diseñador UX** | BR-CKP-CONS-003 (texto literal) y D6/D7 de DS-US-CKP-022: la respuesta no lleva autor ni actor. Cumple el escenario 3 | La columna "Author" con el autor de Git que pinta DSF-DSK-001 § 4.b: el motor no lo publica, por decisión (pantalla compartida) |
 | D10 | **Column settings** como fija primitives-spec § 2.11 (Toggle por columna, "Commit message" siempre visible, "Restablecer"). La preferencia vive en un almacén propio del webview, `gitraptor.graph.v1` (Zustand `persist`, versión 1): `columns` (cinco booleanos) y `view` (`graph` o `table`). Al rehidratar solo se aceptan claves conocidas con su tipo; lo demás vuelve al valor por defecto. Igual para todos los repos | Es preferencia cosmética (ADR-GRP-004; ADR-GRP-017 M-3: nada que autorice). Un almacén aparte no toca las cuatro claves de `gitraptor.ui.v1` que fija TS-DSK-001 ni pide migración | Una quinta clave en `gitraptor.ui.v1`: rompe el test de las cuatro claves de TS-DSK-001 y exige versión 2. No guardarla: primitives-spec dice "se guardan por usuario" |
-| D11 | **Plegado por anchura del centro** (no de la ventana). El ancho disponible de la grilla (medido con `ResizeObserver` sobre el contenedor de `GraphView`) debe alojar las columnas visibles fijas más 220 px de mensaje; si no, se ocultan, en este orden y sin tocar la preferencia guardada, Sha, Author, Date / Time y Branch / Tag; Graph y Commit message nunca se pliegan. Orden distinto al de primitives-spec § 2.15 (Sha, Date, Author, Branch): mientras todo commit diga "sin atribuir" (D9), Author repite el mismo texto en cada fila y Date es el dato útil. Cuentas con las anchuras de § 2.15 (Branch 195, Graph 175, Author 190, Date 120, Sha 84; lateral 252, detalle 352, gutters 12): 1440 px con detalle → centro 788 → Branch, Graph, Message (298) y Date; 1360 px con detalle → 708 → Branch, Graph y Message; 1200 px con cajón cerrado → 912 → todo salvo Sha; 1440 px sin detalle → 1152 → las seis. La grilla solo se desplaza en horizontal si el centro no aloja Graph más 220 px de mensaje. Column settings enseña bajo cada columna plegada `graph.settings.folded` y su interruptor sigue como la persona lo dejó. **Decisión del orquestador (2026-11-09), validada por Diseñador UX** | Es la regla de primitives-spec § 2.15 aplicada al ancho que de verdad hay: a 1440 px con el detalle abierto las seis columnas suman 764 px fijos más el mensaje y no caben (DSF § 2.4) | Plegar solo por anchura de ventana (< 1000 px): a 1440 px la grilla se desplazaría en horizontal, y un novato no encuentra el desplazamiento. Plegar Date antes que Author: esconde el dato que sí sabemos |
+| D11 | **Plegado por anchura del centro** (no de la ventana). El ancho disponible de la grilla (medido con `ResizeObserver` sobre el contenedor de `GraphView`) debe alojar las columnas visibles fijas más 220 px de mensaje; si no, se ocultan, en este orden y sin tocar la preferencia guardada, Sha, Author, Date / Time y Branch / Tag; Graph y Commit message nunca se pliegan. Es el orden y el criterio de primitives-spec § 2.15, enmendada el 2026-11-09 por el Arquitecto para alinearla con D-18 de DSF-DSK-001 (G3): mientras todo commit diga "sin atribuir" (D9), Author repite el mismo texto en cada fila y Date es el dato útil; esta historia es la primera que usa la grilla y su T004 implementa el plegado. Cuentas con las anchuras de § 2.15 (Branch 195, Graph 175, Author 190, Date 120, Sha 84; lateral 252, detalle 352, gutters 12): 1440 px con detalle → centro 788 → Branch, Graph, Message (298) y Date; 1360 px con detalle → 708 → Branch, Graph y Message; 1200 px con cajón cerrado → 912 → todo salvo Sha; 1440 px sin detalle → 1152 → las seis. La grilla solo se desplaza en horizontal si el centro no aloja Graph más 220 px de mensaje. Column settings enseña bajo cada columna plegada `graph.settings.folded` y su interruptor sigue como la persona lo dejó. **Decisión del orquestador (2026-11-09), validada por Diseñador UX** | Es la regla de primitives-spec § 2.15 aplicada al ancho que de verdad hay: a 1440 px con el detalle abierto las seis columnas suman 764 px fijos más el mensaje y no caben (DSF § 2.4) | Plegar solo por anchura de ventana (< 1000 px): a 1440 px la grilla se desplazaría en horizontal, y un novato no encuentra el desplazamiento. Plegar Date antes que Author: esconde el dato que sí sabemos |
 | D12 | **Lienzo y virtualización.** La columna Graph se pinta en un `<canvas>` fuera de React (`src/graph/canvas`, ADR-GRP-003 § Enmienda D7 y NFR-13.3); las filas son DOM con la primitiva `Table`, virtualizadas: solo las visibles y un margen, nunca más del doble de las visibles. `Table` gana props aditivas (`firstRowIndex`, `wipIds`, `focusId`, `onFocusOutside`) | NFR-13.3 lo exige. El lienzo solo pinta formas: el texto (rama, asunto, sha) queda en el DOM, accesible y saneado | SVG por fila: miles de nodos con 32 carriles × 50 commits |
-| D13 | **Punto de extensión para US-DSK-008**: `GraphView` acepta `layers` (capas de lienzo pintadas entre las líneas de los carriles y los nodos, con la geometría de cada columna y fila), `laneBadge` (nodo React en la celda Branch de la cabeza del carril y en la vista en tabla) y `laneA11y` (texto extra para el nombre accesible del carril). Esta historia no registra ninguna capa | La banda ⚡ entre carriles (DSF § 4.b, D-8) es de US-DSK-008, que la escribe en paralelo: así no toca el pintado de los carriles | Dejar que US-DSK-008 modifique `paint.ts`: dos historias editando el mismo pintor |
+| D13 | **Punto de extensión y banda ⚡ en el grafo.** `GraphView` acepta `layers` (capas de lienzo pintadas entre las líneas de los carriles y los nodos, con la geometría de cada columna y fila), `laneBadge` (nodo React en la celda Branch de la cabeza del carril y en la vista en tabla) y `laneA11y` (texto extra para el nombre accesible del carril). **Esta historia registra la capa de conflictos** (T011): US-DSK-008, que entra antes, fija el modelo puro y la insignia (`ConflictBandModel`, `SideRef`, `usePredictionView` en su módulo público `src/conflicts/index.ts`, y `ConflictBand variant="badge"` en `src/ui`, D6 de DS-US-DSK-008); `src/graph/conflict-layer.ts` dibuja la línea entre los carriles `a` y `b` (o hasta la línea de la base) en `danger`, discontinua si `stale` o si las columnas no son contiguas, en la fila de la cabeza más reciente de los dos; un ⚠ es solo insignia. `GraphContent` pasa `layers`, `laneBadge` y `laneA11y` desde `usePredictionView`. `src/graph` solo importa de `src/conflicts` su `index.ts` (tipos y el hook, este solo en `GraphContent`) y nunca `PairDto`, `prediction-model.ts` ni `alerts.ts`. **Decisión del orquestador (2026-11-09), validada por Arquitecto** | El grafo existe solo en esta historia, que llega después: la capa va donde está el lienzo y consume un contrato ya fijado. Así 008 no espera a 005 ni 005 reescribe el modelo | Que 008 escribiese la capa: el lienzo y `GraphGeometry` no existen cuando 008 se implementa. Que 005 derive la banda de los `PairDto`: duplicaría frescura, nombres y orden |
 | D14 | **Alternativa textual**: control "Grafo · Tabla" (`SegmentedControl`) en la cabecera y `⌥⌘T`. La tabla tiene una fila por carril: rama, agente, estado, ↑↓ frente a la base y commits (visibles de total). Cada fila del grafo lleva una frase completa como nombre accesible; el lienzo es `aria-hidden` | DSF-DSK-001 § 4.b (estado "sin color / lector de pantalla") y § 7 (2.1.1, 1.4.1) | Solo nombres accesibles en el grafo: no da una vista de resumen equivalente para quien no ve el dibujo |
 | D15 | **La flota pasa al detalle**: `FleetView` va al panel derecho con el título "Estado de Agentes"; el centro es el grafo. Sin lista de pestañas hasta que exista la segunda ("Cambios sin commit", US-DSK-010/011) | Es lo que dejó escrito DS-US-DSK-004 D1. En 1000–1359 px el detalle es un cajón cerrado, pero cada carril ya dice su agente y su estado. El tooltip del toggle del detalle nombra su contenido (`detail.agents.show` / `.hide`: "Mostrar estado de agentes") para que se encuentre la flota sin abrirlo a ciegas. **Decisión del orquestador (2026-11-09), validada por Diseñador UX** | Una lista de pestañas con una sola pestaña |
 | D16 | **Sin animación de crecimiento** ni anuncio por commit: un commit nuevo aparece en su fila. Solo un cambio del estado de la base se anuncia (`role="status"`) | DSF § 7 (movimiento reducido) y ruido para el lector de pantalla con varios agentes commiteando | Anunciar cada commit |
 | D17 | **Motor sin `graph.lanes`** en `hello.methods` → mensaje `graphUnavailable { reason: "unsupported" }`: el grafo se queda en el nivel 1 con la nota "Este motor no ofrece los commits del grafo; actualiza o reinicia GitRaptor". `query-busy` → se reintenta tras el espaciado de D3, sin aviso. Otro rechazo → `graphUnavailable { reason: "failed" }`: se conserva lo último con "No se pudieron leer los commits ahora" | D11 de DS-US-CKP-022 y descubrimiento por `hello.methods` (ADR-GRP-016 § 1; `crates/api/src/messages.rs:57`) | Fallar todo el centro |
 | D18 | **Nombre del agente en texto normal, color en un punto.** En la celda Branch el nombre del agente va en `text-text-main` (o `text-text-muted` si no hay agente), precedido de un punto de 8 px `bg-lane-<hueco>` en `aria-hidden`. No se usa `text-lane-<hueco>`: los colores de carril solo tienen contraste no textual sobre `panel` (3.33:1 a 9.73:1 en oscuro, 4.47:1 a 7.57:1 en claro, DSYS-GRP-002) y fallan 4.5:1 como texto (WCAG 1.4.3). El punto y los carriles viven siempre sobre `panel`, nunca sobre `control`. **Decisión del orquestador (2026-11-09), validada por Diseñador UX** | El color identifica, el nombre lo dice (1.4.1) | Texto en color de carril: ilegible con `lane.6` en oscuro y `lane.1` en claro |
-| D19 | **Base sin confirmar: el aviso con el comando es uno solo.** El `StatePanel` del grafo dice `graph.base.unconfirmed` y no repite el comando; el aviso con `CopyCommand` de `raptor guard confirm` lo pinta el panel de conflictos de US-DSK-008 (D11 de esa DS) encima del grafo, en el mismo centro. Hasta que 008 entre, el estado dice solo la frase. `base-missing` y `no-base` añaden una línea de causa (`graph.base.missingHint`) y siguen sin botón. **Decisión del orquestador (2026-11-09), validada por Diseñador UX** | Dos comandos iguales en la misma pantalla confunden; el comando es el de US-GRD-014 (confirma la base del equipo en la terminal) | Pintar el comando también en el grafo |
+| D19 | **Base sin confirmar: el aviso con el comando es uno solo.** El `StatePanel` del grafo dice `graph.base.unconfirmed` y no repite el comando; el aviso con `CopyCommand` del comando de confirmar (construido en el backend con la ruta absoluta de `raptor` y la del repo, D11 de DS-US-DSK-008) lo pinta el panel de conflictos encima del grafo, en el mismo centro; 008 ya está en `main` cuando entra esta historia. `base-missing` y `no-base` añaden una línea de causa (`graph.base.missingHint`) y siguen sin botón. **Decisión del orquestador (2026-11-09), validada por Diseñador UX** | Dos comandos iguales en la misma pantalla confunden; el comando es el de US-GRD-014: confirmar la línea base del equipo fija la rama base confirmada que publica `RepoView.base` (verificado, G4) | Pintar el comando también en el grafo |
 | D20 | **Carriles y lienzo.** `LANE_GAP` = 16 px y `NODE_R` = 4 px se confirman; `LANE_GAP_MIN` sube de 6 a 8 px (con 6 px y radio 3 px los nodos se tocan); `NODE_R_MIN` = 3 px. Con 175 px caben la base más 20 carriles al paso mínimo; los que no caben no se dibujan en el lienzo, la celda Branch de su fila sigue diciendo su agente y la nota `graph.clipped` remite a la vista en tabla, que los lista todos. **Decisión del orquestador (2026-11-09), validada por Diseñador UX** | Con 6 px entre ejes y radio 3 px los círculos son tangentes: un carril se confunde con el vecino; 8 px dejan 2 px de aire | Ensanchar la columna Graph: rompe el presupuesto de § 2.15 a 1440 px |
 | D21 | **Cambio de vista anunciado.** `⌥⌘T` y el `SegmentedControl` alternan Grafo y Tabla sin mover el foco; una región `role="status"` dice `graph.view.announce.graph` / `.table`. El `Tooltip` del control muestra el atajo y la ayuda `?` (§ 5 de DSF-DSK-001) lo lista. `⌥⌘T` coincide con "Mostrar u ocultar barra de herramientas" de los menús estándar de macOS: la app de Tauri no define hoy ese menú; si se añade un menú nativo con ese atajo, hay que cambiar uno de los dos. **Decisión del orquestador (2026-11-09), validada por Diseñador UX** | Quien usa lector de pantalla no ve que la vista cambió | Cambiar de vista sin anuncio |
 | D22 | **"Volver" nombra la vista principal.** Con el grafo en el centro, los botones de DS-US-DSK-007 (`grd.view.back`) y DS-US-DSK-008 (`conflicts.detail.back`) dicen "Volver al grafo" / "Back to the graph" (T006 reescribe esos dos textos). Cada destino del centro (par, Guardrails, Time Machine) es excluyente y vuelve a la vista principal. **Decisión del orquestador (2026-11-09), validada por Diseñador UX** | "Volver a la flota" sería falso: la flota está en el detalle | Dejar el texto y que lleve al grafo |
@@ -145,7 +146,7 @@ La entrega tiene dos niveles. El primero se construye ya con lo que el motor pub
 |----|-----------|-----------|---------|--------|-------|
 | G1 | NFR-13.4 pide que un commit nuevo aparezca "sin volver a pedir el grafo entero (solo el carril afectado)" (`docs/architecture/non-functional.md:200`), y `graph.lanes` solo acepta `repo_id` (DS-US-CKP-022 § Contrato de API): la app vuelve a pedir todos los carriles. La caché por carril del daemon (D9 de DS-US-CKP-022) solo recorre el carril que cambió, pero la respuesta lleva todos | Bloquea liberación | — | Decidir si NFR-13.4 se lee como "solo se recorre el carril afectado" (enmienda de su texto) o si `graph.lanes` gana un filtro opcional de carriles (enmienda de DS-US-CKP-022, aditiva) antes del gate de rendimiento de la release | Arquitecto |
 
-**Dependencias de orden (`blocked_by`)**: no son decisiones abiertas; el contrato que se consume ya está fijado en DS-US-CKP-022 (`approved`) y cada pieza tiene dueño y ruta. Mientras no estén en `main`, T007 a T010 (`blocked_tasks`) no empiezan; T001 a T006 sí.
+**Dependencias de orden (`blocked_by`)**: no son decisiones abiertas; el contrato que se consume ya está fijado en DS-US-CKP-022 (`approved`) y cada pieza tiene dueño y ruta. Mientras no estén en `main`, T007 a T010 (`blocked_tasks`) no empiezan; T001 a T006 sí. T011 (capa de conflictos) espera a US-DSK-008, que el orden del orquestador (008 → 007 → 005) ya pone en `main` antes de esta historia.
 
 - **`graph.lanes` no existe en el motor** (DEP-CKP-2). `crates/api/src/methods/` no tiene `graph.rs` ni `query.rs` (comprobado el 2026-11-09: ningún `"graph.` ni `QueryPool` en `crates/` ni en `apps/`). Lo entregan T002 y T003 de DS-US-CKP-022 (US-CKP-022), que a su vez esperan a T003 de DS-US-CKP-012 (`QueryPool`, `query.cancel`, US-CKP-012). Alcanza a T007 y lo que depende de ella.
 - **La biblioteca cliente no envía sin esperar.** `Client` solo tiene `call` y `next_incoming` (`crates/api/src/client/mod.rs:414`, `:501`) e `Incoming` solo `Buffered` y `Frame` (`:222-231`); el `Link` de la app tira cualquier respuesta leída fuera de un `call` (`apps/desktop/src-tauri/src/engine/link.rs:139`). `Client::submit`/`settle` e `Incoming::Reply` los entrega T004 de DS-US-CKP-012 (US-CKP-012). Alcanza a T008.
@@ -177,7 +178,7 @@ classDiagram
     GraphModel ..> GraphDto : nivel 2, commits si hay
     GraphGeometry --> GraphModel : columnas estables por carpeta
     GraphView --> GraphGeometry : ventana visible
-    GraphView "1" --> "0..*" GraphLayer : US-DSK-008 registra la banda
+    GraphView "1" --> "0..*" GraphLayer : T011 registra la capa de conflictos
     GraphView --> GraphPrefs : columnas visibles
     GraphView --> Table : filas de la ventana
     Supervisor ..> GraphDto : graph.lanes, una en vuelo
@@ -188,7 +189,7 @@ classDiagram
 
 🟩 nuevo · 🟨 modificado · ⬜ existente (contexto: no cambia). Cada pieza dice qué tarea la toca.
 
-`GraphModel` es pura y no sabe si los commits llegaron: con `GraphDto` ausente da filas resumen; con él, filas de commit. `GraphView` admite cero o más capas: esta historia no registra ninguna.
+`GraphModel` es pura y no sabe si los commits llegaron: con `GraphDto` ausente da filas resumen; con él, filas de commit. `GraphView` admite cero o más capas: esta historia registra una, la de conflictos (T011), sobre el modelo público de US-DSK-008.
 
 **Cómo fluye:**
 
@@ -218,7 +219,7 @@ graph TD
     snap["instantánea del repo (RepoFleet)"] --> cards["fleetCards por clave"]
     snap --> model["graphModel"]
     cards --> model
-    graph["mensaje graph (GraphDto)"] --> model
+    graphMsg["mensaje graph (GraphDto)"] --> model
     cards --> fleet["FleetView en el detalle"]
     model --> grid["filas de la grilla"]
     model --> canvas["lienzo de carriles"]
@@ -235,7 +236,7 @@ Nombre, color y estado de un agente salen una vez, de `fleetCards` con el regist
 
 ### El trabajo de un vistazo
 
-Dos frentes y un cierre: el grafo con lo que ya se publica (T001–T006), los commits por `graph.lanes` (T007–T009, bloqueados) y la verificación en macOS (T010).
+Tres frentes y un cierre: el grafo con lo que ya se publica (T001–T006), la banda ⚡ sobre el modelo de US-DSK-008 (T011), los commits por `graph.lanes` (T007–T009, bloqueados) y la verificación en macOS (T010).
 
 | # | Tarea | Depende | Aterriza en |
 |---|---|---|---|
@@ -248,11 +249,12 @@ Dos frentes y un cierre: el grafo con lo que ya se publica (T001–T006), los co
 | T007 | Escribir en rojo los tests del grafo en el backend y fijar su DTO | T001 | `apps/desktop/src-tauri` |
 | T008 | Pedir `graph.lanes` desde el supervisor | T007 | `apps/desktop/src-tauri/src/engine` |
 | T009 | Guardar el grafo en la caché y pintar los commits | T008, T006 | `apps/desktop/src/state`, `apps/desktop/src/graph` |
-| T010 | Verificar de punta a punta en macOS | T009 | — |
+| T010 | Verificar de punta a punta en macOS | T009, T011 | — |
+| T011 | Dibujar la banda ⚡ en el grafo con el modelo de US-DSK-008 | T006 | `apps/desktop/src/graph/conflict-layer.ts`, `apps/desktop/src/engine` |
 
 ### En qué orden
 
-Dos ramas desde T001: la del webview (T002 → T003 → T005 → T006, con T004 en paralelo) se construye ya; la del backend (T007 → T008) espera a sus dependencias y se une en T009.
+Dos ramas desde T001: la del webview (T002 → T003 → T005 → T006, con T004 en paralelo) se construye ya; la del backend (T007 → T008) espera a sus dependencias y se une en T009; la banda ⚡ (T011) sale de T006 y entra en la verificación de T010.
 
 ```mermaid
 graph LR
@@ -267,6 +269,8 @@ graph LR
     T008 --> T009
     T006 --> T009
     T009 --> T010
+    T006 --> T011
+    T011 --> T010
 ```
 
 ### T001 — Escribir en rojo los tests del grafo y fijar sus tipos
@@ -390,7 +394,7 @@ graph LR
 **Objetivo.** El centro pinta `GraphView` con la flota del repo abierto; el detalle pinta `FleetView` como "Estado de Agentes". Nivel 1 de punta a punta.
 
 **Ubicación.**
-- `apps/desktop/src/engine/EngineCenter.tsx` (**MODIFY**: `FleetContent` → `GraphContent`)
+- `apps/desktop/src/engine/EngineCenter.tsx` (**MODIFY**: `FleetContent` → `GraphContent`; conserva el panel de conflictos y los destinos del centro)
 - `apps/desktop/src/shell/AppShell.tsx` (**MODIFY**: detalle con `FleetView`)
 - `apps/desktop/src/shell/AppShell.test.tsx` (**MODIFY**)
 - `apps/desktop/src/fleet/useAgentSlots.ts` (**CREATE**)
@@ -406,7 +410,7 @@ graph LR
    1.1 ⛔6.1 Montar `useAgentSlotsSync` en un solo sitio (`GraphContent`). Si lo montan también `FleetView` y el grafo, dos escritores reasignan huecos y un agente cambia de color al abrir el cajón.
 2. Cambiar `FleetView` para que tome el hueco de `useAgentSlot` y deje su `useRef` (DS-US-DSK-004 T004).
 3. Crear `useGraph()`: lee `useFleet()` (DS-US-DSK-004), calcula `fleetCards` y `graphModel` con `useMemo` y, hasta T009, `graph: null`.
-4. En `EngineCenter`, el estado `content` monta `GraphContent` (`useAgentSlotsSync`, `useGraph`, `GraphView`) en lugar de `FleetContent`.
+4. En `EngineCenter`, el estado `content` monta `GraphContent` (`useAgentSlotsSync`, `useGraph`, `GraphView`) en lugar de `FleetContent`. El `ConflictPanel` de US-DSK-008 sigue encima de la vista principal y los destinos `pair` y `guardrails` de `center` siguen sustituyéndola; con `center.view === "main"` el centro pinta el panel y el grafo. `Esc` y `backToMain()` no cambian (los dejó 008; esta tarea no toca `useShortcuts` salvo `⌥⌘T` de T005).
 5. En `AppShell`, el panel de detalle pasa a llevar `heading={t("detail.agents.title")}` (sin lista de pestañas, D15) y `FleetView` del repo abierto; sin repo abierto, nada. Los estados del motor (`EngineBand`) no cambian. El toggle del detalle (`⌥⌘B`) usa `detail.agents.show` / `.hide` como etiqueta y tooltip.
 5.1 Reescribir en `en.json` y `es.json` los textos de `grd.view.back` y `conflicts.detail.back` a "Volver al grafo" / "Back to the graph" (D22).
 6. Mover la marca `gr:fleet-delta-painted` de DS-US-DSK-004 T006 tal cual (sigue en `FleetView`) y añadir `gr:graph-painted` tras pintar la primera ventana del grafo con la instantánea del repo.
@@ -445,10 +449,11 @@ graph LR
 **Ubicación.**
 - `apps/desktop/src-tauri/src/engine/link.rs` (**MODIFY**: `submit`, `reply`, `cancel`)
 - `apps/desktop/src-tauri/src/engine/supervisor.rs` (**MODIFY**)
+- `apps/desktop/src-tauri/tests/commands.rs` (**MODIFY**: test «esta historia no añade comandos»)
 
 **Pasos**
 1. Añadir a `Link` `submit`, `reply` y `cancel` (§ Firmas del stack) con implementación por defecto: `submit` devuelve `Err(LinkError::Refused { code: rpc::code::METHOD_NOT_FOUND })`, `reply` `None`, `cancel` nada. `ClientLink` las implementa con la API de DS-US-CKP-012 T004; `cancel` llama `query.cancel` e ignora el error.
-   1.1 ⛔8.1 En `next`, una respuesta leída que no sea de un `call` se guarda para `reply`; hoy se tira (`link.rs:139`). Si se sigue tirando, la vista se queda en "cargando commits…" para siempre.
+   1.1 ⛔8.1 En `next`, una respuesta leída que no sea de un `call` se guarda para `reply` **solo si su id es el de la petición en vuelo** (`GraphTrack`); cualquier otra respuesta se tira (L-01 de security-expert, **Decisión del orquestador (2026-11-09), validada por Arquitecto y security-expert**). Hoy se tiran todas (`link.rs:139`): si se siguiera tirando la buena, la vista se quedaría en "cargando commits…" para siempre; si se guardaran todas, un daemon podría llenar la memoria con ids que nadie pidió.
 2. Añadir al ámbito del repo un `GraphTrack` (§ Ciclos de vida): `stale`, la petición en vuelo con su instante, el último envío, la última duración y la última cabeza y divergencia por clave.
 3. Marcar `stale` con las causas de D3: tras `open_repo` correcto, con `graph_trigger`, y con un `worktree.state` cuyo conjunto de claves o alguna `(head, divergence)` cambie. En vista restringida no se marca nunca.
 4. En cada vuelta del bucle (`READ_SLICE`, 20 ms): si `stale`, sin petición en vuelo y pasado el espaciado, `submit(GRAPH_LANES, { repo_id })` y `stale = false`. Si `hello.methods` no trae `graph.lanes`, manda `graphUnavailable { reason: "unsupported" }` una vez por repo abierto y no pide nada.
@@ -458,8 +463,8 @@ graph LR
 
 - **Depende:** T007
 - **Refs:** D2, D3, D17; DS-US-CKP-022 D9, D11; DS-US-CKP-012 D1, D2, D4
-- **Aceptación:** `cargo test -p gitraptor-desktop --test graph_supervisor --test fleet_supervisor --test engine_supervisor --test commands` en verde; `tests/commands.rs` sigue comparando la lista exacta de cuatro comandos.
-- **Guard ⛔8.1:** `cargo test -p gitraptor-desktop --test graph_supervisor an_async_reply_read_while_waiting_for_events_reaches_the_webview`
+- **Aceptación:** `cargo test -p gitraptor-desktop --test graph_supervisor --test fleet_supervisor --test engine_supervisor --test commands` en verde; `tests/commands.rs` › `the_graph_adds_no_ipc_command` afirma que esta historia no añade comandos (ningún nombre con `graph` o `lane` en `commands.json` ni en un `#[tauri::command]`), sin fijar la lista absoluta, que sigue fijando el test existente.
+- **Guard ⛔8.1:** `cargo test -p gitraptor-desktop --test graph_supervisor an_async_reply_read_while_waiting_for_events_reaches_the_webview` y `an_unknown_reply_id_is_dropped`
 - **Guard ⛔8.2:** `cargo test -p gitraptor-desktop --test graph_supervisor a_reply_for_a_repo_no_longer_open_is_dropped_and_the_query_is_cancelled`
 
 ### T009 — Guardar el grafo en la caché y pintar los commits
@@ -495,10 +500,32 @@ graph LR
 3. Cada commit dice "Tú u otro (sin atribuir)".
 4. Base `develop` sin esa rama: sin carriles y "Rama base develop no encontrada: no calculable".
 5. Column settings: ocultar Sha y Author, cerrar y abrir la app: siguen ocultas. VoiceOver recorre las filas con flechas y lee la frase de cada una; `⌥⌘T` muestra la tabla.
+6. Dos agentes que van a chocar: la línea ⚡ une sus carriles y la insignia sale en la celda Branch de los dos; VoiceOver lee el conflicto en el nombre de cada carril; con 1440 px y el detalle abierto, el panel de conflictos sigue encima del grafo.
 
-- **Depende:** T009
+- **Depende:** T009, T011
 - **Refs:** escenarios de US-DSK-005
-- **Aceptación:** los cinco pasos, con su resultado en la descripción del PR.
+- **Aceptación:** los seis pasos, con su resultado en la descripción del PR.
+
+### T011 — Dibujar la banda ⚡ en el grafo con el modelo de US-DSK-008
+
+**Objetivo.** La línea entre carriles y la insignia de cada par ⚡/⚠ en el grafo, consumiendo solo el contrato público de US-DSK-008 (D13). Fuera: el modelo, el panel y los avisos, que son de 008.
+
+**Ubicación.**
+- `apps/desktop/src/graph/conflict-layer.ts` (**CREATE**)
+- `apps/desktop/src/graph/conflict-layer.test.ts` (**CREATE**)
+- `apps/desktop/src/graph/boundaries.test.ts` (**CREATE**)
+- `apps/desktop/src/engine/EngineCenter.tsx` (**MODIFY**: `GraphContent` pasa `layers`, `laneBadge` y `laneA11y`)
+- `apps/desktop/src/graph/GraphView.test.tsx` (**MODIFY**)
+
+**Reglas**
+- `conflictLayer(bands: readonly ConflictBandModel[]): GraphLayer` (pura, `id: "conflicts"`), con el tipo importado de `src/conflicts/index.ts`. Por cada banda `level: "conflict"`: carriles `x` de `a` y `b` en `geometry.laneX` (`SideRef` `base` → la columna de la base); fila = la de la cabeza (o fila resumen) más reciente de los dos en `geometry.rowIndex`; segmento horizontal de `x(a)` a `x(b)` en `colors.danger`, 1,5 px, discontinuo si `stale` o si entre las dos columnas hay otro carril. Un carril sin columna (cortado, D20, o fuera de la flota) no dibuja la línea: la insignia y el panel siguen diciéndolo. `level: "overlap"` no dibuja nada en el lienzo. Solo dentro de `window`.
+- `GraphContent`: `const view = usePredictionView(fleet, cards, nowMs)`; `layers = useMemo(() => [conflictLayer(view.bands)], [view.bands])`; `laneBadge(key)` = un `ConflictBand variant="badge"` por banda cuyo `a` o `b` sea ese carril (⚡ antes que ⚠, como mucho dos y "+N" en texto); `laneA11y(key)` = los `a11yLabel` de esas bandas unidos por ", ". La línea de la base usa `SideRef` `base`.
+- Frontera (D13): ningún archivo de `src/graph/**` importa de `src/conflicts/` otra cosa que `src/conflicts/index.ts`, ni importa `PairDto` de `src/client`. `GraphContent` vive en `src/engine` y es quien llama el hook.
+- Sin animación al aparecer la línea (D16); el lienzo sigue `aria-hidden` y el texto equivalente es el panel de 008 y `laneA11y`.
+
+- **Depende:** T006
+- **Refs:** D13, D16, D20; DS-US-DSK-008 D6; DSF-DSK-001 § 4.b (D-8)
+- **Aceptación:** `pnpm --filter @gitraptor/desktop test -- conflict-layer boundaries GraphView` en verde (§ 9.4).
 
 ---
 
@@ -521,12 +548,13 @@ apps/desktop/src/
 │   ├── graph-layout.ts, canvas/{paint,colors}.ts  ← CREATE (T003)
 │   ├── graph-prefs.ts                         ← CREATE (T004)
 │   ├── GraphView.tsx, GraphCanvas.tsx, ColumnSettings.tsx, LaneTable.tsx  ← CREATE (T005)
+│   ├── conflict-layer.ts, boundaries.test.ts   ← CREATE (T011)
 │   ├── useGraph.ts                            ← CREATE (T006), MODIFY (T009)
 │   └── *.test.ts(x)                           ← CREATE (T001, T003, T005)
 ├── fleet/useAgentSlots.ts                     ← CREATE (T006)
 ├── fleet/FleetView.tsx                        ← MODIFY (T006)
 ├── ui/Table.tsx                               ← MODIFY (T005)
-├── engine/EngineCenter.tsx                    ← MODIFY (T006)
+├── engine/EngineCenter.tsx                    ← MODIFY (T006, T011)
 ├── shell/{AppShell,useShortcuts}.ts(x)        ← MODIFY (T005, T006)
 ├── client/{engine-types,queries}.ts           ← MODIFY (T001, T009)
 ├── state/engine-cache.ts                      ← MODIFY (T009)
@@ -561,6 +589,7 @@ apps/desktop/src/
 | `Supervisor` (de DS-US-DSK-003) | `src-tauri/src/engine/supervisor.rs` | Gana `GraphTrack` y pide `graph.lanes` del repo abierto (T008) |
 | `FleetView` (de DS-US-DSK-004) | `src/fleet/FleetView.tsx` | Pasa al detalle y lee los huecos de `useAgentSlot` (T006) |
 | `Table` (de DS-TS-DSK-003) | `src/ui/Table.tsx` | Gana `firstRowIndex`, `wipIds`, `focusId` y `onFocusOutside` (T005) |
+| `ConflictBandModel`, `SideRef`, `usePredictionView` (de DS-US-DSK-008) | `src/conflicts/index.ts` | Contrato público que consume T011; esta historia no lo cambia |
 
 Mensajes nuevos del `Channel` (`EngineMessage`, `type`):
 
@@ -610,6 +639,8 @@ export function folded(prefs: GraphPrefs, availableWidthPx: number): GraphColumn
 // apps/desktop/src/graph/GraphView.tsx
 export interface GraphViewProps { model: GraphModel; repoName: string; stale: boolean; layers?: readonly GraphLayer[]; laneBadge?: (key: string) => ReactNode }
 export function GraphView(props: GraphViewProps): ReactElement;
+// apps/desktop/src/graph/conflict-layer.ts
+export function conflictLayer(bands: readonly ConflictBandModel[]): GraphLayer; // ConflictBandModel de src/conflicts/index.ts (DS-US-DSK-008)
 // apps/desktop/src/graph/useGraph.ts
 export function useGraph(laneA11y?: (key: string) => string | null): { model: GraphModel; fleet: RepoFleet | undefined };
 // apps/desktop/src/fleet/useAgentSlots.ts
@@ -671,7 +702,7 @@ Las claves `fleet.sync.*`, `fleet.unavailable.*`, `fleet.noAgent` y `fleet.agent
 
 ### Comandos IPC
 
-Ninguno nuevo (D2). La lista cerrada de ADR-GRP-017 sigue siendo `app_info`, `engine_retry`, `engine_watch` y `fleet_open` (`apps/desktop/src-tauri/commands.json`), y `tests/commands.rs` la sigue comparando exacta. Sin parámetros nuevos que validar en la frontera del webview; la entrada nueva que se valida es lo que llega del daemon (T007) y lo que se lee del `localStorage` (T004).
+Ninguno nuevo (D2). Esta historia no añade comandos a la lista cerrada de ADR-GRP-017 (`apps/desktop/src-tauri/commands.json`, que al entrar ya lleva `guard_blocks` de US-DSK-007); el test existente de `tests/commands.rs` la sigue comparando exacta y el de T008 afirma que esta historia no añade ninguno. Sin parámetros nuevos que validar en la frontera del webview; la entrada nueva que se valida es lo que llega del daemon (T007) y lo que se lee del `localStorage` (T004).
 
 ### Lo que se consume del canal
 
@@ -709,7 +740,7 @@ Sin errores nuevos hacia el webview: los rechazos de `graph.lanes` se traducen a
 | Vuelta del supervisor | 20 ms (`READ_SLICE`) | `supervisor.rs:117` |
 | Alto de fila / cabecera | `--gr-size-graph-row` (44 px) / `--gr-size-graph-header` (38 px) | primitives-spec § 2.15 |
 | Anchos de columna | Branch 195 px, Graph 175 px, Message `minmax(220px, 1fr)`, Author 190 px, Date 120 px, Sha 84 px | primitives-spec § 2.15 |
-| Plegado de columnas | ancho del centro: Graph + Message (220 px) siempre; luego Sha, Author, Date, Branch en ese orden hasta que quepa | D11 (cambia el orden y el criterio de primitives-spec § 2.15) |
+| Plegado de columnas | ancho del centro: Graph + Message (220 px) siempre; luego Sha, Author, Date, Branch en ese orden hasta que quepa | D11; primitives-spec § 2.15 (enmendada el 2026-11-09) |
 | `LANE_GAP` / `LANE_GAP_MIN` | 16 px / 8 px | D20: 175 px dan base más 9 carriles a 16 px y 20 al mínimo |
 | `NODE_R` / `NODE_R_MIN` | 4 px / 3 px; línea de carril 1,5 px | DSF § 4.b (línea); radio fijado en D20 |
 | `OVERSCAN` | 8 filas por lado, sin pasar del doble de las visibles | NFR-13.3 |
@@ -727,12 +758,12 @@ Sin errores nuevos hacia el webview: los rechazos de `graph.lanes` se traducen a
 
 | Tipo | Cantidad | Tareas dueñas | Herramientas | Cuándo |
 |------|---------:|-------------|---------|------|
-| Unit | 25 | T002, T003, T004, T006, T007 | Vitest, `cargo test` | PR gate |
-| Integration | 7 | T008 | `cargo test` con el daemon falso | PR gate |
+| Unit | 31 | T002, T003, T004, T006, T007, T011 | Vitest, `cargo test` | PR gate |
+| Integration | 8 | T008 | `cargo test` con el daemon falso | PR gate |
 | Contract | 2 | T007, T009 | Fixture dorada Rust ↔ TS | PR gate |
 | E2E | 1 | T010 | macOS con el motor real, manual | merge gate |
 | Security | 3 | T004, T007 | Vitest, `cargo test` | PR gate |
-| Componente | 19 | T005, T006, T009 | Testing Library + axe-core, en/es | PR gate |
+| Componente | 21 | T005, T006, T009, T011 | Testing Library + axe-core, en/es | PR gate |
 
 ### 9.2 Umbrales de cobertura
 
@@ -772,16 +803,18 @@ Sin repos reales salvo T010 (repos temporales, NFR-01).
 | Carriles que no caben (D20) | — | `graph-layout.test.ts` › `lanes past the column are clipped and counted`; `the gap never goes below 8 px` |
 | Cambio de vista anunciado (D21) | — | `GraphView.test.tsx` › `option-command-t announces the view and keeps focus` |
 | Lienzo y capas (D12, D13) | — | `paint.test.ts` › `a registered layer draws between lane lines and nodes`; `no colour literal reaches the context`; `nothing is painted without a change` |
+| Banda ⚡ en el grafo (D13, T011) | — | `conflict-layer.test.ts` › `a conflict draws one danger line between its two lanes at the newer head row`; `a stale or non-contiguous pair draws a dashed line`; `a pair against the base reaches the base column`; `an overlap draws nothing on the canvas`; `a clipped lane draws no line`; `GraphView.test.tsx` › `both lanes of a conflict show the badge and say it in their name`; `the conflict panel stays above the graph` |
+| Frontera con US-DSK-008 (D13) | — | `boundaries.test.ts` › `src/graph imports only the public module of src/conflicts`; `src/graph never imports PairDto` |
 | Virtualización (NFR-13.3) | — | `GraphView.test.tsx` › `the dom never holds more than twice the visible rows`; `Table.test.tsx` › `firstRowIndex offsets aria-rowindex`, `focus outside the window asks the caller` |
 | Teclado y alternativa textual (D14) | — | `GraphView.test.tsx` › `arrows, page and home/end move through every row`; `each row has a full sentence as its name`; `the canvas is hidden from assistive tech`; `LaneTable.test.tsx` › `one row per lane with branch, agent, state, ahead/behind and commits`; `option-command-t switches to the table` |
 | No solo color (NFR-09, WCAG 1.4.1) | — | `GraphView.test.tsx` › `every lane has its agent name and state symbol next to its colour`; axe sin violaciones |
 | Flota en el detalle (D15) | — | `AppShell.test.tsx` › `the detail shows agent status with the fleet`; `the center shows the graph` |
 | Motor sin `graph.lanes` (D17) | `graph_supervisor` › `an_engine_without_graph_lanes_reports_unsupported_once` | `GraphView.test.tsx` › `an unsupported engine keeps level 1 with its note` |
 | Consulta ocupada o fallida (D17) | `graph_supervisor` › `query_busy_retries_after_the_spacing`; `a_refused_query_reports_failed_and_keeps_the_last_graph` | `engine-cache.test.ts` › `graph unavailable keeps the last graph` |
-| Respuesta asíncrona y repo cambiado | `graph_supervisor` › `an_async_reply_read_while_waiting_for_events_reaches_the_webview`; `a_reply_for_a_repo_no_longer_open_is_dropped_and_the_query_is_cancelled` | — |
+| Respuesta asíncrona y repo cambiado | `graph_supervisor` › `an_async_reply_read_while_waiting_for_events_reaches_the_webview`; `a_reply_for_a_repo_no_longer_open_is_dropped_and_the_query_is_cancelled`; `an_unknown_reply_id_is_dropped` (L-01) | — |
 | Vista restringida | `graph_supervisor` › `a_restricted_session_never_asks_graph_lanes` | — |
 | Solo lectura | `graph_supervisor` › `a_graph_run_never_sends_writes_or_reserved_methods` | — |
-| Lista cerrada intacta | `tests/commands.rs` (comparación exacta existente) | `commands.test.ts` (existente) |
+| Esta historia no añade comandos | `tests/commands.rs` › `the_graph_adds_no_ipc_command` (sin fijar la lista absoluta) | `commands.test.ts` › `no command of the command map is about the graph` |
 | Texto no confiable (SEC-12) | `graph_ingest` › `summary_and_branch_reach_the_webview_escaped` (asunto con `\u{1b}]0;x\u{7}` y U+202E); `an_invalid_oid_drops_the_commit`; `the_raw_worktree_path_never_reaches_the_webview` | `GraphView.test.tsx` › `a summary is rendered as text` |
 | Caché del grafo | — | `engine-cache.test.ts` › `graph replaces, repo closed removes it, a new repo snapshot keeps it` |
 | Marcas (NFR-13.2, 13.4) | `graph_supervisor` › `graph_messages_carry_backend_perf` | `GraphView.test.tsx` › `measures each graph delta once`; `marks the first graph paint once per repo` |
@@ -799,12 +832,14 @@ Sin repos reales salvo T010 (repos temporales, NFR-01).
 ## Gate de seguridad
 
 - V1, V2, V5 y V7 de ADR-GRP-017 en verde en el job `desktop`.
-- Lista cerrada intacta: `commands.json` y `capabilities/main.json` sin cambios; `tests/commands.rs` los compara exactos.
+- Esta historia no añade comandos: `commands.json` y `capabilities/main.json` sin cambios en su diff; `tests/commands.rs` › `the_graph_adds_no_ipc_command`.
 - Asunto, rama y base pasan por `display::visible` en `ingest::graph`; la ruta cruda del worktree solo se usa para la clave y nunca llega al webview; `oid` y `merge_base` solo como hex de 40 o 64.
 - El lienzo no pinta texto; todo texto del repo llega al DOM como texto de React (V5: sin `dangerouslySetInnerHTML`).
 - El supervisor solo manda `graph.lanes` y `query.cancel`: ningún método reservado ni de escritura en `calls()` del daemon falso (aserción común de `support`, US-DSK-003). En vista restringida (app abierta por un agente) no pide el grafo: cubre el residuo S-01 de DS-US-CKP-022 G3 para la app.
 - `gitraptor.graph.v1` guarda solo columnas y vista, se valida al leer y no autoriza nada (ADR-GRP-017 M-3).
-- Revisión de `security-expert`: pedida al orquestador para el `Link` asíncrono (T008) y el saneado de los asuntos (T007); no hay comandos nuevos ni escrituras.
+- `Link::next` solo guarda la respuesta cuyo id es el de la petición en vuelo (L-01, T008).
+- `src/graph` solo importa de `src/conflicts` su módulo público (T011).
+- Revisión de `security-expert`: **hecha el 2026-11-09**: aprobada con comentarios; L-01 aplicado (**Decisión del orquestador (2026-11-09), validada por Arquitecto y security-expert**), I-01 anotado (G13) y el requisito sobre `query.cancel` llevado a DS-US-CKP-012 (G12).
 
 Corre `/security-review --scope devspec docs/requirements/features/desktop/dev-specs/US-DSK-005-grafo-de-carriles.md` antes de mezclar.
 
@@ -814,7 +849,7 @@ Corre `/security-review --scope devspec docs/requirements/features/desktop/dev-s
 
 | Ítem / no-objetivo | Historia que lo cubre | Gate (cómo se verifica) |
 |----------------|--------------------|-------------------------|
-| Banda ⚡ entre carriles, insignias ⚡N y ⚠, línea de límites | US-DSK-008 (usa `layers` y `laneBadge`, D13) | `src/graph` no importa `prediction` ni `PairDto` |
+| Modelo de la banda, panel de conflictos, línea de límites y avisos | US-DSK-008 (esta historia solo dibuja su modelo en el lienzo, T011) | `src/graph` solo importa `src/conflicts/index.ts` y nunca `PairDto` (`boundaries.test.ts`) |
 | Actor por commit (`graph.commit-actor`) | Motor-local (ADR-GRP-013, DEP-CKP-2 opcional); sin historia | `CommitDto` no tiene campo de actor |
 | Desplegar "N commits más" o paginar | Sin historia (D13 de DS-US-CKP-022) | La fila `more` no es un botón |
 | Detalle y diff de un commit seleccionado | US-DSK-009 | `onActivate` de la grilla no abre nada |
@@ -830,12 +865,43 @@ Corre `/security-review --scope devspec docs/requirements/features/desktop/dev-s
 | ID | Nota | Acción | Owner |
 |----|------|--------|-------|
 | G2 | DSF-DSK-001 § 4.b decía que la columna Author lleva a la persona. DS-US-CKP-022 D6 excluye autor y correo y la historia pide "sin atribuir" (D9). **Resuelto por UX (2026-11-09)**: se sigue la historia y el design flow se corrige (§ 4.b y D-18 de § 10) | Ninguna | — |
-| G3 | A 1440 px con el detalle abierto las seis columnas no caben (984 px fijos más el mensaje). **Resuelto por UX (2026-11-09)** en D11: el plegado mide el centro y pliega Sha, Author, Date y Branch en ese orden. primitives-spec § 2.15 conserva el orden y el umbral antiguos | Enmendar primitives-spec § 2.15 (orden y criterio de plegado) | Arquitecto |
-| G4 | D5 de DS-US-CKP-022 sugiere "confírmala con `raptor guard confirm`" y ese comando (`apps/cli/src/guard/confirm.rs:1`) confirma la base del equipo de la rama principal con plan y pregunta en la terminal. UX (D19): el comando lo ofrece el aviso de DS-US-DSK-008 (D11) y el grafo solo dice la frase | Confirmar con el PO que ese comando es el que confirma la base que la app llama "sin confirmar" | PO |
+| G3 | A 1440 px con el detalle abierto las seis columnas no caben (984 px fijos más el mensaje). **Resuelto (2026-11-09)**: UX lo fijó en D11 (plegado por ancho del centro, orden Sha, Author, Date, Branch) y el Arquitecto enmendó primitives-spec § 2.15 en el mismo cambio, como enmienda aditiva; esta historia, la primera que usa la grilla, lo implementa en T004. **Decisión del orquestador (2026-11-09), validada por Arquitecto** | Ninguna | — |
+| G4 | **Resuelto (2026-11-09), verificado en el código**: `raptor guard confirm` confirma la línea base del equipo de la rama principal y esa confirmación fija la rama base confirmada. `guard.confirm` la escribe con `set_confirmed_team_baseline` (`crates/core/src/guardrails/confirm.rs:138-158`, `crates/core/src/profile/team_baseline.rs:47-60`), el daemon la lee para la base del repo (`crates/core/src/daemon/mod.rs:1360-1365`) y `observe::base_branch` la publica como `confirmed` (`crates/core/src/observe.rs:326-341`); `raptor guard install` fija el mismo dato al proteger (`crates/core/src/guardrails/install.rs:1170-1176`). Es lo que la app llama "sin confirmar". Misma afirmación en DS-US-DSK-008 (D11 y G13). El aviso con el comando es el de 008 (D19). Sin evento de cambio de base (G2 de DS-US-DSK-008), el nivel 1 del grafo sigue diciendo "sin confirmar" hasta la siguiente instantánea del repo; el nivel 2 lo corrige en cuanto `graph.lanes` responde | Publicar el cambio de base en el ámbito del repo | US-GRP-016 |
 | G5 | El actor por commit no tiene historia: DS-US-CKP-022 lo deja a motor-local con la capacidad reservada `graph.commit-actor`. Hasta entonces todo commit dice "Tú u otro (sin atribuir)", que es el comportamiento aceptado | Si se quiere, TS por reservar (`actor-por-commit-grafo`) en motor-local | Orquestador |
-| G6 | Archivos compartidos con otras US-DSK: `en.json`, `es.json`, `engine-types.ts`, `engine-cache.ts`, `queries.ts`, `wire.rs`, `ingest.rs`, `supervisor.rs`, `link.rs`, el fixture, `AppShell.tsx`, `EngineCenter.tsx`, `useShortcuts.ts` (también US-DSK-018) y `Table.tsx` (primitiva de TS-DSK-003). `src/graph/` es nuevo y propio | Integrar en orden y rebasar; US-DSK-008 entra después de T005 para usar `layers` | Orquestador |
+| G6 | Archivos compartidos con US-DSK-008 y US-DSK-007: orden y responsabilidad en [Archivos compartidos](#archivos-compartidos-entre-008-007-y-005), tabla idéntica en las tres DS. Esta historia entra tercera: sustituye `FleetContent` por `GraphContent` conservando el panel y los destinos del centro; `src/graph/` es nuevo y propio. `useShortcuts.ts` lo toca también US-DSK-018 | Integrar en el orden 008 → 007 → 005 y rebasar | Orquestador |
 | G7 | Los carriles con ↑0 se listan (D3 de DS-US-CKP-022: todo worktree salvo el tronco es carril) y, si ninguno tiene commits propios, se añade el texto del estado "vacío · sin carriles" de DSF § 4.b. Se deduce de la DS aprobada; no es hueco | Ninguna | — |
 | G8 | US-CKP-022 sigue en `draft` con su Dev Spec `approved` | Pasarla a `ready` antes de su worker | PO |
 | G9 | El `Link` asíncrono de T008 replica en la app lo que DS-US-CKP-012 T005 hace en la TUI (`Link::submit`, `offers`). Si DS-US-CKP-012 deja `Client::submit` con otra forma, T008 la adapta sin cambiar las firmas de `Link` de esta spec | Ninguna | Worker de T008 |
 | G10 | El detalle ("Estado de Agentes") es un cajón cerrado entre 1000 y 1359 px (D15): la flota con sus ⛔, ⚡ y terminadas queda a un toggle de distancia. Si Rene quiere la flota siempre a la vista, el detalle abierto por defecto exige centro de 788 px o menos (D11 ya lo soporta) | Decidir tras el primer prototipo | Rene |
-| G11 | Dueño de la banda ⚡ dentro del grafo: esta DS deja `layers` y `laneBadge` "para US-DSK-008" y DS-US-DSK-008 los deja "para US-DSK-005". Ninguna historia los registra | Propuesta de UX: la escribe 008 (`conflictLayer` y `laneBadge`) y los monta `GraphContent` sin que `src/graph` importe `prediction` | Arquitecto y orquestador |
+| G11 | **Resuelto (2026-11-09)**: la banda ⚡ del grafo la monta esta historia en T011 (capa `conflictLayer` en `layers`, `ConflictBand variant="badge"` en `laneBadge`, `laneA11y`), sobre el modelo público que fija DS-US-DSK-008 (D6), que entra antes. **Decisión del orquestador (2026-11-09), validada por Arquitecto** | Ninguna | — |
+| G12 | **Requisito para DS-US-CKP-012** (verify de security-expert): `query.cancel` solo puede cancelar consultas enviadas por la misma conexión; un id de otra conexión responde como desconocido, sin cancelar nada ni revelar que existe. T008 llama `query.cancel` al cambiar de repo y da por hecho ese aislamiento | Añadir la regla y su test a DS-US-CKP-012 (D1 y su contrato de `query.cancel`) antes de que su worker arranque | Arquitecto |
+| G13 | I-01 de security-expert: la clave del carril (FNV-1a de 64 bits de la ruta cruda, DS-US-DSK-004) no resiste colisiones fabricadas. Solo casa carriles, tarjetas, filas WIP y bandas en la pantalla: una colisión puede pintar un carril con el agente o la banda de otro, nunca autoriza ni escribe nada | Ninguna; cambiar a un hash resistente si la clave llegara a usarse para algo más que pintar | — |
+
+### Archivos compartidos entre 008, 007 y 005
+
+Tabla idéntica en DS-US-DSK-008, DS-US-DSK-007 y DS-US-DSK-005. Orden de integración fijado por el orquestador: 008, después 007, después 005; cada una rebasa sobre la anterior ya en `main`. En los archivos compartidos cada historia solo añade variantes, campos o líneas de registro al final (ADR-GRP-016); lo nuevo va en archivos propios (`src/conflicts/`, `src/guardrails/`, `src/graph/`). **Decisión del orquestador (2026-11-09), validada por Arquitecto**.
+
+| Archivo compartido | US-DSK-008 (1.º) | US-DSK-007 (2.º) | US-DSK-005 (3.º) |
+|---|---|---|---|
+| `src-tauri/commands.json`, `src-tauri/src/commands/mod.rs`, `src-tauri/capabilities/main.json` | sin cambios | añade `guard_blocks` y `allow-guard-blocks` | sin cambios |
+| `src-tauri/tests/commands.rs` (lista exacta de DS-US-DSK-004 T002) | test «esta historia no añade comandos», sin fijar la lista | pasa la lista exacta a cinco y añade los tests de `guard_blocks` | test «esta historia no añade comandos», sin fijar la lista |
+| `src/client/commands.ts` y `commands.test.ts` | test «ningún comando de predicción» | añade `guard_blocks` | test «ningún comando del grafo» |
+| `supervisor.rs`: `HubCmd` | sin variantes | `HubCmd::GuardBlocks` | sin variantes |
+| `supervisor.rs`: `RepoScope` y bucle | `PredictionTracker`, recorrido de cursor, `prediction.list` | `raw_path`, `last_guard_read`, lectura en vuelo y relectura por `reserved.audit` | `GraphTrack`, `graph.lanes` asíncrono |
+| `src-tauri/src/engine/mod.rs` | `mod prediction;`, `pub mod shell_command;` | `pub mod exception_command;`, `EngineHub::guard_blocks` | sin cambios |
+| `engine/link.rs`, `engine/launcher.rs` | `Link::daemon_exe`, `daemon_path` del informe `ready` | sin cambios (los reutiliza) | `Link::submit`, `reply`, `cancel` |
+| `engine/shell_command.rs` (nuevo en 008) | crea `posix`, `raptor_path`, `confirm`; `wire::stop_command` lo usa | lo usa desde `exception_command` sin cambiarlo | sin cambios |
+| `engine/wire.rs` (`EngineMessage` y DTO) | `PairDto` ampliado, `PairDetails`, `limits`, `confirmCommand` | `GuardBlocks`, `GuardBlocksUnavailable` y sus DTO | `Graph`, `GraphUnavailable` y sus DTO |
+| `engine/ingest.rs` | `pair`, `pair_detail`, `limits`, `confirm_command` | `guard_blocks`, `guard_entry`, `protection`, `pending` | `graph`, `graph_trigger` |
+| `tests/engine_wire.rs` (fixture) y `tests/support/fake_daemon.rs` | casos de predicción; `Script.prediction` | casos de guard; `guard.status` y `guard.log` | casos del grafo; `graph.lanes` asíncrono |
+| `src/client/engine-types.ts`, `src/client/queries.ts` | `pairDetails` y campos nuevos | `guardBlocks*`, `engineKeys.guard` | `graph*`, `engineKeys.graph` |
+| `src/state/engine-cache.ts` | `details`, `lastComputed`, regla de `rev` | entrada `engineKeys.guard` | entrada `engineKeys.graph` |
+| `src/state/ui-store.ts` | crea `center` (`main`, `pair`) | añade `{ view: "guardrails" }` | sin cambios |
+| `src/state/engine-store.ts` | `AlertState` y recuentos sembrados | sin cambios | sin cambios |
+| `src/engine/EngineCenter.tsx` | `ConflictPanel` encima de la vista principal; destino `pair` | destino `guardrails`; monta `useGuardBlocks` | `FleetContent` → `GraphContent`; conserva panel y destinos; pasa `layers`, `laneBadge`, `laneA11y` |
+| `src/fleet/FleetView.tsx` | sin cambios | sin cambios | pasa al detalle; huecos de `useAgentSlot` |
+| `src/shell/AppShell.tsx` | sin cambios (su test de `Esc`) | `GuardrailsNavRow` al pie de la barra lateral | detalle con `FleetView` |
+| `src/shell/useShortcuts.ts` | `Esc` consumido (`defaultPrevented`) | sin cambios | `⌥⌘T` |
+| `src/shell/TitleBar.tsx` | píldora ⚡ | sin cambios | sin cambios |
+| Primitivas de `src/ui` | `CopyCommand` (anuncio, `onCopied`), `Esc` consumido en `Dialog`, `Popover` y `Toast`; `ConflictBand` nuevo y su línea en `index.ts` | `Toast` (`srLabel`) | `Table` (props aditivas) |
+| `src/i18n/locales/{en,es}.json` | `conflicts.*`, `ui.common.copied`, `ui.common.copyFailed` | `grd.*` | `graph.*`, `detail.agents.*`; reescribe `grd.view.back` y `conflicts.detail.back` |
