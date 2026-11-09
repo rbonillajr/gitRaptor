@@ -2,7 +2,7 @@
 id: TS-DSK-003
 title: "Primitivas del design system de la app de escritorio y catálogo de desarrollo"
 type: ts
-status: ready
+status: implemented
 feature: desktop
 domain: GRP
 priority: high
