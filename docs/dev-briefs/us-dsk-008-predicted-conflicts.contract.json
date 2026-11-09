@@ -1,0 +1,251 @@
+{
+  "source": [
+    "docs/requirements/features/desktop/dev-specs/US-DSK-008-conflictos-previstos.md",
+    "docs/requirements/features/desktop/user-stories/US-DSK-008-conflictos-previstos.md"
+  ],
+  "goal": {
+    "intent": "Que quien tiene la app abierta en un repo vea qué pares de agentes (o un agente y la base) van a chocar, en qué archivos y líneas, con cuánta antigüedad, y reciba un aviso dentro de la app cuando aparece un ⚡ nuevo.",
+    "endState": "El supervisor pide prediction.list por su cuenta (detalle por ids, relleno de cursor, un recorrido a la vez) y manda pairDetails; la caché aplica la regla de rev; el panel de conflictos, la banda, el detalle en el centro, la píldora y el toast pintan el modelo puro, en en/es, accesibles; el comando de confirmar la base lo construye el backend; la lista de comandos IPC no cambia.",
+    "nonGoals": [
+      "No añade comandos IPC ni métodos, eventos o capacidades al canal; todo es de solo lectura",
+      "No pinta la línea de la banda en el grafo (US-DSK-005) ni 'Copiar aviso para los agentes' ni 'Ver en el grafo'",
+      "No activa notificaciones del SO ni sonido",
+      "No resuelve G1, G2 (US-GRP-016, US-CKP-009), G4 (TS-CKP-010) ni G11 (forma de la píldora, PO)",
+      "No corre la suite completa local (la corre el CI) ni valida Windows/Linux"
+    ]
+  },
+  "suite": {
+    "command": "pnpm -C apps/desktop run build && node tools/test/nextest-junit.mjs --workspace && pnpm -C apps/desktop run test"
+  },
+  "layers": {
+    "runtime": {
+      "commands": [
+        {
+          "id": "suite",
+          "cmd": "pnpm -C apps/desktop run build && node tools/test/nextest-junit.mjs --workspace && pnpm -C apps/desktop run test"
+        }
+      ],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "scope": {
+    "projects": [
+      "@gitraptor/desktop",
+      "gitraptor-desktop"
+    ]
+  },
+  "constraints": {
+    "deny_paths": [
+      "docs/ARTIFACTS.md",
+      "docs/architecture/decisions/ADR-GRD-008*",
+      "apps/desktop/src-tauri/commands.json",
+      "apps/desktop/src-tauri/capabilities/main.json"
+    ],
+    "allow_dependency_changes": false
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 900000,
+    "suiteTimeoutMs": 5400000,
+    "maxOutsidePlan": 6
+  },
+  "hops": {
+    "design": {
+      "agent": "main-loop",
+      "model": "sonnet"
+    },
+    "critic": {
+      "agent": "nassa-core:plan-critic",
+      "model": "opus"
+    },
+    "tester": {
+      "agent": "nassa-core:criterion-tester",
+      "model": "sonnet"
+    },
+    "build": {
+      "agent": "nassa-dev-web:web-expert",
+      "model": "sonnet"
+    },
+    "review": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "opus"
+    },
+    "conformance": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "sonnet"
+    }
+  },
+  "criteria": [
+    {
+      "id": "D8-DETAIL",
+      "statement": "Un par ⚡ recibe su detalle (archivos y rangos) por prediction.list sin comando IPC; un prediction.changed nuevo pide su detalle; un rev que se mueve lo pide otra vez; una ráfaga de cambios pide una sola llamada de ≤ 50 ids; un prediction.list rechazado deja los pares sin detalle y sigue el stream",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test prediction_supervisor -- --list 2>/dev/null | grep -q '^a_conflict_pair_gets_its_files_and_ranges_without_any_command: test' && cargo test -p gitraptor-desktop --test prediction_supervisor -- --list 2>/dev/null | grep -q '^a_new_conflict_event_asks_for_its_detail: test' && cargo test -p gitraptor-desktop --test prediction_supervisor -- --list 2>/dev/null | grep -q '^a_detail_is_asked_again_when_the_rev_moves: test' && cargo test -p gitraptor-desktop --test prediction_supervisor -- --list 2>/dev/null | grep -q '^a_burst_of_changes_asks_for_details_once_with_at_most_50_ids: test' && cargo test -p gitraptor-desktop --test prediction_supervisor -- --list 2>/dev/null | grep -q '^a_refused_list_leaves_pairs_without_detail_and_keeps_streaming: test' && cargo test -p gitraptor-desktop --test prediction_supervisor a_conflict_pair_gets_its_files_and_ranges_without_any_command -- --exact && cargo test -p gitraptor-desktop --test prediction_supervisor a_new_conflict_event_asks_for_its_detail -- --exact && cargo test -p gitraptor-desktop --test prediction_supervisor a_detail_is_asked_again_when_the_rev_moves -- --exact && cargo test -p gitraptor-desktop --test prediction_supervisor a_burst_of_changes_asks_for_details_once_with_at_most_50_ids -- --exact && cargo test -p gitraptor-desktop --test prediction_supervisor a_refused_list_leaves_pairs_without_detail_and_keeps_streaming -- --exact",
+      "tests": [
+        "apps/desktop/src-tauri/tests/prediction_supervisor.rs",
+        "apps/desktop/src-tauri/tests/support/fake_daemon.rs"
+      ],
+      "layer": "runtime",
+      "origin": "story"
+    },
+    {
+      "id": "D8-FILL",
+      "statement": "Una instantánea truncada recorre el cursor de prediction.list y termina con filled; un resync durante un recorrido nunca corre dos recorridos a la vez; un recorrido se detiene a los 2 MiB sin filled",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test prediction_supervisor -- --list 2>/dev/null | grep -q '^a_truncated_snapshot_walks_the_cursor_and_ends_filled: test' && cargo test -p gitraptor-desktop --test prediction_supervisor -- --list 2>/dev/null | grep -q '^a_resync_during_a_walk_never_runs_two_walks: test' && cargo test -p gitraptor-desktop --test prediction_supervisor -- --list 2>/dev/null | grep -q '^a_walk_stops_at_2_mib_without_filled: test' && cargo test -p gitraptor-desktop --test prediction_supervisor a_truncated_snapshot_walks_the_cursor_and_ends_filled -- --exact && cargo test -p gitraptor-desktop --test prediction_supervisor a_resync_during_a_walk_never_runs_two_walks -- --exact && cargo test -p gitraptor-desktop --test prediction_supervisor a_walk_stops_at_2_mib_without_filled -- --exact",
+      "tests": [
+        "apps/desktop/src-tauri/tests/prediction_supervisor.rs"
+      ],
+      "layer": "runtime",
+      "origin": "story"
+    },
+    {
+      "id": "D8-BASE",
+      "statement": "Una base movida llega al webview como pares calculating; un par contra la base pending con base-unconfirmed llega con su motivo; el mensaje del repo lleva el comando de confirmar con el raptor del daemon y la ruta del repo",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test prediction_supervisor -- --list 2>/dev/null | grep -q '^a_base_move_reaches_the_webview_as_calculating_pairs: test' && cargo test -p gitraptor-desktop --test prediction_supervisor -- --list 2>/dev/null | grep -q '^a_pending_base_pair_reaches_the_webview_with_its_reason: test' && cargo test -p gitraptor-desktop --test prediction_supervisor -- --list 2>/dev/null | grep -q '^the_repo_message_carries_the_confirm_command_with_the_daemon_raptor_and_the_repo_path: test' && cargo test -p gitraptor-desktop --test prediction_supervisor a_base_move_reaches_the_webview_as_calculating_pairs -- --exact && cargo test -p gitraptor-desktop --test prediction_supervisor a_pending_base_pair_reaches_the_webview_with_its_reason -- --exact && cargo test -p gitraptor-desktop --test prediction_supervisor the_repo_message_carries_the_confirm_command_with_the_daemon_raptor_and_the_repo_path -- --exact",
+      "tests": [
+        "apps/desktop/src-tauri/tests/prediction_supervisor.rs"
+      ],
+      "layer": "runtime",
+      "origin": "story"
+    },
+    {
+      "id": "D8-SHELL",
+      "statement": "shell_command: el comando de confirmar cita el raptor del daemon y la ruta cruda con comillas POSIX; una ruta con texto inseguro da el comando sin ruta; sin raptor conocido no se ofrece; la comilla se escribe como '\\''; el raptor del daemon dentro de un worktree observado cae al del bundle; nunca PATH; wire::stop_command no cambia su salida",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test shell_command -- --list 2>/dev/null | grep -q '^the_confirm_command_quotes_the_daemon_raptor_and_the_raw_repo_path: test' && cargo test -p gitraptor-desktop --test shell_command -- --list 2>/dev/null | grep -q '^a_repo_path_with_unsafe_text_gives_the_command_without_path: test' && cargo test -p gitraptor-desktop --test shell_command -- --list 2>/dev/null | grep -q '^without_a_known_raptor_the_confirm_command_is_not_offered: test' && cargo test -p gitraptor-desktop --test shell_command -- --list 2>/dev/null | grep -q '^a_quote_is_written_as_posix_escape: test' && cargo test -p gitraptor-desktop --test shell_command -- --list 2>/dev/null | grep -q '^the_daemon_raptor_of_the_ready_report_is_used: test' && cargo test -p gitraptor-desktop --test shell_command -- --list 2>/dev/null | grep -q '^a_daemon_raptor_inside_a_watched_worktree_falls_back_to_the_bundle: test' && cargo test -p gitraptor-desktop --test shell_command -- --list 2>/dev/null | grep -q '^never_path: test' && cargo test -p gitraptor-desktop --test shell_command the_confirm_command_quotes_the_daemon_raptor_and_the_raw_repo_path -- --exact && cargo test -p gitraptor-desktop --test shell_command a_repo_path_with_unsafe_text_gives_the_command_without_path -- --exact && cargo test -p gitraptor-desktop --test shell_command without_a_known_raptor_the_confirm_command_is_not_offered -- --exact && cargo test -p gitraptor-desktop --test shell_command a_quote_is_written_as_posix_escape -- --exact && cargo test -p gitraptor-desktop --test shell_command the_daemon_raptor_of_the_ready_report_is_used -- --exact && cargo test -p gitraptor-desktop --test shell_command a_daemon_raptor_inside_a_watched_worktree_falls_back_to_the_bundle -- --exact && cargo test -p gitraptor-desktop --test shell_command never_path -- --exact && cargo test -p gitraptor-desktop --test engine_stop_command",
+      "tests": [
+        "apps/desktop/src-tauri/tests/shell_command.rs",
+        "apps/desktop/src-tauri/tests/engine_stop_command.rs"
+      ],
+      "layer": "runtime",
+      "origin": "story"
+    },
+    {
+      "id": "D8-SAFE",
+      "statement": "Una corrida de predicción nunca manda métodos reservados ni de escritura (assert_read_only); las rutas no confiables del detalle (OSC 52, U+202E) llegan escapadas",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test prediction_supervisor -- --list 2>/dev/null | grep -q '^a_prediction_run_never_sends_reserved_or_writing_methods: test' && cargo test -p gitraptor-desktop --test prediction_supervisor -- --list 2>/dev/null | grep -q '^untrusted_conflict_paths_reach_the_webview_escaped: test' && cargo test -p gitraptor-desktop --test prediction_supervisor a_prediction_run_never_sends_reserved_or_writing_methods -- --exact && cargo test -p gitraptor-desktop --test prediction_supervisor untrusted_conflict_paths_reach_the_webview_escaped -- --exact",
+      "tests": [
+        "apps/desktop/src-tauri/tests/prediction_supervisor.rs"
+      ],
+      "layer": "runtime",
+      "origin": "story"
+    },
+    {
+      "id": "D8-CMD",
+      "statement": "Esta historia no añade comandos IPC: ningún nombre de commands.json ni de #[tauri::command] contiene prediction, pair ni conflict, y la lista exacta de ADR-GRP-017 (app_info, engine_retry, engine_watch, fleet_open) sigue pasando; commands.ts no declara ningún comando de predicción",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test commands -- --list 2>/dev/null | grep -q '^the_prediction_detail_adds_no_ipc_command: test' && cargo test -p gitraptor-desktop --test commands -- --list 2>/dev/null | grep -q '^d3_cmds_engine_commands_are_listed_and_allowed: test' && cargo test -p gitraptor-desktop --test commands the_prediction_detail_adds_no_ipc_command -- --exact && cargo test -p gitraptor-desktop --test commands d3_cmds_engine_commands_are_listed_and_allowed -- --exact && pnpm --filter @gitraptor/desktop exec vitest run src/client/commands.test.ts -t 'no command of the command map is about prediction'",
+      "tests": [
+        "apps/desktop/src-tauri/tests/commands.rs",
+        "apps/desktop/src/client/commands.test.ts"
+      ],
+      "layer": "runtime",
+      "origin": "story"
+    },
+    {
+      "id": "D8-NOTIF",
+      "statement": "Sin notificaciones del SO ni sonido: no hay tauri-plugin-notification en Cargo.toml ni package.json, ni new Notification( ni requestPermission en src/",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test boundaries -- --list 2>/dev/null | grep -q '^no_os_notifications: test' && cargo test -p gitraptor-desktop --test boundaries no_os_notifications -- --exact",
+      "tests": [
+        "apps/desktop/src-tauri/tests/boundaries.rs"
+      ],
+      "layer": "runtime",
+      "origin": "story"
+    },
+    {
+      "id": "D8-WIRE",
+      "statement": "El contrato Rust y TS coincide con la fixture congelada ampliada (PairDto con rev y frescura, limits, confirmCommand y pairDetails): engine_wire.rs compara y el test de la caché lee la misma fixture; ingest::pair copia computedAtUtcMs (negativo a null) y pair_detail sanea rutas",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test engine_wire && cargo test -p gitraptor-desktop --test fleet_ingest && pnpm --filter @gitraptor/desktop exec vitest run src/state/engine-cache.test.ts -t 'fleet fixture'",
+      "tests": [
+        "apps/desktop/src-tauri/tests/engine_wire.rs",
+        "apps/desktop/src-tauri/tests/fleet_ingest.rs",
+        "apps/desktop/src-tauri/tests/fleet_supervisor.rs",
+        "apps/desktop/src/fleet/useFleet.test.tsx",
+        "apps/desktop/src/state/engine-cache.test.ts",
+        "apps/desktop/tests/fixtures/engine-messages.json"
+      ],
+      "layer": "runtime",
+      "origin": "story"
+    },
+    {
+      "id": "D8-CACHE",
+      "statement": "La caché aplica la regla de rev: un resumen viejo nunca pisa uno nuevo; un detalle con rev mayor trae su resumen; filled limpia pairsTruncated; los detalles de un repo sin entrada se descartan; ui-store.center tiene un solo destino (abrir un par sustituye, backToMain vuelve, selectRepo vuelve a main, no se persiste)",
+      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/state/engine-cache.test.ts -t 'an older summary never replaces a newer one' && pnpm --filter @gitraptor/desktop exec vitest run src/state/engine-cache.test.ts -t 'a detail with a newer rev brings its summary' && pnpm --filter @gitraptor/desktop exec vitest run src/state/engine-cache.test.ts -t 'filled clears pairsTruncated' && pnpm --filter @gitraptor/desktop exec vitest run src/state/engine-cache.test.ts -t 'pair details of a repo without a cache entry are dropped' && pnpm --filter @gitraptor/desktop exec vitest run src/state/ui-store.test.ts -t 'opening a pair replaces the center view and back returns to main' && pnpm --filter @gitraptor/desktop exec vitest run src/state/ui-store.test.ts -t 'selecting another repo returns to main'",
+      "tests": [
+        "apps/desktop/src/state/engine-cache.test.ts",
+        "apps/desktop/src/state/ui-store.test.ts"
+      ],
+      "layer": "runtime",
+      "origin": "story"
+    },
+    {
+      "id": "D8-MODEL",
+      "statement": "predictionView y pairDetailView aplican las reglas de frescura (recalculando, base movida con la antigüedad del último resultado, nada sin resultado dice sin conflictos, cero pares solo límites); nextAlerts aplica A5, E1 y E2 (sembrados, recalculating→current, resync, ausente de una truncada, removed y vuelta); el módulo público exporta solo lo del contrato D6",
+      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/conflicts/prediction-model.test.ts && pnpm --filter @gitraptor/desktop exec vitest run src/conflicts/alerts.test.ts",
+      "tests": [
+        "apps/desktop/src/conflicts/prediction-model.test.ts",
+        "apps/desktop/src/conflicts/alerts.test.ts"
+      ],
+      "layer": "runtime",
+      "origin": "story"
+    },
+    {
+      "id": "D8-BAND",
+      "statement": "ConflictBand dice nivel, frescura y 'nuevo' en texto, oculta el glifo a la tecnología de apoyo, nombra el par con 'y', la variante badge no tiene botón, una banda sin detalle enseña el par sin archivo; CopyCommand anuncia 'Copiado' 2 s en una región status, anuncia el fallo y llama onCopied solo tras escribir",
+      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/ui/ConflictBand.test.tsx && pnpm --filter @gitraptor/desktop exec vitest run src/ui/CopyCommand.test.tsx",
+      "tests": [
+        "apps/desktop/src/ui/ConflictBand.test.tsx",
+        "apps/desktop/src/ui/CopyCommand.test.tsx"
+      ],
+      "layer": "runtime",
+      "origin": "story"
+    },
+    {
+      "id": "D8-PANEL",
+      "statement": "El panel de conflictos va en el centro encima de la vista principal (no en FleetView), enseña el par ⚡ con su archivo, a lo sumo 3 bandas y 'y N más', la base pendiente con el comando copiable (con ruta, sin ruta, raptor desconocido) y la oculta si un par contra la base sale de pending; la píldora ⚡ de la barra de título suma los conflictos contados, abre el repo y conserva su nombre completo en modo compacto",
+      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/conflicts/ConflictPanel.test.tsx && pnpm --filter @gitraptor/desktop exec vitest run src/engine/EngineCenter.test.tsx && pnpm --filter @gitraptor/desktop exec vitest run src/shell/TitleBar.test.tsx",
+      "tests": [
+        "apps/desktop/src/conflicts/ConflictPanel.test.tsx",
+        "apps/desktop/src/engine/EngineCenter.test.tsx",
+        "apps/desktop/src/shell/TitleBar.test.tsx"
+      ],
+      "layer": "runtime",
+      "origin": "story"
+    },
+    {
+      "id": "D8-DETAILVIEW",
+      "statement": "ConflictDetailView lista pagos.rs con las líneas de cada lado, pinta rutas como texto, no enseña un detalle de otro rev, y Esc cierra primero el popover y luego el detalle devolviendo el foco a la banda; el Esc consumido (Dialog, Popover, Toast marcan defaultPrevented) nunca llega a onEscape y un Esc dentro del centro no cierra además el cajón",
+      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/conflicts/ConflictDetailView.test.tsx && pnpm --filter @gitraptor/desktop exec vitest run src/shell/AppShell.test.tsx && pnpm --filter @gitraptor/desktop exec vitest run src/ui/Dialog.test.tsx && pnpm --filter @gitraptor/desktop exec vitest run src/ui/Popover.test.tsx && pnpm --filter @gitraptor/desktop exec vitest run src/ui/Toast.test.tsx",
+      "tests": [
+        "apps/desktop/src/conflicts/ConflictDetailView.test.tsx",
+        "apps/desktop/src/shell/AppShell.test.tsx",
+        "apps/desktop/src/ui/Dialog.test.tsx",
+        "apps/desktop/src/ui/Popover.test.tsx",
+        "apps/desktop/src/ui/Toast.test.tsx"
+      ],
+      "layer": "runtime",
+      "origin": "story"
+    },
+    {
+      "id": "D8-ALERTS",
+      "statement": "Un ⚡ nuevo muestra un toast info con el par y el primer archivo (espera el archivo hasta 2 s), se retira si el par deja de ser ⚡, tres o más nuevos en una pasada dan un solo toast, un recuento que sube en otro repo avisa sin nombres de par",
+      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/conflicts/useConflictAlerts.test.tsx",
+      "tests": [
+        "apps/desktop/src/conflicts/useConflictAlerts.test.tsx"
+      ],
+      "layer": "runtime",
+      "origin": "story"
+    },
+    {
+      "id": "D8-GATE",
+      "statement": "El gate de seguridad sigue en verde con el código nuevo (V1, V7, V2 y V5 de ADR-GRP-017) y el catálogo i18n en/es tiene todas las claves conflicts.* y ui.common.*",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test boundaries --test environment --test tauri_surface && pnpm --filter @gitraptor/desktop exec vitest run tests/eslint-v5.test.ts && pnpm --filter @gitraptor/desktop exec vitest run src/i18n/catalog.test.ts",
+      "tests": [
+        "apps/desktop/src-tauri/tests/boundaries.rs",
+        "apps/desktop/src-tauri/tests/environment.rs",
+        "apps/desktop/src-tauri/tests/tauri_surface.rs",
+        "apps/desktop/tests/eslint-v5.test.ts",
+        "apps/desktop/src/i18n/catalog.test.ts"
+      ],
+      "layer": "runtime",
+      "origin": "story"
+    }
+  ]
+}
