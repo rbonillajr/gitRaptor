@@ -21,6 +21,7 @@
 mod attribution;
 mod authorship;
 mod availability;
+mod base;
 mod discovery;
 mod env;
 mod gaps;
