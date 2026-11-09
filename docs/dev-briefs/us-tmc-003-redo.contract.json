@@ -1,0 +1,258 @@
+{
+  "version": 1,
+  "source": [
+    "docs/dev-briefs/us-tmc-003-redo.2-plan.md",
+    "docs/requirements/features/time-machine/dev-specs/US-TMC-003-redo.md"
+  ],
+  "rigor": "alto",
+  "goal": {
+    "intent": "Que el desarrollador (o un agente, sobre su propio trabajo) vuelva con raptor redo al estado justo anterior a su último undo del worktree, como una operación protegida y recuperable, sin pisar nunca trabajo posterior de otro actor (NFR-01, BR-09 Undo/Redo universal), y que el redo de un undo por agente levante su barrera (pendientes de US-TMC-011).",
+    "endState": "timemachine.redo sin operation_id rehace UndoStack::next_redo() del worktree: destino = previo de ese undo, ámbito = el Scope que registró, dueños = su solicitante y los de lo que deshizo (restore_permission + confirmación con PlanKind::Redo), solape de US-TMC-012 con el solicitante del undo como referencia, previo propio, ancla al terminar y registro redo con Target::Redo(U); sin redo responde nothing-to-redo o redo-invalidated sin cambiar nada; se rechaza entero si una parte no se puede rehacer; raptor redo [--json] lo expone en en/es; el redo de un undo por agente devuelve los mismos ids y quita la barrera; operation_id sigue en NOT_IMPLEMENTED y por MCP sigue METHOD_NOT_FOUND.",
+    "nonGoals": [
+      "redo por operation_id",
+      "redo por MCP (Q-MCP-11)",
+      "redo desde la TUI (apps/cli/src/tui/ sin cambios)",
+      "continuar a pesar del solape (D-TMC-27)",
+      "guardrails en el redo (US-TMC-021)",
+      "on_remote (US-TMC-014, no está en main)",
+      "arreglar TD-GRP-005 (atribución S3 bajo carga)"
+    ]
+  },
+  "criteria": [
+    {
+      "id": "TMC003-WIRE",
+      "statement": "T001: TmRejectReason gana nothing-to-redo y redo-invalidated al final; RedoParams acepta confirmation opcional (omitida si falta) y validate rechaza un token mal formado; RedoResult serializa como UndoResult con redone_undo_id y omite kept y kept_total vacíos",
+      "verify": "cargo test -p gitraptor-api --lib timemachine_redo_tests",
+      "layer": "runtime",
+      "tests": [
+        "crates/api/src/timemachine_redo_tests.rs"
+      ]
+    },
+    {
+      "id": "TMC003-STACK",
+      "statement": "T002: redo_invalidated() da la operación que vació un redo pendiente, None si nunca hubo redo, None si un undo posterior lo reabrió y None tras un redo interrumpido que no vació nada; next_redo y last_operation no cambian",
+      "verify": "cargo test -p gitraptor-core --lib timemachine::oplog::stack::redo_tests",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/timemachine/oplog/stack_redo_tests.rs"
+      ]
+    },
+    {
+      "id": "TMC003-CONFIRM",
+      "statement": "T003: PlanKind::Redo tiene su etiqueta en el hash: el hash de un plan de redo nunca coincide con el de un undo con los mismos hechos",
+      "verify": "cargo test -p gitraptor-core --lib timemachine::confirm::redo_tests",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/timemachine/confirm/redo_tests.rs"
+      ]
+    },
+    {
+      "id": "TMC003-OWNERS",
+      "statement": "T004 guard ⛔4.1: los dueños de un redo son el solicitante del undo y el dueño de cada OpRef de su Target::Undo (solicitante congelado de la operación, actor del evento crudo o Unattributed si el evento ya no está); un agente que no es dueño de todos recibe other-actor",
+      "verify": "cargo test -p gitraptor-core --lib timemachine::redo::tests",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/timemachine/redo_tests.rs"
+      ]
+    },
+    {
+      "id": "TMC003-S1",
+      "statement": "Escenario 1: una operación sin atribuir borra b.rs, un undo lo recupera y el redo lo vuelve a borrar; la huella es la de después de la operación y el contenido de b.rs sigue en el previo del redo",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_003 -- --exact redo_returns_to_the_state_before_the_undo",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_tmc_003.rs"
+      ]
+    },
+    {
+      "id": "TMC003-S2",
+      "statement": "Escenario 2: el previo del redo existe, está disponible y verificado, y tiene el estado de feat-login justo antes del redo; el redo queda en el oplog como redo terminado con Target::Redo(U)",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_003 -- --exact the_redo_has_its_own_prior_point",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_tmc_003.rs"
+      ]
+    },
+    {
+      "id": "TMC003-S3",
+      "statement": "Escenario 3: sin undo pendiente el redo se rechaza con nothing-to-redo, la huella no cambia y el rechazo queda en el oplog (redo de intent a rejected, Target::None)",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_003 -- --exact nothing_to_redo_changes_nothing",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_tmc_003.rs"
+      ]
+    },
+    {
+      "id": "TMC003-S4",
+      "statement": "Escenario 4: undo, commit nuevo en feat-login y redo → redo-invalidated; la huella no cambia",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_003 -- --exact a_new_commit_invalidates_the_redo",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_tmc_003.rs"
+      ]
+    },
+    {
+      "id": "TMC003-WALK",
+      "statement": "D-TMC-26: dos undos y dos redos vuelven al estado del final; un undo después de un redo vuelve a deshacer la misma operación",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_003 -- --exact consecutive_redos_walk_forward an_undo_after_a_redo_takes_back_the_operation_again",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_tmc_003.rs"
+      ]
+    },
+    {
+      "id": "TMC003-GUARD-4.2",
+      "statement": "T004 guard ⛔4.2: con captura continua activa, un redo justo después de un undo no lo invalida su propio eco, y las escrituras del redo no entran en la pila como Git crudo (un undo posterior deshace el redo)",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_003 -- --exact a_redo_right_after_an_undo_is_not_invalidated_by_its_echo",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_tmc_003.rs"
+      ]
+    },
+    {
+      "id": "TMC003-SERVED",
+      "statement": "T005: timemachine.redo sin operation_id se sirve (ya no NOT_IMPLEMENTED); con operation_id sigue NOT_IMPLEMENTED con implemented_by unassigned",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_003 -- --exact redo_without_id_is_served_and_by_id_is_not",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_tmc_003.rs"
+      ]
+    },
+    {
+      "id": "TMC003-S5",
+      "statement": "Escenario 5: claude-1 deshace una operación suya que tocó b.rs, después un cambio sin atribuir modifica b.rs; el redo de claude-1 se rechaza con overlap que nombra b.rs y al actor sin atribuir; el repo no cambia",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_003_agents -- --exact a_later_unattributed_change_stops_the_agents_redo",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_tmc_003_agents.rs"
+      ]
+    },
+    {
+      "id": "TMC003-S6",
+      "statement": "Escenario 6: el agente B pide rehacer el undo que el agente A hizo de su propio trabajo → other-actor; el repo no cambia",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_003_agents -- --exact an_agent_cannot_redo_another_actors_undo",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_tmc_003_agents.rs"
+      ]
+    },
+    {
+      "id": "TMC003-CONFIRM-AGENT",
+      "statement": "ADR-TMC-005 § 3: un sin atribuir que rehace el undo del trabajo de un agente recibe confirmation-required; con TestConfirmation::Eligible y el token el redo se hace; el token de un undo no confirma un redo (challenge-invalid)",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_003_agents -- --exact an_unattributed_redo_of_an_agents_work_needs_confirmation a_redo_token_is_not_an_undo_token",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_tmc_003_agents.rs"
+      ]
+    },
+    {
+      "id": "TMC003-SELECTIVE",
+      "statement": "Pendientes de US-TMC-011: el redo del undo por agente rehace los mismos ids de Target::Undo(set) y levanta la barrera selective-undo-below; tras él un undo simple deshace la operación más reciente; una corrección de atribución posterior no cambia lo que el redo devuelve",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_011 -- --exact redo_restores_the_set_and_lifts_the_barrier plain_undo_after_redo_takes_the_latest_operation a_correction_after_the_undo_does_not_change_what_it_undid",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_tmc_011.rs"
+      ]
+    },
+    {
+      "id": "TMC003-CLI-TEXT",
+      "statement": "T006: cada valor de TmRejectReason tiene su texto redo.reason.<código> en en y es; redo.done y redo.prior existen con sus marcadores; nothing-to-redo y redo-invalidated dicen que nada cambió",
+      "verify": "cargo test -p gitraptor-cli --bin raptor -- undo::redo::tests",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/src/undo/redo_tests.rs"
+      ]
+    },
+    {
+      "id": "TMC003-E2E",
+      "statement": "T006/T007: raptor redo con daemon real en un perfil temporal: hecho en inglés y en español (código 0, nombra el undo y el punto previo), --json con RedoResult, y nothing-to-redo con código 1 y el repo intacto",
+      "verify": "cargo test -p gitraptor-cli --test redo_process",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/redo_process.rs"
+      ]
+    },
+    {
+      "id": "TMC003-M2-DEMO",
+      "statement": "Pendiente de US-TMC-011 (demo M2): tras el undo por agente confirmado, raptor redo con la confirmación en la pty devuelve el worktree objetivo al estado de después del trabajo de su agente y los demás worktrees no cambian",
+      "verify": "cargo test -p gitraptor-cli --test m2_demo_undo_agent",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/m2_demo_undo_agent.rs"
+      ],
+      "priority": "should",
+      "priorityEvidence": "US-TMC-011 § Estado de la implementación: 'La demo de M2 no es fiable en macOS hasta que eso se arregle en el motor' (TD-GRP-005); Brief us-tmc-003-redo.2-plan.md § Decisiones de preparación P3"
+    }
+  ],
+  "suite": {
+    "command": "node tools/test/nextest-junit.mjs"
+  },
+  "layers": {
+    "runtime": {
+      "commands": [
+        {
+          "id": "suite",
+          "cmd": "node tools/test/nextest-junit.mjs"
+        }
+      ],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "scope": {
+    "projects": [
+      "gitraptor-api",
+      "gitraptor-core",
+      "gitraptor-cli"
+    ]
+  },
+  "constraints": {
+    "deny_paths": [
+      "Cargo.toml",
+      "Cargo.lock",
+      "crates/api/Cargo.toml",
+      "crates/core/Cargo.toml",
+      "apps/cli/Cargo.toml",
+      "crates/policy/",
+      "crates/theme/",
+      "crates/git/",
+      "apps/mcp/",
+      "apps/desktop/",
+      "apps/cli/src/tui/",
+      "crates/core/src/timemachine/oplog/schema.rs",
+      "crates/core/tests/us_tmc_013_common/",
+      "docs/ARTIFACTS.md"
+    ],
+    "allow_dependency_changes": false
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 600000,
+    "suiteTimeoutMs": 5400000
+  },
+  "hops": {
+    "design": {
+      "agent": "main-loop",
+      "model": "opus"
+    },
+    "critic": {
+      "agent": "nassa-core:plan-critic",
+      "model": "opus"
+    },
+    "tester": {
+      "agent": "nassa-core:criterion-tester",
+      "model": "sonnet"
+    },
+    "build": {
+      "agent": "nassa-dev-rust:rust-expert",
+      "model": "opus"
+    },
+    "review": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "opus"
+    },
+    "conformance": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "sonnet"
+    }
+  }
+}
