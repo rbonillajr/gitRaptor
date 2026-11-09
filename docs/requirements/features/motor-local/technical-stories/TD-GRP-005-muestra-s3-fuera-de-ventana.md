@@ -103,3 +103,6 @@ Implementado en: PR #333.
 - **Fuera de alcance**: `us_grp_010::the_time_machine_sees_the_current_attribution` falla 2 de 10 también en `main` bajo carga, porque los eventos FS del directorio Git no llegan. Va a [TD-GRP-006](./TD-GRP-006-bajo-carga-los-eventos-de-fsevents.md).
 - Sin certificar (modo rápido); el detalle de la verificación está en el PR.
 
+### Causa residual
+
+Bajo carga queda una causa del producto que este TD no cubre: un cwd ilegible en la muestra S3 deja la atribución en `ambiguous`. Registrada en [TD-GRP-007](./TD-GRP-007-cwd-ilegible-ambiguo-bajo-carga.md) (draft, con la pregunta para el Arquitecto).
