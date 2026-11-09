@@ -16,20 +16,21 @@ use gitraptor_api::messages::{
 };
 use gitraptor_api::methods;
 use gitraptor_api::prediction::{
-    PairDetail, PairLevel as ApiPairLevel, PairReason as ApiPairReason, PairSideView,
-    PairStateView, PairSummary, PredictionChanged,
+    ConflictKindView, LimitCode as ApiLimitCode, LineRange, PairDetail, PairLevel as ApiPairLevel,
+    PairReason as ApiPairReason, PairSideView, PairStateView, PairSummary, PredictionChanged,
 };
 use gitraptor_api::scope::{
     AttentionCount, AttentionView, GlobalSnapshot, RepoAttentionData, RepoSnapshot, RepoSummaryView,
 };
 
+use super::shell_command;
 use super::wire::{
     AgentDto, AttentionDto, Autostart, BaseDto, BaseStatus, BoundedCountDto, CandidateDto,
-    ConfirmCommandDto, CountDto, CountsDto, DaemonDto, DivergenceDto, EndCause, EngineDto,
-    EngineMessage, EngineStateDto, FleetPerf, GlobalDto, HeadDto, NotOfferedReason, PairDetailDto,
-    PairDto, PairLevel, PairReason, PairState, ReadyDto, RepoFleetDto, RepoStateDto,
-    RepoSummaryDto, SessionDto, SessionOrigin, SessionState, Tier, UnavailableReason, WorktreeDto,
-    WorktreeStatusDto,
+    ConfirmCommandDto, ConflictFileDto, ConflictFilesDto, ConflictKind, CountDto, CountsDto,
+    DaemonDto, DivergenceDto, EndCause, EngineDto, EngineMessage, EngineStateDto, FleetPerf,
+    GlobalDto, HeadDto, LimitCode, LineRangeDto, PairDetailDto, PairDto, PairLevel, PairReason,
+    PairState, ReadyDto, RepoFleetDto, RepoStateDto, RepoSummaryDto, SessionDto, SessionOrigin,
+    SessionState, Tier, UnavailableReason, WorktreeDto, WorktreeStatusDto,
 };
 
 /// The global snapshot as a DTO.
@@ -63,14 +64,17 @@ pub fn key(raw_path: &str) -> String {
 }
 
 /// The open repo's snapshot as a DTO.
-pub fn repo(snapshot: &RepoSnapshot) -> RepoFleetDto {
+///
+/// `raptor` is the executable the confirm command names (see [`super::shell_command::raptor_path`]).
+pub fn repo(snapshot: &RepoSnapshot, raptor: Option<&Path>) -> RepoFleetDto {
     let view = &snapshot.repo;
-    let (pairs, pairs_truncated) = match &view.prediction {
+    let (pairs, pairs_truncated, limits) = match &view.prediction {
         Some(prediction) => (
             prediction.pairs.iter().map(pair).collect(),
             prediction.pairs_truncated,
+            prediction.limits.iter().copied().map(limit).collect(),
         ),
-        None => (Vec::new(), false),
+        None => (Vec::new(), false, Vec::new()),
     };
     RepoFleetDto {
         repo_id: visible(&view.repo_id, NAME_MAX_CHARS),
@@ -92,24 +96,63 @@ pub fn repo(snapshot: &RepoSnapshot) -> RepoFleetDto {
         worktrees: view.worktrees.iter().map(worktree).collect(),
         pairs,
         pairs_truncated,
-        limits: Vec::new(),
-        confirm_command: confirm_command(view.path.raw(), None),
+        limits,
+        confirm_command: confirm_command(view.path.raw(), raptor),
     }
 }
 
 /// The command that confirms the base of the repo at `raw_repo_path`, when `raptor` is known.
-pub fn confirm_command(_raw_repo_path: &str, _raptor: Option<&Path>) -> ConfirmCommandDto {
-    ConfirmCommandDto::NotOffered {
-        reason: NotOfferedReason::RaptorUnknown,
+/// The raw path is quoted, never the sanitized text, so the command works pasted anywhere.
+pub fn confirm_command(raw_repo_path: &str, raptor: Option<&Path>) -> ConfirmCommandDto {
+    shell_command::confirm(raptor, raw_repo_path)
+}
+
+fn limit(code: ApiLimitCode) -> LimitCode {
+    match code {
+        ApiLimitCode::OverlapIncludesUncommitted => LimitCode::OverlapIncludesUncommitted,
+        ApiLimitCode::ConflictCommittedOnly => LimitCode::ConflictCommittedOnly,
+        ApiLimitCode::NoMergeDriversOrAttributes => LimitCode::NoMergeDriversOrAttributes,
+        ApiLimitCode::RenameLimit => LimitCode::RenameLimit,
+        ApiLimitCode::InsertionsMayMerge => LimitCode::InsertionsMayMerge,
+        ApiLimitCode::JoinedHunks => LimitCode::JoinedHunks,
+        ApiLimitCode::PairIgnoresBaseMoves => LimitCode::PairIgnoresBaseMoves,
+        ApiLimitCode::LocalOnly => LimitCode::LocalOnly,
     }
 }
 
-/// One pair with its files as a DTO.
+/// One pair with its files as a DTO; every path goes through `display::visible`.
 pub fn pair_detail(detail: &PairDetail) -> PairDetailDto {
+    let path = |p: &gitraptor_api::Untrusted| visible(p.raw(), TEXT_MAX_CHARS);
+    let range = |r: &LineRange| LineRangeDto {
+        start: r.start,
+        len: r.len,
+    };
     PairDetailDto {
         pair: pair(&detail.summary),
-        overlap: Vec::new(),
-        conflict: None,
+        overlap: detail.overlap.iter().map(path).collect(),
+        conflict: detail.conflict.as_ref().map(|conflict| ConflictFilesDto {
+            files: conflict
+                .files
+                .iter()
+                .map(|file| ConflictFileDto {
+                    path: path(&file.path),
+                    kind: match file.kind {
+                        ConflictKindView::Content => ConflictKind::Content,
+                        ConflictKindView::AddAdd => ConflictKind::AddAdd,
+                        ConflictKindView::ModifyDelete => ConflictKind::ModifyDelete,
+                        ConflictKindView::Rename => ConflictKind::Rename,
+                        ConflictKindView::DirectoryFile => ConflictKind::DirectoryFile,
+                        ConflictKindView::Binary => ConflictKind::Binary,
+                        ConflictKindView::Submodule => ConflictKind::Submodule,
+                    },
+                    ours: file.ours.iter().map(range).collect(),
+                    theirs: file.theirs.iter().map(range).collect(),
+                    hunks_truncated: file.hunks_truncated,
+                    has_merge_rule: file.has_merge_rule,
+                })
+                .collect(),
+            truncated: conflict.truncated,
+        }),
     }
 }
 
@@ -323,6 +366,21 @@ pub fn repo_event(event: &Event, recv_ns: u64) -> Option<EngineMessage> {
             })
         }
         _ => None,
+    }
+}
+
+/// A page of pair details for the window.
+pub fn pair_details(
+    repo_id: &str,
+    details: &[PairDetail],
+    filled: bool,
+    recv_ns: u64,
+) -> EngineMessage {
+    EngineMessage::PairDetails {
+        repo_id: visible(repo_id, NAME_MAX_CHARS),
+        details: details.iter().map(pair_detail).collect(),
+        filled,
+        perf: perf(recv_ns),
     }
 }
 

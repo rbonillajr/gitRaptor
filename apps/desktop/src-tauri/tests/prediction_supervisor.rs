@@ -424,7 +424,7 @@ fn a_burst_of_changes_asks_for_details_once_with_at_most_50_ids() {
         "D8-DETAIL: that call asks for the 30 ids of the burst"
     );
     let second = burst(REPO_SEQ + 31, 60);
-    let _ = h.wait_details(90);
+    let _ = h.wait_details(60);
     let later: Vec<Vec<String>> = h.list_calls().iter().skip(1).map(ids_of).collect();
     assert!(
         later.iter().all(|ids| ids.len() <= 50),

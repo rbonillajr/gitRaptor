@@ -18,10 +18,12 @@ use gitraptor_api::client::ensure::{
     EnsureOutcome, EnsureReport, IncompatibleWhich, UnavailableReason,
 };
 use gitraptor_api::client::{Client, installed, peer};
-use gitraptor_api::messages::ClientKind;
+use gitraptor_api::messages::{ClientKind, HelloResult};
+use gitraptor_api::rpc::Notification;
+use serde_json::Value;
 
 use super::link::{
-    ClientLink, ConnectFailure, Connector, Incompatibility, IncompatibilityKind, Link,
+    ClientLink, ConnectFailure, Connector, Incompatibility, IncompatibilityKind, Link, LinkError,
     REQUIRED_CAPABILITIES, map_client_error,
 };
 
@@ -46,6 +48,32 @@ pub struct BundleConnector {
     verify_peer: fn(u32) -> bool,
     /// The runtime folder of the last report, always absolute.
     runtime: Option<PathBuf>,
+    /// The executable that serves the daemon, from the last `ready` report.
+    daemon_exe: Option<PathBuf>,
+}
+
+/// A [`ClientLink`] that knows the executable that serves its daemon.
+struct BundleLink {
+    inner: ClientLink,
+    daemon_exe: Option<PathBuf>,
+}
+
+impl Link for BundleLink {
+    fn hello(&self) -> &HelloResult {
+        self.inner.hello()
+    }
+
+    fn call(&mut self, method: &str, params: Value) -> Result<Value, LinkError> {
+        self.inner.call(method, params)
+    }
+
+    fn next(&mut self, timeout: Duration) -> Result<Option<(u64, Notification)>, LinkError> {
+        self.inner.next(timeout)
+    }
+
+    fn daemon_exe(&self) -> Option<&Path> {
+        self.daemon_exe.as_deref()
+    }
 }
 
 impl BundleConnector {
@@ -56,6 +84,7 @@ impl BundleConnector {
             raptor: None,
             verify_peer: peer::installed_raptor_peer,
             runtime: None,
+            daemon_exe: None,
         }
     }
 
@@ -67,13 +96,19 @@ impl BundleConnector {
             raptor: Some(raptor),
             verify_peer,
             runtime: None,
+            daemon_exe: None,
         }
     }
 
     /// Connects to the channel in `runtime`, refusing a server that `verify_peer` refuses.
     fn open(&self, runtime: &Path) -> Result<Box<dyn Link>, ConnectFailure> {
         Client::connect_runtime(runtime, ClientKind::Cli, PROTOCOL_VERSION, self.verify_peer)
-            .map(|client| Box::new(ClientLink(client)) as Box<dyn Link>)
+            .map(|client| {
+                Box::new(BundleLink {
+                    inner: ClientLink(client),
+                    daemon_exe: self.daemon_exe.clone(),
+                }) as Box<dyn Link>
+            })
             .map_err(map_client_error)
     }
 }
@@ -105,6 +140,13 @@ impl Connector for BundleConnector {
         outcome(&report)?;
         let runtime = runtime.ok_or(ConnectFailure::LaunchFailed)?;
         self.runtime = Some(runtime.clone());
+        // Only an absolute path names an executable; a relative one would resolve against the
+        // app's own folder.
+        self.daemon_exe = report
+            .daemon_path
+            .as_deref()
+            .map(PathBuf::from)
+            .filter(|path| path.is_absolute());
         self.open(&runtime)
     }
 }
