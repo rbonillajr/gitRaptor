@@ -22,8 +22,8 @@ related: [BRD-GRP-001, INF-GRP-003, INF-GRP-004, ADR-GRP-005, ADR-GRP-014]
 | Hito | Criterio de salida (resumen) | % completado | Fecha estimada (días naturales) | Depende de |
 |---|---|---|---|---|
 | **M1** Dogfooding | 6 criterios del [backlog](backlog.md#hito-m1--dogfooding): 10 días de uso real, detección ≥ 90 %, un `undo` real, force-push bloqueado, recursos y frescura | Construido 100 %; criterios 50 % (2 cumplidos, 2 en parte, 1 en curso, 1 sin cumplir) | 2026-10-22 a 2026-11-06 | Rene: racha de 10 días con registro diario |
-| **M2** MVP completo en macOS | Las 102 fichas Must y Should del MVP que no son de M1, implementadas (112 antes del recorte del 2026-11-08); gates del MVP obligatorios en CI, rendimiento medido en la máquina de referencia y la demo del BRD § 13 en macOS. US-MCP-009 se libera junto con US-MCP-010 y US-MCP-011 (G2 y G4 de DS-US-MCP-009) | 42,0 % al 2026-10-28 sobre 112 (34 implementadas, 3 hechas y 20 en parte); se recalcula sobre 102 al regenerar `release-status.md`; solo historias 34,5 % | Central 2027-01-14; rango 2026-12-21 a 2027-01-28 | La flota y las ventanas de revisión; cierre de M1 |
-| **M2-UI** App de escritorio, UI-1 (hito paralelo) | Las 8 historias de UI-1 (US-DSK-001 a 008) implementadas en macOS y la demo del novato: añadir, proteger, ver un choque previsto y deshacer lo de un agente, sin terminal. Lo mínimo de UI-2 (US-DSK-009, 010, 012, 013 y 015) entra antes de v0.1.0. No bloquea el cierre de M2 | 0 % (de 10 fichas) | Central 2026-12-22; rango 2026-12-05 a 2027-01-19 ([cálculo](#fecha)) | SPIKE-GRD-002 (macOS), ADR-GRP-017, las enablers DEP-DSK-2 a 6 |
+| **M2** MVP completo en macOS | Las 102 fichas Must y Should del MVP que no son de M1, implementadas (112 antes del recorte del 2026-11-08); gates del MVP obligatorios en CI, rendimiento medido en la máquina de referencia y la demo del BRD § 13 en macOS. US-MCP-009 se libera junto con US-MCP-010 y US-MCP-011 (G2 y G4 de DS-US-MCP-009) | 51,5 % al 2026-11-08 sobre 102 (39 implementadas, 3 hechas y 21 en parte; 42,0 % sobre 112 al 2026-10-28) | Central 2027-02-01; rango 2026-12-30 a 2027-02-27 (antes: central 2027-01-14; rango 2026-12-21 a 2027-01-28) | La flota y las ventanas de revisión; cierre de M1 |
+| **M2-UI** App de escritorio, UI-1 (hito paralelo) | Las 8 historias de UI-1 (US-DSK-001 a 008) implementadas en macOS y la demo del novato: añadir, proteger, ver un choque previsto y deshacer lo de un agente, sin terminal. Lo mínimo de UI-2 (US-DSK-009, 010, 012, 013 y 015) entra antes de v0.1.0. No bloquea el cierre de M2 | 0 % (de 10 fichas) | Central 2027-01-09; rango 2026-12-12 a 2027-02-28 ([cálculo](#fecha); recalculado el 2026-11-08 con la velocidad nueva de M2, antes central 2026-12-22 y rango 2026-12-05 a 2027-01-19) | SPIKE-GRD-002 (macOS), ADR-GRP-017, las enablers DEP-DSK-2 a 6 |
 | **EA** Acceso anticipado (alpha semanal) | Hito continuo, sin fichas propias: cada viernes un tag `v0.1.0-alpha.N` desde `main` (solo macOS, sin firmar) si cumple el [criterio de cada alpha](#ea-acceso-anticipado-alpha-semanal). Se cierra con la primera `v0.1.0-beta.N` | Pipeline y guía en el PR `chore/weekly-alpha`; la primera alpha está por cortar | Primera: 2026-11-06; luego cada viernes | M1 cerrado en lo que afecte a NFR-01 (W116 y W117) |
 | **M3** Beta multiplataforma | Sobre un tag `v0.1.0-beta.N`: los XP Must de `xplat-pendientes.md` cerrados, `cargo test` y "repo intacto" en verde en Linux y Windows reales, humo de punta a punta instalado | 37,5 % (8 hechos y 8 en parte de 32) | Por recalcular (no antes del cierre de M2); la del 2026-10-08 era 2026-11-02 a 2026-12-01 | Cierre de M2; rondas manuales de Rene; una máquina con Windows 11 |
 | **M4** v0.1.0: primera release instalable (piloto interno) | Release firmada en macOS y Windows, instalación y actualización verificadas en los tres SO, primera experiencia en una máquina nueva | 14,3 % (2 en parte de 7) | Por recalcular (no antes del cierre de M2); la del 2026-10-08 era 2026-11-09 a 2026-12-15 | Cierre de M3; cuentas de firma (externos); decisión D1 |
@@ -230,17 +230,42 @@ Estados (al 2026-10-28, sacados de [release-status.md](release-status.md)): **I*
 
 ### Avance
 
-Estado al **2026-10-28**, medido con `node tools/status/release-status.mjs` sobre `origin/main` (commit `3cb912f5`). M2 son **todos los Must y Should del MVP que no son de M1**: 112 fichas (87 US y 25 enablers), con 34 implementadas (24 US y 10 enablers), 3 hechas (`done`, equivalen a implementadas) y 20 en parte (12 y 8). Las 55 restantes están sin empezar (51 en borrador, 3 listas y 1 bloqueada). Las fichas de M1 cuentan en M1 aunque también sean del MVP. **Tras el recorte del 2026-11-08 el total baja a 102**; las cifras de abajo son de ese día y se recalculan al regenerar `release-status.md`.
+Estado al **2026-11-08**, medido con `node tools/status/release-status.mjs` (`release-status.md`, 178 fichas). M2 son **todos los Must y Should del MVP que no son de M1**: tras el recorte del 2026-11-08 (PR #310) son **102 fichas**, con 39 implementadas, 3 hechas (`done`, equivalen a implementadas) y 21 en parte. Las 39 restantes están sin empezar (36 en borrador y 3 listas). Las fichas de M1 cuentan en M1 aunque también sean del MVP.
 
-- Hito completo: (34 + 3 + 0,5 × 20) / 112 = **42,0 %**. El 18,0 % anterior se calculó el 2026-10-09 y nadie lo actualizó: desde entonces la flota implementó decenas de fichas de las cinco features y los estados se sincronizaron.
-- Solo historias: (24 + 0,5 × 12) / 87 = **34,5 %**. Refleja mejor el valor que falta por entregar.
-- Con M1 incluido (el MVP en macOS completo): (34 + 3 + 18 + 0,5 × (20 + 1)) / (112 + 19) = 65,5 / 131 = **50,0 %**.
+- Hito completo: (39 + 3 + 0,5 × 21) / 102 = 52,5 / 102 = **51,5 %**. Al 2026-10-28 era 42,0 % sobre 112 (34 + 3 + 0,5 × 20 = 47 fichas equivalentes cerradas); desde entonces se cerraron 5,5 fichas equivalentes y el recorte sacó 10 fichas sin empezar. Sin el recorte, el avance de hoy sería 52,5 / 112 = 46,9 %: el recorte explica unos 4,6 puntos del salto.
+- Con M1 incluido (el MVP en macOS completo): solo se recalcula sobre el estado de M1 de `release-status.md`; no cambia con este recálculo.
+- Pendiente de contar, ya en curso: #325 (US-TMC-011) y #323 (TS-GRP-005 PR-B). No suman al avance hasta que se mergeen.
 
 ### Ruta crítica y fecha
 
-Estado al 2026-10-28. Quedan unas **65 fichas equivalentes** (55 sin empezar y 20 en parte, a 0,5).
+Estado al **2026-11-08**. Quedan **49,5 fichas equivalentes** (39 sin empezar y 21 en parte, a 0,5). **Decisión del orquestador (2026-11-08), validada por Scrum Master.** El cálculo del 2026-10-28 queda abajo como historial.
 
-**Velocidad real de la última semana** (2026-10-22 a 2026-10-28, `gh pr list` y fecha del primer PR de cada ficha, como en el [método](#velocidad-observada-y-método-de-estimación)):
+**Velocidad real desde el 2026-10-28** (`gh pr list --state merged`, fecha de merge y primer PR de cada ficha, mismo [método](#velocidad-observada-y-método-de-estimación); k = 1):
+
+| Día | Fichas equivalentes | Qué cerró |
+|---|---|---|
+| 2026-10-29 | 1,0 | US-GRD-016 (#313) |
+| 2026-10-30 | 1,0 | US-TMC-012 (#316); #314 es el segundo PR de TS-CKP-001, no suma |
+| 2026-10-31 a 2026-11-04 | 0 | Sin merges |
+| 2026-11-05 | 1,0 | US-TMC-010 (#319; `mergedAt` del 5 de noviembre, no de hoy) |
+| 2026-11-06 y 2026-11-07 | 0 | Sin merges |
+| 2026-11-08 | 2,5 | US-MCP-016 (#321, 1,0), US-CKP-006 en parte (#320, 0,5) y US-GRP-008 (#322, 1,0). GitHub fecha #320 y #322 el 2026-11-09 en UTC |
+| **Total, 11 días** | **5,5** | 0,50 por día natural |
+
+Coincide con el avance del recuento: de 55 fichas equivalentes sin cerrar (65 menos las 10 del recorte) a 49,5, es decir 5,5 cerradas. Es la cuarta ventana seguida a la baja: 2,0, 0,93, 0,79 y ahora 0,50 por día. **La flota estuvo casi parada en código del 2026-10-31 al 2026-11-07**: solo se mergeó código el 2026-11-05 (#317 a #319) y el 2026-11-08 (#320 a #322); los demás merges de esos días son documentos (#310, #324) o la config de build (#328). Cuatro días con producción (29 y 30 de octubre, 5 y 8 de noviembre) dieron las 5,5 fichas, unas 1,4 por día activo: ese es el techo de lo que ha rendido la flota cuando corre. Las métricas del orquestador (7 PR medidos antes del modo rápido) dan una mediana de 5,8 h activas por PR y 1,6 runs de CI fallidos de media por PR: el tiempo activo por ficha es corto, el problema es la cadencia, no el coste de cada PR.
+
+**Cálculo del 2026-11-08** (⚠️ **ASSUMPTION** del orquestador y del Scrum Master; k = 1):
+
+- **Optimista:** p75 diario de los 11 días (7 días a 0, tres a 1,0 y uno a 2,5; p75 = 1,0): 49,5 / 1,0 = 50 días, 2026-12-28, más 2 de demo: **2026-12-30**.
+- **Central:** media de 14 días, 0,6 por día (5,5 de los últimos 11 días más unas 3 de 2026-10-26 a 2026-10-28, que salen por diferencia con la semana del 22 al 28 de octubre y son aproximadas): 49,5 / 0,6 = 83 días, 2027-01-30, más 2 de demo: **2027-02-01**.
+- **Pesimista:** el p25 diario es 0, así que se usa la media de los últimos 7 días (3,5 fichas, 0,50 por día) con un 10 % de colchón: 49,5 / 0,50 × 1,1 = 109 días, 2027-02-25, más 2 de demo: **2027-02-27**.
+- **Frente al 2026-10-28** (central 2027-01-14; rango 2026-12-21 a 2027-01-28): el central se mueve 18 días hacia delante y el rango 9 y 30 días. Descomposición del cambio del central: el recorte de 10 fichas quita unos 12 días (10 / 0,86); lo que no se cerró en estos 11 días respecto de la velocidad de entonces (9,5 esperadas, 5,5 reales) suma unos 5; y bajar la velocidad aplicada de 0,86 a 0,6 suma unos 25. Neto, unos 18 días más. El recorte no compensa la parada.
+- **Riesgo de alcance, sin contar** (no existen en disco): una TS-CKP-011 que cierre el hueco G-B de US-CKP-006 (M2, unas 1,0 ficha) y quizá una TS-TMC nueva (~1,0). Cada ficha equivalente suma unos 2 días al central (1 / 0,6): con las dos, el central pasa a unos 2027-02-05. Se contarán cuando existan como ficha con `milestone: M2`. Al revés, #325 (US-TMC-011) y #323 (TS-GRP-005 PR-B) están en curso y bajarían unas 1,5 fichas (3 días) al mergearse.
+- **Qué lo movería:** si la flota corre todos los días a las 1,4 fichas de un día activo, el cierre cae hacia 2026-12-15; es una cota de lo posible, no un compromiso. Una semana más sin merges de código desplaza todo 7 días y empuja el central hacia la fecha pesimista.
+
+**Historial: cálculo del 2026-10-28.** Quedaban unas **65 fichas equivalentes** (55 sin empezar y 20 en parte, a 0,5; sobre 112).
+
+**Velocidad real de la semana del 2026-10-22 al 2026-10-28** (`gh pr list` y fecha del primer PR de cada ficha):
 
 | Métrica | 08 a 14 oct | 15 a 21 oct | 22 a 28 oct |
 |---|---|---|---|
@@ -259,8 +284,8 @@ Lo que cambió respecto del 2026-10-08 (27 PR y 8,8 fichas equivalentes por día
 
 - **Ruta crítica:** SPIKE-CKP-001 (en parte) y TS-CKP-001 (en parte) → US-CKP-006 a 010 y US-MCP-016, con 4 o 5 eslabones de 1 a 2 días cada uno (6 a 10 días). Ya no limita: la fecha la fija la velocidad de la flota. **Riesgo:** si la fase (b) de SPIKE-CKP-001 concluye que el predictor no funciona como está diseñado, se replanifica todo el bloque de predicción.
 - **Otras cadenas:** US-CKP-012 a 022 y 024 (US-CKP-023 salió el 2026-11-08) y las escrituras del MCP (US-MCP-011, 012, 018 y 019; TS-CKP-003 ya está implementada); US-TMC-007 → US-MCP-017; SPIKE-GRD-002 → factor del SO de la app (UI-1, hito M2-UI); US-GRD-013 y la cola de confirmación salieron de M2 el 2026-11-08.
-- **Cierre:** lo que llegue más tarde entre la flota y M1, más 1 o 2 días de demo. **Central: 2027-01-14** (65 / 0,86, la media de los últimos 14 días, son 76 días hasta 2027-01-12, más 2 de demo). **Optimista: 2026-12-21** (si repunta la flota; no incluye los 3 a 6 días de la cola de confirmación). **Conservadora: 2027-01-28.** La velocidad va a la baja (2,0, 0,93 y 0,79 por día en las tres últimas semanas) y los cuellos de botella son la revisión y el CI de macOS, no solo la flota.
-- **M3 y M4** dependen del cierre de M2: sus fechas de abajo (calculadas el 2026-10-08) se desplazan al menos lo mismo que M2 y no se han recalculado.
+- **Cierre (2026-10-28, reemplazado por el cálculo de arriba):** lo que llegue más tarde entre la flota y M1, más 1 o 2 días de demo. **Central: 2027-01-14** (65 / 0,86, la media de los últimos 14 días, son 76 días hasta 2027-01-12, más 2 de demo). **Optimista: 2026-12-21** (si repunta la flota; no incluye los 3 a 6 días de la cola de confirmación). **Conservadora: 2027-01-28.** La velocidad va a la baja (2,0, 0,93 y 0,79 por día en las tres últimas semanas) y los cuellos de botella son la revisión y el CI de macOS, no solo la flota.
+- **M3 y M4** dependen del cierre de M2: sus fechas de abajo (calculadas el 2026-10-08) se desplazan al menos lo mismo que M2 y siguen **por recalcular** (no antes del cierre de M2, ahora central 2027-02-01).
 
 ## Hito paralelo M2-UI: app de escritorio (UI-1)
 
@@ -296,13 +321,15 @@ TS-CKP-006, 007 y 009 son enablers de UI-2 que deben estar antes de v0.1.0 (crit
 
 ### Fecha
 
-Estimada el 2026-11-08 por el Scrum Master, con el [método](#velocidad-observada-y-método-de-estimación) y la misma cuenta que la [ruta crítica de M2](#ruta-crítica-y-fecha). **Decisión del orquestador (2026-11-08), validada por Scrum Master.**
+Estimada el 2026-11-08 por el Scrum Master y recalculada ese mismo día con la velocidad de M2 actualizada, con el [método](#velocidad-observada-y-método-de-estimación) y la misma cuenta que la [ruta crítica de M2](#ruta-crítica-y-fecha). **Decisión del orquestador (2026-11-08), validada por Scrum Master.**
 
 | Caso | Fecha | Cuenta |
 |---|---|---|
-| Optimista | **2026-12-05** | 12,5 / (1,25 × 0,40) = 25 días, más 2 de demo |
-| **Central** | **2026-12-22** | 12,5 / (0,86 × 0,35) = 42 días, más 2 de demo |
-| Pesimista | **2027-01-19** | 12,5 / (0,79 × 0,25) × 1,1 = 70 días, más 2 de demo |
+| Optimista | **2026-12-12** | 12,5 / (1,0 × 0,40) = 32 días, más 2 de demo |
+| **Central** | **2027-01-09** | 12,5 / (0,6 × 0,35) = 60 días, más 2 de demo |
+| Pesimista | **2027-02-28** | 12,5 / (0,50 × 0,25) × 1,1 = 110 días, más 2 de demo |
+
+**Recalculado el 2026-11-08** con la velocidad nueva de M2 (1,0, 0,6 y 0,50 fichas equivalentes por día; [cálculo](#ruta-crítica-y-fecha)). Es un cambio de fecha que exige el método: la cuenta es la misma y solo cambia la velocidad de entrada. Antes: optimista 2026-12-05, central 2026-12-22, pesimista 2027-01-19 (con 1,25, 0,86 y 0,79). **Decisión del orquestador (2026-11-08), validada por Scrum Master.** Las 12,5 fichas equivalentes no cambian.
 
 **Fichas equivalentes** (completa = 1; la unidad del método, unos 3 PR). Las complejidades de TS-DSK-001 y TS-DSK-002 son medias; las Dev Specs de TS-DSK-001, US-DSK-003 y US-DSK-004 están listas para implementar:
 
@@ -320,25 +347,25 @@ Estimada el 2026-11-08 por el Scrum Master, con el [método](#velocidad-observad
 | Motor de US-CKP-022 (`graph.lanes`) | 1,0 | La historia sigue en borrador; su Dev Spec está aprobada. US-DSK-005 no cierra sin ella |
 | **Total** | **12,5** | |
 
-**Capacidad en paralelo.** M2 tiene prioridad y no se retrasa. M2-UI toma una parte de la flota y de la revisión de Rene: 40 % en el optimista, 35 % en el central y 25 % en el pesimista, sobre la velocidad de 1,25 (p75 de 14 días), 0,86 (media de 14 días) y 0,79 (media de 7 días) fichas equivalentes por día natural que usa M2. Con esa parte, M2-UI absorbe 0,50, 0,30 y 0,20 fichas por día.
+**Capacidad en paralelo.** M2 tiene prioridad y no se retrasa. M2-UI toma una parte de la flota y de la revisión de Rene: 40 % en el optimista, 35 % en el central y 25 % en el pesimista, sobre la velocidad de 1,0 (p75 de 11 días), 0,6 (media de 14 días) y 0,50 (media de 7 días) fichas equivalentes por día natural que usa M2. Con esa parte, M2-UI absorbe 0,40, 0,21 y 0,125 fichas por día.
 
 **Ruta crítica, en el orden fijado por el orquestador:** TS-DSK-001 → TS-DSK-002 → US-DSK-003 y US-DSK-004 → US-DSK-005 y US-DSK-008 → US-DSK-007 → US-DSK-006, US-DSK-001 y US-DSK-002. Son 6 eslabones de 2 a 4 días: unos 12 a 24 días de cadena, por debajo de la fecha por capacidad en los tres casos, así que la fecha la fija la capacidad y no la cadena. SPIKE-GRD-002 corre en paralelo (la ejecuta Rene en su Mac) y no está en esa cadena.
 
 **Supuestos** (⚠️ **ASSUMPTION** del Scrum Master):
 
 - Las equivalencias de arriba son estimación mía sobre las complejidades del Arquitecto; no las he cambiado. 5 y 8 PR por ficha no se esperan: si una historia de pantalla pasa de 1,5 se parte.
-- La velocidad de M2 sigue siendo la medida el 2026-10-28; desde entonces solo hubo unos 6 PR mergeados (2026-10-30 al 2026-11-08, casi todo documentos), así que la flota estuvo parada y el dato real puede ser peor. Se recalcula con la ventana de 7 días en cuanto haya PR de código.
+- La velocidad de M2 es la del 2026-11-08 (1,0, 0,6 y 0,50): la flota estuvo casi parada en código del 2026-10-31 al 2026-11-07. Se recalcula con la ventana de 7 días cada vez que se recalcule M2.
 - El CI de la app corre en ubuntu; la demo y el gate NFR-13 se ejecutan a mano en macOS y caben en los 2 días de cierre. Hay una máquina Mac (la de Rene).
 - No hay trabajo de firma ni de cuenta Apple en M2-UI: las alphas siguen sin firmar y la cuenta se necesita solo para v0.1.0.
-- US-DSK-005 espera el motor de US-CKP-022 (1,0 incluida); si otro carril de M2 lo entrega antes, el total baja a 11,5 y la fecha central a 2026-12-17.
+- US-DSK-005 espera el motor de US-CKP-022 (1,0 incluida); si otro carril de M2 lo entrega antes, el total baja a 11,5 y la fecha central a 2027-01-04.
 
 **Qué la movería:**
 
-- **SPIKE-GRD-002 negativo o sin ejecutar.** No retrasa: el criterio 2 se cumple con la versión de copiar el comando (Q-DSK-15). Positivo: se abre el trabajo de "sin terminal" en US-DSK-001, 002 y 006 (presencia humana desde la app, DEP-DSK-1), unas 1,5 fichas más, y la fecha central pasa a 2026-12-27. Hace falta que Rene lo ejecute antes de que empiecen esas tres historias (unas 4 semanas desde hoy en el central).
+- **SPIKE-GRD-002 negativo o sin ejecutar.** No retrasa: el criterio 2 se cumple con la versión de copiar el comando (Q-DSK-15). Positivo: se abre el trabajo de "sin terminal" en US-DSK-001, 002 y 006 (presencia humana desde la app, DEP-DSK-1), unas 1,5 fichas más, y la fecha central pasa a 2027-01-16. Hace falta que Rene lo ejecute antes de que empiecen esas tres historias, que van al final de la cadena (más de un mes desde hoy en el central).
 - **Capacidad de revisión de Rene (R-DSK-1).** Es lo más sensible: pasar del 35 % al 25 % de la revisión lleva el central a la fecha pesimista. Una semana sin merges como la del 2026-10-23 al 26 desplaza todo 7 días.
 - **Un hallazgo de seguridad** en la frontera de la app (Q-DSK-2 y Q-DSK-3) abre retrabajo no contado.
 
-**S-DSK-1 corregida.** "Unas 3 semanas" no se cumple ni en el optimista (25 días más la demo, unas 4 semanas). El supuesto pasa a **unas 4 semanas en el mejor caso y unas 6 en el central**, contando TS-DSK-001 y TS-DSK-002, que S-DSK-1 no incluía.
+**S-DSK-1 corregida.** "Unas 3 semanas" no se cumple ni en el optimista (32 días más la demo, unas 5 semanas). El supuesto pasa a **unas 5 semanas en el mejor caso y unas 9 en el central** (recalculado el 2026-11-08; el 2026-11-08 anterior decía 4 y 6), contando TS-DSK-001 y TS-DSK-002, que S-DSK-1 no incluía.
 
 ### Acciones pendientes de Rene
 
@@ -654,4 +681,5 @@ Ninguna se ha tomado en su nombre. Hasta que decida, el plan aplica la recomenda
 | La v0.1.0 es el hito **M4**: el generador de estado (#184) solo reconoce hitos `M<n>`. El tag sigue siendo `v0.1.0` | Decisión del orquestador (2026-10-08), por el contrato del generador |
 | M2 son los Must y Should del MVP **que no son de M1** (112 fichas desde el 2026-10-27). Las fichas de M1 cuentan en M1; INF-GRP-001, INF-GRP-002 y TS-GRP-004, con la parte de M1 hecha, se siguen en M2. US-GRP-018, US-GRP-019, US-GRP-021, US-TMC-017 (Could) y US-TMC-021 (Fase 2) quedan sin hito | Decisión del orquestador (2026-10-08). El PO contaba M2 con las de M1 (128 fichas, 29,7 %); con el contrato del generador cada ficha va a un solo hito |
 | Avance de M2 al 2026-10-28: 42,0 % (112 fichas; solo historias 34,5 %). Fecha de M2 recalculada con la velocidad de los últimos 7 y 14 días: k = 1 (la velocidad ya se mide sobre M2), y media de 7 días en lugar del p25 cuando este es 0. Central 2027-01-14, rango 2026-12-21 a 2027-01-28. Las fechas de M3 y M4 quedan por recalcular | Decisión del orquestador (2026-10-28), validada por el Scrum Master |
+| Recálculo del 2026-11-08: M2 al 51,5 % sobre 102 (52,5 fichas equivalentes cerradas); quedan 49,5; velocidad 1,0 (p75, 11 días), 0,6 (media de 14) y 0,50 (media de 7) por día; central 2027-02-01, rango 2026-12-30 a 2027-02-27 (antes 2027-01-14; 2026-12-21 a 2027-01-28). M2-UI se recalcula con la misma velocidad: central 2027-01-09, rango 2026-12-12 a 2027-02-28. M3 y M4 siguen por recalcular. TS-CKP-011 (G-B de US-CKP-006) y una posible TS-TMC no se cuentan hasta que existan | Decisión del orquestador (2026-11-08), validada por Scrum Master |
 | M2-UI como hito paralelo de la app de escritorio, recorte de la tanda 1 de M2 (10 fichas, 112 a 102) y lo mínimo de UI-2 antes de v0.1.0 | Decisión de Rene (2026-11-08), al aceptar las recomendaciones de CTX-DSK-001 |
