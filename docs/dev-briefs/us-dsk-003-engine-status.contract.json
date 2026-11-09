@@ -1,0 +1,265 @@
+{
+  "source": [
+    "docs/requirements/features/desktop/dev-specs/US-DSK-003-estado-del-motor.md",
+    "docs/requirements/features/desktop/user-stories/US-DSK-003-estado-del-motor.md"
+  ],
+  "goal": {
+    "intent": "Que la app de escritorio diga si el motor funciona y qué hacer cuando no, en vez de una ventana vacía o un error técnico.",
+    "endState": "Un supervisor en el backend de Tauri conecta con el daemon solo por BundleConnector, sigue la secuencia (snapshot N, subscribe N+1, resync, backoff 250 ms x 2^(n-1) tope 5 s) y manda mensajes tipados y saneados por un único Channel; el webview muestra pastilla, banda y estados del centro (parado, incompatible, rechazado, sin canal, esperando Git, sin repos, vista restringida) en en/es, accesibles, claro y oscuro, con engine_watch y engine_retry como únicos comandos nuevos y solo lectura.",
+    "nonGoals": [
+      "No arranca el motor desde la app más allá del Connector de TS-DSK-002 (el botón Arrancar motor llama engine_retry start:true y es el Connector quien arranca)",
+      "No muestra flota ni abre repos (US-DSK-004)",
+      "No añade métodos, eventos ni capacidades al canal, ni escribe nada en el motor",
+      "No toca autostart, Ajustes ni protección inactiva"
+    ]
+  },
+  "suite": {
+    "command": "pnpm -C apps/desktop run build && node tools/test/nextest-junit.mjs --workspace && pnpm -C apps/desktop run test"
+  },
+  "layers": {
+    "runtime": {
+      "commands": [
+        {
+          "id": "suite",
+          "cmd": "pnpm -C apps/desktop run build && node tools/test/nextest-junit.mjs --workspace && pnpm -C apps/desktop run test"
+        }
+      ],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "scope": {
+    "projects": [
+      "@gitraptor/desktop",
+      "gitraptor-desktop",
+      "gitraptor-api",
+      "gitraptor-cli"
+    ]
+  },
+  "constraints": {
+    "deny_paths": [
+      "docs/ARTIFACTS.md",
+      "docs/architecture/decisions/ADR-GRD-008*"
+    ],
+    "allow_dependency_changes": false
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 900000,
+    "suiteTimeoutMs": 5400000,
+    "maxOutsidePlan": 5
+  },
+  "hops": {
+    "design": {
+      "agent": "main-loop",
+      "model": "sonnet"
+    },
+    "critic": {
+      "agent": "nassa-core:plan-critic",
+      "model": "opus"
+    },
+    "tester": {
+      "agent": "nassa-core:criterion-tester",
+      "model": "sonnet"
+    },
+    "build": {
+      "agent": "nassa-dev-rust:rust-expert",
+      "model": "sonnet"
+    },
+    "review": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "opus"
+    },
+    "conformance": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "sonnet"
+    }
+  },
+  "criteria": [
+    {
+      "id": "D3-LINK",
+      "statement": "REQUIRED_CAPABILITIES queda en las cuatro capacidades (el test dsk002_link_required_capabilities_are_the_three_of_the_app se sustituye por required_capabilities_are_the_four_the_app_needs) (scope.activity, observation.tiers, prediction.pairs, connection.requester) y un SocketConnector hacia el daemon falso llega al hello y a connection.accept",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test engine_link -- --list 2>/dev/null | grep -q '^required_capabilities_are_the_four_the_app_needs: test' && cargo test -p gitraptor-desktop --test engine_link required_capabilities_are_the_four_the_app_needs -- --exact && cargo test -p gitraptor-desktop --test engine_launcher -- --list 2>/dev/null | grep -q '^dsk002_launcher_starting_runs_ensure_with_the_exact_argv: test' && cargo test -p gitraptor-desktop --test engine_launcher dsk002_launcher_starting_runs_ensure_with_the_exact_argv -- --exact && cargo test -p gitraptor-desktop --test engine_supervisor -- --list 2>/dev/null | grep -q '^connects_to_the_fake_daemon: test' && cargo test -p gitraptor-desktop --test engine_supervisor connects_to_the_fake_daemon -- --exact",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "apps/desktop/src-tauri/tests/engine_link.rs",
+        "apps/desktop/src-tauri/tests/engine_launcher.rs",
+        "apps/desktop/src-tauri/tests/engine_supervisor.rs",
+        "apps/desktop/src-tauri/tests/support/fake_daemon.rs"
+      ]
+    },
+    {
+      "id": "D3-STOPPED",
+      "statement": "Sin motor en marcha la app dice stopped not-running y, con Retry start, el Connector lo arranca y llega a live",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test engine_supervisor -- --list 2>/dev/null | grep -q '^a_stopped_engine_is_reported_and_retry_with_start_launches_it: test' && cargo test -p gitraptor-desktop --test engine_supervisor a_stopped_engine_is_reported_and_retry_with_start_launches_it -- --exact",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "apps/desktop/src-tauri/tests/engine_supervisor.rs"
+      ]
+    },
+    {
+      "id": "D3-LOST",
+      "statement": "Al perder la conexión marca los datos como viejos (staleSinceMs), reconecta sola con espera creciente observable en retryInMs (250 ms x 2^(n-1), tope 5 s) y llamando connect(false) (solo el primer intento y Retry start llaman connect(true), D5), pide scope.snapshot nuevo y scope.subscribe con from_seq N+1 del run_id nuevo, y vuelve a live con staleSinceMs null",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test engine_supervisor -- --list 2>/dev/null | grep -q '^a_lost_connection_marks_data_stale_and_catches_up_alone: test' && cargo test -p gitraptor-desktop --test engine_supervisor a_lost_connection_marks_data_stale_and_catches_up_alone -- --exact",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "apps/desktop/src-tauri/tests/engine_supervisor.rs"
+      ]
+    },
+    {
+      "id": "D3-INCOMPAT",
+      "statement": "Un daemon más viejo, más nuevo, sin una capacidad o el propio motor sin capacidades se reportan incompatibles con su versión y la acción correcta (start solo si daemon_path es el raptor propio, sin stopCommand; copy-stop con comando; update-app; none)",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test engine_supervisor -- --list 2>/dev/null | grep -q '^an_older_daemon_is_incompatible_with_its_version: test' && cargo test -p gitraptor-desktop --test engine_supervisor -- --list 2>/dev/null | grep -q '^a_newer_daemon_asks_to_update_the_app: test' && cargo test -p gitraptor-desktop --test engine_supervisor -- --list 2>/dev/null | grep -q '^a_missing_capability_is_incompatible: test' && cargo test -p gitraptor-desktop --test engine_supervisor -- --list 2>/dev/null | grep -q '^the_own_engine_missing_capabilities_offers_start: test' && cargo test -p gitraptor-desktop --test engine_supervisor an_older_daemon_is_incompatible_with_its_version -- --exact && cargo test -p gitraptor-desktop --test engine_supervisor a_newer_daemon_asks_to_update_the_app -- --exact && cargo test -p gitraptor-desktop --test engine_supervisor a_missing_capability_is_incompatible -- --exact && cargo test -p gitraptor-desktop --test engine_supervisor the_own_engine_missing_capabilities_offers_start -- --exact",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "apps/desktop/src-tauri/tests/engine_supervisor.rs"
+      ]
+    },
+    {
+      "id": "D3-NOREPOS",
+      "statement": "Sin repos observados entrega el estado del motor y los candidatos descubiertos",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test engine_supervisor -- --list 2>/dev/null | grep -q '^no_repos_delivers_the_engine_state_and_the_candidates: test' && cargo test -p gitraptor-desktop --test engine_supervisor no_repos_delivers_the_engine_state_and_the_candidates -- --exact",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "apps/desktop/src-tauri/tests/engine_supervisor.rs"
+      ]
+    },
+    {
+      "id": "D3-SEQ",
+      "statement": "Un hueco de secuencia toma una instantánea nueva y un duplicado se descarta",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test engine_supervisor -- --list 2>/dev/null | grep -q '^a_gap_takes_a_new_snapshot: test' && cargo test -p gitraptor-desktop --test engine_supervisor -- --list 2>/dev/null | grep -q '^a_duplicate_is_dropped: test' && cargo test -p gitraptor-desktop --test engine_supervisor a_gap_takes_a_new_snapshot -- --exact && cargo test -p gitraptor-desktop --test engine_supervisor a_duplicate_is_dropped -- --exact",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "apps/desktop/src-tauri/tests/engine_supervisor.rs"
+      ]
+    },
+    {
+      "id": "D3-RESYNC",
+      "statement": "scope.resync lleva su motivo en conn hasta volver a live, y events.resync slow-consumer reconecta con espera creciente",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test engine_supervisor -- --list 2>/dev/null | grep -q '^a_scope_resync_carries_its_reason_until_live: test' && cargo test -p gitraptor-desktop --test engine_supervisor -- --list 2>/dev/null | grep -q '^a_slow_consumer_reconnects_with_growing_wait: test' && cargo test -p gitraptor-desktop --test engine_supervisor a_scope_resync_carries_its_reason_until_live -- --exact && cargo test -p gitraptor-desktop --test engine_supervisor a_slow_consumer_reconnects_with_growing_wait -- --exact",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "apps/desktop/src-tauri/tests/engine_supervisor.rs"
+      ]
+    },
+    {
+      "id": "D3-RESTRICTED",
+      "statement": "Una app abierta por un agente, con perfil mcp, con solicitante unverified o sin solicitante es vista restringida: una sola llamada engine.snapshot, engineOnly y ningún scope.subscribe",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test engine_supervisor -- --list 2>/dev/null | grep -q '^an_agent_requester_is_restricted_and_never_subscribes: test' && cargo test -p gitraptor-desktop --test engine_supervisor -- --list 2>/dev/null | grep -q '^an_mcp_profile_is_restricted: test' && cargo test -p gitraptor-desktop --test engine_supervisor -- --list 2>/dev/null | grep -q '^an_unverified_requester_is_restricted: test' && cargo test -p gitraptor-desktop --test engine_supervisor -- --list 2>/dev/null | grep -q '^a_missing_requester_is_restricted: test' && cargo test -p gitraptor-desktop --test engine_supervisor an_agent_requester_is_restricted_and_never_subscribes -- --exact && cargo test -p gitraptor-desktop --test engine_supervisor an_mcp_profile_is_restricted -- --exact && cargo test -p gitraptor-desktop --test engine_supervisor an_unverified_requester_is_restricted -- --exact && cargo test -p gitraptor-desktop --test engine_supervisor a_missing_requester_is_restricted -- --exact",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "apps/desktop/src-tauri/tests/engine_supervisor.rs"
+      ]
+    },
+    {
+      "id": "D3-UNTRUSTED",
+      "statement": "Todo texto no confiable llega al webview saneado (OSC 52 como \\x1b]52;, U+202E como \\u{202e}) y la Incompatibility cruda del daemon se sanea antes de mostrarse",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test engine_supervisor -- --list 2>/dev/null | grep -q '^untrusted_text_reaches_the_webview_escaped: test' && cargo test -p gitraptor-desktop --test engine_supervisor -- --list 2>/dev/null | grep -q '^an_incompatibility_from_the_daemon_is_sanitized: test' && cargo test -p gitraptor-desktop --test engine_supervisor untrusted_text_reaches_the_webview_escaped -- --exact && cargo test -p gitraptor-desktop --test engine_supervisor an_incompatibility_from_the_daemon_is_sanitized -- --exact",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "apps/desktop/src-tauri/tests/engine_supervisor.rs"
+      ]
+    },
+    {
+      "id": "D3-READONLY",
+      "statement": "La aserción común de support (ningún daemon.replace, daemon.stop, repo.add ni método con writes en calls()) se ejecuta al cerrar cada test de engine_supervisor.rs, y el verify corre el archivo entero; never_sends_replace_stop_or_writes la prueba además sola",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test engine_supervisor",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "apps/desktop/src-tauri/tests/engine_supervisor.rs"
+      ]
+    },
+    {
+      "id": "D3-STOPCMD",
+      "statement": "stop_command cita cada argumento con comillas simples POSIX (la comilla como '\\'') y devuelve None si un carácter cumple must_escape (M-1)",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test engine_stop_command -- --list 2>/dev/null | grep -q '^stop_command_quotes_every_argument_and_refuses_sec12: test' && cargo test -p gitraptor-desktop --test engine_stop_command stop_command_quotes_every_argument_and_refuses_sec12 -- --exact",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "apps/desktop/src-tauri/tests/engine_stop_command.rs"
+      ]
+    },
+    {
+      "id": "D3-WIRING",
+      "statement": "La app conecta solo por BundleConnector: lib.rs registra EngineHub::new(Box::new(BundleConnector::new()), bundled_raptor()) y llama shutdown en RunEvent::Exit, y SocketConnector no aparece en src/ fuera de engine/link.rs (B-3, W137)",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test engine_wiring -- --list 2>/dev/null | grep -q '^the_app_connects_only_through_the_bundle_connector: test' && cargo test -p gitraptor-desktop --test engine_wiring the_app_connects_only_through_the_bundle_connector -- --exact",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "apps/desktop/src-tauri/tests/engine_wiring.rs"
+      ]
+    },
+    {
+      "id": "D3-CENTER",
+      "statement": "AppShell monta EngineBand y EngineCenter alimentados por useEngine desde el almacén y la caché: el centro muestra el panel que da engineView y lleva data-stale cuando conn no es live; el botón de arrancar llama engine_retry con start true",
+      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/shell/AppShell.test.tsx",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "apps/desktop/src/shell/AppShell.test.tsx"
+      ]
+    },
+    {
+      "id": "D3-CMDS",
+      "statement": "engine_watch y engine_retry están en commands.json y en la capability; aceptan {params:{...}} y rechazan campos desconocidos o start ausente con invalid-params; engine_retry sin supervisor da not-watching; la superficie Tauri (V2) sigue cerrada",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test commands --test tauri_surface",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "apps/desktop/src-tauri/tests/commands.rs",
+        "apps/desktop/src-tauri/tests/tauri_surface.rs"
+      ]
+    },
+    {
+      "id": "D3-CMDS-TS",
+      "statement": "commands.ts declara engine_watch y engine_retry con sus tipos y los invoca con el envoltorio params",
+      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/client/commands.test.ts",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "apps/desktop/src/client/commands.test.ts"
+      ]
+    },
+    {
+      "id": "D3-STREAM",
+      "statement": "watchEngine entrega 1.000 mensajes en un solo lote y en orden con un único requestAnimationFrame",
+      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/client/engine-stream.test.ts",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "apps/desktop/src/client/engine-stream.test.ts"
+      ]
+    },
+    {
+      "id": "D3-CACHE",
+      "statement": "applyEngineBatch deja la caché y el almacén esperados con cada variante de la fixture, sin mutar el objeto anterior; engineKeys.repo no tiene escritores y no hay queryFn de red",
+      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/state/engine-cache.test.ts",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "apps/desktop/src/state/engine-cache.test.ts",
+        "apps/desktop/tests/fixtures/engine-messages.json"
+      ]
+    },
+    {
+      "id": "D3-SHELL",
+      "statement": "La pastilla está en la barra de título entre el botón del panel izquierdo y el de tema, App llama watchEngine una sola vez al montar y marca gr:first-meaningful-paint una sola vez en un estado final; Reintentar llama engine_retry y queda aria-disabled hasta el siguiente conn",
+      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/shell/TitleBar.test.tsx src/app/App.test.tsx",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "apps/desktop/src/shell/TitleBar.test.tsx",
+        "apps/desktop/src/app/App.test.tsx"
+      ]
+    }
+  ]
+}
