@@ -975,9 +975,9 @@ La app usa el tema «grafito glass» de [DSYS-GRP-002](../../../../design-system
 | H-12 | Hueco | D-12 (push, pull y fetch como acción explícita del humano) no está en ninguna historia ni en ADR-GRD-007/008: falta la regla de Guardrails que decide y el texto de lo que ve el humano cuando se bloquea. El texto de c2 ("deshacer no envía nada al servidor") se ajustó para no afirmar que GitRaptor nunca empuja | PO y Arquitecto |
 | H-13 | Hueco | La vista de Time Machine (c1: filtros, línea de tiempo por actor con selección por arrastre, chip de reversibilidad, vista previa con los rechazos de NFR-01) agrupa más de lo que dicen US-CKP-021 y US-TMC-006/023 | PO |
 | H-14 | Riesgo | `⌥⌘T` (alternar grafo y tabla) coincide con "Mostrar u ocultar barra de herramientas" de macOS; hoy la app de Tauri no tiene ese menú. Si Rene añade un menú nativo, hay que elegir otro atajo | Rene / Arquitecto |
-| H-15 | Hueco | Ninguna Dev Spec registra la banda ⚡ en el lienzo del grafo: DS-US-DSK-005 y DS-US-DSK-008 se la dejan una a la otra (G11 y G9 de ellas) | Arquitecto y orquestador |
-| H-16 | Hueco | `CopyCommand` no anuncia que copió (WCAG 4.1.3); lo usan d4, el aviso de base pendiente y la base sin confirmar | Arquitecto (enmienda aditiva de TS-DSK-003) |
-| H-17 | Hueco | primitives-spec § 2.15 pliega las columnas bajo 1000 px de ventana y en otro orden; D-18 las pliega por ancho del centro. La spec de primitivas debe enmendarse | Arquitecto |
+| H-15 | **Cerrado (2026-11-09)** | La banda ⚡ del grafo: DS-US-DSK-008 (entra primero) fija el modelo puro y la insignia en su módulo público; DS-US-DSK-005 (entra después) dibuja la línea en su slot `layers` y la insignia en `laneBadge` (su T011). Decisión del orquestador (2026-11-09), validada por Arquitecto | — |
+| H-16 | **Cerrado (2026-11-09)** | `CopyCommand` anuncia «Copiado» en una región `role="status"` (WCAG 4.1.3): enmienda aditiva en primitives-spec § 2.16, implementada en DS-US-DSK-008 T005. Decisión del orquestador (2026-11-09), validada por Arquitecto | — |
+| H-17 | **Cerrado (2026-11-09)** | primitives-spec § 2.15 enmendada: plegado por ancho del centro en el orden Sha, Autor, Fecha, Rama (D-18), implementado en DS-US-DSK-005 T004. Decisión del orquestador (2026-11-09), validada por Arquitecto | — |
 
 ---
 
