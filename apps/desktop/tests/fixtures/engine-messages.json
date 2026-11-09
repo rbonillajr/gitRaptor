@@ -1,0 +1,131 @@
+{
+  "conn": {
+    "resync": "slow-consumer",
+    "staleSinceMs": 1762697100000,
+    "state": {
+      "attempt": 2,
+      "kind": "reconnecting",
+      "retryInMs": 500
+    },
+    "type": "conn"
+  },
+  "discovered": {
+    "candidates": [
+      {
+        "name": "delta",
+        "path": "/Users/me/code/delta"
+      }
+    ],
+    "replace": true,
+    "type": "discovered"
+  },
+  "engineOnly": {
+    "engine": {
+      "gitVersion": null,
+      "state": "no-repos"
+    },
+    "type": "engineOnly"
+  },
+  "engineState": {
+    "engine": {
+      "gitVersion": null,
+      "state": "waiting-for-git"
+    },
+    "type": "engineState"
+  },
+  "global": {
+    "autostart": "not-registered",
+    "daemon": {
+      "protocol": 9,
+      "version": "0.1.0"
+    },
+    "engine": {
+      "gitVersion": "2.45.1",
+      "state": "observing"
+    },
+    "repos": [
+      {
+        "attention": {
+          "conflicts": {
+            "count": 2,
+            "state": "counted"
+          },
+          "denials": {
+            "state": "unavailable"
+          }
+        },
+        "name": "alpha",
+        "path": "/Users/me/code/alpha",
+        "repoId": "repo-alpha",
+        "state": "observed",
+        "tier": "active"
+      },
+      {
+        "attention": {
+          "conflicts": {
+            "state": "unavailable"
+          },
+          "denials": {
+            "state": "unavailable"
+          }
+        },
+        "name": "beta",
+        "path": "/Users/me/code/beta",
+        "repoId": "repo-beta",
+        "state": "unavailable",
+        "tier": null
+      }
+    ],
+    "type": "global"
+  },
+  "repoAttention": {
+    "attention": {
+      "conflicts": {
+        "count": 3,
+        "state": "counted"
+      },
+      "denials": {
+        "count": 1,
+        "state": "counted"
+      }
+    },
+    "repoId": "repo-alpha",
+    "type": "repoAttention"
+  },
+  "repoObserved": {
+    "repo": {
+      "attention": {
+        "conflicts": {
+          "count": 0,
+          "state": "counted"
+        },
+        "denials": {
+          "state": "unavailable"
+        }
+      },
+      "name": "gamma",
+      "path": "/Users/me/code/gamma",
+      "repoId": "repo-gamma",
+      "state": "observed",
+      "tier": "waking"
+    },
+    "type": "repoObserved"
+  },
+  "repoRetired": {
+    "repoId": "repo-beta",
+    "type": "repoRetired"
+  },
+  "repoTier": {
+    "repoId": "repo-alpha",
+    "tier": "dormant",
+    "type": "repoTier"
+  },
+  "session": {
+    "activity": true,
+    "daemonVersion": "0.1.0",
+    "discovery": true,
+    "protocol": 9,
+    "restricted": false,
+    "type": "session"
+  }
+}

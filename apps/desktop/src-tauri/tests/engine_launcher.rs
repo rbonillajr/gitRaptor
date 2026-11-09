@@ -19,13 +19,15 @@ use gitraptor_desktop::engine::link::{ConnectFailure, Connector, Incompatibility
 /// The fixed `PATH` of `run_ensure` (DS-TS-DSK-002 T006).
 const FIXED_PATH: &str = "/usr/bin:/bin:/usr/sbin:/sbin";
 
-const REQUIRES: [&str; 6] = [
+const REQUIRES: [&str; 8] = [
     "--require",
     "scope.activity",
     "--require",
     "observation.tiers",
     "--require",
     "prediction.pairs",
+    "--require",
+    "connection.requester",
 ];
 
 /// Every peer is taken as an installed `raptor`: the test server is this test process.
