@@ -1,0 +1,164 @@
+{
+  "version": 1,
+  "source": [
+    "docs/dev-briefs/ts-tmc-005.2-plan.md",
+    "docs/requirements/features/time-machine/technical-stories/TS-TMC-005-undo-espera-punto-base.md"
+  ],
+  "rigor": "alto",
+  "goal": {
+    "intent": "Que, cuando falta el punto base B de un cambio de agente pero su captura ya está en camino, el undo espere esa captura con un plazo propio y una señal explícita, para que overlap-unverified (D7 de DS-US-TMC-012) quede para los casos en que B de verdad no se puede obtener y no para una carrera con la captura continua.",
+    "endState": "Un agente que hace raptor undo justo después de un git reset --hard crudo recupera su trabajo a la primera, también en una máquina cargada, sin que el undo deshaga más de lo que deshace hoy tras un reintento: la captura continua publica por repo cada captura sellada o abandonada, el planificador (undo simple, --since y undo por agente) espera como máximo BASE_WAIT sin sleep ni sondeo y sin el lock del oplog ni el writer del almacén, vuelve a leer y aplica base_point_of sin cambios; sin captura pendiente, sin motor o con referencia sin atribuir no espera; al vencer responde overlap-unverified sin cambios en el repo; el daemon registra tm_base_wait con base_wait_ms y result.",
+    "nonGoals": [
+      "cambiar D7 (sin B sigue fallando cerrado)",
+      "usar el previo como base",
+      "atribuir ediciones (G2)",
+      "acelerar la captura continua",
+      "el solape de la restauración (US-TMC-024)",
+      "quitar los sleep ya existentes en crates/core/src/timemachine fuera del camino de la espera",
+      "espera en el redo (su base es el ancla síncrona)"
+    ]
+  },
+  "criteria": [
+    {
+      "id": "TMC005-CA1",
+      "priority": "must",
+      "statement": "CA-1: un agente que hace raptor undo justo tras un git reset --hard crudo, sin esperar la captura, recupera su trabajo a la primera (undo simple y undo por agente, con la captura retenida 500 ms por CaptureLayer; e2e sin la espera previa al undo)",
+      "verify": "cargo test -p gitraptor-core --lib timemachine::base_wait::tests::ca1 && cargo test -p gitraptor-cli --test raw_git_undo an_agent_recovers_its_work_after_a_raw_reset_hard && cargo test -p gitraptor-cli --test undo_overlap_same_session",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/timemachine/base_wait_tests.rs",
+        "apps/cli/tests/raw_git_undo.rs",
+        "apps/cli/tests/undo_overlap_same_session.rs"
+      ]
+    },
+    {
+      "id": "TMC005-CA2",
+      "priority": "must",
+      "statement": "CA-2: con la captura retenida más que BASE_WAIT (5 s), el undo responde overlap-unverified en <= BASE_WAIT + OVERLAP_BUDGET, sin cambios en el repo y con el rechazo en el oplog",
+      "verify": "cargo test -p gitraptor-core --lib timemachine::base_wait::tests::ca2",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/timemachine/base_wait_tests.rs"
+      ]
+    },
+    {
+      "id": "TMC005-CA3",
+      "priority": "must",
+      "statement": "CA-3: sin captura pendiente (abandonada por MAX_RETRIES, o sin motor) no hay espera: overlap-unverified en menos de 100 ms más el plan, con tm_base_wait result=not-pending cuando hay motor",
+      "verify": "cargo test -p gitraptor-core --lib timemachine::base_wait::tests::ca3",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/timemachine/base_wait_tests.rs"
+      ]
+    },
+    {
+      "id": "TMC005-CA4",
+      "priority": "must",
+      "statement": "CA-4: con referencia sin atribuir no se espera nunca: undo sin atribuir con la captura retenida, sin tm_base_wait con base_wait_ms > 0",
+      "verify": "cargo test -p gitraptor-core --lib timemachine::base_wait::tests::ca4",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/timemachine/base_wait_tests.rs"
+      ]
+    },
+    {
+      "id": "TMC005-CA5",
+      "priority": "must",
+      "statement": "CA-5: la espera no retiene el lock del oplog ni el writer del almacén: la captura sella mientras el undo espera, y el lock del oplog está libre durante la espera",
+      "verify": "cargo test -p gitraptor-core --lib timemachine::base_wait::tests::ca5",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/timemachine/base_wait_tests.rs"
+      ]
+    },
+    {
+      "id": "TMC005-CA6",
+      "priority": "must",
+      "statement": "CA-6: B obtenido tras esperar es el mismo que obtiene un reintento posterior (mismo snapshot_id de B sobre el mismo historial; NFR-01, no deshace de más)",
+      "verify": "cargo test -p gitraptor-core --lib timemachine::base_wait::tests::ca6",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/timemachine/base_wait_tests.rs"
+      ]
+    },
+    {
+      "id": "TMC005-CA7",
+      "priority": "must",
+      "statement": "CA-7: sin sleep en el camino de producción de la espera (sustituye el clippy/grep de CI de la TS, G4 del Brief): base_wait.rs entero y el tramo entre los marcadores '// base-wait: begin' y '// base-wait: end' de undo.rs y undo_agent.rs (cada marcador exactamente una vez por fichero, en orden y con un tramo no vacío) no contienen sleep, park_timeout ni try_recv",
+      "verify": "cargo test -p gitraptor-core --lib timemachine::base_wait::tests::ca7",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/timemachine/base_wait_tests.rs"
+      ]
+    }
+  ],
+  "suite": {
+    "command": "node tools/test/nextest-junit.mjs"
+  },
+  "layers": {
+    "runtime": {
+      "commands": [
+        {
+          "id": "suite",
+          "cmd": "node tools/test/nextest-junit.mjs"
+        }
+      ],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "scope": {
+    "projects": [
+      "gitraptor-core",
+      "gitraptor-cli"
+    ]
+  },
+  "constraints": {
+    "deny_paths": [
+      "Cargo.toml",
+      "Cargo.lock",
+      "crates/core/Cargo.toml",
+      "apps/cli/Cargo.toml",
+      "crates/api/",
+      "crates/policy/",
+      "crates/theme/",
+      "crates/git/",
+      "apps/mcp/",
+      "apps/desktop/",
+      "crates/core/src/timemachine/redo.rs",
+      "crates/core/src/timemachine/oplog/schema.rs",
+      "docs/ARTIFACTS.md"
+    ],
+    "allow_dependency_changes": false
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 600000,
+    "suiteTimeoutMs": 5400000
+  },
+  "hops": {
+    "design": {
+      "agent": "nassa-dev-rust:rust-architect",
+      "model": "opus"
+    },
+    "critic": {
+      "agent": "nassa-core:plan-critic",
+      "model": "opus"
+    },
+    "tester": {
+      "agent": "nassa-core:criterion-tester",
+      "model": "opus"
+    },
+    "build": {
+      "agent": "nassa-dev-rust:rust-expert",
+      "model": "opus"
+    },
+    "review": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "opus"
+    },
+    "conformance": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "sonnet"
+    }
+  }
+}
