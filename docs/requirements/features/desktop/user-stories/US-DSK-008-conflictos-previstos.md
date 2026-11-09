@@ -2,7 +2,7 @@
 id: US-DSK-008
 title: "El usuario ve qué agentes van a chocar antes de que choquen y en qué archivos"
 type: us
-status: ready
+status: implemented
 priority: high
 created: 2026-10-28
 updated: 2026-11-09
@@ -87,3 +87,5 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 
 - **Diseño:** [design-flow.md](../design/design-flow.md) (DSF-DSK-001), conflictos previstos.
 - **Dev Spec:** [DS-US-DSK-008](../dev-specs/US-DSK-008-conflictos-previstos.md) (`spec-ready`, 2026-11-09).
+
+Implementado en: PR #345 (T001 a T007 de la Dev Spec). Pendiente de la verificación manual en macOS con el motor real (T008): dos worktrees con dos sesiones de Claude Code que chocan, el aviso de un ⚡ nuevo sin notificación del SO, la base movida y la base sin confirmar con el comando copiable.

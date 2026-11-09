@@ -316,7 +316,7 @@ Lo que cambió respecto del 2026-10-08 (27 PR y 8,8 fichas equivalentes por día
 | US-DSK-005 | Grafo de carriles | Must | Pend (`ready`) | Lo que falte de US-CKP-022 |
 | US-DSK-006 | Deshacer de un botón | Must | Pend (`ready`) | Factor del SO para confirmar trabajo ajeno |
 | US-DSK-007 | Bloqueo explicado | Must | Pend (`ready`) | La excepción consciente es el comando `raptor guard exec`, que la app muestra para copiar (Q-DSK-9) |
-| US-DSK-008 | Conflictos previstos | Must | Pend (`ready`) | Lo que falte de TS-CKP-001 |
+| US-DSK-008 | Conflictos previstos | Must | Hecho (PR #345; falta la verificación manual en macOS) | Lo que falte de TS-CKP-001 |
 | SPIKE-GRD-002 | Factor del SO en macOS (Q-DSK-17) | Must | R (ready) | **Se ejecuta ya, dentro de UI-1.** Sigue contando en M2 (primer hito que lo lista); aquí se registra su papel |
 
 TS-CKP-006, 007 y 009 son enablers de UI-2 que deben estar antes de v0.1.0 (criterio 3), y SPIKE-DSK-001 y SPIKE-DSK-002 son los de la presencia de sesión de v0.1.0; ninguno entra en esta composición. Lo mínimo de UI-2 antes de v0.1.0 (US-DSK-009, 010, 012, 013 y 015) se cuenta en el criterio 3 y no en esta composición. US-DSK-011, 014, 016, 017 y 018 quedan para después de v0.1.0 salvo que Rene diga otra cosa.

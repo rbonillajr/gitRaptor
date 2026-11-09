@@ -823,3 +823,5 @@ Tabla idéntica en DS-US-DSK-008, DS-US-DSK-007 y DS-US-DSK-005. Orden de integr
 | `src/shell/TitleBar.tsx` | píldora ⚡ | sin cambios | sin cambios |
 | Primitivas de `src/ui` | `CopyCommand` (anuncio, `onCopied`), `Esc` consumido en `Dialog`, `Popover` y `Toast`; `ConflictBand` nuevo y su línea en `index.ts` | `Toast` (`srLabel`) | `Table` (props aditivas) |
 | `src/i18n/locales/{en,es}.json` | `conflicts.*`, `ui.common.copied`, `ui.common.copyFailed` | `grd.*` | `graph.*`, `detail.agents.*`; reescribe `grd.view.back` y `conflicts.detail.back` |
+
+Implementado en: PR #345 (T001 a T007 de la Dev Spec). Pendiente de la verificación manual en macOS con el motor real (T008): dos worktrees con dos sesiones de Claude Code que chocan, el aviso de un ⚡ nuevo sin notificación del SO, la base movida y la base sin confirmar con el comando copiable.
