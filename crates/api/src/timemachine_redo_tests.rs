@@ -142,7 +142,7 @@ fn redo_result_lists_kept_paths_and_their_total() {
     let value = serde_json::to_value(&cut).unwrap();
     assert_eq!(
         value["kept"],
-        json!([{ "worktree": "feat-login", "path": "b.rs" }]),
+        json!([{ "worktree": { "untrusted": "feat-login" }, "path": { "untrusted": "b.rs" } }]),
         "TMC003-WIRE: kept travels when not empty"
     );
     assert_eq!(
