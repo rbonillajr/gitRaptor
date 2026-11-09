@@ -1,7 +1,8 @@
 //! Demo M2, criterion 2 (US-TMC-011): four Claude Code sessions work in four worktrees; in one of
 //! them the developer runs `raptor undo --agent claude-code --since 20m`, confirms on a terminal
 //! (a pty made with `script`) and only that worktree's agent work goes away; the other three,
-//! their branches included, do not change (`raptor redo` bringing it back: pending US-TMC-003).
+//! their branches included, do not change; then `raptor redo`, confirmed the same way, brings
+//! the agent's work back (US-TMC-003).
 //!
 //! The real `raptor` binary is the daemon and the client over a temporary machine (temporary repo,
 //! home and profile: NFR-01). The four "Claude Code" sessions are copies of this test binary named
@@ -491,7 +492,28 @@ fn four_sessions_and_one_agent_undone() {
         );
     }
 
-    // redo: pending US-TMC-003
+    // The redo, as the developer on the terminal with the same confirmation: the target worktree is
+    // back to the state after its agent's work and the others do not change.
+    let out = m.on_terminal(&target, &["redo"], "en_US.UTF-8", Some("y"));
+
+    assert!(
+        out.status.success(),
+        "TMC003-M2-DEMO: the redo succeeds after the developer confirms: {}",
+        text(&out)
+    );
+    assert_eq!(
+        m.state(name, &target),
+        after_work[0],
+        "TMC003-M2-DEMO: the target worktree is back to the state after its agent's work"
+    );
+    for (wt, expected) in m.worktrees.iter().zip(&after_work).skip(1) {
+        assert_eq!(
+            m.state(wt.0, &wt.1),
+            *expected,
+            "TMC003-M2-DEMO: worktree {} (files, HEAD, branch, status) must not change",
+            wt.0
+        );
+    }
     drop(claudes);
     m.stop();
 }

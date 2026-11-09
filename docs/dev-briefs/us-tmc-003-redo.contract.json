@@ -120,7 +120,7 @@
     },
     {
       "id": "TMC003-S5",
-      "statement": "Escenario 5: claude-1 deshace una operación suya que tocó b.rs, después un cambio sin atribuir modifica b.rs; el redo de claude-1 se rechaza con overlap que nombra b.rs y al actor sin atribuir; el repo no cambia",
+      "statement": "Escenario 5 y NFR-01 (se rechaza entero): claude-1 deshace una operación suya que tocó b.rs y al menos otra ruta; después un cambio sin atribuir modifica b.rs; el redo de claude-1 se rechaza con overlap que nombra b.rs y al actor sin atribuir, y la huella completa del worktree (la otra ruta incluida) queda igual que antes del redo",
       "verify": "cargo test -p gitraptor-core --test us_tmc_003_agents -- --exact a_later_unattributed_change_stops_the_agents_redo",
       "layer": "runtime",
       "tests": [
@@ -131,6 +131,15 @@
       "id": "TMC003-S6",
       "statement": "Escenario 6: el agente B pide rehacer el undo que el agente A hizo de su propio trabajo → other-actor; el repo no cambia",
       "verify": "cargo test -p gitraptor-core --test us_tmc_003_agents -- --exact an_agent_cannot_redo_another_actors_undo",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_tmc_003_agents.rs"
+      ]
+    },
+    {
+      "id": "TMC003-KEPT",
+      "statement": "NFR-01 (nunca pisa trabajo posterior de otro actor): (1) tras un undo, otro actor cambia una ruta que ese undo no tocó; el redo se hace, esa ruta conserva el cambio del otro actor y sale en kept/kept_total del RedoResult; (2) lo mismo con el redo de un undo por agente (US-TMC-011), que restaura entero el previo de U",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_003_agents -- --exact a_redo_keeps_another_actors_later_change a_redo_of_an_agent_undo_keeps_another_actors_later_change",
       "layer": "runtime",
       "tests": [
         "crates/core/tests/us_tmc_003_agents.rs"
