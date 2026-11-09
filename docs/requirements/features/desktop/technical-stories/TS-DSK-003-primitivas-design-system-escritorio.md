@@ -61,3 +61,5 @@ tags: [desktop, design-system, primitivas, grafito-glass, tokens-web, a11y, axe,
 - `pnpm --filter @gitraptor/desktop dev` y abrir `http://localhost:1420/?catalog`: las 14 primitivas en oscuro y claro lado a lado, con los estados forzados; el conmutador de movimiento reducido quita las transiciones.
 - En la ventana B1, la barra de título se ve igual que antes de la migración a `IconButton`.
 - VoiceOver en macOS recorre un Menu, un Dialog `confirm` y el árbol de ejemplo del catálogo y anuncia rol, nombre y estado.
+
+Implementado en: PR #331. Pendiente de la verificación manual en macOS (T010 pasos 3 a 5: `?catalog` en Safari, VoiceOver, Reducir movimiento y `tauri:dev`) y de la captura del catálogo en claro y oscuro; Windows y Linux, en la etapa de validación multiplataforma.
