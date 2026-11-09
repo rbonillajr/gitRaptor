@@ -707,17 +707,210 @@ pub struct SelectedInput<'a> {
     pub deadline: Instant,
 }
 
-/// Phase 1 of the overlap check of an undo by agent: the clean points after the agent's first
-/// change.
-pub fn check_selected(_store: &SnapshotStore, _input: &SelectedInput<'_>) -> OverlapReport {
-    OverlapReport::default()
+/// Phase 1 of the overlap check of an undo by agent: the subjects of `input.finals` against
+/// `input.last_point` (D-TMC-34). A point older than the agent's last change has not got the
+/// final value yet and would give a false conflict (D8): the caller passes only the subjects whose
+/// last change is older than the point (it knows the point's mark), and here a subject the point
+/// does not show as the agent left it (a path whose index is not the final one, a branch or
+/// `HEAD` with another value) is left to phase 2, which compares every subject against the prior.
+/// Without a point nothing is compared here.
+pub fn check_selected(store: &SnapshotStore, input: &SelectedInput<'_>) -> OverlapReport {
+    let Some(point) = input.last_point else {
+        return OverlapReport::default();
+    };
+    let mut report = selected_against(store, input, point, true);
+    if !report.unverified {
+        report.last_point = Some(point.to_owned());
+    }
+    report
 }
 
-/// Phase 2 of the overlap check of an undo by agent: from the last point to the undo's `prior`.
+/// Phase 2 of the overlap check of an undo by agent: every subject against the undo's `prior`,
+/// taken with the repo held.
 pub fn check_selected_tail(
-    _store: &SnapshotStore,
-    _input: &SelectedInput<'_>,
-    _prior: &str,
+    store: &SnapshotStore,
+    input: &SelectedInput<'_>,
+    prior: &str,
 ) -> OverlapReport {
-    OverlapReport::default()
+    let mut report = selected_against(store, input, prior, false);
+    if !report.unverified {
+        report.last_point = Some(prior.to_owned());
+    }
+    report
+}
+
+/// A subject conflicts when its value at `point` is not the agent's final one; a branch also
+/// when an event outside the set named it after the base of the agent's first change. Anything
+/// that cannot be read in time is `unverified`, never "no overlap". With `defer`, a subject the
+/// point does not show as the agent left it is not compared (phase 1, D8).
+fn selected_against(
+    store: &SnapshotStore,
+    input: &SelectedInput<'_>,
+    point: &str,
+    defer: bool,
+) -> OverlapReport {
+    use super::undo_agent::{Subject as Subj, Value};
+    if Instant::now() >= input.deadline {
+        return OverlapReport::unverified();
+    }
+    let Ok(at) = PointValues::read(store, point, input) else {
+        return OverlapReport::unverified();
+    };
+    if Instant::now() >= input.deadline {
+        return OverlapReport::unverified();
+    }
+    let seen_ms = now_ms();
+    let mut conflicts: Vec<Conflict> = Vec::new();
+    for (subject, (wanted, _)) in input.finals {
+        let differs = match (subject, wanted) {
+            (Subj::Path { worktree_key, path }, Value::Entry { file, index }) => {
+                match at.path(worktree_key, path) {
+                    Some((_, at_index)) if defer && at_index != *index => false,
+                    seen => seen != Some((*file, *index)),
+                }
+            }
+            (Subj::Ref(full), Value::Ref(tip)) => !defer && at.branch(full) != Some(*tip),
+            (Subj::Head { worktree_key }, Value::Head(head)) => {
+                !defer && at.head(worktree_key).as_ref() != Some(head)
+            }
+            // A subject with a value of another shape is a caller's mistake: never "no overlap".
+            _ => return OverlapReport::unverified(),
+        };
+        let mover = match subject {
+            Subj::Ref(full) => branch_mover(input, full),
+            _ => None,
+        };
+        if differs || mover.is_some() {
+            conflicts.push(Conflict {
+                subject: match subject {
+                    Subj::Path { worktree_key, path } => Subject::Path {
+                        worktree_key: worktree_key.clone(),
+                        path: path.clone(),
+                    },
+                    Subj::Ref(full) => Subject::Ref(full.clone()),
+                    Subj::Head { .. } => Subject::Ref("HEAD".to_owned()),
+                },
+                // An edit is not an engine event: without one, the later change is unattributed.
+                actor: mover.unwrap_or(Requester::Unattributed),
+                seen_ms,
+            });
+        }
+    }
+    conflicts.sort_by(|a, b| a.subject.cmp(&b.subject));
+    conflicts.dedup_by(|a, b| a.subject == b.subject);
+    OverlapReport {
+        conflicts,
+        ..OverlapReport::default()
+    }
+}
+
+/// The actor of the first event outside the set that names the branch `full` after the base of
+/// the agent's first change on it (D-TMC-34): history in between is not rewritten.
+fn branch_mover(input: &SelectedInput<'_>, full: &str) -> Option<Requester> {
+    let base = *input.first_base.get(full)?;
+    let short = full.strip_prefix("refs/heads/").unwrap_or(full);
+    let mut later: Vec<&super::engine::RawGitEvent> = input
+        .events
+        .iter()
+        .filter(|e| e.seq > base)
+        .filter(|e| e.branch.as_deref() == Some(short))
+        .filter(|e| !input.set.contains(&OpRef::GitEvent(e.seq)))
+        .collect();
+    later.sort_by_key(|e| e.seq);
+    later.first().map(|e| e.actor.clone())
+}
+
+type EntryPair = (
+    Option<(gitraptor_git::tm_write::files::Kind, gitraptor_git::Oid)>,
+    Option<(gitraptor_git::tm_write::files::Kind, gitraptor_git::Oid)>,
+);
+
+/// What a point holds for the subjects of an undo by agent.
+struct PointValues {
+    files: HashMap<String, HashMap<String, (TreeKind, gitraptor_git::Oid)>>,
+    index: HashMap<String, HashMap<String, (TreeKind, gitraptor_git::Oid)>>,
+    meta: super::store::Meta,
+}
+
+type TreeKind = gitraptor_git::tm_write::store::TreeEntryKind;
+
+impl PointValues {
+    fn read(
+        store: &SnapshotStore,
+        point: &str,
+        input: &SelectedInput<'_>,
+    ) -> Result<Self, CaptureError> {
+        use super::undo_agent::Subject as Subj;
+        let meta = store.meta(point)?;
+        let keys: BTreeSet<&str> = input
+            .finals
+            .keys()
+            .filter_map(|s| match s {
+                Subj::Path { worktree_key, .. } => Some(worktree_key.as_str()),
+                _ => None,
+            })
+            .collect();
+        let mut files = HashMap::new();
+        let mut index = HashMap::new();
+        for key in keys {
+            if Instant::now() >= input.deadline {
+                return Err(CaptureError::InvalidInput("deadline passed".into()));
+            }
+            let listed = |entries: Vec<(String, TreeKind, gitraptor_git::Oid)>| {
+                entries
+                    .into_iter()
+                    .map(|(path, kind, id)| (path, (kind, id)))
+                    .collect::<HashMap<_, _>>()
+            };
+            files.insert(key.to_owned(), listed(store.files(point, key)?));
+            index.insert(key.to_owned(), listed(store.staged(point, key)?));
+        }
+        Ok(Self { files, index, meta })
+    }
+
+    /// The file and index entries of `path`; `None` when one of them is not a file, a link or
+    /// absent (a submodule or a tree there cannot be the agent's final value).
+    fn path(&self, key: &str, path: &str) -> Option<EntryPair> {
+        let side =
+            |map: &HashMap<String, HashMap<String, (TreeKind, gitraptor_git::Oid)>>| match map
+                .get(key)
+                .and_then(|m| m.get(path))
+            {
+                None => Some(None),
+                Some((kind, id)) => entry_kind(*kind).map(|k| Some((k, *id))),
+            };
+        Some((side(&self.files)?, side(&self.index)?))
+    }
+
+    /// The tip of `full`; `Some(None)` when the branch does not exist, `None` when it is unreadable.
+    fn branch(&self, full: &str) -> Option<Option<gitraptor_git::Oid>> {
+        let short = full.strip_prefix("refs/heads/").unwrap_or(full);
+        match self.meta.branches.get(short) {
+            None => Some(None),
+            Some(hex) => gitraptor_git::Oid::from_hex(hex).map(Some),
+        }
+    }
+
+    fn head(&self, key: &str) -> Option<gitraptor_git::tm_write::worktree::HeadValue> {
+        use gitraptor_git::tm_write::worktree::HeadValue;
+        let w = self.meta.worktrees.iter().find(|w| w.key == key)?;
+        if w.detached {
+            return gitraptor_git::Oid::from_hex(w.head_commit.as_deref()?)
+                .map(HeadValue::Detached);
+        }
+        let name = w.head_branch.as_deref()?;
+        gitraptor_git::RefName::new(&format!("refs/heads/{name}"))
+            .ok()
+            .map(HeadValue::Branch)
+    }
+}
+
+fn entry_kind(kind: TreeKind) -> Option<gitraptor_git::tm_write::files::Kind> {
+    use gitraptor_git::tm_write::files::Kind;
+    match kind {
+        TreeKind::Blob => Some(Kind::File),
+        TreeKind::Executable => Some(Kind::Executable),
+        TreeKind::Symlink => Some(Kind::Symlink),
+        TreeKind::Gitlink | TreeKind::Tree => None,
+    }
 }
