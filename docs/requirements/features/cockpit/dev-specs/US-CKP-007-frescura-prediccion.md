@@ -4,7 +4,7 @@ title: "Dev Spec — US-CKP-007: una predicción vieja nunca se presenta como ac
 type: dev-spec
 status: draft
 created: 2026-10-27
-updated: 2026-10-27
+updated: 2026-11-09
 story: US-CKP-007
 feature: cockpit
 domain: GRP
@@ -41,8 +41,8 @@ lineage:
 constitution_gates: []
 validation:
   must_read_resolved: true
-  gaps_blocking: 1
-  ready_to_implement: false
+  gaps_blocking: 0
+  ready_to_implement: true
   gaps_release: 0
   ready_to_release: false
 tags: [cockpit, tui, prediccion-conflictos, frescura, antiguedad, i18n, br-ckp-calc-003]
@@ -84,7 +84,7 @@ El trabajo es solo de la TUI. El motor decide qué par se recalcula y cuándo (D
 
 | ID | Gap | Tipo | Bloquea | Cierre | Owner |
 |----|-----|------|---------|--------|-------|
-| G1 | T009 y el resto del PR-B de TS-CKP-001 sin construir: no existen `PairSummary`, `prediction.changed` ni la regla de base movida. El PR-B espera a G5 de DS-TS-CKP-001 (TS-GRP-005) | Bloqueante | T001 a T004 | Mergear el PR-B de TS-CKP-001 | Orquestador |
+| G1 | T009 y el resto del PR-B de TS-CKP-001: `PairSummary`, `prediction.changed` y la regla de base movida | Bloqueante | T001 a T004 | **Cerrado por #314** (2026-11-09). Nombres comprobados contra `main`: `PairSummary`, `PairStateView`, `PairReason`, `PairLevel` (`none` en el cable) y `PredictionChanged` en `crates/api/src/prediction.rs`; coinciden con esta DS | Orquestador |
 
 **Dependencia (no es gap):** [DS-US-CKP-006](./US-CKP-006-conflictos-previstos.md) ya está escrita y se implementa antes que esta DS: `PredictionModel` y `PairRow` en `apps/cli/src/tui/prediction.rs`, `RepoView.prediction` y el panel `ConflictPanelModel` en `apps/cli/src/tui/widgets/conflict_alert.rs`.
 
