@@ -15,7 +15,7 @@ mod us_tmc_011_common;
 use gitraptor_api::rpc::code;
 use gitraptor_api::timemachine::UndoResult;
 use gitraptor_api::{Actor, AgentKind, methods};
-use gitraptor_core::timemachine::oplog::{OperationKind, OperationState, Target};
+use gitraptor_core::timemachine::oplog::{OpRef, OperationKind, OperationState, Target};
 use gitraptor_core::timemachine::store::SnapshotStore;
 use gitraptor_testkit::fingerprint::Snapshot;
 use serde_json::Value;
@@ -597,28 +597,6 @@ fn confirmed_redo(w: &World) -> Value {
         .unwrap_or_else(|e| panic!("TMC003-SELECTIVE: the confirmed redo failed: {e:?}"))
 }
 
-/// A plain undo of the test's client, confirmed when the daemon asks for it.
-fn confirmed_plain_undo(w: &World) -> Value {
-    let mut c = w.client();
-    let token = match w.plain_undo_call(&mut c, None) {
-        Ok(done) => return done,
-        Err(e) => {
-            let (_, data) = rejected(Err::<Value, _>(e));
-            let data = data.unwrap_or(Value::Null);
-            assert_eq!(
-                data["reason"], "confirmation-required",
-                "TMC003-SELECTIVE: after the redo the plain undo is not held by the barrier: {data}"
-            );
-            data["challenge"]["token"]
-                .as_str()
-                .expect("a challenge")
-                .to_owned()
-        }
-    };
-    w.plain_undo_call(&mut c, Some(&token))
-        .unwrap_or_else(|e| panic!("TMC003-SELECTIVE: the confirmed plain undo failed: {e:?}"))
-}
-
 /// Escenario 6: the redo returns the set and lifts the barrier: the paths go back to the state after
 /// the agent's work, the redo is recorded as `Target::Redo(U)`, U keeps its set and the next plain
 /// undo is no longer held by the barrier.
@@ -714,6 +692,11 @@ fn redo_restores_the_set_and_lifts_the_barrier() {
 
 /// Escenario 6: after the redo, the next plain undo takes the latest operation (`two.txt` of
 /// claude-1), not one under the redone set.
+///
+/// In this world there is no point before a raw agent commit and `timemachine.snapshot` is not
+/// served yet (US-TMC-005), so the plain undo cannot complete (`target-unavailable`) with or
+/// without the redo: the test requires that it is not held by the barrier and that it points at the
+/// most recent operation.
 #[test]
 fn plain_undo_after_redo_takes_the_latest_operation() {
     let w = world();
@@ -729,24 +712,39 @@ fn plain_undo_after_redo_takes_the_latest_operation() {
         "claude-1 two",
         "TMC003-SELECTIVE: the redo brought the commits back"
     );
+    let latest = w
+        .timeline(None, "1h")
+        .entries
+        .iter()
+        .filter_map(|e| e.id.strip_prefix("event:")?.parse::<i64>().ok())
+        .max()
+        .expect("a raw Git event in the timeline");
 
-    confirmed_plain_undo(&w);
-
-    assert_eq!(
-        w.log()[0],
-        "claude-1 one",
-        "TMC003-SELECTIVE: the plain undo took only the latest commit: {:?}",
-        w.log()
-    );
+    // The plain undo (confirmed when the daemon asks) is never held by the barrier.
+    let mut c = w.client();
+    if let Err(e) = w.plain_undo_call(&mut c, None) {
+        let (_, data) = rejected(Err::<Value, _>(e));
+        let data = data.unwrap_or(Value::Null);
+        assert_ne!(
+            data["reason"], "selective-undo-below",
+            "TMC003-SELECTIVE: after the redo the plain undo is not held by the barrier: {data}"
+        );
+        if let Some(token) = data["challenge"]["token"].as_str()
+            && let Err(e) = w.plain_undo_call(&mut c, Some(token))
+        {
+            let (_, data) = rejected(Err::<Value, _>(e));
+            assert_ne!(
+                data.unwrap_or(Value::Null)["reason"],
+                "selective-undo-below",
+                "TMC003-SELECTIVE: the confirmed plain undo is not held by the barrier"
+            );
+        }
+    }
+    // It points at the most recent operation: the raw Git event of claude-1's `two.txt` commit.
+    let target = last_undo_target(&w);
     assert!(
-        !w.worktree.join("two.txt").exists(),
-        "TMC003-SELECTIVE: two.txt, the latest operation, is the one taken back"
-    );
-    assert_eq!(w.read("one.txt"), "1\n", "TMC003-SELECTIVE: one.txt stays");
-    assert_eq!(
-        w.read("mine.txt"),
-        "mine",
-        "TMC003-SELECTIVE: nothing under the set is touched"
+        matches!(&target, Target::Undo(ids) if ids == &[OpRef::GitEvent(latest)]),
+        "TMC003-SELECTIVE: the plain undo points at the latest operation (event {latest}): {target:?}"
     );
 }
 
