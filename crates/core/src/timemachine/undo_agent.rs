@@ -802,6 +802,21 @@ pub(super) fn is_excluded(exclusions: &[super::oplog::Exclusion], key: &str, pat
         })
 }
 
+/// What the branch rule of an undo by agent reads from `events` (TD-TMC-003). Stub until the
+/// plan is approved: the events as they are.
+#[allow(dead_code)]
+pub(super) fn branch_rule_events(
+    events: &[RawGitEvent],
+    _ops: &[super::oplog::OperationView],
+    _snaps: &[super::oplog::SnapshotView],
+    _floor: i64,
+    _key: &str,
+    _set: &[OpRef],
+    _own_sessions: &BTreeSet<String>,
+) -> Vec<RawGitEvent> {
+    events.to_vec()
+}
+
 #[cfg(test)]
 #[path = "undo_agent_tests.rs"]
 mod tests;
@@ -809,3 +824,7 @@ mod tests;
 #[cfg(test)]
 #[path = "undo_agent_more_tests.rs"]
 mod more_tests;
+
+#[cfg(test)]
+#[path = "undo_agent_echo_tests.rs"]
+mod echo_tests;
