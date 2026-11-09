@@ -70,7 +70,7 @@ tags: [cockpit, catalogo-operaciones, ejecutor, operacion-protegida, capa, seria
 - **Entorno**: con un hook que lee la terminal y editores apuntando a un canario, nada se cuelga y el canario no se ejecuta. Variables de sesión inválidas se omiten con diagnóstico y un PATH con un `git` falso no cambia el `git` lanzado. Un `refs/replace` no cambia los objetos de la operación; un hook solo ve los descriptores 0, 1 y 2.
 - **Ruta nueva y ramas (H-02, L-02)**: se rechazan un padre con un enlace simbólico, una ruta dentro de `.git` o de un worktree observado, una ruta que aparece entre preparar y ejecutar, y las ramas `HEAD`, `@`, hex de 40 caracteres y con caracteres de anchura cero.
 - **Tiempo**: un hook de capa `mcp` que no termina se interrumpe con el motivo `time-limit`; uno igual de capa `cockpit` espera a Cancelar.
-- **Nunca push ni descargas (M-02)**: captura de red durante todo el catálogo: 0 conexiones; en un *partial clone* con un objeto ausente, fallo sin red.
+- **Nunca push ni descargas en las operaciones locales (M-02)**: captura de red durante las operaciones locales del catálogo: 0 conexiones (Validación 16 de ADR-CKP-002, enmendada el 2026-11-08); en un *partial clone* con un objeto ausente, fallo sin red.
 - **Interrupción (regresión de INF-TMC-001)**: un daemon que muere a mitad deja la operación `interrumpida` y Deshacer vuelve al previo.
 
 #### Verificación Manual / Sandbox
