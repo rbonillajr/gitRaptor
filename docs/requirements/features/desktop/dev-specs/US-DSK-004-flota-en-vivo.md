@@ -214,6 +214,7 @@ graph LR
 - `ingest.rs`: `key(raw: &str) -> String` (FNV-1a 64, 16 dígitos hex en minúscula, sobre los bytes crudos); `repo`, `worktree`, `session`, `pair` (§ Contratos compartidos). Toda ruta y nombre pasa por `display::visible`; la carpeta es el último componente de la ruta cruda, saneado después de cortarlo. `detached_at` solo pasa si son 40 o 64 dígitos hex, y se manda entero (la UI corta a 7). `Actor::Agent { kind: claude-code }` → `{ kind: "claude-code" }`; `other` → `{ kind: "other", name }` saneado; `Actor::Unattributed` no aparece en `SessionView` (siempre es un agente) y, si llegara, la sesión se descarta.
 - `fleet_open` según [§ Contrato de API](#contrato-de-api); llama `EngineHub::open`. `commands.json` suma `"fleet_open"` y la capability `allow-fleet-open`.
 - **Decisión del orquestador (2026-11-09), tras el crítico**: el id de `fleet_open` se valida al deserializar `FleetOpenParams` o al principio de `EngineHub::open`, **antes** de comprobar que hay supervisor (un id inválido da `invalid-params` aunque no haya `watch`); `CommandError` no gana variantes.
+- **Decisión del orquestador (2026-11-09), a petición de Rene**: la lista de `commands.json` se sigue comparando **exacta** en `tests/commands.rs` (ahora `app_info`, `engine_retry`, `engine_watch` y `fleet_open`); no se relaja a «contiene» porque esa comparación es la que garantiza la lista cerrada de ADR-GRP-017.
 
 - **Depende:** T001
 - **Refs:** D3, D8; DS-US-CKP-001 § 2 y D1; ADR-CKP-003 § 4
