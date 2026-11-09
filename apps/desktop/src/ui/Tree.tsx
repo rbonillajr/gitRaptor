@@ -94,8 +94,9 @@ export function TreeRow({ node, level, posInSet, setSize, expanded, selected, ta
       className={cx(
         "relative mx-(--gr-space-2) flex shrink-0 items-center gap-(--gr-space-2) rounded-sm pe-(--gr-space-2) cursor-pointer select-none gr-ring-inset gr-motion",
         HEIGHT[node.kind],
-        node.kind === "group" || node.disabled ? "text-text-muted" : "text-text-main",
-        selected ? "bg-accent-glow text-text-main" : "gr-hover:bg-surface-hover gr-hover:text-text-main",
+        selected
+          ? "bg-accent-glow text-text-main"
+          : cx(node.kind === "group" || node.disabled ? "text-text-muted" : "text-text-main", "gr-hover:bg-surface-hover gr-hover:text-text-main"),
         node.disabled && "cursor-default",
       )}
     >
