@@ -101,30 +101,20 @@ describe("engine states", () => {
     expect(screen.queryByText("Nothing to show yet.")).toBeNull();
   });
 
-  it("stopped engine says no history is recorded and offers a retry plus the command to start it", () => {
+  it("stopped engine says no history is recorded and offers to start it", () => {
     const onRetry = vi.fn();
     show(scenario("stopped"), { onRetry });
     expect(screen.getByText("The GitRaptor engine is not running: no history is being recorded for your repos.")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Engine stopped" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Start engine" }), "the app cannot start the engine yet").toBeNull();
-    expect(screen.getAllByText("raptor daemon start").every((el) => el.tagName === "CODE")).toBe(true);
-    const [retry] = screen.getAllByRole("button", { name: "Retry now" });
-    if (!retry) throw new Error("no retry button");
-    fireEvent.click(retry);
-    expect(onRetry).toHaveBeenCalledExactlyOnceWith(false);
+    const [start] = screen.getAllByRole("button", { name: "Start engine" });
+    if (!start) throw new Error("no start button");
+    fireEvent.click(start);
+    expect(onRetry).toHaveBeenCalledExactlyOnceWith(true);
   });
 
   it("a failed launch adds its sentence to the band", () => {
     show(scenario("stopped, launch failed"));
     expect(within(screen.getByRole("status")).getByText(/It could not be started\./)).toBeInTheDocument();
-  });
-
-  it("copies the start command", async () => {
-    show(scenario("stopped"));
-    const [copy] = screen.getAllByRole("button", { name: "Copy" });
-    if (!copy) throw new Error("no copy button");
-    await act(async () => void fireEvent.click(copy));
-    expect(writeText).toHaveBeenCalledWith("raptor daemon start");
   });
 
   it("lost connection dims the fleet and says since when", async () => {
@@ -182,14 +172,12 @@ describe("engine states", () => {
     expect(screen.getByText(/The running engine is older than this app\. Update the GitRaptor installation/)).toBeInTheDocument();
   });
 
-  it("the app's own older engine offers a retry and the start command, not a start button", () => {
+  it("the app's own older engine offers to start it again", () => {
     const onRetry = vi.fn();
     show(scenario("incompatible, own engine"), { onRetry });
     expect(screen.getByText(/this app's own, from an older version/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Start engine" })).toBeNull();
-    expect(screen.getByText("raptor daemon start").tagName).toBe("CODE");
-    fireEvent.click(screen.getByRole("button", { name: "Retry now" }));
-    expect(onRetry).toHaveBeenCalledExactlyOnceWith(false);
+    fireEvent.click(screen.getByRole("button", { name: "Start engine" }));
+    expect(onRetry).toHaveBeenCalledExactlyOnceWith(true);
   });
 
   it("an app older than the engine asks to update the app", () => {
