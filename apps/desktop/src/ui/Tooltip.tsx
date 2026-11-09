@@ -50,6 +50,8 @@ const GRACE_MS = 100;
 
 /** Time of the last tooltip closing, shared by every Tooltip: a neighbour opened inside 300 ms skips the delay (D12). */
 let lastClosedAt = Number.NEGATIVE_INFINITY;
+/** Mounted tooltips: with none left there is no neighbour to skip the delay for, so the window is forgotten. */
+let mounted = 0;
 
 /** The visual of a tooltip with no behaviour: text plus the shortcut in mono (and its spoken phrase). */
 export function TooltipSurface({ content, shortcut, id }: { content: string; shortcut?: string; id?: string }) {
@@ -144,9 +146,12 @@ export function Tooltip({ content, shortcut, describes = false, placement = "bot
   };
   useEffect(() => {
     const pending = timers.current;
+    mounted += 1;
     return () => {
       clearTimeout(pending.open);
       clearTimeout(pending.close);
+      mounted -= 1;
+      if (mounted === 0) lastClosedAt = Number.NEGATIVE_INFINITY;
     };
   }, []);
 
