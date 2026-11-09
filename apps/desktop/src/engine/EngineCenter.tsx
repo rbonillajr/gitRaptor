@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next";
 import type { CandidateDto, ConnState } from "@/client/engine-types";
 import { Button, CopyCommand, Skeleton, StatePanel } from "@/ui";
 import { cx } from "@/ui/cx";
-import { START_COMMAND } from "./EngineBand";
 import { MIN_GIT, type EngineView } from "./engine-view";
 
 export interface EngineCenterProps {
@@ -38,13 +37,11 @@ function IncompatiblePanel({ conn, onRetry, pending }: { conn: Incompatible; onR
         message={
           <>
             <p className="m-0">{t("engine.incompatible.ownEngine")}</p>
-            <p className="m-0">{t("engine.stopped.howTo")}</p>
-            <CopyCommand command={START_COMMAND} />
           </>
         }
         action={
-          <Button disabled={pending} onClick={() => onRetry(false)}>
-            {t("engine.action.retryNow")}
+          <Button disabled={pending} onClick={() => onRetry(true)}>
+            {t("engine.action.start")}
           </Button>
         }
       />
@@ -139,13 +136,11 @@ function Body({ center, conn, gitVersion, candidates, onRetry, pending = false, 
           title={t("engine.stopped.title")}
           message={
             <>
-              <p className="m-0">{t("engine.stopped.howTo")}</p>
-              <CopyCommand command={START_COMMAND} />
             </>
           }
           action={
-            <Button disabled={pending} onClick={() => onRetry(false)}>
-              {t("engine.action.retryNow")}
+            <Button disabled={pending} onClick={() => onRetry(true)}>
+              {t("engine.action.start")}
             </Button>
           }
         />

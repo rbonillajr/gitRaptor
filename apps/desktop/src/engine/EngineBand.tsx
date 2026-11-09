@@ -1,14 +1,11 @@
 import { useTranslation } from "react-i18next";
-import { Button, CopyCommand } from "@/ui";
+import { Button } from "@/ui";
 import { cx } from "@/ui/cx";
 import type { EngineView } from "./engine-view";
 
-/** The literal the user runs while the app cannot launch the engine itself (the launcher is a separate dependency). */
-export const START_COMMAND = "raptor daemon start";
-
 export interface EngineBandProps {
   band: NonNullable<EngineView["band"]>;
-  /** `start` is only ever `false` for now: the app cannot start the engine, so it only asks to retry the connection. */
+  /** `true` asks the bundled launcher to start the engine (`engine_retry { start: true }`); `false` only retries the connection. */
   onRetry: (start: boolean) => void;
   /** Buttons stay `aria-disabled` until the next connection state arrives. */
   pending?: boolean;
@@ -35,11 +32,10 @@ export function EngineBand({ band, onRetry, pending = false }: EngineBandProps) 
         {band.detailKey ? <> {t(band.detailKey)}</> : null}
       </span>
       {band.action ? (
-        <Button size="sm" disabled={pending} onClick={() => onRetry(false)}>
-          {t("engine.action.retryNow")}
+        <Button size="sm" disabled={pending} onClick={() => onRetry(band.action === "start")}>
+          {band.action === "start" ? t("engine.action.start") : t("engine.action.retryNow")}
         </Button>
       ) : null}
-      {band.action === "start" ? <CopyCommand command={START_COMMAND} /> : null}
     </div>
   );
 }

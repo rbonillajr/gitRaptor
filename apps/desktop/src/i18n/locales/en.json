@@ -106,8 +106,7 @@
       "noCommand": "The engine's path has characters that can't be copied safely; stop it from the installation that started it."
     },
     "stopped": {
-      "title": "Engine stopped",
-      "howTo": "Start it from a terminal:"
+      "title": "Engine stopped"
     },
     "rejected": {
       "title": "Engine channel refused",

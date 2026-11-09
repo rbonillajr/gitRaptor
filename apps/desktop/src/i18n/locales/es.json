@@ -106,8 +106,7 @@
       "noCommand": "La ruta del motor tiene caracteres que no se pueden copiar con seguridad; páralo desde la instalación que lo arrancó."
     },
     "stopped": {
-      "title": "Motor parado",
-      "howTo": "Arráncalo desde una terminal:"
+      "title": "Motor parado"
     },
     "rejected": {
       "title": "El motor rechazó el canal",
