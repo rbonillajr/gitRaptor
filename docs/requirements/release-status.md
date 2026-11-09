@@ -198,7 +198,7 @@
 | [SPIKE-GRP-002](features/motor-local/technical-stories/SPIKE-GRP-002-viabilidad-observador.md) | Viabilidad del observador de cambios a escala en los tres SO | Implementado en parte (`partially-implemented`) | #17, #23 | 2 |
 | [TD-GRP-001](features/motor-local/technical-stories/TD-GRP-001-acl-windows.md) | Verificación de ACL en Windows: git.exe (SEC-10) y perfil (SEC-06) | Implementado en parte (`partially-implemented`) | #72 | 2 |
 | [TS-GRP-004](features/motor-local/technical-stories/TS-GRP-004-canal-clientes.md) | Canal local de clientes y contrato de mensajes | Implementado en parte (`partially-implemented`) | #36, #87, #123, #133, #158 | 3 |
-| [TS-GRP-005](features/motor-local/technical-stories/TS-GRP-005-clases-trabajo-ahorro-energia.md) | Clases de trabajo del daemon y mecanismo de ahorro de energía | Implementado en parte (`partially-implemented`) | #298 | — |
+| [TS-GRP-005](features/motor-local/technical-stories/TS-GRP-005-clases-trabajo-ahorro-energia.md) | Clases de trabajo del daemon y mecanismo de ahorro de energía | Implementado en parte (`partially-implemented`) | #298, #323 | — |
 | [TD-GRP-002](features/motor-local/technical-stories/TD-GRP-002-motor-bajo-rafaga.md) | Frescura y memoria del motor bajo una ráfaga de archivos | Listo (`ready`) | — | — |
 | [TD-GRP-003](features/motor-local/technical-stories/TD-GRP-003-nfr04-maquina-referencia.md) | Presupuesto de NFR-04 sin gate automático: medirlo en una máquina de referencia | Listo (`ready`) | — | — |
 | [TS-GRP-009](features/motor-local/technical-stories/TS-GRP-009-clase-desktop-perfil-lectura.md) | Clase de cliente de la app de escritorio y perfil de lectura mcp con un agente en su ascendencia | Listo (`ready`) | — | — |
@@ -344,7 +344,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [INF-TMC-001](features/time-machine/technical-stories/INF-TMC-001-arnes-caos-recuperable.md) | Arnés de caos y de garantías de los snapshots en los tres SO | Implementado en parte (`partially-implemented`) | — | — |
 | [SPIKE-CKP-001](features/cockpit/technical-stories/SPIKE-CKP-001-prediccion-5s.md) | Predicción de conflictos en ≤ 5 s p95 sin escribir en el repo: merge en memoria frente a almacén en el perfil | Implementado en parte (`partially-implemented`) | #266 | 3 |
 | [TS-GRP-004](features/motor-local/technical-stories/TS-GRP-004-canal-clientes.md) | Canal local de clientes y contrato de mensajes | Implementado en parte (`partially-implemented`) | #36, #87, #123, #133, #158 | 3 |
-| [TS-GRP-005](features/motor-local/technical-stories/TS-GRP-005-clases-trabajo-ahorro-energia.md) | Clases de trabajo del daemon y mecanismo de ahorro de energía | Implementado en parte (`partially-implemented`) | #298 | — |
+| [TS-GRP-005](features/motor-local/technical-stories/TS-GRP-005-clases-trabajo-ahorro-energia.md) | Clases de trabajo del daemon y mecanismo de ahorro de energía | Implementado en parte (`partially-implemented`) | #298, #323 | — |
 | [US-CKP-002](features/cockpit/user-stories/US-CKP-002-orden-atencion-terminadas.md) | La lista pone primero lo que pide atención y no se llena de sesiones viejas | Implementado en parte (`partially-implemented`) | #284 | — |
 | [US-CKP-005](features/cockpit/user-stories/US-CKP-005-terminal-pequena-sin-color.md) | La TUI se puede usar en una terminal pequeña, sin color o en ASCII | Implementado en parte (`partially-implemented`) | #273 | 2 |
 | [US-CKP-006](features/cockpit/user-stories/US-CKP-006-conflictos-previstos.md) | El desarrollador ve qué agentes van a chocar antes de hacer merge | Implementado en parte (`partially-implemented`) | — | — |
@@ -631,7 +631,7 @@ Canal local de clientes y contrato de mensajes
 - Retención de la auditoría de comandos reservados.
 - Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../architecture/xplat-pendientes.md)).
 
-### [TS-GRP-005](features/motor-local/technical-stories/TS-GRP-005-clases-trabajo-ahorro-energia.md) — #298
+### [TS-GRP-005](features/motor-local/technical-stories/TS-GRP-005-clases-trabajo-ahorro-energia.md) — #298, #323
 
 Clases de trabajo del daemon y mecanismo de ahorro de energía
 

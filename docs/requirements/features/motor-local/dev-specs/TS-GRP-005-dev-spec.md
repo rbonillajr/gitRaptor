@@ -64,7 +64,7 @@ tags: [motor-local, recursos, prioridad, qos, ahorro-energia, power-source, daem
 
 # DS-TS-GRP-005 · Clases de trabajo del daemon y ahorro de energía
 
-Implementado en parte en: PR #298 (PR-A: T001 a T006, con D17) y PR #PRB (PR-B: T007 a T014, con D18). Falta: RES-06 del hashing de la captura continua (TD-TMC-002, D18) y la cifra de RES-07 en una máquina tranquila (T013).
+Implementado en parte en: PR #298 (PR-A: T001 a T006, con D17) y PR #323 (PR-B: T007 a T014, con D18). Falta: RES-06 del hashing de la captura continua (TD-TMC-002, D18) y la cifra de RES-07 en una máquina tranquila (T013).
 
 ## Contexto rápido
 

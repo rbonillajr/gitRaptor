@@ -115,7 +115,7 @@ Un job por SO, `engine bench (<so>)`, de unos 15 a 30 minutos. La protección de
   - RES-03: despertares en reposo.
   - RES-04: vigilancias de inotify frente a `max_user_watches` y vuelta a la línea base tras 100 altas y bajas.
   - RES-05: el banco solo reporta el crecimiento del perfil.
-  - RES-07: escenario con todos los núcleos saturados, que bloquea TS-GRP-005. **Escenario hecho (2026-11-08, PR #PRB de TS-GRP-005):** `cargo bench -p gitraptor-core --bench tm_snapshot -- --saturated` y `cargo bench -p gitraptor-cli --bench engine -- --quick --saturated`, con un proceso ocupado por núcleo lógico (`gitraptor_testkit::cpu_load`). Primera medición en el Mac de desarrollo (10 núcleos), **no válida como gate**, porque había otros workers en marcha (carga 25–38):
+  - RES-07: escenario con todos los núcleos saturados, que bloquea TS-GRP-005. **Escenario hecho (2026-11-08, PR #323 de TS-GRP-005):** `cargo bench -p gitraptor-core --bench tm_snapshot -- --saturated` y `cargo bench -p gitraptor-cli --bench engine -- --quick --saturated`, con un proceso ocupado por núcleo lógico (`gitraptor_testkit::cpu_load`). Primera medición en el Mac de desarrollo (10 núcleos), **no válida como gate**, porque había otros workers en marcha (carga 25–38):
     - Previo, 10 worktrees, p95: 119 a 255 ms.
     - Espera al escritor, p95: 9,2 a 24,6 ms. Sin el saturador ya daba 20,5–22,9 ms, así que el ruido viene de la máquina.
     - Motor, escenarios de una edición, p95: 148 a 231 ms, todos ≤ 300.
