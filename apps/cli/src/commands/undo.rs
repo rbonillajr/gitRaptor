@@ -15,10 +15,15 @@ pub(crate) struct Cmd {
     /// days), as one undo.
     #[arg(long, value_name = "DURATION")]
     since: Option<String>,
+    /// Undo only the work of one agent in this worktree: a session id from
+    /// `raptor sessions --json` or an agent name such as claude-code. With --since, only that
+    /// period; without it, the last 30 days.
+    #[arg(long, value_name = "ID")]
+    agent: Option<String>,
 }
 
 impl Cmd {
     pub(crate) fn run(self, _: &Global) -> ExitCode {
-        undo::run(self.json, self.since.as_deref())
+        undo::run(self.json, self.since.as_deref(), self.agent.as_deref())
     }
 }
