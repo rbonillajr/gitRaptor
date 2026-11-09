@@ -23,11 +23,14 @@ use crate::profile::ProfileDirs;
 use crate::timemachine::confirm::Confirmation;
 use crate::timemachine::continuous::CaptureDeps;
 use crate::timemachine::engine::{EngineLink, RawGitEvent, SessionAttribution};
-use crate::timemachine::oplog::{Channel, Oplog, Requester, RequesterOrigin, SnapshotLevel};
+use crate::timemachine::oplog::{
+    Channel, NewOperation, OpRef, OperationKind, OperationTransition, Oplog, Requester,
+    RequesterOrigin, Scope, SnapshotLevel, Target,
+};
 use crate::timemachine::protected::{McpRepos, TimeMachineBackend, TmRepos};
 use crate::timemachine::store::{CaptureRequest, WorktreeScope};
 use crate::timemachine::undo::{
-    Selection, TmRepoHandle, UndoDone, UndoEnv, UndoError, undo_selected,
+    PlanRefusal, RawSide, Selection, TmRepoHandle, UndoDone, UndoEnv, UndoError, undo_selected,
 };
 
 const REPO: &str = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
@@ -293,4 +296,175 @@ fn a_reset_without_a_base_is_overlap_unverified() {
     assert_eq!(r.head(), first, "nothing changed: the branch stays");
     assert_eq!(r.read("api.rs").as_deref(), Some("v1\n"));
     assert_eq!(r.read("other.txt").as_deref(), Some("not the agent's\n"));
+}
+
+#[test]
+fn a_branch_another_actor_moved_in_the_window_is_never_written() {
+    let r = rig();
+    let first = r.commit("api.rs", "v1\n");
+    let second = r.commit("api.rs", "v2\n");
+    r.point(1);
+    let reset = r.reset(2, &first);
+    // Before the next point, another actor creates a branch (from another worktree, as far as
+    // the points can tell): it differs between T and B, but the reset never named it.
+    r.f.git(&["branch", "hotfix", &second]);
+    r.point(2);
+    let git = system_git();
+
+    r.run(vec![reset], &git)
+        .expect("the undo of the agent's reset runs");
+
+    assert_eq!(r.head(), second, "the branch the reset named goes back");
+    assert_eq!(
+        r.f.git(&["rev-parse", "--verify", "refs/heads/hotfix"])
+            .trim(),
+        second,
+        "a branch the operation did not name is left as the other actor left it"
+    );
+}
+
+// --- `plan` read directly: the owner rule of oplog operations and its fail-closed reads. ---
+
+fn named(name: &str, session: &str) -> Requester {
+    Requester::Agent {
+        name: name.into(),
+        origin: RequesterOrigin::Detected,
+        session_id: session.into(),
+    }
+}
+
+fn unattributed_who() -> Who {
+    Who {
+        actor: Actor::Unattributed,
+        requester: Requester::Unattributed,
+    }
+}
+
+impl Rig {
+    /// A finished oplog operation of `kind` by `who`, over this worktree only.
+    fn operation(&self, kind: OperationKind, who: Requester, prior: &str) -> String {
+        let mut log = self.repo.repo.oplog.lock().unwrap();
+        let id = log
+            .record_operation(
+                &NewOperation {
+                    kind,
+                    subtype: None,
+                    scope: Scope {
+                        worktrees: vec![self.repo.repo.worktree.to_string_lossy().into_owned()],
+                        refs: vec!["refs/heads/main".into()],
+                    },
+                    requester: who,
+                    channel: Channel::Mcp,
+                    confirmed: false,
+                    target: Target::None,
+                    warnings: Vec::new(),
+                    engine_mark: 1,
+                },
+                1,
+            )
+            .unwrap();
+        for step in [
+            OperationTransition::PriorSnapshot { snapshot_id: prior },
+            OperationTransition::Ready,
+            OperationTransition::Applying { step: 1 },
+            OperationTransition::Finished,
+        ] {
+            log.advance_operation(&id, step, 2).unwrap();
+        }
+        id
+    }
+
+    /// `plan` with no store, so a set that forms is refused at its first change and the refusal
+    /// carries it.
+    fn plan(
+        &self,
+        common_dir: &Path,
+        who: &Who,
+        sessions: &SessionAttribution,
+        selector: &str,
+    ) -> PlanRefusal {
+        let confirm = Confirmation::unavailable();
+        let raw = RawSide {
+            events: Vec::new(),
+            floor: 0,
+        };
+        let input = super::AgentPlanInput {
+            oplog: &self.repo.repo.oplog,
+            store: None,
+            common_dir,
+            worktree: &self.repo.repo.worktree,
+            who,
+            channel: Channel::Cli,
+            confirm: &confirm,
+            raw: &raw,
+            sessions: Some(sessions),
+            selector,
+            since_ms: 0,
+            deadline: std::time::Instant::now() + Duration::from_secs(10),
+        };
+        match super::plan(&input) {
+            Ok(_) => panic!("without a store the plan cannot finish"),
+            Err(refusal) => refusal,
+        }
+    }
+}
+
+#[test]
+fn a_restore_over_the_worktree_enters_the_set_by_its_frozen_requester() {
+    let r = rig();
+    let prior = r.point(1);
+    let id = r.operation(OperationKind::Restore, agent(), &prior);
+    let sessions = SessionAttribution(HashMap::from([(A.to_owned(), agent())]));
+
+    let (reason, _, set, _) = r.plan(&r.repo.repo.common_dir, &who(), &sessions, A);
+
+    assert_eq!(set, vec![OpRef::Oplog(id)], "the restore is the agent's");
+    assert_eq!(reason, TmRejectReason::TargetUnavailable);
+}
+
+#[test]
+fn a_protected_operation_follows_the_corrected_attribution() {
+    let r = rig();
+    let prior = r.point(1);
+    let id = r.operation(OperationKind::Protected, agent(), &prior);
+    // A was corrected from claude-code to codex-1 after the operation was recorded.
+    let sessions = SessionAttribution(HashMap::from([(A.to_owned(), named("codex-1", A))]));
+
+    assert_eq!(
+        super::operation_owner(OperationKind::Protected, &agent(), &sessions),
+        named("codex-1", A)
+    );
+    assert_eq!(
+        super::operation_owner(OperationKind::Restore, &agent(), &sessions),
+        agent(),
+        "any other kind keeps its frozen requester"
+    );
+
+    let common = &r.repo.repo.common_dir;
+    let (_, _, set, _) = r.plan(common, &unattributed_who(), &sessions, "codex-1");
+    assert_eq!(set, vec![OpRef::Oplog(id)], "the operation goes to codex-1");
+    let (reason, _, set, _) = r.plan(common, &unattributed_who(), &sessions, "claude-code");
+    assert_eq!(
+        reason,
+        TmRejectReason::NothingToUndo,
+        "and never to claude-code"
+    );
+    assert!(set.is_empty());
+}
+
+#[test]
+fn unreadable_registered_worktrees_refuse_the_request() {
+    let r = rig();
+    let sessions = SessionAttribution(HashMap::from([(A.to_owned(), agent())]));
+    let not_a_repo = r.f.profile.join("not-a-repo");
+    std::fs::create_dir_all(&not_a_repo).unwrap();
+
+    let (reason, _, set, _) = r.plan(&not_a_repo, &who(), &sessions, A);
+
+    assert_eq!(
+        reason,
+        TmRejectReason::WorktreeUnavailable,
+        "a branch in use elsewhere cannot be told apart: fail closed"
+    );
+    assert!(set.is_empty());
 }
