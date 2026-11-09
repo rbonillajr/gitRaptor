@@ -25,6 +25,9 @@ export type GuardBlocks =
       readAtMs: number | null;
     };
 
+/** When the last `guardBlocks` of each repo arrived, to tell how old the entries of an unavailable read are. */
+const lastGuardRead = new Map<string, number>();
+
 /** The global entry: the last snapshot, or the restricted view of D6 (`restricted`, no repos). */
 export type GlobalEntry = GlobalDto & { restricted?: true };
 
@@ -166,7 +169,24 @@ export function applyEngineBatch(client: QueryClient, batch: readonly EngineMess
           return { ...f, repo: { ...f.repo, pairs: [...byId.values()], pairsTruncated }, details, lastComputed };
         });
         break;
+      case "guardBlocks":
+        lastGuardRead.set(message.blocks.repoId, Date.now());
+        client.setQueryData<GuardBlocks>(engineKeys.guard(message.blocks.repoId), { state: "ready", ...message.blocks });
+        break;
+      case "guardBlocksUnavailable": {
+        if (message.cause === "not-open" && useUiStore.getState().selectedRepoId !== message.repoId) break;
+        client.setQueryData<GuardBlocks>(engineKeys.guard(message.repoId), (old) => ({
+          state: "unavailable",
+          cause: message.cause,
+          protection: message.protection,
+          entries: old?.entries ?? [],
+          readAtMs: old === undefined ? null : old.state === "unavailable" ? old.readAtMs : (lastGuardRead.get(message.repoId) ?? null),
+        }));
+        break;
+      }
       case "repoClosed":
+        lastGuardRead.delete(message.repoId);
+        client.removeQueries({ queryKey: engineKeys.guard(message.repoId), exact: true });
         useEngineStore.getState().markRepoClosed(message.repoId);
         client.removeQueries({ queryKey: engineKeys.repo(message.repoId), exact: true });
         if (useUiStore.getState().selectedRepoId === message.repoId) useUiStore.getState().selectRepo(null);

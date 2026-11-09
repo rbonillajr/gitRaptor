@@ -19,7 +19,7 @@ export { StatePanel, type StatePanelProps } from "./StatePanel";
 export { StatusDot, type StatusTone } from "./StatusDot";
 export { StatusPill, type StatusPillProps, type StatusPillTone } from "./StatusPill";
 export { Table, TableHeader, TableRow, type TableColumn, type TableProps, type TableRowProps } from "./Table";
-export { ToastProvider, ToastSurface, useToast, type ToastInput, type ToastKind } from "./Toast";
+export { ToastProvider, ToastSurface, useOptionalToast, useToast, type ToastInput, type ToastKind } from "./Toast";
 export { Toggle, type ToggleProps } from "./Toggle";
 export { Tooltip, TooltipSurface, type TooltipProps } from "./Tooltip";
 export { Tree, TreeRow, type TreeNode, type TreeNodeKind, type TreeProps, type TreeRowProps } from "./Tree";

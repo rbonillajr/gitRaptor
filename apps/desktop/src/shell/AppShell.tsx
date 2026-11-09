@@ -6,6 +6,8 @@ import { RepoTreeContainer } from "@/fleet/RepoTreeContainer";
 import { EngineBand } from "@/engine/EngineBand";
 import { EngineCenter } from "@/engine/EngineCenter";
 import { useEngine } from "@/engine/useEngine";
+import { GuardrailsNavRow } from "@/guardrails/GuardrailsNavRow";
+import { useGuardUnseen } from "@/guardrails/unseen-store";
 import { useUiStore } from "@/state/ui-store";
 import { Panel } from "@/ui/Panel";
 import { TitleBar } from "./TitleBar";
@@ -25,6 +27,10 @@ export function AppShell() {
   const theme = useUiStore((s) => s.theme);
   const sidebarOpen = useUiStore((s) => s.sidebarOpen);
   const detailOpen = useUiStore((s) => s.detailOpen);
+  const repoOpen = useUiStore((s) => s.selectedRepoId !== null);
+  const guardrailsOpen = useUiStore((s) => s.center.view === "guardrails");
+  const openGuardrails = useUiStore((s) => s.openGuardrails);
+  const unseenBlocks = useGuardUnseen((s) => s.count);
   const toggleSidebar = useUiStore((s) => s.toggleSidebar);
   const toggleDetail = useUiStore((s) => s.toggleDetail);
   const cycleTheme = useUiStore((s) => s.cycleTheme);
@@ -112,6 +118,11 @@ export function AppShell() {
           className="w-(--gr-size-sidebar) shrink-0 p-0!"
         >
           <RepoTreeContainer />
+          {repoOpen && engine.view.center.kind !== "restricted" ? (
+            <div className="mt-auto p-(--gr-space-2)">
+              <GuardrailsNavRow unseen={unseenBlocks} active={guardrailsOpen} onOpen={openGuardrails} />
+            </div>
+          ) : null}
         </Panel>
         <Panel as="main" className="min-w-0 flex-1 overflow-hidden p-0!">
           {engine.view.band ? <EngineBand band={engine.view.band} onRetry={onRetry} pending={retryPending} /> : null}

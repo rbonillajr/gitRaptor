@@ -5,7 +5,7 @@ import type { EngineMessage } from "./engine-types";
  * The closed list of IPC commands of the backend and their types. Must equal
  * `src-tauri/commands.json` (D4); `commands.test.ts` checks it.
  */
-export const COMMANDS = ["app_info", "engine_watch", "engine_retry", "fleet_open"] as const;
+export const COMMANDS = ["app_info", "engine_watch", "engine_retry", "fleet_open", "guard_blocks"] as const;
 
 export type CommandName = (typeof COMMANDS)[number];
 
@@ -24,4 +24,9 @@ export interface Commands {
   engine_retry: { params: { start: boolean }; result: Record<string, never> };
   /** Opens the repo scope in the backend: its snapshot and events then arrive as `repo*` messages (one repo at a time). */
   fleet_open: { params: { repoId: string }; result: Record<string, never> };
+  /**
+   * Asks the backend to read `guard.status` and `guard.log` of the open repo (read only): the result arrives as
+   * `guardBlocks` or `guardBlocksUnavailable`. The path never leaves the backend.
+   */
+  guard_blocks: { params: { repoId: string }; result: Record<string, never> };
 }
