@@ -1,0 +1,32 @@
+[package]
+name = "gitraptor-desktop"
+description = "GitRaptor desktop app (Tauri backend)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "gitraptor_desktop"
+path = "src/lib.rs"
+
+[[bin]]
+name = "gitraptor-desktop"
+path = "src/main.rs"
+
+[dependencies]
+tauri.workspace = true
+gitraptor-api = { workspace = true, features = ["client"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+
+[build-dependencies]
+tauri-build.workspace = true
+serde_json = "1.0.151"
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true
