@@ -16,6 +16,7 @@ pub mod oplog;
 pub mod overlap;
 pub(crate) mod prior_point;
 pub mod protected;
+pub mod redo;
 /// The repo write lock lives in a neutral module shared with the executor
 /// (ADR-CKP-002 § 5); re-exported for the applier.
 pub use crate::repo_lock;

@@ -253,6 +253,10 @@ pub enum TmRejectReason {
     SelectiveUndoBelow,
     /// The engine's attribution could not be read, so no agent's work can be chosen.
     AttributionUnavailable,
+    /// There is no undo to redo: the redo stack is empty.
+    NothingToRedo,
+    /// A new change after the undo invalidated its redo.
+    RedoInvalidated,
 }
 
 /// `data` of an `OPERATION_REJECTED` error of a Time Machine command.
@@ -483,6 +487,34 @@ pub struct UndoResult {
     pub undone_operation_ids: Vec<String>,
 }
 
+/// `timemachine.redo` result for a full connection (US-TMC-003).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RedoResult {
+    /// The redo itself, as recorded.
+    pub operation_id: String,
+    /// The point taken right before the redo.
+    pub prior_snapshot_id: String,
+    /// The undo this redo took back.
+    pub redone_undo_id: String,
+    /// The state the worktree returned to: the point taken right before the undo.
+    pub target_snapshot_id: String,
+    pub requester: RequesterView,
+    pub written: u64,
+    pub removed: u64,
+    pub not_restored: Vec<NotRestored>,
+    /// Paths left as they were because another actor changed them after the undo; at most
+    /// `MAX_KEPT_PATHS`, only with `CAP_TM_OVERLAP`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub kept: Vec<KeptPath>,
+    /// How many paths were kept in all, when `kept` is cut at `MAX_KEPT_PATHS`; 0 (omitted)
+    /// otherwise. Only with `CAP_TM_OVERLAP`.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub kept_total: u64,
+    /// Applier warnings as stable codes (e.g. `stash-kept`).
+    pub warnings: Vec<String>,
+}
+
 fn is_zero(n: &u64) -> bool {
     *n == 0
 }
@@ -636,6 +668,9 @@ pub struct RedoParams {
     pub operation_id: Option<String>,
     #[serde(default)]
     pub surface: Option<Surface>,
+    /// The token of a challenge this connection received (`CAP_TM_CONFIRMATION`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confirmation: Option<ConfirmationToken>,
 }
 
 /// `timemachine.restore` parameters (US-TMC-009).
@@ -1025,6 +1060,7 @@ impl UndoParams {
 
 impl RedoParams {
     pub fn validate(&self) -> Result<(), Invalid> {
+        check_confirmation(self.confirmation.as_ref().map(ConfirmationToken::as_str))?;
         if let Some(id) = &self.operation_id {
             check_oplog_id("operation_id", id)?;
         }

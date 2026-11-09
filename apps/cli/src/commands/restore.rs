@@ -246,6 +246,10 @@ fn reason_key(reason: TmRejectReason) -> &'static str {
         TmRejectReason::NotSelectable
         | TmRejectReason::SelectiveUndoBelow
         | TmRejectReason::AttributionUnavailable => "restore.reason.unsupported",
+        // Only a redo rejects with these; a restore never does.
+        TmRejectReason::NothingToRedo | TmRejectReason::RedoInvalidated => {
+            "restore.reason.unsupported"
+        }
     }
 }
 
