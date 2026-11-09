@@ -470,8 +470,11 @@ enum Owner {
 
 #[derive(Debug, Clone)]
 struct Sighting {
-    /// Monotonic mark of the router event that triggered the sample.
-    t_recv: u64,
+    /// Monotonic marks of the router events this sighting answers, sorted
+    /// and without repeats: the notices of one read whose `started_before`
+    /// came out the same (TD-GRP-005). It counts for a batch when any of them
+    /// falls in its window.
+    t_recvs: Vec<u64>,
     gits: Vec<GitSeen>,
 }
 
@@ -758,7 +761,7 @@ impl Detector {
     /// Takes one S3 sample now, as if the router had seen a Git write at
     /// `t_recv` (tests; the router triggers it in the daemon).
     pub fn sample_now(&self, repo_id: &str, t_recv: u64) {
-        self.inner.sample(&[Notice {
+        self.inner.sample_queued(vec![Notice {
             repo_id: repo_id.to_owned(),
             t_recv,
             wall_us: wall_us(),
@@ -817,7 +820,8 @@ impl Detector {
         let mut foreign = false;
         let mut counts = S3Counts::default();
         let samples = st.sightings.get(repo_id).into_iter().flatten();
-        for sighting in samples.filter(|s| s.t_recv >= from && s.t_recv <= t_flush) {
+        let in_window = |s: &&Sighting| s.t_recvs.iter().any(|t| *t >= from && *t <= t_flush);
+        for sighting in samples.filter(in_window) {
             for git in &sighting.gits {
                 let (class, counter) = classify(git, repo, worktree, scope, &mut counts);
                 if let Some(counter) = counter {
@@ -1059,9 +1063,18 @@ impl Inner {
         self.lock().live.values().any(|l| l.repo_id == repo_id)
     }
 
-    /// One S3 sample for each repo of `notices`: every live `git` of the
-    /// user, the session it descends from and its working folder.
-    fn sample(&self, notices: &[Notice]) {
+    /// One S3 sample for `notices`, from one read of the process table: every
+    /// live `git` of the user, the session it descends from and its working
+    /// folder, worked out once per repo. Each notice keeps its own mark and its
+    /// own "started before" (TD-GRP-005): what an immediate sample at that
+    /// notice would have shown, minus the `git`s that ended meanwhile. The
+    /// notices of a repo whose "started before" comes out the same share one
+    /// [`Sighting`], so a burst of notices cannot push older sightings (one
+    /// that saw a foreign `git`) out of the ring.
+    fn sample_queued(&self, notices: Vec<Notice>) {
+        if notices.is_empty() {
+            return;
+        }
         let Some(table) = self.procs.list() else {
             return;
         };
@@ -1075,21 +1088,29 @@ impl Inner {
         let unreadable = cwds.values().filter(|c| c.is_none()).count() as u64;
         self.cwd_unreadable.fetch_add(unreadable, Ordering::Relaxed);
         let tolerance = u64::try_from(self.config.start_tolerance.as_micros()).unwrap_or(0);
-        // What each notice needs from the state, copied so the reads below
+        // The notices of each repo, in arrival order.
+        let mut by_repo: Vec<(String, Vec<Notice>)> = Vec::new();
+        for notice in notices {
+            match by_repo.iter_mut().find(|(id, _)| *id == notice.repo_id) {
+                Some((_, own)) => own.push(notice),
+                None => by_repo.push((notice.repo_id.clone(), vec![notice])),
+            }
+        }
+        // What each repo needs from the state, copied so the reads below
         // (folders of ancestors, argv and environment) never hold the lock
         // the scan and the router wait on.
         let snapshots: Vec<(Sessions, Option<RepoPaths>)> = {
             let st = self.lock();
-            notices
+            by_repo
                 .iter()
-                .map(|notice| {
+                .map(|(repo_id, _)| {
                     let sessions = st
                         .live
                         .iter()
-                        .filter(|(_, l)| l.repo_id == notice.repo_id)
+                        .filter(|(_, l)| l.repo_id == *repo_id)
                         .map(|(k, l)| (*k, l.session_id.clone()))
                         .collect();
-                    (sessions, st.repos.get(&notice.repo_id).cloned())
+                    (sessions, st.repos.get(repo_id).cloned())
                 })
                 .collect()
         };
@@ -1115,8 +1136,8 @@ impl Inner {
             facts.insert(pid, read);
             read
         };
-        let mut sightings = Vec::with_capacity(notices.len());
-        for (notice, (sessions, repo)) in notices.iter().zip(&snapshots) {
+        let mut sightings: Vec<(String, Vec<Sighting>)> = Vec::with_capacity(by_repo.len());
+        for ((repo_id, own), (sessions, repo)) in by_repo.iter().zip(&snapshots) {
             let repo = repo.as_ref();
             let seen: Vec<GitSeen> = gits
                 .iter()
@@ -1167,7 +1188,8 @@ impl Inner {
                     GitSeen {
                         owner,
                         cwd,
-                        started_before: g.start_us <= notice.wall_us.saturating_add(tolerance),
+                        // Set per notice below.
+                        started_before: false,
                         placed_by_ancestor,
                         redirect,
                         writes,
@@ -1175,15 +1197,40 @@ impl Inner {
                     }
                 })
                 .collect();
-            sightings.push((notice, seen));
+            // "Started before" of each `git`, per notice: the notices with the
+            // same answer share one sighting, ordered by their first mark.
+            let mut groups: Vec<(Vec<bool>, Vec<u64>)> = Vec::new();
+            for notice in own {
+                let cutoff = notice.wall_us.saturating_add(tolerance);
+                let mask: Vec<bool> = gits.iter().map(|g| g.start_us <= cutoff).collect();
+                match groups.iter_mut().find(|(m, _)| *m == mask) {
+                    Some((_, marks)) => marks.push(notice.t_recv),
+                    None => groups.push((mask, vec![notice.t_recv])),
+                }
+            }
+            let mut own_sightings: Vec<Sighting> = groups
+                .into_iter()
+                .map(|(mask, mut t_recvs)| {
+                    t_recvs.sort_unstable();
+                    t_recvs.dedup();
+                    let gits = seen
+                        .iter()
+                        .zip(mask)
+                        .map(|(g, started_before)| GitSeen {
+                            started_before,
+                            ..g.clone()
+                        })
+                        .collect();
+                    Sighting { t_recvs, gits }
+                })
+                .collect();
+            own_sightings.sort_by_key(|s| s.t_recvs.first().copied());
+            sightings.push((repo_id.clone(), own_sightings));
         }
         let mut st = self.lock();
-        for (notice, seen) in sightings {
-            let ring = st.sightings.entry(notice.repo_id.clone()).or_default();
-            ring.push_back(Sighting {
-                t_recv: notice.t_recv,
-                gits: seen,
-            });
+        for (repo_id, own) in sightings {
+            let ring = st.sightings.entry(repo_id).or_default();
+            ring.extend(own);
             while ring.len() > MAX_SIGHTINGS {
                 ring.pop_front();
             }
@@ -1257,20 +1304,17 @@ fn scan_loop(inner: &Inner, stop: &Receiver<()>) {
     }
 }
 
-/// Samples as soon as the first notice arrives; notices that queued up
-/// meanwhile share the next sample (the earliest one, the most permissive
-/// "started before").
+/// Samples as soon as the first notice arrives; every notice that queued up
+/// meanwhile shares the next read of the process table, and keeps its own
+/// mark and its own "started before" (TD-GRP-005, ADR-GRP-012 amendment
+/// 2026-11-09): dropping all but one per repo left the commit's own notice
+/// without a sighting in its window.
 fn sample_loop(inner: &Inner, rx: &Receiver<Notice>) {
     while let Ok(first) = rx.recv() {
-        inner.sample(&[first]);
-        let mut pending: Vec<Notice> = Vec::new();
-        while let Ok(more) = rx.try_recv() {
-            if !pending.iter().any(|n| n.repo_id == more.repo_id) {
-                pending.push(more);
-            }
-        }
+        inner.sample_queued(vec![first]);
+        let pending: Vec<Notice> = rx.try_iter().collect();
         if !pending.is_empty() {
-            inner.sample(&pending);
+            inner.sample_queued(pending);
         }
     }
 }
