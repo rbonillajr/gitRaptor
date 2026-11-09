@@ -1,0 +1,143 @@
+{
+  "source": [
+    "docs/requirements/features/desktop/dev-specs/TS-DSK-001-andamiaje-app-escritorio.md",
+    "docs/dev-briefs/ts-dsk-001-desktop-scaffold.prep.md"
+  ],
+  "goal": {
+    "intent": "Dar a la app de escritorio (D7, BR-27, hito M2-UI) una base sobre la que cada historia añada su vista sin reabrir la frontera de seguridad de ADR-GRP-017: backend Tauri que solo enlaza el cliente del canal, lista cerrada de comandos IPC, CSP estricta sin red y sin plugins shell, fs ni http.",
+    "endState": "apps/desktop existe: el crate gitraptor-desktop compila con un único comando app_info, la ventana B1 vacía (grafito glass, claro y oscuro, atajos ⌘B y ⌥⌘B, cajón de detalle) se construye con Vite, las fitness functions V1, V2, V5 y V7 son tests verdes, glass.css se genera desde los tokens, el job de CI desktop corre la app y los jobs generales excluyen el crate.",
+    "nonGoals": [
+      "Conectar con el daemon o arrancarlo (TS-DSK-002, US-DSK-003)",
+      "externalBin, .dmg, firma o updater",
+      "Datos del motor, grafo, buscador ⌘K o píldora de estado",
+      "Tipos generados desde crates/api y TanStack Router",
+      "Marcar el check desktop como obligatorio en la protección de main (G4, tras el primer verde)"
+    ]
+  },
+  "criteria": [
+    {
+      "id": "IPC1",
+      "statement": "ipc::parse acepta solo {\"params\": {…}} sin campos desconocidos en ningún nivel y rechaza cuerpos que no son objeto (invalid-params); app_info::info() devuelve CARGO_PKG_VERSION y PROTOCOL_VERSION; los comandos #[tauri::command] de src/commands coinciden con commands.json y con los permisos allow-<comando> de la capability",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test commands",
+      "layer": "runtime",
+      "tests": ["apps/desktop/src-tauri/tests/commands.rs"]
+    },
+    {
+      "id": "WIN1",
+      "statement": "La ventana solo navega a los orígenes de frontendDist (tauri://localhost, http://tauri.localhost) y, en debug, a http://localhost:1420; cualquier otro esquema, host o puerto se rechaza",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test window",
+      "layer": "runtime",
+      "tests": ["apps/desktop/src-tauri/tests/window.rs"]
+    },
+    {
+      "id": "V1",
+      "statement": "Las dependencias normales de gitraptor-desktop no alcanzan gitraptor-core, gitraptor-git ni gitraptor-policy, sí alcanzan gitraptor-api con la feature client, y el crate no está en default-members",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test boundaries",
+      "layer": "runtime",
+      "tests": ["apps/desktop/src-tauri/tests/boundaries.rs"]
+    },
+    {
+      "id": "V2",
+      "statement": "La superficie de Tauri es la exacta de la Dev Spec: CSP y devCsp exactas, sin red ni unsafe-eval, flags endurecidos, una sola capability cerrada a main con permisos de commands.json, sin plugins (shell, fs, http ni otros), sin devtools y con los manejadores de navegación en window.rs",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test tauri_surface",
+      "layer": "runtime",
+      "tests": ["apps/desktop/src-tauri/tests/tauri_surface.rs"]
+    },
+    {
+      "id": "V7",
+      "statement": "El backend no lee el entorno ni los argumentos en tiempo de ejecución y no depende de inicializadores de logging que lean variables",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test environment",
+      "layer": "runtime",
+      "tests": ["apps/desktop/src-tauri/tests/environment.rs"]
+    },
+    {
+      "id": "TOK1",
+      "statement": "glass.css se genera desde tokens/glass.json con tema oscuro y claro idénticos en sus dos bloques, sin variables vacías y con el contraste WCAG de DSYS-GRP-002, y check detecta un glass.css desactualizado; construir no cambia la salida rust (crates/theme/src/generated.rs)",
+      "verify": "pnpm --filter @gitraptor/tokens run build && git diff --exit-code crates/theme/src/generated.rs packages/design-tokens/css/glass.css && pnpm --filter @gitraptor/tokens run check && node --test packages/design-tokens/test/glass.test.mjs",
+      "layer": "runtime",
+      "tests": ["packages/design-tokens/test/glass.test.mjs"]
+    },
+    {
+      "id": "V5",
+      "statement": "ESLint prohíbe HTML de texto no confiable (dangerouslySetInnerHTML, innerHTML, insertAdjacentHTML, document.write, librerías de markdown), los plugins de Tauri en todo el frontend y @tauri-apps/api fuera de src/client",
+      "verify": "pnpm -C apps/desktop exec vitest run tests/eslint-v5.test.ts",
+      "layer": "runtime",
+      "tests": ["apps/desktop/tests/eslint-v5.test.ts"]
+    },
+    {
+      "id": "FE1",
+      "statement": "La lista de comandos del frontend es igual a commands.json y call(\"app_info\", {}) envía { params: {} } por invoke",
+      "verify": "pnpm -C apps/desktop exec vitest run src/client/commands.test.ts",
+      "layer": "runtime",
+      "tests": ["apps/desktop/src/client/commands.test.ts"]
+    },
+    {
+      "id": "FE2",
+      "statement": "El almacén de la ventana cicla el tema auto → light → dark → auto, persiste solo theme, language, sidebarOpen y detailOpen y se rehidrata",
+      "verify": "pnpm -C apps/desktop exec vitest run src/state/ui-store.test.ts",
+      "layer": "runtime",
+      "tests": ["apps/desktop/src/state/ui-store.test.ts"]
+    },
+    {
+      "id": "FE3",
+      "statement": "Los catálogos en y es tienen el mismo conjunto de claves y ningún valor vacío",
+      "verify": "pnpm -C apps/desktop exec vitest run src/i18n/catalog.test.ts",
+      "layer": "runtime",
+      "tests": ["apps/desktop/src/i18n/catalog.test.ts"]
+    },
+    {
+      "id": "B1",
+      "statement": "La ventana B1 vacía muestra barra de título, barra lateral, centro y detalle con nombres accesibles en en y es; ⌘B y ⌥⌘B pliegan los paneles; el tema cicla y fija data-theme; a 1200 px el detalle es un cajón con foco atrapado que Esc cierra; axe sin violaciones; marca gr:shell-painted",
+      "verify": "pnpm -C apps/desktop exec vitest run src/shell/AppShell.test.tsx",
+      "layer": "runtime",
+      "tests": ["apps/desktop/src/shell/AppShell.test.tsx"]
+    },
+    {
+      "id": "CI1",
+      "statement": "Los jobs generales excluyen gitraptor-desktop (cargo-test-selection, nextest-junit, affected-tests, repo-intact) y el workflow desktop existe con su filtro y sus pasos",
+      "verify": "node --test tools/ci/desktop-exclusion.test.mjs",
+      "layer": "runtime",
+      "tests": ["tools/ci/desktop-exclusion.test.mjs"]
+    },
+    {
+      "id": "STA1",
+      "statement": "El lock de pnpm está congelado, el frontend pasa lint y typecheck y el crate gitraptor-desktop pasa clippy sin avisos",
+      "verify": "node --test tools/ci/desktop-static.test.mjs",
+      "layer": "static",
+      "tests": ["tools/ci/desktop-static.test.mjs"]
+    },
+    {
+      "id": "DOC1",
+      "statement": "AGENTS.md dice que fuera del job desktop la suite general es cargo test --workspace --exclude gitraptor-desktop (G3)",
+      "verify": "grep -q 'exclude gitraptor-desktop' AGENTS.md",
+      "layer": "static"
+    }
+  ],
+  "suite": {
+    "command": "pnpm -C apps/desktop run build && node tools/test/nextest-junit.mjs --workspace && pnpm -C apps/desktop run test && pnpm --filter @gitraptor/tokens run test && node --test tools/ci/desktop-exclusion.test.mjs tools/test/nextest-junit.test.mjs"
+  },
+  "layers": {
+    "runtime": {
+      "commands": [
+        { "id": "suite", "cmd": "pnpm -C apps/desktop run build && node tools/test/nextest-junit.mjs --workspace && pnpm -C apps/desktop run test && pnpm --filter @gitraptor/tokens run test && node --test tools/ci/desktop-exclusion.test.mjs tools/test/nextest-junit.test.mjs" }
+      ],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "constraints": {
+    "deny_paths": ["docs/ARTIFACTS.md", "docs/architecture/decisions/ADR-GRD-008*"],
+    "allow_dependency_changes": true
+  },
+  "scope": {
+    "projects": ["@gitraptor/desktop", "gitraptor-desktop", "@gitraptor/tokens"]
+  },
+  "budget": { "maxRounds": 3, "verifyTimeoutMs": 900000, "suiteTimeoutMs": 5400000, "maxOutsidePlan": 3 },
+  "hops": {
+    "design": { "agent": "main-loop", "model": "opus" },
+    "critic": { "agent": "nassa-core:plan-critic", "model": "opus" },
+    "tester": { "agent": "nassa-core:criterion-tester", "model": "sonnet" },
+    "build": { "agent": "nassa-dev-rust:rust-expert", "model": "opus" },
+    "review": { "agent": "nassa-dev-rust:rust-code-reviewer", "model": "opus" },
+    "conformance": { "agent": "nassa-dev-rust:rust-code-reviewer", "model": "sonnet" }
+  }
+}
