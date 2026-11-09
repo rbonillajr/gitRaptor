@@ -14,7 +14,7 @@ related:
   adrs: [ADR-GRP-014, ADR-GRP-017, ADR-GRP-005, ADR-CKP-003, ADR-GRP-016]
   nfrs: [NFR-02, NFR-03, NFR-06, SEC-10, SEC-13, SEC-14]
   stories: [US-DSK-003, US-GRP-004, TS-DSK-001]
-  specs: []
+  specs: [DS-TS-DSK-002]
 ado:
   id: null
   url: null
@@ -36,12 +36,13 @@ tags: [desktop, dep-dsk-5, revision-seguridad, arranque-bajo-demanda, externalbi
 ### Alcance Técnico
 
 - **Añadir** a la CLI el subcomando de diagnóstico del arranque para clientes sin terminal (`raptor daemon ensure`), que arranca el motor si no corre, solo reemplaza un daemon lanzado desde su misma ruta y devuelve en una línea JSON dónde está el canal, quién lo sirve y el estado del autoarranque.
-- **Implementar** en `apps/desktop/src-tauri` el lanzador de la app: localiza el `raptor` del bundle junto al ejecutable, lo verifica y lo ejecuta con argv y entorno fijos, sin plugin `shell`, como implementación del punto de arranque de la biblioteca cliente.
+- **Implementar** en `apps/desktop/src-tauri` la costura de conexión de la app y su implementación real, que localiza el `raptor` del bundle junto al ejecutable, lo verifica y lo ejecuta con argv y entorno fijos, sin plugin `shell`.
+  - implementa el `Connector` de la app; no usa `Launch` ni `ensure_daemon_with` (Ajuste tras la revisión de arquitectura (2026-11-08), validado por Arquitecto)
   - entorno fijo también en debug: el perfil de prueba llega por el `Launch` inyectado en los tests, nunca por el entorno de la app (M-4, Ajuste tras la revisión de seguridad (2026-11-08), validado por security-expert)
 - **Implementar** la verificación del daemon antes del handshake (B-3 de ADR-GRP-017): mismo usuario y ejecutable `raptor` instalado.
   - en la biblioteca cliente del canal y en el crate del SO con `unsafe` acotado, nunca en `gitraptor-desktop` (B-1, Ajuste tras la revisión de seguridad (2026-11-08), validado por security-expert)
   - límite: reutilización del pid entre la lectura del par y la resolución de su ruta; la verificación por *audit token* la decide SPIKE-DSK-001
-- **Exponer** al webview el resultado del arranque y de la compatibilidad de versiones como estados tipados, con comandos de la lista cerrada (convención de TS-DSK-001) para "Arrancar motor" y para registrar el autoarranque con el `raptor` del bundle.
+- **Exponer** al webview el resultado del arranque y de la compatibilidad de versiones como estados tipados, con comandos de la lista cerrada (convención de TS-DSK-001) para consultar y registrar el autoarranque con el `raptor` del bundle; "Arrancar motor" es el comando de reintento de US-DSK-003 (Ajuste tras la revisión de arquitectura (2026-11-08), validado por Arquitecto).
   - el autoarranque se registra o se quita solo tras confirmarlo el humano en un diálogo nativo que abre el backend (B-2, Ajuste tras la revisión de seguridad (2026-11-08), validado por security-expert)
 - **Configurar** los binarios del motor como `externalBin` del bundle solo en el build de release, con el nombre por target triple que exige Tauri.
 - **Añadir** a `release.yml` el job que construye `GitRaptor-<versión>-aarch64-apple-darwin.dmg` con los binarios del archivo `aarch64-apple-darwin` de la misma corrida, y a `select-assets.sh` el `.dmg` de las alphas.

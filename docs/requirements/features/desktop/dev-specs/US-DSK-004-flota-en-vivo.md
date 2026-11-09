@@ -13,6 +13,7 @@ frontend_surface: true
 stack: react
 profile: frontend-feature
 tooling: [cargo, pnpm, node]
+blocked_by: [US-DSK-003, TS-DSK-002]
 related:
   context: ../context.md
   story: ../user-stories/US-DSK-004-flota-en-vivo.md
@@ -303,7 +304,7 @@ graph LR
 - `apps/desktop/src/fleet/FleetView.test.tsx` (**MODIFY**)
 
 **Reglas**
-- Backend: `worktrees`, `session` y `prediction` llevan `perf: { backendNs }` = `monotonic_ns()` al enviar menos el `recv_ns` del `Link::next` que trajo el evento.
+- Backend: `worktrees`, `session` y `prediction` llevan `perf: { backendNs }` = `monotonic_ns()` al enviar menos el `recv_ns` del `Link::next` (costura de DS-TS-DSK-002) que trajo el evento. Ajuste tras la revisión (2026-11-08), validado por Arquitecto / security-expert.
 - `engine-stream.ts`: cada lote lleva `receivedAt` = `performance.now()` del primer mensaje del lote.
 - `FleetView`: tras el commit de React que aplicó un lote con mensajes del repo, en el primer `requestAnimationFrame`, `performance.measure("gr:fleet-delta", { start: receivedAt })`, y `performance.mark("gr:fleet-delta-painted")`.
 
