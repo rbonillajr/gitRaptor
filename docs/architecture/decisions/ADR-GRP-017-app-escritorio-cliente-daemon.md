@@ -104,6 +104,7 @@ El daemon resuelve el solicitante como siempre: por la ascendencia del proceso, 
   - **Dependencia de spike**: el binding de `Security.framework` choca con `unsafe_code = "forbid"`, el mismo obstáculo del punto 1 de la Enmienda TS-GRP-004. Mientras no se resuelva, ninguna app tiene identidad firmada y la presencia de sesión no existe.
 - **Identidad por ruta** (solo alphas sin firmar): el ejecutable del par es el binario de la app en `/Applications` o `~/Applications`, sin traslocación de Gatekeeper y sin escritura para otros usuarios.
   - Basta para leer, que es de riesgo bajo (abajo).
+  - **Hueco de lectura** (R-6): `~/Applications` es escribible por el usuario, así que un agente puede dejar allí un binario homónimo y lanzarlo con `open -a`; ese binario obtiene la lectura completa de la app. Se acepta solo para las alphas sin firma. En v0.1.0 el daemon fija el cdhash o el requisito de firma del ejecutable de la app de su misma versión y deja de aceptar la identidad por ruta.
   - Para escribir no prueba nada. Por eso solo admite el factor por acción, cuya seguridad descansa en el diálogo del SO con el texto que arma el daemon (§ 4) y no en la identidad de la app.
   - **Decisión** (A-1): las alphas sin firmar se quedan en lectura + factor por acción.
 - **Lectura completa sin terminal: riesgo bajo, no nulo** (M-2): un agente con permiso de Accesibilidad puede leer la ventana (`AXValue`), y con Grabación de pantalla, capturarla. `sharingType = .none` (§ 2) corta las capturas, no la Accesibilidad. Se acepta porque las lecturas no cambian el repo (NFR-01) y la vista es la que el desarrollador ya ve en la TUI.
@@ -121,7 +122,7 @@ Se reutiliza el mecanismo de [ADR-GRD-008](./ADR-GRD-008-factor-autenticacion-fu
 | Qué pide la app | Factor | Vigencia |
 |---|---|---|
 | **Presencia de sesión** (solo con identidad firmada): capa `cockpit` para las operaciones del catálogo que **se revierten en local con la Time Machine** (NFR-01): Deshacer de trabajo propio o sin atribuir, y las operaciones locales de UI-2 | Una vez. Texto del diálogo: **"Permitir que GitRaptor escriba en tus repos hasta las HH:MM. Si no abriste tú la app, cancela."** | Ligada a la conexión y al `(pid, inicio)` de la app. **Caduca** a los 15 min sin escrituras o a las 4 h. **Se invalida** al bloquear la pantalla, suspender el equipo, cambiar de usuario, cerrar la conexión o reiniciar el daemon |
-| **Factor por acción**: comandos reservados (ADR-GRP-005 § 6 y ADR-GRD-007 § 1: añadir o retirar un repo, instalar la protección, `mcp.enable`…), confirmación de trabajo ajeno (ADR-TMC-005 § 3), excepción consciente (D10), confirmaciones D5/D8 y **todo efecto remoto o no recuperable** (push, borrar una rama remota, los PRs de UI-2). Push, pull y fetch solo los pide el humano desde la app, con decisión de Guardrails y punto previo para pull, nunca un agente ni el MCP (Q-DSK-14; ADR-CKP-002, Enmienda 2026-11-08) | Uno por acción, ligado al resumen del plan canónico (A-2) | Ninguna reutilización. Lleva la ventana, el anuncio y la auditoría de D5 cuando la acción relaja |
+| **Factor por acción**: comandos reservados (ADR-GRP-005 § 6 y ADR-GRD-007 § 1: añadir o retirar un repo, instalar la protección, `mcp.enable`…), confirmación de trabajo ajeno (ADR-TMC-005 § 3), excepción consciente (D10), confirmaciones D5/D8 y **todo efecto remoto o no recuperable** (push, borrar una rama remota, los PRs de UI-2). Push, pull y fetch solo los pide el humano desde la app, con decisión de Guardrails y punto previo para pull, nunca un agente ni el MCP (Q-DSK-14; ADR-CKP-002, Enmienda 2026-11-08). Los tres piden **siempre** factor por acción: la presencia de sesión no los cubre, porque un agente con Accesibilidad podría pulsar el botón (ajuste 2026-11-08; pasar `pull` o `fetch` a sesión sería una enmienda posterior con su revisión de seguridad) | Uno por acción, ligado al resumen del plan canónico (A-2) | Ninguna reutilización. Lleva la ventana, el anuncio y la auditoría de D5 cuando la acción relaja |
 
 - **Texto del factor por acción**: lo arma el daemon en el `localizedReason` de LocalAuthentication, dentro del diálogo del SO. Usa una plantilla fija por acción con el verbo, el repo y el objetivo saneados (SEC-GRD-06), más un **código corto de correlación**. La app muestra el mismo código junto a la acción pedida.
 - **El botón del webview solo pide la acción y nunca la confirma**. La única confirmación es el diálogo del SO. Por eso un clic sintético sobre la ventana no basta.
@@ -154,7 +155,7 @@ El módulo de presencia de ADR-GRD-008 § 6 aún no existe en el código; lo gat
 - **v0.1.0**:
   - Firma Developer ID con *hardened runtime*, sin los entitlements prohibidos del § 3, y notarización, con los secretos de ADR-GRP-014 § 4. Es lo que habilita la identidad firmada y la presencia de sesión.
   - **Updater de Tauri solo a petición** del humano (Q-DSK-18, NFR-03): sin comprobación automática ni en segundo plano. Corre en el backend con su propia clave de firma, nunca en el webview, y entra con el permiso `updater` como única excepción a la lista del § 2.
-  - **Canal**: `.dmg` firmado y cask de Homebrew en el tap propio (Q-DSK-19; ADR-GRP-014, Enmienda 2026-11-08).
+  - **Canal**: `.dmg` firmado y cask `gitraptor-app` en el tap `rbonillajr/homebrew-tap`, el mismo de la fórmula de la CLI (ADR-GRP-014 § 5, D5; Q-DSK-19; ADR-GRP-014, Enmienda 2026-11-08).
 - **Plataformas de UI-1**: solo macOS (Q-DSK-12). Windows y Linux siguen el § 5.
 
 ## Alternativas consideradas
@@ -194,6 +195,7 @@ El módulo de presencia de ADR-GRD-008 § 6 aún no existe en el código; lo gat
 | R-3 | Sin firma (alphas), un proceso del usuario reemplaza el binario de la app | Acotado (A-1): con identidad por ruta no hay presencia de sesión. El factor por acción muestra en el diálogo del SO el texto armado por el daemon |
 | R-4 | El humano aprueba por costumbre un diálogo que provocó un agente | Mitigado: el texto lo arma el daemon con el plan; el código de correlación coincide con el de la app; el texto de la sesión dice "si no abriste tú la app, cancela"; ADR-GRD-008 limita la fatiga |
 | R-5 | Un agente con Accesibilidad lee la ventana (`AXValue`) | Aceptado, riesgo bajo (M-2): solo lectura. `sharingType = .none` corta las capturas de pantalla |
+| R-6 | Con identidad por ruta, un agente deja un binario homónimo en `~/Applications` (escribible por el usuario) y lo lanza con `open -a`: obtiene la lectura completa de la app | Aceptado solo para las alphas sin firma: solo lectura, y escribir sigue pidiendo el factor por acción. En v0.1.0 el daemon fija el cdhash o el requisito de firma del ejecutable de la app de su misma versión (§ 3) |
 
 ## Validación (funciones de fitness)
 
@@ -202,7 +204,7 @@ El módulo de presencia de ADR-GRD-008 § 6 aún no existe en el código; lo gat
 | V1 | `cargo metadata`: `gitraptor-desktop` no depende de `gitraptor-git` ni de `gitraptor-policy`, y de `gitraptor-core` solo usa el módulo `client` (comprobación estática como V5 de ADR-CKP-003) | CI, job `desktop` |
 | V2 | Un test lee `tauri.conf.json` y `capabilities/` y comprueba: <ul><li>que no están los plugins prohibidos del § 2;</li><li>la CSP exacta;</li><li>`withGlobalTauri: false` y `freezePrototype: true`;</li><li>`assetProtocol.enable: false` y `dangerousDisableAssetCspModification: false`;</li><li>que no hay `devUrl` en release ni esquema de URL</li></ul> | CI, job `desktop` |
 | V3 | Grafo de un repo de 100K commits por el canal: primera pintura y deltas dentro de NFR-05 y del presupuesto de ADR-GRP-011 | Banco de INF-GRP-002, en macOS |
-| V4 | Tests del daemon con el doble de prueba del factor y de la identidad. Resultado esperado en cada caso: <ul><li>sin presencia de sesión: la escritura se rechaza;</li><li>con sesión e identidad firmada: se acepta una escritura local;</li><li>con sesión, una escritura remota o reservada: pide el factor por acción;</li><li>con identidad por ruta: nunca hay sesión;</li><li>agente en la ascendencia: perfil `mcp`;</li><li>sesión invalidada por bloqueo, suspensión o reinicio del daemon: se rechaza</li></ul> | CI, tests de `crates/core` |
+| V4 | Tests del daemon con el doble de prueba del factor y de la identidad. Resultado esperado en cada caso: <ul><li>sin presencia de sesión: la escritura se rechaza;</li><li>con sesión e identidad firmada: se acepta una escritura local;</li><li>con sesión, una escritura remota o reservada: pide el factor por acción;</li><li>con identidad por ruta: nunca hay sesión;</li><li>identidad por ruta + factor por acción: capa `cockpit` solo para ese plan;</li><li>push con sesión vigente: pide el factor por acción;</li><li>agente en la ascendencia: perfil `mcp`;</li><li>sesión invalidada por bloqueo, suspensión o reinicio del daemon: se rechaza</li></ul> | CI, tests de `crates/core` |
 | V5 | El frontend no usa `dangerouslySetInnerHTML` ni renderiza markdown de texto no confiable (regla de ESLint) | CI, job `desktop` |
 | V6 | El comando copiable entrecomilla en POSIX y no se ofrece con caracteres de SEC-12 (M-1). Test con un corpus de argumentos hostiles | CI, job `desktop` |
 | V7 | El backend ignora las variables `TAURI_*`, `WEBKIT_*` y `RUST_LOG` heredadas (M-3) y rechaza un daemon cuyo ejecutable no es un `raptor` instalado (B-3) | CI, tests de `src-tauri` |
@@ -252,6 +254,17 @@ Rene aceptó las recomendaciones del orquestador ([contexto de desktop](../../re
 | Q-DSK-12: plataformas de UI-1 | **Solo macOS** | § 5, § 6 |
 
 **Acción de Rene**: comprar la cuenta de Apple Developer (99 USD al año) antes de cortar v0.1.0 y cargar los secretos de ADR-GRP-014 § 4. Sin ella no hay identidad firmada y v0.1.0 sale como las alphas: lectura + factor por acción, sin "Deshacer" de un toque.
+
+## Ajustes tras la revisión de arquitectura (2026-11-08)
+
+El architecture-advisor aprobó con cambios las enmiendas del 2026-11-08. **Decisión del orquestador (2026-11-08), validada por el Arquitecto.**
+
+| Id | Cambio | Dónde queda |
+|---|---|---|
+| C3 | `push`, `pull` y `fetch` piden siempre factor por acción desde la app; se retira la vía "presencia de sesión si la Dev Spec demuestra…" | § 4; ADR-CKP-002 y ADR-GRP-005, Enmienda 2026-11-08 |
+| C4 | V4 añade "identidad por ruta + factor por acción dan `cockpit` solo para ese plan" y "push con sesión vigente pide el factor"; la Validación 16 de ADR-CKP-002 exige clase `desktop` y factor | V4; ADR-CKP-002, Validación 16 |
+| C6 | Hueco de lectura con identidad por ruta (`~/Applications` escribible + `open -a`) | § 3, R-6; ADR-MCP-001, Enmienda 2026-11-08 |
+| C7 | Un solo tap, `rbonillajr/homebrew-tap`, con la fórmula `gitraptor` y el cask `gitraptor-app` | § 6; ADR-GRP-014 § 5 y Enmienda 2026-11-08 |
 
 ## Revisión de seguridad (2026-10-28)
 
