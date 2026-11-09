@@ -200,9 +200,12 @@ impl Rig {
         (err, set)
     }
 
-    fn since(&self, secs_ago: i64) -> Selection {
+    /// The period starts `secs_ago` before `now`, the instant the test anchored its operations at:
+    /// never the wall clock at call time, which drifts by seconds on a loaded runner (the real
+    /// snapshots of `operation` are slow on Windows) and would push them out of the period.
+    fn since(&self, now: i64, secs_ago: i64) -> Selection {
         Selection::Since {
-            since_ms: now_ms() - secs_ago * 1_000,
+            since_ms: now - secs_ago * 1_000,
         }
     }
 }
@@ -226,7 +229,7 @@ fn since_takes_the_suffix_of_the_stack_inside_the_period() {
     let (b, _) = r.operation("b", now - 3_000, 2);
     let (c, _) = r.operation("c", now - 1_000, 3);
 
-    let (err, set) = r.attempt(Vec::new(), r.since(10));
+    let (err, set) = r.attempt(Vec::new(), r.since(now, 10));
     assert_eq!(
         reason(&err),
         TmRejectReason::GitUnavailable,
@@ -255,7 +258,7 @@ fn since_stops_at_the_first_older_operation() {
     let (_b, _) = r.operation("b", now - 60_000, 2);
     let (c, _) = r.operation("c", now - 1_000, 3);
 
-    let (_, set) = r.attempt(Vec::new(), r.since(10));
+    let (_, set) = r.attempt(Vec::new(), r.since(now, 10));
     assert_eq!(
         set,
         vec![oplog_op(&c)],
@@ -316,7 +319,7 @@ fn a_raw_event_not_covered_rejects_the_whole_period() {
         .unwrap()
         .len();
 
-    let (err, set) = r.attempt(vec![push], r.since(10));
+    let (err, set) = r.attempt(vec![push], r.since(now, 10));
     assert_eq!(
         reason(&err),
         TmRejectReason::RawGitNotCovered,
@@ -360,7 +363,7 @@ fn the_target_is_the_prior_of_the_oldest() {
     let (_b, _) = r.operation("b", now - 3_000, 1);
     let (_c, prior_c) = r.operation("c", now - 1_000, 2);
     mark_unavailable(&r, &prior_c);
-    let (err, _) = r.attempt(Vec::new(), r.since(10));
+    let (err, _) = r.attempt(Vec::new(), r.since(now, 10));
     assert_eq!(
         reason(&err),
         TmRejectReason::GitUnavailable,
@@ -373,7 +376,7 @@ fn the_target_is_the_prior_of_the_oldest() {
     let (_b, prior_b) = r.operation("b", now - 3_000, 1);
     let (_c, _) = r.operation("c", now - 1_000, 2);
     mark_unavailable(&r, &prior_b);
-    let (err, _) = r.attempt(Vec::new(), r.since(10));
+    let (err, _) = r.attempt(Vec::new(), r.since(now, 10));
     assert_eq!(
         reason(&err),
         TmRejectReason::TargetUnavailable,
