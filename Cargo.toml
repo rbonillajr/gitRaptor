@@ -1,6 +1,8 @@
 [workspace]
 resolver = "3"
-members = ["crates/*", "apps/cli", "apps/mcp"]
+members = ["crates/*", "apps/cli", "apps/mcp", "apps/desktop/src-tauri"]
+# The Tauri backend needs WebKitGTK on Linux: built only by its own CI job (ADR-GRP-002).
+default-members = ["crates/*", "apps/cli", "apps/mcp"]
 
 [workspace.package]
 version = "0.0.0"
@@ -37,6 +39,9 @@ tempfile = "3"
 windows-sys = "0.61"
 # sysctl of crates/macsys only (ADR-GRP-002, Enmienda 2026-10-07); the version the lock already has.
 libc = "0.2.190"
+# The desktop app backend (ADR-GRP-017): default features only, never `devtools`.
+tauri = "=2.12.5"
+tauri-build = "=2.7.4"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
