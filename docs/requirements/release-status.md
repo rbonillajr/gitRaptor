@@ -10,10 +10,10 @@
 
 | Estado | Fichas |
 |---|---|
-| Implementado (`implemented`) | 66 |
+| Implementado (`implemented`) | 67 |
 | Hecho (`done`) | 3 |
 | Implementado en parte (`partially-implemented`) | 29 |
-| Listo (`ready`) | 27 |
+| Listo (`ready`) | 26 |
 | Borrador (`draft`) | 57 |
 | Bloqueado (`blocked`) | 1 |
 | **Total** | **183** |
@@ -23,7 +23,7 @@
 | Feature | Implementado | Hecho | Implementado en parte | Listo | Borrador | Bloqueado | Total |
 |---|---|---|---|---|---|---|---|
 | [cockpit](#cockpit) | 10 | 0 | 6 | 2 | 20 | 1 | 39 |
-| [desktop](#desktop) | 2 | 0 | 1 | 20 | 0 | 0 | 23 |
+| [desktop](#desktop) | 3 | 0 | 1 | 19 | 0 | 0 | 23 |
 | [guardrails](#guardrails) | 14 | 0 | 7 | 1 | 3 | 0 | 25 |
 | [mcp](#mcp) | 7 | 0 | 4 | 0 | 9 | 0 | 20 |
 | [motor-local](#motor-local) | 18 | 2 | 9 | 3 | 12 | 0 | 44 |
@@ -77,18 +77,18 @@
 
 ### desktop
 
-23 fichas: 2 implementado, 1 implementado en parte, 20 listo.
+23 fichas: 3 implementado, 1 implementado en parte, 19 listo.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
 | [TS-DSK-001](features/desktop/technical-stories/TS-DSK-001-andamiaje-app-escritorio.md) | Andamiaje de apps/desktop: proyecto Tauri del monorepo, frontera de seguridad y ventana B1 vacía | Implementado (`implemented`) | — | — |
 | [TS-DSK-003](features/desktop/technical-stories/TS-DSK-003-primitivas-design-system-escritorio.md) | Primitivas del design system de la app de escritorio y catálogo de desarrollo | Implementado (`implemented`) | — | — |
+| [US-DSK-003](features/desktop/user-stories/US-DSK-003-estado-del-motor.md) | El usuario sabe si GitRaptor está funcionando y qué hacer cuando no | Implementado (`implemented`) | — | — |
 | [TS-DSK-002](features/desktop/technical-stories/TS-DSK-002-arranque-motor-binarios-bundle.md) | Arranque del motor desde la app y binarios del motor dentro del bundle | Implementado en parte (`partially-implemented`) | — | — |
 | [SPIKE-DSK-001](features/desktop/technical-stories/SPIKE-DSK-001-identidad-firmada-app.md) | Verificar en el daemon la firma de la app de escritorio desde su audit token sin romper unsafe_code = forbid | Listo (`ready`) | — | — |
 | [SPIKE-DSK-002](features/desktop/technical-stories/SPIKE-DSK-002-lanzamiento-por-agente.md) | Detectar que un agente lanzó la app de escritorio con open -a (evento oapp y keySenderPIDAttr) | Listo (`ready`) | — | — |
 | [US-DSK-001](features/desktop/user-stories/US-DSK-001-anadir-repo-sin-terminal.md) | El novato añade su repo a GitRaptor desde la app sin abrir una terminal | Listo (`ready`) | — | — |
 | [US-DSK-002](features/desktop/user-stories/US-DSK-002-proteger-repo-con-un-clic.md) | El novato protege su repo con un clic, sabe qué se instaló y puede quitarlo | Listo (`ready`) | — | — |
-| [US-DSK-003](features/desktop/user-stories/US-DSK-003-estado-del-motor.md) | El usuario sabe si GitRaptor está funcionando y qué hacer cuando no | Listo (`ready`) | — | — |
 | [US-DSK-004](features/desktop/user-stories/US-DSK-004-flota-en-vivo.md) | El usuario ve en vivo qué agente trabaja en cada copia de su repo y cuál pide atención | Listo (`ready`) | — | — |
 | [US-DSK-005](features/desktop/user-stories/US-DSK-005-grafo-de-carriles.md) | El usuario ve crecer la rama de cada agente como un carril sobre la rama base | Listo (`ready`) | — | — |
 | [US-DSK-006](features/desktop/user-stories/US-DSK-006-deshacer-de-un-boton.md) | El usuario deshace con un botón lo que hizo un agente o él mismo, y puede rehacerlo | Listo (`ready`) | — | — |
@@ -397,16 +397,16 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### M2-UI
 
-11 fichas: 1 implementado, 1 implementado en parte, 9 listo.
+11 fichas: 2 implementado, 1 implementado en parte, 8 listo.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
 | [TS-DSK-001](features/desktop/technical-stories/TS-DSK-001-andamiaje-app-escritorio.md) | Andamiaje de apps/desktop: proyecto Tauri del monorepo, frontera de seguridad y ventana B1 vacía | Implementado (`implemented`) | — | — |
+| [US-DSK-003](features/desktop/user-stories/US-DSK-003-estado-del-motor.md) | El usuario sabe si GitRaptor está funcionando y qué hacer cuando no | Implementado (`implemented`) | — | — |
 | [TS-DSK-002](features/desktop/technical-stories/TS-DSK-002-arranque-motor-binarios-bundle.md) | Arranque del motor desde la app y binarios del motor dentro del bundle | Implementado en parte (`partially-implemented`) | — | — |
 | [TS-GRP-009](features/motor-local/technical-stories/TS-GRP-009-clase-desktop-perfil-lectura.md) | Clase de cliente de la app de escritorio y perfil de lectura mcp con un agente en su ascendencia | Listo (`ready`) | — | — |
 | [US-DSK-001](features/desktop/user-stories/US-DSK-001-anadir-repo-sin-terminal.md) | El novato añade su repo a GitRaptor desde la app sin abrir una terminal | Listo (`ready`) | — | — |
 | [US-DSK-002](features/desktop/user-stories/US-DSK-002-proteger-repo-con-un-clic.md) | El novato protege su repo con un clic, sabe qué se instaló y puede quitarlo | Listo (`ready`) | — | — |
-| [US-DSK-003](features/desktop/user-stories/US-DSK-003-estado-del-motor.md) | El usuario sabe si GitRaptor está funcionando y qué hacer cuando no | Listo (`ready`) | — | — |
 | [US-DSK-004](features/desktop/user-stories/US-DSK-004-flota-en-vivo.md) | El usuario ve en vivo qué agente trabaja en cada copia de su repo y cuál pide atención | Listo (`ready`) | — | — |
 | [US-DSK-005](features/desktop/user-stories/US-DSK-005-grafo-de-carriles.md) | El usuario ve crecer la rama de cada agente como un carril sobre la rama base | Listo (`ready`) | — | — |
 | [US-DSK-006](features/desktop/user-stories/US-DSK-006-deshacer-de-un-boton.md) | El usuario deshace con un botón lo que hizo un agente o él mismo, y puede rehacerlo | Listo (`ready`) | — | — |

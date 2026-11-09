@@ -2,10 +2,10 @@
 id: US-DSK-003
 title: "El usuario sabe si GitRaptor está funcionando y qué hacer cuando no"
 type: us
-status: ready
+status: implemented
 priority: high
 created: 2026-10-28
-updated: 2026-11-08
+updated: 2026-11-09
 feature: desktop
 source: inline
 decision: "Decisión de Rene del 2026-11-08 (aceptación de las recomendaciones, Q-DSK-7 a Q-DSK-20), ver CTX-DSK-001 § 11"
@@ -82,3 +82,7 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 
 - **Diseño:** [design-flow.md](../design/design-flow.md) (DSF-DSK-001), estados vacíos y de conexión.
 - **Dev Spec:** [DS-US-DSK-003](../dev-specs/US-DSK-003-estado-del-motor.md) (`spec-ready`, 2026-11-08).
+
+## Estado de implementación
+
+Implementado en: PR #336 (T001 a T007 de la Dev Spec). Pendiente de la verificación manual en macOS con el motor real (T008): arranque desde la app, parada con la app abierta, perfil sin repos y ventana abierta por un agente.
