@@ -106,13 +106,27 @@ impl FakeRaptor {
         path
     }
 
+    /// Writes the script without this process ever opening it for writing.
+    ///
+    /// Tests run in parallel threads, and on Linux a child forked by another test inherits every
+    /// open descriptor until its `exec`: if one of them is this script's write descriptor,
+    /// running the script fails with `ETXTBSY` (seen as `LaunchFailed`). So the text goes to a
+    /// source file and `/bin/cp`, a process of its own that has exited when this returns, creates
+    /// the script; no thread of this process ever holds a writable descriptor to it.
     fn write_script(&self, body: &str) {
         let script = format!(
             "#!/bin/sh\nprintf '%s\\n' '{CALL}' \"$@\" >> '{argv}'\n/usr/bin/env > '{env}'\n{body}",
             argv = self.argv_log().display(),
             env = self.env_log().display(),
         );
-        std::fs::write(&self.raptor, script).unwrap();
+        let source = self.dir.path().join("raptor.sh");
+        std::fs::write(&source, script).unwrap();
+        let status = std::process::Command::new("/bin/cp")
+            .arg(&source)
+            .arg(&self.raptor)
+            .status()
+            .unwrap();
+        assert!(status.success(), "cannot copy the fake raptor: {status}");
         std::fs::set_permissions(&self.raptor, std::fs::Permissions::from_mode(0o755)).unwrap();
     }
 
