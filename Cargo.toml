@@ -43,3 +43,11 @@ unsafe_code = "forbid"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
+
+# Dev and test builds keep file:line in backtraces but drop full debuginfo, and dependencies carry none.
+# Full debuginfo was most of each worktree's 30-50 GB target/ and slowed linking on macOS (2026-11-08).
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
