@@ -1,0 +1,144 @@
+{
+  "version": 1,
+  "source": [
+    "docs/requirements/features/cockpit/dev-specs/US-CKP-007-frescura-prediccion.md"
+  ],
+  "rigor": "alto",
+  "goal": {
+    "intent": "Que ninguna predicción vieja se presente como actual en la TUI: cada par muestra su antigüedad (que avanza sola cada segundo), un par recalculado dice 'desactualizado · recalculando', los pares sin resultado se agregan como 'Calculando N de M pares', los pending/not-computable se agrupan por motivo y 'Sin conflictos previstos' solo sale con todo vigente y limpio (BR-CKP-CALC-003, US-CKP-007).",
+    "endState": "apps/cli tiene present/freshness_text.rs (FreshnessText en/es, cadenas enteras), tui/freshness.rs (funciones puras de mapeo y líneas agregadas), Prediction::Pending, fn age pub(crate), el Tick de update.rs que repinta mientras haya resultados, y el panel de conflictos pinta filas y líneas agregadas (ConflictPanelModel.summary) con snapshots en en/es y ASCII; la TUI no importa motor ni Git; el contrato de API y el motor no cambian.",
+    "nonGoals": [
+      "Alerta de conflicto nuevo (US-CKP-008)",
+      "PolicyBanner y acción ante pending/not-computable (US-CKP-009)",
+      "Cambios en el motor, la API o la regla de base movida (ya en main por #314)",
+      "G-B: confirmar la base en runtime no replanifica (TS-CKP-011)",
+      "KPI de US-CKP-010 y age_s del perfil mcp",
+      "Linux y Windows (etapa de validación multiplataforma)"
+    ]
+  },
+  "suite": {
+    "command": "node tools/test/nextest-junit.mjs"
+  },
+  "layers": {
+    "runtime": {
+      "commands": [
+        {
+          "id": "suite",
+          "cmd": "node tools/test/nextest-junit.mjs"
+        }
+      ],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "criteria": [
+    {
+      "id": "S1",
+      "statement": "Cuando la TUI abre un repo de 10 worktrees (10 pares) con todos los pares calculating, el panel dice 'Calculando 10 de 10 pares' (es) / 'Calculating 10 of 10 pairs' (en), ningún par dice 'Sin conflictos' y no hay línea 'Sin conflictos previstos'",
+      "verify": "cargo test -p gitraptor-cli --test tui_freshness s1_initial_calculation_says_calculating_and_never_no_conflicts",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_freshness.rs"
+      ]
+    },
+    {
+      "id": "S2",
+      "statement": "Cuando un prediction.changed lleva el par claude-1 ↔ claude-2 a recalculating con resultado de hace 40 s, su fila dice 'desactualizado · hace 40 s · recalculando' (también sin ⚡ ni ⚠), el par claude-3 ↔ claude-4 sigue current 'hace 40 s', y un segundo evento devuelve el primero a current 'hace 0 s'. La fila de un par recalculating sin ⚡ ni ⚠ no lleva ⚡ ni ⚠ ni línea de archivos",
+      "verify": "cargo test -p gitraptor-cli --test tui_freshness s2_a_commit_marks_only_that_pair_stale_with_its_age",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_freshness.rs"
+      ]
+    },
+    {
+      "id": "S3",
+      "statement": "Cuando un prediction.changed pasa los 4 pares contra la base a calculating sin level, el panel muestra 'Calculando 4 de 10 pares', esos pares pierden su fila y no aparece 'Sin conflictos previstos'",
+      "verify": "cargo test -p gitraptor-cli --test tui_freshness s3_a_moved_base_shows_the_base_pairs_calculating",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_freshness.rs"
+      ]
+    },
+    {
+      "id": "S4",
+      "statement": "Un resultado calculado hace 3 min muestra 'hace 3 min' junto al par (es) / '3 min ago' o su cadena entera en en, y un Msg::Tick de 1 s lo mueve de 'hace 59 s' a 'hace 1 min'; una antigüedad negativa (reloj por detrás) se ve 'hace 0 s'",
+      "verify": "cargo test -p gitraptor-cli --test tui_freshness s4_the_age_is_always_shown_and_moves_with_the_tick",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_freshness.rs"
+      ]
+    },
+    {
+      "id": "S5",
+      "statement": "Los pares pending y not-computable se agrupan por motivo con singular y plural ('Pendiente: confirma la rama base (4 pares)', 'No calculable: falta la rama base (1 par)') y ninguno dice 'Sin conflictos' ni habilita 'Sin conflictos previstos'",
+      "verify": "cargo test -p gitraptor-cli --test tui_freshness s5_pending_and_not_computable_group_by_reason_and_never_say_no_conflicts",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_freshness.rs"
+      ]
+    },
+    {
+      "id": "S6",
+      "statement": "'Sin conflictos previstos · hace N' (N del resultado más antiguo) solo aparece con al menos un par y todos current sin ⚡ ni ⚠; con 0 pares, o con un solo par recalculating, calculating, pending o con ⚠, no aparece",
+      "verify": "cargo test -p gitraptor-cli --test tui_freshness s6_no_conflicts_line_only_when_every_pair_is_current_and_clean",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_freshness.rs"
+      ]
+    },
+    {
+      "id": "S7",
+      "statement": "Con NO_COLOR/ASCII la frescura se ve igual: 'hace N', 'desactualizado' y 'Calculando' salen sin color y el '·' se pliega a '|' según Glyphs::fold (tui/style.rs), sin otros caracteres Unicode, en 80x24, en en y es",
+      "verify": "cargo test -p gitraptor-cli --test tui_freshness s7_freshness_is_legible_without_color_and_in_ascii",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_freshness.rs"
+      ]
+    }
+  ],
+  "constraints": {
+    "deny_paths": [
+      "docs/ARTIFACTS.md",
+      "docs/architecture/decisions/ADR-GRD-008*",
+      "crates/core/**",
+      "crates/api/**"
+    ],
+    "allow_dependency_changes": false
+  },
+  "scope": {
+    "projects": [
+      "gitraptor-cli"
+    ]
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 900000,
+    "suiteTimeoutMs": 5400000,
+    "maxOutsidePlan": 3
+  },
+  "hops": {
+    "design": {
+      "agent": "main-loop",
+      "model": "sonnet"
+    },
+    "critic": {
+      "agent": "nassa-core:plan-critic",
+      "model": "opus"
+    },
+    "tester": {
+      "agent": "nassa-core:criterion-tester",
+      "model": "sonnet"
+    },
+    "build": {
+      "agent": "nassa-dev-rust:rust-expert",
+      "model": "sonnet"
+    },
+    "review": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "opus"
+    },
+    "conformance": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "sonnet"
+    }
+  }
+}

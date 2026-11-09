@@ -68,7 +68,7 @@ El trabajo es solo de la TUI. El motor decide qué par se recalcula y cuándo (D
 **Decisiones del Arquitecto como autor de la Dev Spec (2026-10-27):**
 
 - **E1**: los textos van en un catálogo tipado propio, `apps/cli/src/present/freshness_text.rs` (`FreshnessText`, `render(self, lang: Lang)` con `match` exhaustivo en/es y `every()`), registrado con una línea en `present/mod.rs`. Es el patrón de AD1 de DS-US-CKP-006 (`present/prediction_text.rs`) y de DS-US-CKP-008 (`present/conflict_alert_text.rs`): un archivo por historia y un mismo mecanismo (ADR-GRP-016). Los `.txt` de `apps/cli/i18n/` no sirven aquí: su lector, `apps/cli/src/i18n.rs`, es un módulo del binario (`main.rs:8`) y la TUI vive en la librería. Corrección del pase de coherencia (2026-10-27).
-- **E2**: `Text::Ago` (`present/i18n.rs:348`) dice "ahora" por debajo de 1 s, y P4 exige "hace 0 s". No se reutiliza el texto, solo el corte por unidades: `fn age` (`present/i18n.rs:92`) pasa a `pub(crate)`.
+- **E2**: `Text::Ago` (`present/i18n.rs:348`) dice "ahora" por debajo de 1 s, y P4 exige "hace 0 s". No se reutiliza el texto, solo el corte por unidades: `fn age` (`present/i18n.rs:93`) pasa a `pub(crate)`.
 - **E3**: `Prediction` (`widgets/conflict_alert.rs:20`) solo distingue `PendingBase`. Se añade `Prediction::Pending` para los otros motivos de `pending`, con el mismo estilo (`SymbolToken::Info`, `StatusInfo`).
 - **E4**: un par `current` o `recalculating` sin `computed_at_utc_ms` (el contrato no lo permite, pero el cliente no confía) se presenta como `calculating`. Sin hora no hay resultado que mostrar.
 - **E5**: con 0 pares no se pinta "Sin conflictos previstos". Con 0 pares, el panel solo lleva la línea de límites (P7: la TUI no inventa filas).
@@ -183,7 +183,7 @@ sequenceDiagram
 
 ### T003 — Redibujar cada segundo mientras haya resultados
 
-**Objetivo.** Que la antigüedad avance sola. Hoy el `Msg::Tick` (`update.rs:55`) solo marca `dirty` si el repo publica la actividad.
+**Objetivo.** Que la antigüedad avance sola. Hoy el `Msg::Tick` (`update.rs:58`) solo marca `dirty` si el repo publica la actividad.
 
 **Ubicación.** `apps/cli/src/tui/update.rs` (**MODIFY**: brazo `Msg::Tick`)
 
@@ -201,7 +201,7 @@ sequenceDiagram
 
 **Ubicación.**
 - `apps/cli/src/tui/widgets/conflict_alert.rs` (**MODIFY**): `ConflictPanelModel.summary: Vec<PanelLine>` y `PanelLine { prediction: Prediction, text: SafeText }`, pintadas con el estilo de `Prediction` (`:89`) encima de `limits`
-- `apps/cli/src/tui/view.rs` (**MODIFY**): donde DS-US-CKP-006 T004 construye el `ConflictPanelModel`, `ConflictEntry.status` y `summary` salen de `tui::freshness`; y los tests de snapshot
+- `apps/cli/src/tui/view/conflict_panel.rs` (**MODIFY**, `build` líneas 18-46: el filtro `listed` pasa a incluir los `recalculating` sin ⚡/⚠, P2; `status` de `entry` sale de `tui::freshness`) y `apps/cli/src/tui/view.rs` (**MODIFY** solo si hace falta): donde se construye el `ConflictPanelModel`, `ConflictEntry.status` y `summary` salen de `tui::freshness`; y los tests de snapshot
 - `apps/cli/src/tui/snapshots/freshness_*_{en,es,ascii}.snap` (**CREATE**)
 
 **Reglas**
@@ -240,7 +240,7 @@ sequenceDiagram
 | `ConflictPanelModel`, `ConflictEntry.status` | `apps/cli/src/tui/widgets/conflict_alert.rs` | **CREATE** en DS-US-CKP-006 T004 |
 | `ConflictPanelModel.summary`, `PanelLine` | ídem | **CREATE** (T004) |
 | `PairStateView`, `PairReason`, `PairLevel` | `gitraptor_api::prediction` | **CREATE** en DS-TS-CKP-001 T009 |
-| `Msg::Tick { now_ms }`, `TICK` | `apps/cli/src/tui/app.rs:30`, `:113`; `update.rs:55` | existe |
+| `Msg::Tick { now_ms }`, `TICK` | `apps/cli/src/tui/app.rs:30`, `:113`; `update.rs:58` | existe |
 | `Model.now_ms` (reloj de pared, ms UTC: `app.rs:221`, `wall_ms`) | `apps/cli/src/model.rs` | existe |
 | `fn age(ms) -> (i64, &str)` | `apps/cli/src/present/i18n.rs:92` | **MODIFY** a `pub(crate)` (E2) |
 | `FreshnessText` | `apps/cli/src/present/freshness_text.rs` | **CREATE** (T001, E1) |
@@ -265,6 +265,10 @@ Antigüedad en s (< 60), min (< 60), h (< 24), d (P4); negativa vale 0 (A4); tic
 ---
 
 ## Estrategia de pruebas y cobertura
+
+**Contrato de `/implement` (2026-11-09).** Los escenarios se certifican con `apps/cli/tests/tui_freshness.rs` (API pública, sin daemon): S1 (escenario 1), S2 (2b), S3 (3b), S4 (4), S5 (pending/not-computable por motivo), S6 (línea «Sin conflictos previstos»), S7 (sin color y ASCII). Los tests `tui::*::tests::freshness_*` de abajo son unitarios de apoyo y los snapshots de T004.
+
+**Decisión del orquestador (2026-11-09), validada por el crítico del plan (PC-1, PC-3).** En ASCII el `·` se pliega a `|` (`Glyphs::fold`, `tui/style.rs`), no se cambia el plegado. Una fila `recalculating` sin ⚡ ni ⚠ no lleva símbolo de conflicto ni línea de archivos: `ConflictEntry` gana una marca opcional (p. ej. `conflict: Option<ConflictMark>` o un `stale_only: bool`) que el widget pinta con el estilo `Stale` y sin `⚡`/`⚠`; el experto elige la forma mínima.
 
 ### Un test por criterio de aceptación
 
