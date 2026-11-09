@@ -45,6 +45,7 @@ tags: [desktop, spike, identidad-firmada, seccode, audit-token, code-signing, ma
 - **Inventario de bindings**: comparar los crates candidatos (bindings generados de `Security.framework` y envoltorios de alto nivel) por funciones cubiertas, mantenimiento, licencia y superficie de dependencias (SEC-GRD-15), y medir cuánto `unsafe` queda fuera del crate.
 - **Prototipo**: un servidor de socket Unix mínimo que obtiene el audit token del par y valida el requisito, y un cliente empaquetado como `.app` con cuatro firmas: ad hoc, Developer ID sin *hardened runtime*, Developer ID con *hardened runtime* y Developer ID con `get-task-allow`.
 - **Ataques**: cliente lanzado con `DYLD_INSERT_LIBRARIES`; bundle firmado al que se le cambia un recurso; binario homónimo en `~/Applications` lanzado con `open -a`; pid reutilizado entre la conexión y la petición; app traslocada por Gatekeeper.
+- **Dirección inversa (B-1; Ajuste tras la revisión de seguridad (2026-11-08), validado por security-expert)**: con el mismo binding, la app verifica al daemon del socket por su audit token (`LOCAL_PEERTOKEN`) en vez de por `LOCAL_PEERPID`, que admite reutilización de pid; comprobar que un pid reutilizado entre `connect` y la verificación no pasa.
 - **Encaje**: comprobar que la validación se puede llamar desde el hilo del canal sin bloquear el resto de conexiones y medir la latencia en frío y en caliente.
 - **Sin cuenta de Apple Developer**: hacer lo anterior con un certificado de desarrollo local y dejar marcado lo que solo se confirma con Developer ID y notarización.
 
@@ -52,6 +53,7 @@ tags: [desktop, spike, identidad-firmada, seccode, audit-token, code-signing, ma
 
 - **Decisión de binding** escrita: crate elegido o funciones dentro de `macsys`, con el `unsafe` que queda, dónde y con qué test de frontera; si hace falta una excepción nueva, su texto para ADR-GRP-002.
 - Las cuatro firmas y los cinco ataques dan el resultado esperado (solo pasa Developer ID con *hardened runtime* y sin los entitlements prohibidos).
+- La app verifica al daemon por audit token con el mismo binding, o el informe dice por qué no (B-1).
 - Latencia medida en el Mac de Rene, frente al presupuesto de 10 ms por petición.
 - Lista de lo pendiente de confirmar con Developer ID y notarización reales.
 - Si la respuesta es "no se puede sin `unsafe` fuera de `macsys`" ni con una excepción aceptable, el Research Brief lo dice y ADR-GRP-017 § 3 queda con la identidad por ruta y el factor por acción también en v0.1.0.

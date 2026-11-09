@@ -42,6 +42,7 @@ tags: [cockpit, desktop, dep-dsk-4, catalogo-operaciones, commit, capa-cockpit, 
 - **Proteger** con el snapshot `previo_garantizado` antes de crear el commit; "Deshacer" de la Time Machine deja el commit fuera de la rama y los cambios otra vez sin commitear (US-DSK-010, escenario 3).
 - **Decidir** con Guardrails como operación gobernada "Commit" (TS-CKP-003): las políticas de formato del mensaje y tamaño de diff (US-GRD-009) y de autoría (US-GRD-018) se evalúan en la preparación y se repiten al ejecutar; una denegación devuelve la regla y el motivo.
 - **Resolver** la capa con ADR-GRP-017 § 4: en la app, `cockpit` con **presencia de sesión** (se revierte en local); con identidad por ruta, **factor por acción** ligado al plan; desde la TUI, la capa `cockpit` de siempre. Un agente solicitante sigue en la capa `mcp`.
+- **Fijar** en la huella del plan el resumen de los hooks efectivos y de `core.hooksPath` (B-3; Ajuste tras la revisión de seguridad (2026-11-08), validado por security-expert): `pre-commit` y `commit-msg` pueden tener efectos que la Time Machine no deshace. Si cambiaron desde el último factor, el commit pide **factor por acción** aunque haya presencia de sesión; si cambian entre preparar y ejecutar, `rejected`.
 - **Entregar** la salida de los hooks del repo (`pre-commit`, `commit-msg`), saneada y truncada, solo a la conexión `cockpit` que pidió el commit (ADR-CKP-002 § 6).
 - **Mantener** sin variantes `--amend`, `--no-verify` ni `--allow-empty` (ADR-CKP-002 § 1).
 - **Fuera de alcance**: preparar y quitar del índice (TS-CKP-008); el compositor del mensaje en la app (US-DSK-010); el commit que cierra un merge detenido (Requisitos Técnicos de US-DSK-014); la presencia de sesión y el factor, que da ADR-GRP-017 por su propia historia; ofrecer el commit en la TUI, que necesitaría su historia.
@@ -56,6 +57,7 @@ tags: [cockpit, desktop, dep-dsk-4, catalogo-operaciones, commit, capa-cockpit, 
 - **Autoría**: el commit lleva como autor la persona configurada y ningún trailer de agente.
 - **NFR-01**: con el almacén lleno, `aborted` y el repo igual (huella de INF-GRP-001); "Deshacer" devuelve la rama y el índice al previo.
 - **Capa (ADR-GRP-017, V4)**: con el doble del factor, la app sin presencia de sesión recibe rechazo; con sesión e identidad firmada se acepta; con identidad por ruta pide factor por acción; con capa `mcp`, "todo lo preparado" con otra sesión presente sigue rechazado.
+- **Hooks (B-3)**: cambiar `core.hooksPath` o el contenido de `pre-commit` tras el último factor hace que el siguiente commit con presencia de sesión pida factor por acción; cambiarlo entre preparar y ejecutar da `rejected`.
 - **Regresión MCP**: la suite de `safe_commit` (US-MCP-009 y US-MCP-010) sigue en verde con la versión mayor nueva.
 - **Red**: captura de red durante el commit: 0 conexiones (Validación 16 de ADR-CKP-002, parte local).
 
