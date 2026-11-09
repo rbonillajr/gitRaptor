@@ -14,7 +14,8 @@ export interface DialogProps {
   onOpenChange: (open: boolean) => void;
   /** `confirm` is an `alertdialog`. */
   kind: "confirm" | "info";
-  title: string;
+  /** A node only to put a decorative glyph (`aria-hidden`) beside the text; the text is the accessible name. */
+  title: ReactNode;
   description: string;
   children?: ReactNode;
   /** Required in `confirm`. */

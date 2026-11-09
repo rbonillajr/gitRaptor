@@ -350,5 +350,177 @@
       "label": "{{count}} predicted conflicts across your repos. Open them",
       "compact": "⚡ {{count}}"
     }
+  },
+  "grd": {
+    "actor": {
+      "claudeCode": "Claude Code · {{worktree}}",
+      "other": "another agent · {{worktree}}"
+    },
+    "agent": {
+      "claudeCode": "Claude Code",
+      "none": "an agent",
+      "other": "another agent"
+    },
+    "block": {
+      "attempted": "What it tried",
+      "attemptedOp": "It tried to {{operation}}, at {{time}}.",
+      "attemptedPush": "A {{kind}} of {{source}} onto {{ref}} on the server ({{remote}}), at {{time}}.",
+      "canDo": "What you can do",
+      "do": {
+        "exception": "If you're the one who needs it, you can make an exception for this once.",
+        "nothing": "Nothing: protection did its job. You can tell the agent to use another branch."
+      },
+      "nothing": "Nothing happened. {{ref}} is unchanged on your machine and on the server.",
+      "nothingLocal": "Nothing happened. {{ref}} is unchanged on your machine.",
+      "ok": "Got it",
+      "openLabel": "View the block: {{title}}",
+      "seeLog": "See in the log",
+      "stoppedLabel": "What stopped it",
+      "technical": "Technical details",
+      "times": "×{{count}}, the last at {{time}}",
+      "title": "Blocked: {{actor}} tried to {{operation}}",
+      "titleNoActor": "Blocked: someone tried to {{operation}} (no agent identified)",
+      "why": {
+        "deletebase": "It deletes your main branch, the starting point for everyone.",
+        "forcepush": "It replaces the server's history. Commits others pushed that aren't on your machine would be lost for everyone."
+      },
+      "whyLabel": "Why it's dangerous"
+    },
+    "empty": "Nothing blocked in {{repo}}. Protection is on.",
+    "empty.unprotected": "{{repo}} isn't protected.",
+    "exc": {
+      "branchDeleteHint": "If git says the branch isn't merged and you still want to delete it, change -d to -D.",
+      "cancelHow": "Once you run it you have 10 seconds to cancel: press Ctrl-C in that terminal.",
+      "cancelOr": "Or run this in another terminal:",
+      "cancelled": "Cancelled: nothing ran. It's in the log.",
+      "cancelledBy": "Cancelled by {{actor}}: nothing ran.",
+      "close": "Close",
+      "cta": "I'll do it myself…",
+      "done": "Done with an exception: {{operation}}; skipped {{rules}}",
+      "engineDown": "The engine is stopped: the exception needs it.",
+      "mismatch": "The announced exception isn't the one you copied: cancel it with Ctrl-C in that terminal.",
+      "notOffered": {
+        "commit": "The exception only works for push, deleting a local branch and rebase.",
+        "operation": "The exception only works for push, deleting a local branch and rebase.",
+        "raptorUnknown": "GitRaptor can't find its own `raptor` to write the command.",
+        "rateLimited": "GitRaptor didn't log where it happened, so it can't write the command.",
+        "remote": "The exception needs a remote by name, not a URL.",
+        "rule": "This rule can't be skipped with an exception.",
+        "unsafeText": "A name in this operation has characters that could act on your terminal, so we don't offer the command.",
+        "whereUnknown": "GitRaptor didn't log where it happened, so it can't write the command."
+      },
+      "pending": "Exception announced in a terminal: runs in {{n}} s",
+      "pendingAnnounce": "Exception announced: runs in {{n}} seconds",
+      "pendingNow": "Running now…",
+      "pendingOp": "{{operation}}; it skips {{rules}}",
+      "reason": "This version of GitRaptor can't ask for Touch ID yet, so the confirmation happens in your terminal.",
+      "rebaseHint": "GitRaptor doesn't log which base the agent rebased onto, so it can't write the command for you. If you really need it, write it in your terminal after `--` and read what it shows before accepting.",
+      "rejected": "Exception refused: {{operation}}",
+      "remote": "GitRaptor can't undo this on the server: it may delete other people's commits.",
+      "review": "Check the command: the terminal shows what it will do and asks before doing it. If the terminal shows `--yes` or a different operation, cancel it.",
+      "sourceInferred": "Inferred source branch: {{branch}} (the one checked out in that folder when it was blocked). Check in the terminal's plan that it's the one you want to push.",
+      "terminal": "To prove it's you and not an agent, run this command in your own terminal (not an agent's):",
+      "terminal.title": "Confirm from your terminal",
+      "where": "Where's the terminal? Press Cmd+Space and type \"Terminal\".",
+      "who": "You do it, not {{agent}}. It runs once; the rule stays on afterwards."
+    },
+    "gloss": {
+      "ask": "What is {{term}}?",
+      "exception": "Doing, once and on record, something the protection blocks.",
+      "forcePush": "Push to the server replacing its history. It can delete other people's work.",
+      "hooks": "Small programs Git runs before some operations; that's how risky ones are stopped.",
+      "protection": "Rules that stop dangerous Git operations in this repo."
+    },
+    "kind": {
+      "forcePush": "force push",
+      "push": "push"
+    },
+    "level": {
+      "floor": "team configuration",
+      "local": "local configuration",
+      "minimum": "the default minimum set",
+      "profile": "personal configuration",
+      "system": "default value",
+      "worktree": "team configuration on this branch"
+    },
+    "nav": {
+      "labelUnseen": "Guardrails, {{unseen}}",
+      "title": "Guardrails",
+      "unseen_one": "{{count}} new block",
+      "unseen_other": "{{count}} new blocks"
+    },
+    "op": {
+      "branchDelete": "delete the branch {{ref}}",
+      "commit": "make a commit on {{branch}}",
+      "forcePush": "rewrite the history of {{ref}} on the server ({{remote}})",
+      "push": "push to {{ref}} on the server ({{remote}})",
+      "pushDelete": "delete {{ref}} on the server ({{remote}})",
+      "rebase": "rebase {{branch}}",
+      "rebaseUnknown": "a rebase",
+      "refMove": "move the branch {{ref}}"
+    },
+    "rule": {
+      "authorship": {
+        "humanAuthor": "commits are made by the person (human-author)",
+        "trailerRequired": "an agent's commit carries its trailer (agents-commit)"
+      },
+      "config": {
+        "relaxIgnored": "a relaxation was ignored while the agent acted"
+      },
+      "minimum": {
+        "baseBranchDelete": "base branch protection",
+        "forcePush": "no force-push"
+      },
+      "permission": {
+        "branchDelete": "permission of branch-delete",
+        "commit": "permission of commit",
+        "forcePush": "permission of force-push",
+        "merge": "permission of merge",
+        "push": "permission of push",
+        "rebase": "permission of rebase",
+        "resetHard": "permission of reset-hard",
+        "worktreeAdd": "permission of worktree-add",
+        "worktreeRemove": "permission of worktree-remove"
+      },
+      "policy": {
+        "commitFormat": "commit format",
+        "configProtected": "Guardrails configuration protected from agents",
+        "diffSize": "diff size limit",
+        "forbiddenPath": "forbidden path",
+        "protectedBranch": "protected branch"
+      },
+      "system": {
+        "channelNotAuthentic": "the operation could not be verified",
+        "degraded": "the operation could not be verified",
+        "inputRejected": "the operation could not be verified",
+        "internalError": "the operation could not be verified",
+        "repoMismatch": "the operation could not be verified",
+        "snapshotFailed": "the operation could not be verified"
+      }
+    },
+    "stale": "Last read {{age}} ago",
+    "summary": "{{blocked}} blocked in the last {{days}} days · {{exceptions}} exceptions",
+    "tech": {
+      "actor": "Actor: {{actor}}",
+      "decision": "Decision: {{id}}",
+      "layer": "Layer: {{layer}}",
+      "rule": "Rule: {{rule}} (level: {{level}})"
+    },
+    "toast": {
+      "kindLabel": "Blocked",
+      "many": "{{count}} operations were blocked",
+      "view": "View"
+    },
+    "unavailable": {
+      "active": "The block list of {{repo}} isn't available right now. Protection is still on: the hooks decide without this list.",
+      "notObserved": "GitRaptor isn't watching {{repo}} right now.",
+      "unknown": "The block list of {{repo}} isn't available right now. Protection doesn't depend on this list: if {{repo}} is protected, the hooks keep stopping operations."
+    },
+    "unknown": "unknown",
+    "unlogged": "From {{from}} to {{to}} the engine wasn't running: what the hooks blocked then isn't logged",
+    "unverified": "Logged without detail (too many at once)",
+    "view": {
+      "back": "Back to the fleet"
+    }
   }
 }

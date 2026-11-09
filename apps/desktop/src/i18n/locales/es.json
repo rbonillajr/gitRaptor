@@ -350,5 +350,177 @@
       "label": "{{count}} conflictos previstos en tus repos. Abrirlos",
       "compact": "⚡ {{count}}"
     }
+  },
+  "grd": {
+    "actor": {
+      "claudeCode": "Claude Code · {{worktree}}",
+      "other": "otro agente · {{worktree}}"
+    },
+    "agent": {
+      "claudeCode": "Claude Code",
+      "none": "un agente",
+      "other": "otro agente"
+    },
+    "block": {
+      "attempted": "Qué intentó",
+      "attemptedOp": "Intentó {{operation}}, a las {{time}}.",
+      "attemptedPush": "Un {{kind}} de {{source}} sobre {{ref}} en el servidor ({{remote}}), a las {{time}}.",
+      "canDo": "Qué puedes hacer",
+      "do": {
+        "exception": "Si eres tú quien necesita hacerlo, puedes hacer una excepción para esta vez.",
+        "nothing": "Nada: la protección hizo su trabajo. Puedes decirle al agente que use otra rama."
+      },
+      "nothing": "No pasó nada. {{ref}} sigue igual en tu equipo y en el servidor.",
+      "nothingLocal": "No pasó nada. {{ref}} sigue igual en tu equipo.",
+      "ok": "Entendido",
+      "openLabel": "Ver el bloqueo: {{title}}",
+      "seeLog": "Ver en el registro",
+      "stoppedLabel": "Qué lo frenó",
+      "technical": "Detalles técnicos",
+      "times": "×{{count}}, la última a las {{time}}",
+      "title": "Bloqueado: {{actor}} intentó {{operation}}",
+      "titleNoActor": "Bloqueado: se intentó {{operation}} (sin agente identificado)",
+      "why": {
+        "deletebase": "Borra tu rama principal. Todo el equipo la usa como punto de partida.",
+        "forcepush": "Reemplaza el historial del servidor. Los commits que otros subieron y no están en tu equipo se perderían para todos."
+      },
+      "whyLabel": "Por qué es peligroso"
+    },
+    "empty": "Nada bloqueado en {{repo}}. La protección está activa.",
+    "empty.unprotected": "{{repo}} no está protegido.",
+    "exc": {
+      "branchDeleteHint": "Si git dice que la rama no está fusionada y la quieres borrar igualmente, cambia -d por -D.",
+      "cancelHow": "Cuando lo ejecutes tendrás 10 segundos para cancelar: pulsa Ctrl-C en esa terminal.",
+      "cancelOr": "O ejecuta esto en otra terminal:",
+      "cancelled": "Cancelada: no se ejecutó nada. Queda en el registro.",
+      "cancelledBy": "La canceló {{actor}}: no se ejecutó nada.",
+      "close": "Cerrar",
+      "cta": "Lo haré yo…",
+      "done": "Hecho con excepción: {{operation}}; se saltó {{rules}}",
+      "engineDown": "El motor está parado: la excepción lo necesita.",
+      "mismatch": "La excepción anunciada no es la que copiaste: cancélala con Ctrl-C en esa terminal.",
+      "notOffered": {
+        "commit": "La excepción solo sirve para push, borrar una rama local y rebase.",
+        "operation": "La excepción solo sirve para push, borrar una rama local y rebase.",
+        "raptorUnknown": "GitRaptor no encuentra su propio `raptor` para escribir el comando.",
+        "rateLimited": "GitRaptor no anotó dónde ocurrió, así que no puede escribir el comando.",
+        "remote": "La excepción necesita un remoto por su nombre, no una URL.",
+        "rule": "Esta regla no se puede saltar con una excepción.",
+        "unsafeText": "Un nombre de esta operación tiene caracteres que podrían actuar sobre tu terminal, así que no ofrecemos el comando.",
+        "whereUnknown": "GitRaptor no anotó dónde ocurrió, así que no puede escribir el comando."
+      },
+      "pending": "Excepción anunciada en una terminal: se ejecuta en {{n}} s",
+      "pendingAnnounce": "Excepción anunciada: se ejecuta en {{n}} segundos",
+      "pendingNow": "Ejecutándose ahora…",
+      "pendingOp": "{{operation}}; se salta {{rules}}",
+      "reason": "Esta versión de GitRaptor todavía no puede pedir Touch ID, así que la confirmación se hace en tu terminal.",
+      "rebaseHint": "GitRaptor no anota sobre qué base hizo el agente el rebase, así que no puede escribir el comando por ti. Si de verdad lo necesitas, escríbelo en tu terminal después de `--` y lee lo que te enseñe antes de aceptar.",
+      "rejected": "Excepción rechazada: {{operation}}",
+      "remote": "En el servidor no hay vuelta atrás desde GitRaptor: puede borrar commits de otros.",
+      "review": "Revisa el comando: la terminal te enseñará qué va a hacer y te preguntará antes. Si en la terminal aparece `--yes` o una operación distinta, cancélala.",
+      "sourceInferred": "Rama de origen deducida: {{branch}} (la que estaba sacada en esa carpeta cuando se bloqueó). Comprueba en el plan de la terminal que es la que quieres subir.",
+      "terminal": "Para demostrar que eres tú y no un agente, ejecuta este comando en tu propia terminal (no en la de un agente):",
+      "terminal.title": "Confirma desde tu terminal",
+      "where": "¿Dónde está la terminal? Pulsa Cmd+Espacio y escribe \"Terminal\".",
+      "who": "La harás tú, no {{agent}}. Se ejecuta una sola vez; la regla sigue activa después."
+    },
+    "gloss": {
+      "ask": "¿Qué es {{term}}?",
+      "exception": "Hacer tú, una sola vez y quedando anotado, algo que la protección frena.",
+      "forcePush": "Enviar al servidor reemplazando su historial. Puede borrar trabajo de otros.",
+      "hooks": "Pequeños programas que Git ejecuta antes de ciertas operaciones; así se frena lo peligroso.",
+      "protection": "Reglas que frenan operaciones peligrosas de Git en este repo."
+    },
+    "kind": {
+      "forcePush": "push forzado",
+      "push": "push"
+    },
+    "level": {
+      "floor": "configuración del equipo",
+      "local": "configuración local",
+      "minimum": "el conjunto mínimo por defecto",
+      "profile": "configuración personal",
+      "system": "valor por defecto",
+      "worktree": "configuración del equipo en esta rama"
+    },
+    "nav": {
+      "labelUnseen": "Guardrails, {{unseen}}",
+      "title": "Guardrails",
+      "unseen_one": "{{count}} bloqueo nuevo",
+      "unseen_other": "{{count}} bloqueos nuevos"
+    },
+    "op": {
+      "branchDelete": "borrar la rama {{ref}}",
+      "commit": "hacer un commit en {{branch}}",
+      "forcePush": "reescribir el historial de {{ref}} en el servidor ({{remote}})",
+      "push": "subir a {{ref}} en el servidor ({{remote}})",
+      "pushDelete": "borrar {{ref}} en el servidor ({{remote}})",
+      "rebase": "rebasar {{branch}}",
+      "rebaseUnknown": "un rebase",
+      "refMove": "mover la rama {{ref}}"
+    },
+    "rule": {
+      "authorship": {
+        "humanAuthor": "los commits los hace la persona (human-author)",
+        "trailerRequired": "el commit de un agente lleva su trailer (agents-commit)"
+      },
+      "config": {
+        "relaxIgnored": "se ignoró una relajación mientras actuaba el agente"
+      },
+      "minimum": {
+        "baseBranchDelete": "protección de la rama base",
+        "forcePush": "prohibir force-push"
+      },
+      "permission": {
+        "branchDelete": "permiso de branch-delete",
+        "commit": "permiso de commit",
+        "forcePush": "permiso de force-push",
+        "merge": "permiso de merge",
+        "push": "permiso de push",
+        "rebase": "permiso de rebase",
+        "resetHard": "permiso de reset-hard",
+        "worktreeAdd": "permiso de worktree-add",
+        "worktreeRemove": "permiso de worktree-remove"
+      },
+      "policy": {
+        "commitFormat": "formato de commit",
+        "configProtected": "configuración de Guardrails protegida frente a agentes",
+        "diffSize": "límite de diff",
+        "forbiddenPath": "ruta prohibida",
+        "protectedBranch": "rama protegida"
+      },
+      "system": {
+        "channelNotAuthentic": "no se pudo verificar la operación",
+        "degraded": "no se pudo verificar la operación",
+        "inputRejected": "no se pudo verificar la operación",
+        "internalError": "no se pudo verificar la operación",
+        "repoMismatch": "no se pudo verificar la operación",
+        "snapshotFailed": "no se pudo verificar la operación"
+      }
+    },
+    "stale": "Última lectura hace {{age}}",
+    "summary": "{{blocked}} bloqueadas en los últimos {{days}} días · {{exceptions}} excepciones",
+    "tech": {
+      "actor": "Actor: {{actor}}",
+      "decision": "Decisión: {{id}}",
+      "layer": "Capa: {{layer}}",
+      "rule": "Regla: {{rule}} (nivel: {{level}})"
+    },
+    "toast": {
+      "kindLabel": "Bloqueo",
+      "many": "Se bloquearon {{count}} operaciones",
+      "view": "Ver"
+    },
+    "unavailable": {
+      "active": "La lista de bloqueos de {{repo}} no está disponible ahora. La protección sigue activa: los hooks deciden sin esta lista.",
+      "notObserved": "GitRaptor no está observando {{repo}} ahora.",
+      "unknown": "La lista de bloqueos de {{repo}} no está disponible ahora. La protección no depende de esta lista: si {{repo}} está protegido, los hooks siguen frenando."
+    },
+    "unknown": "desconocido",
+    "unlogged": "De {{from}} a {{to}} el motor no estaba en marcha: lo que bloquearon los hooks entonces no está anotado",
+    "unverified": "Anotadas sin detalle (demasiadas a la vez)",
+    "view": {
+      "back": "Volver a la flota"
+    }
   }
 }

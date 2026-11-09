@@ -12,6 +12,8 @@ export type ToastKind = "success" | "info" | "warning" | "error";
 export interface ToastInput {
   kind: ToastKind;
   message: string;
+  /** Replaces the hidden kind prefix (`ui.toast.kind.<kind>`) read by screen readers, e.g. "Blocked" (DS-US-DSK-007 D15). */
+  srLabel?: string;
   action?: { label: string; onAction: () => void };
 }
 
@@ -44,8 +46,13 @@ export function useToast(): ToastApi {
   return api;
 }
 
+/** Like `useToast`, but `null` outside a `ToastProvider`: for views that raise a toast only when the app has one. */
+export function useOptionalToast(): ToastApi | null {
+  return useContext(ToastContext);
+}
+
 /** The toast as it looks, with no timer (the catalog paints it). `role` follows the kind; Escape inside closes it. */
-export function ToastSurface({ kind, message, action, onClose, id }: ToastInput & { onClose: () => void; id?: string }) {
+export function ToastSurface({ kind, message, srLabel, action, onClose, id }: ToastInput & { onClose: () => void; id?: string }) {
   const { t } = useTranslation();
   const glyph = kind === "info" ? null : GLYPH[kind];
   return (
@@ -67,7 +74,7 @@ export function ToastSurface({ kind, message, action, onClose, id }: ToastInput 
           <glyph.Icon />
         </span>
       ) : null}
-      {kind !== "info" ? <span className="sr-only">{t(`ui.toast.kind.${kind}`)}</span> : null}
+      {kind !== "info" ? <span className="sr-only">{srLabel ?? t(`ui.toast.kind.${kind}`)}</span> : null}
       <span className="min-w-0 flex-1">{message}</span>
       {action ? (
         <Button
@@ -104,7 +111,13 @@ function ToastCard({ toast, paused, onClose }: { toast: ToastItem; paused: boole
 
   return (
     <div className={cx("gr-motion", shown ? "opacity-100" : "opacity-0")}>
-      <ToastSurface kind={toast.kind} message={toast.message} onClose={onClose} {...(toast.action ? { action: toast.action } : {})} />
+      <ToastSurface
+        kind={toast.kind}
+        message={toast.message}
+        onClose={onClose}
+        {...(toast.action ? { action: toast.action } : {})}
+        {...(toast.srLabel ? { srLabel: toast.srLabel } : {})}
+      />
     </div>
   );
 }
