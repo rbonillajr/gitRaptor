@@ -4,7 +4,7 @@ title: "Dev Spec — Deshacer solo lo que hizo un agente en un periodo (raptor u
 type: dev-spec
 status: draft
 created: 2026-10-27
-updated: 2026-10-28
+updated: 2026-11-08
 story: US-TMC-011
 scope: backend
 frontend_surface: false
@@ -679,6 +679,24 @@ Corre `/security-review --scope devspec docs/requirements/features/time-machine/
 ## Enmienda (2026-10-28, US-TMC-008)
 
 **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO.** Origen: [DS-US-TMC-008](./US-TMC-008-timeline-atribucion-vigente.md) D2; D-TMC-45. **T002 (opcional)**: `EngineLink::session_attribution` puede construirse sobre la misma lectura del bucle que `session_actors` (Actor → Requester con la regla de `requester_of`) para tener una sola lectura del actor vigente.
+
+## Enmienda (2026-11-08, implementación)
+
+Implementado en: PR #PR_NUM (parcial). Decisiones tomadas al implementar. Cada una es una **decisión del orquestador (2026-11-08)**, salvo donde se dice otra cosa. Brief de la corrida: [`docs/dev-briefs/us-tmc-011-undo-by-agent.2-plan.md`](../../../../dev-briefs/us-tmc-011-undo-by-agent.2-plan.md).
+
+| # | Decisión | Motivo |
+|---|---|---|
+| I1 | `Selection::Agent { selector, span_ms }`, no `since_ms`. El periodo se convierte en momento con el reloj del daemon, tras el lock y la calma, en el mismo punto que `Within` | La regla de `main` tras US-TMC-010 (SEC-TMC-07): se reutiliza la selección de periodo, no se duplica |
+| I2 | **Redo pendiente de US-TMC-003**: `timemachine.redo` sigue en `NOT_IMPLEMENTED` en `main`. Los tests del escenario 6, de la atribución al planificar (D1) y de la demo prueban hasta el undo: barrera activa y ids en el oplog. Levantar la barrera y rehacer los mismos ids queda para US-TMC-003 | **Decisión del coordinador (2026-11-08)**, con enmienda firmada de los tests. La historia queda `partially-implemented` |
+| I3 | En el cambio de `reset`, `branch-update`, `branch-switch` y de las operaciones del oplog (`changed_between`), solo se escriben las ramas que nombra la propia operación (`event.branch`, `record.scope.refs`) o la rama de `HEAD` del worktree en T o B. Otra rama que difiera entre T y B **nunca se escribe** | Revisión de código (High): `changed_between` compara todas las ramas del repo, y un undo podía borrar una rama que otro actor creó en otro worktree en esa ventana. Deshace de menos, nunca de más (NFR-01). Precisa el paso 7 del Diseño |
+| I4 | La lista de worktrees registrados ilegible da `worktree-unavailable`, y una operación de `done()` ilegible da `target-unavailable`: ambas rechazan la petición entera | Revisión de código (Medium): fallaban abiertas o se saltaban en silencio |
+| I5 | Los objetos que faltan en el almacén se copian con `SnapshotStore::anchor` (cierre de los commits de antes), y el aplicador los trae según el paso 4 de ADR-TMC-002 § 3 | Mismo mecanismo que la captura; ADR sin cambios |
+| I6 | `session_attribution` se sirve desde el bucle del daemon con un `Control::SessionAttribution`, como `raw_events` | La "una sola lectura del bucle" de T002 |
+| I7 | D8 lo filtra `undo_agent` antes de `check_selected`, porque `SelectedInput` no lleva la marca del punto. La fase 1 deja para la fase 2 todo sujeto que el punto no muestre con su valor final | Contrato de `SelectedInput` sin cambios |
+| I8 | `timemachine.undo` con `operation_id` se acota al repo antes del `NOT_IMPLEMENTED`: un id o una carpeta desconocidos dan `NOT_FOUND` o `SCOPE_REFUSED` | La ruta común de `tm_command` |
+| I9 | Los tests unitarios van en ficheros propios (`*_tests.rs`), y el binario `us_tmc_011` corre en un grupo de nextest de un hilo (`.config/nextest.toml`) | R4 del contrato. En nextest, el mutex del arnés no serializa los daemons |
+
+Ningún ADR cambia (revisión de arquitectura): el subtipo `agent` ya está en la enmienda de ADR-TMC-003 del 2026-10-28.
 
 ## Notas del autor
 
