@@ -4,7 +4,7 @@ title: "Reglas de Negocio — Cockpit"
 type: business-rules
 status: draft
 created: 2026-10-04
-updated: 2026-10-28
+updated: 2026-11-08
 domain: GRP
 epic: E-001
 feature: cockpit
@@ -620,7 +620,20 @@ Constraint: nunca push ni fetch
 
 **Ejemplo**: tras integrar `feat-pagos` en `main`, el ahead de `main` frente al remoto sube; el Cockpit no ofrece push.
 
-**Fuentes**: Q-CKP-10; ADR-TMC-004; NFR-01.
+> **Enmienda (2026-11-08, Q-DSK-14).** **Decisión del orquestador (2026-11-08), decidida por Rene** (opción b; origen: [contexto de desktop](../desktop/context.md), "Decisiones de alcance para Rene", y [ADR-CKP-002](../../../architecture/decisions/ADR-CKP-002-catalogo-operaciones-ejecutor.md), Enmienda 2026-11-08). "Nunca push ni fetch" **vale para los agentes y el MCP**: ninguna escritura que pida un agente (por MCP, por la TUI o por JSON-RPC directo) ni ninguna herramienta MCP contacta con el remoto. La app de escritorio y la TUI **sí** permiten push, pull y fetch como **acción explícita del humano**, con capa `cockpit`, siempre como operaciones de red del catálogo ejecutadas por el daemon, con decisión de Guardrails y con punto previo de la Time Machine para pull (NFR-01). Las demás operaciones del catálogo siguen sin red. Desde la app, push pide el factor del SO por acción (ADR-GRP-017 § 4). La regla formal queda así:
+>
+> ```
+> escrituras del Cockpit ⊆ catálogo de operaciones (ejecutor del daemon)   (DEP-CKP-7)
+> Constraint: cada escritura es operación protegida                         (ADR-TMC-004)
+> Constraint: operaciones locales del catálogo → 0 conexiones de red
+> Constraint: push | pull | fetch ⇒ solicitante = humano (capa cockpit) ∧ decisión de Guardrails
+> Constraint: solicitante = agente ∨ capa = mcp ⇒ nunca push, pull ni fetch
+> Constraint: pull ⇒ punto previo de la Time Machine
+> ```
+>
+> Hasta que exista la historia de red (US-DSK-015) con su Dev Spec, el catálogo no tiene operaciones de red y el Cockpit sigue sin ofrecer push; el ejemplo de arriba sigue siendo cierto hoy.
+
+**Fuentes**: Q-CKP-10; ADR-TMC-004; NFR-01; Q-DSK-14 (enmienda 2026-11-08).
 
 ### BR-CKP-CONS-003: Presentación del actor
 

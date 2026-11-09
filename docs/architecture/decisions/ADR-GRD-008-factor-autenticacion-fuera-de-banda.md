@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-04
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-11-08
 deciders: [Rene Bonilla, Orquestador (autonomía delegada por Rene Bonilla), Arquitecto, PO]
 domain: GRP
 feature: guardrails
@@ -73,11 +73,13 @@ La seguridad descansa en la condición 2. El aislamiento de la interfaz (condici
 **Lo invoca siempre el daemon.** El cliente (CLI o TUI) solo pide la acción y muestra el estado. El canal no tiene ningún campo de "prueba"; si el cliente envía uno, se ignora. El MCP no expone ninguna de estas acciones (BR-AUTH-004).
 
 1. **Controles previos**: el daemon aplica primero ADR-GRP-005 § 6, puntos 1 a 3, con la Enmienda TS-GRP-004: identidad `(pid, inicio)` comprobada en cada petición en macOS, clasificador por euid (los intérpretes cuentan como agente hasta SPIKE-GRP-001) y rechazo **`daemon-descendant`** de los descendientes del propio daemon (DEP-MCP-3, confused deputy). Si fallan, rechaza la acción **sin mostrar el diálogo** (`precheck-denied`), para que un agente detectado no pueda abrir diálogos. Si la conexión que pidió la acción se cierra antes de aplicarla, la entrada se anula (`cancelled`).
+   - **App de escritorio** (Enmienda 2026-11-08, ADR-GRP-017 A-3): para la clase de cliente `desktop` con identidad verificada (ADR-GRP-017 § 3), **el factor sustituye al control 3**. Los controles 1 y 2 y `daemon-descendant` se mantienen; si fallan, se rechaza sin diálogo (`precheck-denied`). Para cualquier otro cliente, el factor se sigue sumando a los controles 1 a 3.
 2. **Plan y reto**: el daemon construye el **plan canónico** de la acción y su **resumen** (SHA-256 sobre la serialización canónica). Después genera un **nonce** de ≥ 128 bits con el CSPRNG del SO y guarda **en memoria** la entrada pendiente: nonce, resumen, acción, identidad del cliente y momento. Contenido del plan:
    - **Relajar con el comando** (US-GRD-013): nivel, clave, valor anterior y nuevo, y el identificador del contenido del archivo destino antes de escribir.
    - **Aprobar en la cola** (US-GRD-015): id de la petición, operación normalizada, repo, worktree, actor, regla y transición.
 3. **Anuncio** (D5): `reserved-action-pending` en todos los clientes, con el resumen legible del plan y el estado "esperando la autenticación del sistema". El **Cockpit** es un cliente más: aprobar desde su cola pasa por el mismo factor, que invoca el daemon, y muestra ese estado; rechazar es un comando reservado sin factor y sin ventana (Q-CKP-14). DEP-CKP-8 se cierra con US-GRD-015 + este ADR + SPIKE-GRD-002.
 4. **Diálogo del SO**: el daemon lo invoca con un texto que arma él a partir de una **plantilla fija por acción** y de los parámetros del plan saneados con las reglas de SEC-GRD-06 (categorías Cc, Cf, Zl y Zp neutralizadas, longitud acotada). En Linux, el texto lo fija el `.policy` (§ 2) y el detalle se ve en el anuncio de los clientes.
+   - **En macOS** (Enmienda 2026-11-08, ADR-GRP-017): el texto va en `localizedReason`, con el verbo, el repo, el objetivo y un **código corto de correlación** que también muestra el cliente.
    - **Sin reutilización**: un contexto nuevo por petición. En macOS, sin periodo de reutilización de un desbloqueo reciente. En Linux, `auth_self` y nunca `auth_self_keep`.
 5. **Resultado**: solo `verificado` cuenta. Cualquier otro resultado (rechazo del usuario, cancelación, error, no disponible o tiempo agotado) anula la entrada y se audita.
 6. **Ventana** (D5): con el resultado `verificado` se abre la ventana cancelable, y cualquier cliente puede cancelar. Va **después** del factor: el humano que acaba de autenticarse todavía puede cancelar si leyó mal, y la ventana no gasta tiempo antes de saber si el factor pasa (OQ-GRD-008-4).
@@ -130,6 +132,7 @@ Cada intento se publica también en `reserved.audit`, para que el Cockpit lo mue
 | `repo.retire`, `attribution.correct` (A-2) y añadir un repo a la allowlist del MCP (DEP-MCP-3, Q-MCP-3) | Comandos reservados de ADR-GRP-005 § 6, sin cambios | Candidatos para la misma vía preferente; A-2 es decisión pendiente de Rene antes de su release |
 | Instalar, registrar la denegación, adoptar una huérfana | No (no relajan) | — |
 | Confirmar trabajo ajeno en la Time Machine (TQ-14 b, Fase 2) | Fuera de alcance | Puede reutilizar esta capacidad |
+| Acciones pedidas desde la app de escritorio ([ADR-GRP-017](./ADR-GRP-017-app-escritorio-cliente-daemon.md) § 4; Enmienda 2026-11-08) | **Obligatorio** y fail-closed para los comandos reservados, la confirmación de trabajo ajeno, la excepción consciente, las confirmaciones D5/D8 y todo efecto remoto o no recuperable (p. ej. push), uno por acción y **sin modo preferente**. La **presencia de sesión** de ADR-GRP-017 es una entrada de factor más, con el plan "escribir hasta HH:MM", sin reutilización entre sesiones e invalidada al bloquear la pantalla, suspender el equipo, cambiar de usuario o reiniciar el daemon | — |
 
 **Adoptarlo después no requiere otro diseño**: es una fila más en la lista fija del binario, más sus pruebas. Cada acción va fijada como **obligatoria** (fail-closed) o **preferente**. En el modo preferente **solo `unavailable` cae a D5**, y la ausencia queda en el anuncio y en la auditoría; `denied`, `cancelled`, `timeout`, `busy`, `throttled` y cualquier error son rechazo sin caída, porque si no un agente provocaría diálogos hasta el bloqueo por fatiga para forzar D5. El modo no es configurable. Mientras una acción no lo adopte, sigue con D5 y su aceptación del riesgo por acción.
 
@@ -254,7 +257,18 @@ Se aplicaron con la aceptación (2026-10-04), salvo las marcadas como pendientes
 | `context.md` del Cockpit | DEP-CKP-8 = US-GRD-015 (cola en el daemon y la CLI, con el factor de ADR-GRD-008) | **Aplicada (2026-10-04)** |
 | ADR-TMC-005 (TQ-14 b) | Nota informativa: la presencia verificada por el SO de la Fase 2 puede reutilizar esta capacidad | Pendiente (informativa, Fase 2) |
 
-## Referencias
+## Enmienda (2026-11-08, ADR-GRP-017: app de escritorio)
+
+Origen: [ADR-GRP-017](./ADR-GRP-017-app-escritorio-cliente-daemon.md) § 3 y § 4, hallazgo A-3 de su revisión de seguridad (D7, BR-27). **Decisión del orquestador (2026-11-08), decidida por Rene.** El `status` sigue en `accepted`.
+
+| Cambio | Dónde |
+|---|---|
+| **Paso 1 (Controles previos)**: para la clase de cliente `desktop` con identidad verificada, el factor **sustituye** al control 3 en lugar de sumarse. Los controles 1 y 2 y `daemon-descendant` se mantienen; si fallan, `precheck-denied` sin diálogo. Para cualquier otro cliente, sin cambios | § 3, paso 1 |
+| **Paso 4 (Diálogo del SO)**: en macOS, texto en `localizedReason` con verbo, repo, objetivo y código corto de correlación, que el cliente muestra junto a la acción pedida | § 3, paso 4 |
+| **Fila nueva "Acciones pedidas desde la app de escritorio"**: factor obligatorio, uno por acción y sin modo preferente, también para lo que en la terminal es preferente o solo D5 (la app no tiene control 3 al que volver). La presencia de sesión es una entrada de factor más, limitada a lo que se revierte en local (ADR-CKP-002 § 4, Enmienda 2026-11-08) | § 5 |
+| **Quién pide la acción**: "el cliente (CLI o TUI)" incluye la app de escritorio. Su botón solo pide; la única confirmación es el diálogo del SO | § 3 |
+| **Auditoría**: los intentos de la app llevan la clase de cliente `desktop`, el tipo de identidad (firmada o por ruta) y el código de correlación; sin terminal de control, la cadena de D5 lo anota así | § 4 |
+| **SPIKE-GRD-002** amplía su alcance (Q-DSK-17, se ejecuta ya dentro de UI-1): los `AXPress` y `CGEvent` sintéticos frente al diálogo de LocalAuthentication, y si el daemon lanzado desde el `externalBin` del bundle puede invocar el diálogo y a nombre de quién aparece | § 7 |
 
 - **Reglas y riesgos**: BR-AUTH-001, BR-AUTH-004, BR-TIME-001, BR-CONS-001; Q-GRD-19, Q-GRD-21, Q-GRD-22, Q-GRD-23, Q-GRD-24, Q-GRD-32; R-GRD-3, R-GRD-4, R-GRD-10; NFR-03.
 - **Otros frentes**: ADR-GRP-005, Enmienda TS-GRP-004 (puntos 1, 2, 5, 7, 8 y 9); DEP-MCP-3, Q-MCP-3, Q-MCP-5; Q-CKP-14, DEP-CKP-8; SPIKE-GRD-002, SPIKE-GRP-001.

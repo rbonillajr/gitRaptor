@@ -5,7 +5,7 @@ type: adr
 status: accepted
 date: 2026-10-05
 created: 2026-10-05
-updated: 2026-10-28
+updated: 2026-11-08
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
@@ -157,6 +157,17 @@ Decisión de Rene Bonilla (2026-10-05), D4 y D5 del documento de negocio:
    - `--uninstall` borra solo `raptor`, `raptor-mcp` y `raptor-hook` del directorio indicado, solo si son archivos regulares que llevan dentro el nombre `gitraptor` (no ejecuta nada del directorio), y aborta antes de borrar nada si uno es un enlace o ajeno; nunca `rm -r`, nunca el perfil ni la Time Machine (NFR-01); se niega mientras el autoarranque esté registrado (`raptor daemon disable` primero).
 5. **Autenticidad.** `SHA256SUMS` prueba integridad, no autenticidad. Se recomienda activar `RELEASE_ATTEST` desde la primera alpha (las attestations son públicas e irreversibles: decide Rene), que cubren también `install.sh` e `install.ps1`, y verificar con `gh attestation verify`. Las releases inmutables de GitHub deberían activarse antes de publicar la primera alpha (raíz de confianza del `curl | sh`; revisión de seguridad M-01). Hipótesis a confirmar por Rene: el repo es público; si es privado, el `curl` anónimo no funciona y el canal entero no sirve.
 6. **Validación.** `tools/release/select-assets.test.sh` e `install.test.sh` (12 casos: checksum manipulado, versión inválida, archivo con entradas ajenas o con un enlace, directorio escribible por todos, cuarentena, desinstalación y su negativa con autoarranque, con un archivo ajeno o con un enlace) corren en el job `scripts` de `release.yml`. La corrida completa del tag se prueba con el primer tag real, que corta el coordinador.
+
+## Enmienda 2026-11-08: app de escritorio
+
+Origen: [ADR-GRP-017](./ADR-GRP-017-app-escritorio-cliente-daemon.md) § 2 y § 6 (D7, BR-27), Q-DSK-16, Q-DSK-18 y Q-DSK-19. **Decisión del orquestador (2026-11-08), decidida por Rene.** El `status` sigue en `accepted`.
+
+1. **Alphas (§ 2 y § 3).** El borrador de una alpha añade `GitRaptor-<versión>-aarch64-apple-darwin.dmg`, **sin firmar** (firma ad hoc) y sin notarizar, con su `.sha256` y su entrada en el `SHA256SUMS` filtrado. `tools/release/select-assets.sh` lo incluye en su lista. Solo Apple silicon; ⚠️ **ASSUMPTION**: Intel, después. La app incluye `raptor` y `raptor-mcp` de la misma versión (`bundle.externalBin`). Las notas de la release explican la aprobación en Ajustes → Privacidad y seguridad y que la app sin firmar solo lee y escribe con factor por acción, sin presencia de sesión (ADR-GRP-017 § 3). El updater está desactivado.
+2. **v0.1.0 (§ 3 y § 4).** `GitRaptor-<versión>-aarch64-apple-darwin.dmg` firmado con Developer ID, *hardened runtime* y `--timestamp`, sin los entitlements `get-task-allow`, `disable-library-validation` ni `allow-dyld-environment-variables`, y notarizado con `notarytool` y grapado (`stapler`) sobre el `.dmg`. Los binarios de `externalBin` se firman con la misma identidad antes que el bundle. Usa los secretos del § 4. Un job comprueba con `codesign --verify --strict` y `spctl --assess` el resultado, y que el requisito designado contiene el bundle id y el Team ID que el daemon tiene como constantes (ADR-GRP-017 § 3). **Acción de Rene**: comprar la cuenta de Apple Developer (Q-DSK-16); sin ella, v0.1.0 sale como las alphas.
+3. **Canal (§ 5).** En v0.1.0, `.dmg` + **cask** `gitraptor-app` en el tap propio, renderizado por `render-channels.mjs` con URL y sha256, y publicado por `release-channels.yml` con las mismas condiciones que la fórmula (no prereleases). En las alphas, solo el `.dmg` adjunto al borrador.
+4. **Cadena de suministro del frontend (§ 2).** Todo job que construye la app (CI y release) instala con `pnpm install --frozen-lockfile --ignore-scripts` y ejecuta `pnpm audit`, que bloquea la release ante una vulnerabilidad conocida, como `cargo audit` (SEC-07). Los builds de release siguen sin restaurar caché.
+5. **Updater de Tauri (Q-DSK-18).** En v0.1.0, **solo a petición** del humano ("Buscar actualizaciones"), nunca una comprobación automática ni en segundo plano (NFR-03). Corre en el backend Rust, nunca en el webview, con su propia clave de firma (secreto nuevo, nombre fijado por la Dev Spec) y como única excepción a los plugins prohibidos de ADR-GRP-017 § 2. El manifiesto del updater se publica con la release, solo para releases no prerelease.
+6. **Validación.** El job de release falla si un `.dmg` de una versión sin sufijo de prerelease no pasa `codesign --verify --strict`, `spctl --assess` y la comprobación de entitlements; `select-assets.test.sh` cubre el `.dmg` de la alpha; un test de la configuración de Tauri comprueba que el updater no tiene comprobación automática (V2 de ADR-GRP-017).
 
 ## Referencias
 

@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-08
+updated: 2026-11-08
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
@@ -352,3 +352,14 @@ Derivada de la Dev Spec de US-GRP-005. **Decisión del orquestador (2026-10-09),
 |---|---|
 | **Cerrojo de instancia comprobado en el latido**: antes de comprobar el canal, el daemon verifica que el archivo del cerrojo sigue siendo el que tomó. Si ya no está, lo vuelve a tomar; si lo tiene otro proceso, se para sin escribir en los almacenes ni en el perfil | § 2 |
 | **Riesgo residual (NFR-01)**: entre el borrado de la carpeta de estado y el siguiente latido (60 s como mucho) puede haber dos instancias, y el cerrojo de escritura por repo solo es de proceso, así que las dos podrían escribir con la Time Machine en el mismo repo | § 2, riesgo residual |
+
+## Enmienda (2026-11-08, ADR-GRP-017: app de escritorio)
+
+Origen: [ADR-GRP-017](./ADR-GRP-017-app-escritorio-cliente-daemon.md) § 3 y § 4 (D7, BR-27). **Decisión del orquestador (2026-11-08), decidida por Rene.** El `status` sigue en `accepted`.
+
+| Cambio | Dónde |
+|---|---|
+| **Punto 3 para la clase de cliente `desktop`**: la app de escritorio no tiene terminal de control. Para la clase `desktop` con **identidad verificada** (firmada por `SecCode` o por ruta en las alphas sin firmar, ADR-GRP-017 § 3), el punto 3 se cumple con el **factor del SO** de [ADR-GRD-008](./ADR-GRD-008-factor-autenticacion-fuera-de-banda.md), que invoca el daemon. Los puntos 1 y 2 y la regla `daemon-descendant` se siguen comprobando en cada petición; si fallan, se rechaza sin diálogo. Para cualquier otro cliente, el punto 3 no cambia | § 6.3 |
+| **Factor por acción** para todo comando reservado pedido desde la app (incluidos los de la tabla de Guardrails que en la terminal no lo exigen) y para todo efecto remoto o no recuperable. La **presencia de sesión** (solo con identidad firmada, v0.1.0) da la capa `cockpit` únicamente para operaciones del catálogo que se revierten en local (ADR-CKP-002 § 4) y **nunca** cumple el punto 3 para un comando reservado | § 6 |
+| **Sin factor**, la app de escritorio no pasa el punto 3: solo lee y muestra el comando de terminal equivalente (ADR-GRP-017 § 5) | § 6 |
+| **Riesgo residual**: un agente puede abrir la app con `open -a` y obtener ascendencia limpia (A-2), o conducir la ventana con Accesibilidad. Lo acota que la única confirmación es el diálogo del SO con el texto que arma el daemon (ADR-GRP-017 § 4, R-1 y R-4) | § 6, riesgo residual |

@@ -4,7 +4,7 @@ title: "Contexto — Cockpit"
 type: context
 status: draft
 created: 2026-10-04
-updated: 2026-10-28
+updated: 2026-11-08
 domain: GRP
 epic: E-001
 feature: cockpit
@@ -178,7 +178,7 @@ Impacto de no resolverlo:
 
 ### Técnicas (Arquitectura)
 - **Fuente única**: todo lo que la TUI muestra sale de lo que el motor publica (ADR-GRP-005, ADR-GRP-013). La TUI no lee Git, no abre el perfil y no embebe el motor (Q-CKP-22). Lo que falta es una dependencia DEP-CKP-n.
-- **Una sola vía de escritura**: toda escritura del Cockpit es una operación del catálogo ejecutada por el daemon como operación protegida (intención, snapshot previo, ejecución, registro). Sin snapshot no hay operación (D-TMC-10, ADR-TMC-004). Nunca push.
+- **Una sola vía de escritura**: toda escritura del Cockpit es una operación del catálogo ejecutada por el daemon como operación protegida (intención, snapshot previo, ejecución, registro). Sin snapshot no hay operación (D-TMC-10, ADR-TMC-004). Nunca push. *Enmienda (2026-11-08, Q-DSK-14; decisión del orquestador (2026-11-08), decidida por Rene)*: "nunca push" vale para los agentes y el MCP; la app de escritorio y la TUI permiten push, pull y fetch como acción explícita del humano, con decisión de Guardrails y punto previo para pull (BR-CKP-CONS-002, ADR-CKP-002 Enmienda 2026-11-08).
 - **Nunca escribir en el repo para predecir**: la predicción no deja rastro en el repo del usuario (NFR-01, ADR-GRP-009).
 - **Cero pérdida (NFR-01)**: cada acción de escritura es recuperable con Deshacer, salvo lo que el snapshot no guarda, que se nombra antes (Q-CKP-12).
 - **Guardrails decide**: el Cockpit no autoriza; la confirmación en la TUI es UX, no control (Q-CKP-16, ADR-GRP-005 § 6).

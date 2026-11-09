@@ -2,10 +2,11 @@
 id: ADR-GRP-017
 title: "App de escritorio como cliente del daemon: frontera de seguridad y presencia humana sin terminal"
 type: adr
-status: proposed
+status: accepted
+accepted: 2026-11-08
 date: 2026-10-28
 created: 2026-10-28
-updated: 2026-10-28
+updated: 2026-11-08
 deciders: [Rene Bonilla, Orquestador (autonomía delegada por Rene Bonilla), Arquitecto, security-expert]
 domain: GRP
 feature: desktop
@@ -14,11 +15,12 @@ tags: [desktop, tauri, gui, canal-local, presencia-humana, factor-del-so, firma-
 changelog:
   - 2026-10-28: creado (D7, app de escritorio en el MVP). Decisión del orquestador (2026-10-28), validada por Arquitecto.
   - 2026-10-28: revisión del security-expert ("aprobar con cambios"). Hallazgos A-1 a A-3, M-1 a M-3 y B-1 a B-3 aplicados. Decisión del orquestador (2026-10-28), validada por Arquitecto y security-expert.
+  - 2026-11-08: aceptado. Decisiones de Rene sobre Q-DSK-12, Q-DSK-14 y Q-DSK-16 a Q-DSK-19 recogidas; enmiendas de ADR-GRP-005, ADR-CKP-002, ADR-MCP-001, ADR-GRP-014 y ADR-GRD-008 aplicadas. Decisión del orquestador (2026-11-08), decidida por Rene.
 ---
 
 # ADR-GRP-017 — App de escritorio como cliente del daemon
 
-> **Estado**: `proposed`. **Decisión del orquestador (2026-10-28), validada por Arquitecto y security-expert** (revisión del 2026-10-28, "aprobar con cambios", ya aplicada; ver la sección "Revisión de seguridad (2026-10-28)"). Pasa a `accepted` cuando se den estas tres condiciones: la otra sesión aplica la enmienda propuesta a ADR-GRD-008 (A-3), SPIKE-GRD-002 y el spike por reservar cierran sus dependencias, y Rene resuelve lo de su sección. El stack no se reabre: Tauri + React + Vite según [ADR-GRP-001](./ADR-GRP-001-stack-tecnologico.md), con su enmienda de alcance del 2026-10-28.
+> **Estado**: `accepted` el 2026-11-08. **Decisión del orquestador (2026-10-28), validada por Arquitecto y security-expert** (revisión del 2026-10-28, "aprobar con cambios", ya aplicada; ver la sección "Revisión de seguridad (2026-10-28)"). **Aceptado con las decisiones de Rene del 2026-11-08** (sección "Decisiones de Rene (2026-11-08)") y con las enmiendas de otros artefactos aplicadas. Las dependencias de spike no bloquean la aceptación: hasta que cierren, rige la degradación del § 5. El stack no se reabre: Tauri + React + Vite según [ADR-GRP-001](./ADR-GRP-001-stack-tecnologico.md), con su enmienda de alcance del 2026-10-28.
 
 ## Contexto
 
@@ -114,12 +116,12 @@ Se reutiliza el mecanismo de [ADR-GRD-008](./ADR-GRD-008-factor-autenticacion-fu
 - plan y reto de un solo uso, con fail-closed;
 - un diálogo a la vez y limitación ante la fatiga.
 
-**Para la clase `desktop` con identidad verificada, el factor sustituye al control 3. Los controles 1 y 2 y `daemon-descendant` se siguen comprobando en cada petición, y si fallan, la petición se rechaza sin diálogo.** Esto **modifica** ADR-GRD-008 § 3, donde el factor se suma y el paso 1 exige los controles 1 a 3. La enmienda propuesta está en "Enmiendas requeridas" (A-3).
+**Para la clase `desktop` con identidad verificada, el factor sustituye al control 3. Los controles 1 y 2 y `daemon-descendant` se siguen comprobando en cada petición, y si fallan, la petición se rechaza sin diálogo.** Esto **modifica** ADR-GRD-008 § 3, donde el factor se suma y el paso 1 exige los controles 1 a 3. La enmienda está aplicada (A-3; ver "Enmiendas requeridas").
 
 | Qué pide la app | Factor | Vigencia |
 |---|---|---|
 | **Presencia de sesión** (solo con identidad firmada): capa `cockpit` para las operaciones del catálogo que **se revierten en local con la Time Machine** (NFR-01): Deshacer de trabajo propio o sin atribuir, y las operaciones locales de UI-2 | Una vez. Texto del diálogo: **"Permitir que GitRaptor escriba en tus repos hasta las HH:MM. Si no abriste tú la app, cancela."** | Ligada a la conexión y al `(pid, inicio)` de la app. **Caduca** a los 15 min sin escrituras o a las 4 h. **Se invalida** al bloquear la pantalla, suspender el equipo, cambiar de usuario, cerrar la conexión o reiniciar el daemon |
-| **Factor por acción**: comandos reservados (ADR-GRP-005 § 6 y ADR-GRD-007 § 1: añadir o retirar un repo, instalar la protección, `mcp.enable`…), confirmación de trabajo ajeno (ADR-TMC-005 § 3), excepción consciente (D10), confirmaciones D5/D8 y **todo efecto remoto o no recuperable** (push, borrar una rama remota, los PRs de UI-2) | Uno por acción, ligado al resumen del plan canónico (A-2) | Ninguna reutilización. Lleva la ventana, el anuncio y la auditoría de D5 cuando la acción relaja |
+| **Factor por acción**: comandos reservados (ADR-GRP-005 § 6 y ADR-GRD-007 § 1: añadir o retirar un repo, instalar la protección, `mcp.enable`…), confirmación de trabajo ajeno (ADR-TMC-005 § 3), excepción consciente (D10), confirmaciones D5/D8 y **todo efecto remoto o no recuperable** (push, borrar una rama remota, los PRs de UI-2). Push, pull y fetch solo los pide el humano desde la app, con decisión de Guardrails y punto previo para pull, nunca un agente ni el MCP (Q-DSK-14; ADR-CKP-002, Enmienda 2026-11-08) | Uno por acción, ligado al resumen del plan canónico (A-2) | Ninguna reutilización. Lleva la ventana, el anuncio y la auditoría de D5 cuando la acción relaja |
 
 - **Texto del factor por acción**: lo arma el daemon en el `localizedReason` de LocalAuthentication, dentro del diálogo del SO. Usa una plantilla fija por acción con el verbo, el repo y el objetivo saneados (SEC-GRD-06), más un **código corto de correlación**. La app muestra el mismo código junto a la acción pedida.
 - **El botón del webview solo pide la acción y nunca la confirma**. La única confirmación es el diálogo del SO. Por eso un clic sintético sobre la ventana no basta.
@@ -151,7 +153,9 @@ El módulo de presencia de ADR-GRD-008 § 6 aún no existe en el código; lo gat
   - Gatekeeper exige aprobar la app en Ajustes → Privacidad y seguridad, y la nota de la release lo explica.
 - **v0.1.0**:
   - Firma Developer ID con *hardened runtime*, sin los entitlements prohibidos del § 3, y notarización, con los secretos de ADR-GRP-014 § 4. Es lo que habilita la identidad firmada y la presencia de sesión.
-  - Si se adopta el updater de Tauri, corre en el backend con su propia clave de firma, nunca en el webview, y entra con el permiso `updater` como única excepción a la lista del § 2.
+  - **Updater de Tauri solo a petición** del humano (Q-DSK-18, NFR-03): sin comprobación automática ni en segundo plano. Corre en el backend con su propia clave de firma, nunca en el webview, y entra con el permiso `updater` como única excepción a la lista del § 2.
+  - **Canal**: `.dmg` firmado y cask de Homebrew en el tap propio (Q-DSK-19; ADR-GRP-014, Enmienda 2026-11-08).
+- **Plataformas de UI-1**: solo macOS (Q-DSK-12). Windows y Linux siguen el § 5.
 
 ## Alternativas consideradas
 
@@ -209,23 +213,24 @@ El módulo de presencia de ADR-GRD-008 § 6 aún no existe en el código; lo gat
 |---|---|
 | ¿Hay un binding de `SecCodeCopyGuestWithAttributes` y de la validación de requisitos compatible con `unsafe_code = "forbid"`, o hace falta una excepción como `macsys`? (A-1) | **Spike por reservar** (identidad de la app de escritorio) |
 | ¿El evento `oapp` permite detectar un `open -a` lanzado por un agente, con `keySenderPIDAttr`? | **Spike por reservar** |
-| ¿Los `AXPress` o los `CGEvent` sintéticos alcanzan el diálogo de LocalAuthentication? ¿Se puede marcar su origen sintético con `kCGEventSourceUnixProcessID`? | SPIKE-GRD-002 (amplía su verificación de eventos sintéticos) |
-| ¿Puede el daemon invocar LocalAuthentication siendo un proceso sin UI dentro del bundle (`externalBin`)? ¿A nombre de quién aparece el diálogo? | SPIKE-GRD-002 |
+| ¿Los `AXPress` o los `CGEvent` sintéticos alcanzan el diálogo de LocalAuthentication? ¿Se puede marcar su origen sintético con `kCGEventSourceUnixProcessID`? | SPIKE-GRD-002 (amplía su verificación de eventos sintéticos; se ejecuta ya, Q-DSK-17) |
+| ¿Puede el daemon invocar LocalAuthentication siendo un proceso sin UI dentro del bundle (`externalBin`)? ¿A nombre de quién aparece el diálogo? | SPIKE-GRD-002 (se ejecuta ya, Q-DSK-17) |
 
 ## Enmiendas requeridas en otros artefactos
 
-No se aplican desde este ADR. Las aplica el orquestador al aceptarlo.
+Aplicadas con la aceptación (2026-11-08). **Decisión del orquestador (2026-11-08), decidida por Rene.**
 
-| Artefacto | Cambio |
-|---|---|
-| ADR-GRP-005 § 6 (control 3) | Para la clase de cliente `desktop` con identidad verificada, el control 3 se cumple con el factor del SO (§ 4 de este ADR) |
-| ADR-CKP-002 § 4 (capa) | La capa `cockpit` también se concede a la app con presencia de sesión, limitada a las operaciones revertibles en local |
-| ADR-MCP-001 § 2 (perfil) | Lectura completa para la app con identidad (firmada o por ruta) y ascendencia limpia (§ 3) |
-| **ADR-GRD-008 § 3 y § 5** (A-3). **Otra sesión edita ADR-GRD-008**: texto propuesto para esa sesión, abajo | — |
-| ADR-GRP-014 § 2 y § 3 | Añadir el `.dmg` de la app a las alphas, su firma en la release y la instalación con `--frozen-lockfile --ignore-scripts` |
-| AGENTS.md (Alcance) | La app de escritorio deja de ser Fase 3 (D7) |
+| Artefacto | Cambio | Estado |
+|---|---|---|
+| ADR-GRP-005 § 6 (control 3) | Para la clase de cliente `desktop` con identidad verificada, el control 3 se cumple con el factor del SO (§ 4 de este ADR) | **Aplicada (2026-11-08)**: [Enmienda (2026-11-08, ADR-GRP-017)](./ADR-GRP-005-forma-motor-proceso-segundo-plano.md#enmienda-2026-11-08-adr-grp-017-app-de-escritorio) |
+| ADR-CKP-002 § 4 (capa) y Validación 16 | La capa `cockpit` también se concede a la app con presencia de sesión, limitada a las operaciones revertibles en local. Push, pull y fetch como operaciones de red pedidas solo por el humano (Q-DSK-14) | **Aplicada (2026-11-08)**: [Enmienda (2026-11-08, ADR-GRP-017 y Q-DSK-14)](./ADR-CKP-002-catalogo-operaciones-ejecutor.md#enmienda-2026-11-08-adr-grp-017-y-q-dsk-14-capa-cockpit-para-la-app-de-escritorio-y-operaciones-de-red) |
+| ADR-MCP-001 § 2 (perfil) | Lectura completa para la app con identidad (firmada o por ruta) y ascendencia limpia (§ 3) | **Aplicada (2026-11-08)**: [Enmienda (2026-11-08, ADR-GRP-017)](./ADR-MCP-001-servidor-mcp-cliente-daemon.md#enmienda-2026-11-08-adr-grp-017-app-de-escritorio) |
+| **ADR-GRD-008 § 3 y § 5** (A-3) | Texto de abajo | **Aplicada (2026-11-08)**: [Enmienda (2026-11-08, ADR-GRP-017)](./ADR-GRD-008-factor-autenticacion-fuera-de-banda.md#enmienda-2026-11-08-adr-grp-017-app-de-escritorio) |
+| ADR-GRP-014 § 2 y § 3 | Añadir el `.dmg` de la app a las alphas, su firma en la release, el cask, la instalación con `--frozen-lockfile --ignore-scripts` y el updater solo a petición | **Aplicada (2026-11-08)**: [Enmienda 2026-11-08: app de escritorio](./ADR-GRP-014-pipeline-release-distribucion.md#enmienda-2026-11-08-app-de-escritorio) |
+| BR-CKP-CONS-002 (Cockpit) | "Nunca push ni fetch" vale para agentes y MCP; la app y la TUI permiten push, pull y fetch como acción explícita del humano (Q-DSK-14) | **Aplicada (2026-11-08)**: [business-rules.md del Cockpit](../../requirements/features/cockpit/business-rules.md) |
+| AGENTS.md (Alcance) | La app de escritorio deja de ser Fase 3 (D7) | **Aplicada** antes de este ADR: AGENTS.md ya la incluye en el MVP desde D7 |
 
-**Texto propuesto para ADR-GRD-008** (enmienda "2026-10-28, app de escritorio", origen ADR-GRP-017 A-3):
+**Texto aplicado a ADR-GRD-008** (enmienda "2026-11-08, app de escritorio", origen ADR-GRP-017 A-3):
 
 > **§ 3, paso 1 (Controles previos)**: para la clase de cliente `desktop` con identidad verificada (ADR-GRP-017 § 3), **el factor sustituye al control 3**. Los controles 1 y 2 y `daemon-descendant` se mantienen; si fallan, se rechaza sin diálogo (`precheck-denied`). Para cualquier otro cliente, el factor se sigue sumando a los controles 1 a 3.
 >
@@ -233,12 +238,20 @@ No se aplican desde este ADR. Las aplica el orquestador al aceptarlo.
 >
 > **§ 3, paso 4 (Diálogo del SO)**: en macOS, el texto va en `localizedReason`, con el verbo, el repo, el objetivo y un código corto de correlación que también muestra el cliente.
 
-## Pendiente de Rene
+## Decisiones de Rene (2026-11-08)
 
-1. **Cuenta de Apple Developer** (99 USD al año) para firmar y notarizar la app y el CLI en v0.1.0. Sin ella no hay identidad firmada, y la app se queda en lectura + factor por acción (sin "Deshacer" de un toque).
-2. **Updater de Tauri en v0.1.0**: comprobación automática o solo a petición. Las dos abren la red desde la app y hay que contrastarlas con NFR-03. Se recomienda "solo a petición".
-3. **Prioridad de SPIKE-GRD-002 (macOS) y del spike por reservar** dentro de UI-1. La otra opción es aceptar que UI-1 se entregue en solo lectura con comandos copiables.
-4. **Canal de la app**: un cask de Homebrew en el tap propio, además del `.dmg`.
+Rene aceptó las recomendaciones del orquestador ([contexto de desktop](../../requirements/features/desktop/context.md), "Decisiones de alcance para Rene"). **Decisión del orquestador (2026-11-08), decidida por Rene.**
+
+| Pregunta | Decisión | Dónde queda |
+|---|---|---|
+| Q-DSK-16: cuenta de Apple Developer | **En v0.1.0** (M4). Hasta entonces, las alphas sin firmar no tienen presencia de sesión: lectura + factor por acción | § 3, § 6; ADR-GRP-014, Enmienda 2026-11-08 |
+| Q-DSK-18: updater de Tauri | **Solo a petición**, nunca automático (NFR-03) | § 6; ADR-GRP-014, Enmienda 2026-11-08 |
+| Q-DSK-17: prioridad de SPIKE-GRD-002 (macOS) | **Se ejecuta ya**, dentro de UI-1, con el módulo de presencia | "Dependencias de spike" |
+| Q-DSK-19: canal de la app | **`.dmg` + cask de Homebrew** en el tap propio en v0.1.0; en las alphas, `.dmg` aarch64 sin firmar | § 6; ADR-GRP-014, Enmienda 2026-11-08 |
+| Q-DSK-14: push, pull y fetch | **Opción (b)**: solo como acción explícita del humano en la app, decidida por Guardrails, con punto previo de la Time Machine para pull, y **nunca** por agentes ni por el MCP | § 4; ADR-CKP-002, Enmienda 2026-11-08; BR-CKP-CONS-002 |
+| Q-DSK-12: plataformas de UI-1 | **Solo macOS** | § 5, § 6 |
+
+**Acción de Rene**: comprar la cuenta de Apple Developer (99 USD al año) antes de cortar v0.1.0 y cargar los secretos de ADR-GRP-014 § 4. Sin ella no hay identidad firmada y v0.1.0 sale como las alphas: lectura + factor por acción, sin "Deshacer" de un toque.
 
 ## Revisión de seguridad (2026-10-28)
 
