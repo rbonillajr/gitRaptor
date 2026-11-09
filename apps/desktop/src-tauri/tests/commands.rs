@@ -187,14 +187,11 @@ fn rejects<P: serde::de::DeserializeOwned>(body: Value) {
 
 #[test]
 fn d3_cmds_engine_commands_are_listed_and_allowed() {
-    // `fleet_open` joins the list in DS-US-DSK-004 (see the D4-CMD tests below).
-    let listed = commands_json();
-    for name in ["app_info", "engine_retry", "engine_watch"] {
-        assert!(
-            listed.iter().any(|c| c == name),
-            "D3-CMDS: commands.json lacks {name}"
-        );
-    }
+    assert_eq!(
+        commands_json(),
+        ["app_info", "engine_retry", "engine_watch", "fleet_open"],
+        "D3-CMDS: commands.json is exactly app_info, engine_watch, engine_retry and fleet_open"
+    );
     let text = std::fs::read_to_string(Path::new(ROOT).join("capabilities/main.json")).unwrap();
     let cap: Value = serde_json::from_str(&text).unwrap();
     let perms: Vec<&str> = cap["permissions"]
