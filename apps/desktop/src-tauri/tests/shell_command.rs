@@ -144,3 +144,16 @@ fn never_path() {
         "D8-SHELL: a daemon exe that is not an installed raptor falls back to the bundle"
     );
 }
+
+#[test]
+fn a_git_common_dir_watched_also_covers_its_main_worktree() {
+    let (repo, daemon) = installed_raptor("repo-");
+    let git_dir = repo.path().join(".git");
+    std::fs::create_dir(&git_dir).expect("create .git");
+    let (_bundle_dir, bundled) = installed_raptor("bundle-");
+    assert_eq!(
+        raptor_path(Some(&daemon), Some(&bundled), &[git_dir.as_path()]),
+        Some(bundled.clone()),
+        "L-02: a raptor in the main worktree of an observed repo is not named (security-review M-01)"
+    );
+}
