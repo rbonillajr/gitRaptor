@@ -156,6 +156,7 @@ impl Rig {
             layer: None,
             free_space_floor: None,
             after_mark,
+            seals: Default::default(),
         }
     }
 

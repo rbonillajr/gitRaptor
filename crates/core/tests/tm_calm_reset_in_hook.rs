@@ -162,6 +162,7 @@ fn a_capture_during_a_reset_paused_in_its_hook_is_not_taken() {
         layer: None,
         free_space_floor: None,
         after_mark: None,
+        seals: Default::default(),
     };
     let out = observe(
         &deps,

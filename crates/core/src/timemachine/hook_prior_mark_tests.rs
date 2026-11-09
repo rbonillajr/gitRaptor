@@ -112,6 +112,7 @@ fn rig(bumps: i64, expire_at: usize) -> Rig {
         layer: None,
         free_space_floor: None,
         after_mark: None,
+        seals: Default::default(),
     };
     let ask = HookPriorAsk {
         repo_id: REPO.into(),

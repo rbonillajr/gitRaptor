@@ -176,6 +176,7 @@ impl Rig {
             layer: None,
             free_space_floor: None,
             after_mark: None,
+            seals: Default::default(),
         };
         let marks = Arc::new(ExecutorMarks::default());
         let stopping = AtomicBool::new(false);

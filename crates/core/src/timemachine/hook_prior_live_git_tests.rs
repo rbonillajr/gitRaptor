@@ -30,6 +30,7 @@ fn rig_deps(r: &Rig) -> (CaptureDeps, Arc<Mutex<Oplog>>) {
         layer: None,
         free_space_floor: None,
         after_mark: None,
+        seals: Default::default(),
     };
     (deps, oplog)
 }

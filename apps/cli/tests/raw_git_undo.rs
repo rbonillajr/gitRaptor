@@ -377,13 +377,10 @@ fn an_agent_recovers_its_work_after_a_raw_reset_hard() {
         ),
         "{reset:#?}"
     );
-    // The state right after the reset is the base of what the agent takes
-    // back: without a point of it, the undo cannot tell the reset from later
-    // work and refuses as `overlap-unverified` (US-TMC-012, D7). The daemon
-    // captures it once the worktree is quiet, asynchronously; on a loaded
-    // runner that came after the agent's undo. Only after the reset do
-    // `login.txt` as committed and the untracked `util.rs` go together.
-    m.captured_all(&[("login.txt", b"user\n"), ("util.rs", UTIL)]);
+    // TS-TMC-005: nothing waits here for the capture of the state right
+    // after the reset (the base of what the agent takes back). The daemon's
+    // undo waits for it itself, so the agent's first `raptor undo` already
+    // recovers its work.
 
     // The developer, at a terminal, is asked to confirm taking back the
     // agent's work (US-TMC-013); with no answer it is not confirmed and
@@ -415,6 +412,17 @@ fn an_agent_recovers_its_work_after_a_raw_reset_hard() {
     assert_eq!(undo.target_snapshot_id, captured);
     assert_eq!(std::fs::read(m.worktree.join("login.txt")).unwrap(), WORK);
     assert_eq!(std::fs::read(m.worktree.join("util.rs")).unwrap(), UTIL);
+    // TS-TMC-005 (T006): how long the undo waited for its base, as the daemon
+    // logged it; measured to fix `BASE_WAIT`.
+    let log = std::fs::read_to_string(m.dirs().state.join(gitraptor_core::daemon::LOG_FILE))
+        .unwrap_or_default();
+    let waits: Vec<&str> = log
+        .lines()
+        .filter(|l| l.contains(" tm_base_wait "))
+        .flat_map(|l| l.split(' '))
+        .filter(|t| t.starts_with("base_wait_ms=") || t.starts_with("result="))
+        .collect();
+    eprintln!("tm_base_wait: {waits:?}");
 
     // Its own undo is not raw Git: a second one has nothing left, and says
     // so.

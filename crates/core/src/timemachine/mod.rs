@@ -4,6 +4,7 @@
 
 pub mod agent_selector;
 pub mod apply;
+pub mod base_wait;
 pub mod chaos;
 pub mod confirm;
 pub mod continuous;
