@@ -270,3 +270,12 @@ Las menciones de `reserved-action-pending` en el § 1 y en la Enmienda (2026-10-
 - **Lo mismo vale para el hijo del ejecutor** (`crates/core/src/guardrails/link.rs`, `nearest_git` en `marks.child_link`): en Windows clasificaba como `Grandchild` el `git` del propio daemon.
 
 **Validación 12b** (Windows, ligadura): en Git for Windows, `raptor guard exec -- git push --force` se acepta. Si el binario real no se puede resolver, el resultado es `not-the-child` (fail-closed).
+
+## Enmienda (2026-11-08, plazo de respuesta de `raptor guard exec`)
+
+**Decisión de Rene (2026-11-08), validada por Arquitecto.** El `status` sigue en `accepted`. Afecta al paso 3 del § 3 (anuncio y ventana); no cambia la duración de la ventana ni el flujo del token.
+
+- **El plazo para responder es la ventana.** Si al cerrarse la ventana la pregunta interactiva sigue sin respuesta, `raptor guard exec` cancela: no se emite token, no se lanza `git` y se registra `exception-cancelled` (ADR-GRD-006 § 1). Responder tarde no la revive. Los reintentos no alargan el plazo.
+- **Respuesta inválida**: se explican las válidas y se vuelve a preguntar, hasta 3 respuestas inválidas seguidas; la tercera cancela y lo dice. Enter solo equivale a **No** (ConfirmPrompt, design system v0 § 4).
+- **`--yes`** solo omite la pregunta: la ventana se cumple igual.
+- **Si el daemon no confirma la cancelación**, `exec` lo dice por stderr (no afirma que quedó auditada), sale con error y no lanza `git`.
