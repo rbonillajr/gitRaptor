@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion -- test helpers assert the DOM they just rendered */
 // TS003-OVERLAYS (TS-DSK-003 T007, D13): Menu opening keys, roving focus, type-ahead, item kinds, Escape and Tab.
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import type { ComponentPropsWithRef } from "react";
 import axe from "axe-core";
 import i18n from "i18next";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -22,7 +23,7 @@ const spies = () => ({ fetchAll: vi.fn(), pull: vi.fn(), byDate: vi.fn(), tags: 
 
 function Harness({ s = spies() }: { s?: ReturnType<typeof spies> }) {
   return (
-    <Menu label="Fetch options" entries={entries(s)} trigger={(props) => <button type="button" {...props}>Fetch</button>} />
+    <Menu label="Fetch options" entries={entries(s)} trigger={(props: ComponentPropsWithRef<"button">) => <button type="button" {...props}>Fetch</button>} />
   );
 }
 const trigger = () => screen.getByRole("button", { name: "Fetch" });

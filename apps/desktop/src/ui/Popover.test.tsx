@@ -4,7 +4,7 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import axe from "axe-core";
 import i18n from "i18next";
-import { useState } from "react";
+import { useState, type ComponentPropsWithRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import "@/i18n";
 import { Popover } from "./Popover";
@@ -20,7 +20,7 @@ function Settings({ onOpenChange }: { onOpenChange?: (o: boolean) => void }) {
       <Popover
         label="Column settings"
         {...(onOpenChange ? { onOpenChange } : {})}
-        trigger={(props) => <button type="button" {...props}>Gear</button>}
+        trigger={(props: ComponentPropsWithRef<"button">) => <button type="button" {...props}>Gear</button>}
       >
         <Toggle label="Author" checked={a} onCheckedChange={setA} />
         <Toggle label="Date" checked={b} onCheckedChange={setB} />

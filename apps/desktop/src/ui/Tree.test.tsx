@@ -30,7 +30,7 @@ function Harness({ initial = ["r1", "g1"], selected = null, loading, spies }: { 
       label="Repositories"
       nodes={NODES}
       expanded={expanded}
-      onExpandedChange={(next) => { setExpanded(next); spies.onExpandedChange(next); }}
+      onExpandedChange={(next: ReadonlySet<string>) => { setExpanded(next); spies.onExpandedChange(next); }}
       selectedId={selected}
       onSelect={spies.onSelect}
       onActivate={spies.onActivate}
