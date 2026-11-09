@@ -13,6 +13,7 @@ frontend_surface: true
 stack: react
 profile: frontend-feature
 tooling: [cargo, pnpm, node]
+blocked_by: [TS-DSK-001, TS-DSK-002]
 related:
   context: ../context.md
   story: ../user-stories/US-DSK-003-estado-del-motor.md
@@ -26,6 +27,7 @@ must_read:
   - ../user-stories/US-DSK-003-estado-del-motor.md
   - ./TS-DSK-001-andamiaje-app-escritorio.md
   - ../technical-stories/TS-DSK-002-arranque-motor-binarios-bundle.md
+  - ./TS-DSK-002-arranque-motor-binarios-bundle.md
   - ../design/design-flow.md
   - ../../cockpit/dev-specs/US-CKP-003-estados-motor-conexion.md
   - ../../../../architecture/decisions/ADR-GRP-017-app-escritorio-cliente-daemon.md
@@ -45,6 +47,7 @@ must_read:
   - ../../../../../apps/cli/src/present/sanitize.rs
   - ../../../../../apps/cli/src/tui/engine_state.rs
   - ../../../../../crates/core/src/channel/conn.rs
+  - ../../../../../crates/core/src/channel/requester.rs
 lineage:
   supersedes: []
   superseded_by: []
@@ -73,7 +76,7 @@ Esta historia pone la tubería que usarán todas las demás: el supervisor de la
 |---|---|
 | Supervisor | Hilo del backend que conecta, toma instantáneas, sigue la secuencia de cada ámbito y reconecta. Es el único que habla con el daemon |
 | `Channel` | `tauri::ipc::Channel` creado por el webview y pasado a `engine_watch`; lleva los `EngineMessage` del backend al webview, en orden |
-| Costura | Los traits `Connector` y `Link`: el supervisor no sabe cómo se arranca el motor (TS-DSK-002) ni si habla con un daemon real o con el falso de los tests |
+| Costura | Los traits `Connector` y `Link` de `engine/link.rs`, que crea DS-TS-DSK-002: el supervisor no sabe cómo se arranca el motor ni si habla con un daemon real o con el falso de los tests |
 | Vista restringida | La ventana la abrió un agente (ADR-GRP-017 § 3): banda fija y sin datos de repos |
 
 **Decisiones de esta Dev Spec**: todas son **Decisión del orquestador (2026-11-08), validada por Arquitecto**.
@@ -85,8 +88,8 @@ Esta historia pone la tubería que usarán todas las demás: el supervisor de la
 | D3 | El backend traduce los tipos del contrato a DTO propios (`wire.rs`) y sanea **todo** texto no confiable con `gitraptor_api::display::visible`, el saneador de la TUI movido a `crates/api` | SEC-12 y ADR-GRP-017 § 2 piden las mismas categorías que `present::ingest`; el backend no puede enlazar `apps/cli`. Mover la función (no copiarla) deja una sola fuente | Copiar el saneador en el backend: dos copias que divergen. Sanear en el webview: el texto crudo cruzaría el IPC |
 | D4 | La app se presenta como `ClientKind::Cli` hasta que exista la clase `desktop` | Es la única clase a la que el daemon publica `hello.requester` (`crates/core/src/channel/conn.rs:573-577`), que da la señal de "abierta por un agente". No amplía nada: el daemon resuelve al solicitante por ascendencia en cada petición | `Other`: sin `requester`, la app no sabría que la abrió un agente |
 | D5 | El motor se arranca (`start = true`) solo al abrir la app y con el botón "Arrancar motor". Una reconexión tras una caída solo conecta | Si el usuario paró el motor con `raptor daemon stop`, la app no debe relanzarlo a sus espaldas. El autoarranque de launchd, si está registrado, lo vuelve a levantar y la app se pone al día sola (escenario 2) | Arrancar en cada intento, como la TUI: pelearía con el usuario |
-| D6 | Vista restringida si `hello.profile == mcp` **o** `hello.requester` es `resolved` con `actor` agente. El backend no se suscribe a ningún ámbito: lee una vez `engine.snapshot` para el estado del motor y manda `session.restricted = true` | ADR-GRP-017 § 3 pide perfil `mcp` para una app con un agente en la ascendencia; el daemon aún no lo aplica (G1). La app falla cerrada en lo que muestra | Mostrar la flota mientras el daemon no restrinja: la banda diría "ves lo mismo que él" y sería falso |
-| D7 | Capacidades obligatorias: `scope.activity`, `observation.tiers` y `prediction.pairs`. Si al daemon le falta una, estado "Motor incompatible" (`missing-capabilities`). `discovery.events` es opcional: sin ella no se piden candidatos | ADR-GRP-014, Enmienda DEP-DSK-5, D5: "mismo protocolo y las capacidades que la app necesita". US-DSK-004 las usa | Degradar en silencio: la flota diría "no disponible" en columnas que el motor sí puede dar |
+| D6 | Vista restringida si `hello.profile == mcp`, **o** `hello.requester` es `resolved` con `actor` agente, **o** `hello.requester` es `unverified`, **o** falta `hello.requester` (falla cerrada; Ajuste tras la revisión (2026-11-08), validado por Arquitecto / security-expert, L-01 y L-02). El backend no se suscribe a ningún ámbito: lee una vez `engine.snapshot` para el estado del motor y manda `session.restricted = true` | ADR-GRP-017 § 3 pide perfil `mcp` para una app con un agente en la ascendencia; el daemon aún no lo aplica (G1). La app falla cerrada en lo que muestra. **Hasta TS-GRP-009 es cosmética, no un control**: la lectura no es más amplia que la de un agente que ejecuta `raptor`. `unverified` no aparece en uso normal en macOS: con `TERMINAL_PROOF` y `ORPHANS_MARKED` verdaderos (`crates/core/src/channel/authz.rs:271-275`), una app abierta desde el Finder (padre `launchd`) se resuelve `unattributed`; `unverified` solo sale si el proceso del par no se puede leer, su inicio no coincide (pid reutilizado), es de otro usuario o es un descendiente del daemon sin marca (`crates/core/src/channel/requester.rs:178-200`). En Windows, sin `ORPHANS_MARKED`, saldría siempre restringida (etapa de validación multiplataforma) | Mostrar la flota mientras el daemon no restrinja: la banda diría "ves lo mismo que él" y sería falso |
+| D7 | Capacidades obligatorias (`REQUIRED_CAPABILITIES` de DS-TS-DSK-002): `scope.activity`, `observation.tiers`, `prediction.pairs` y, añadida por esta historia, `connection.requester` (L-01). Si al daemon le falta una, estado "Motor incompatible" (`missing-capabilities`). Si `daemon_path` es el `raptor` del bundle (`launcher::bundled_raptor()`), la acción ofrecida es "Arrancar motor" (`start: true`, pasa por `ensure`, que reemplaza un daemon de su mismo binario); si no, el comando copiable (arch 9). `discovery.events` es opcional: sin ella no se piden candidatos. Ajuste tras la revisión (2026-11-08), validado por Arquitecto / security-expert | ADR-GRP-014, Enmienda DEP-DSK-5, D5: "mismo protocolo y las capacidades que la app necesita". US-DSK-004 las usa | Degradar en silencio: la flota diría "no disponible" en columnas que el motor sí puede dar |
 | D8 | "Arrancar motor" es `engine_retry { start: true }`, de esta historia; TS-DSK-002 no añade otro comando para lo mismo. "Reintentar ahora" es `engine_retry { start: false }` | Un solo camino para reconectar; TS-DSK-002 aporta el `Connector` que sabe arrancar | Un `engine_start` de TS-DSK-002 y un `engine_retry` de aquí: dos comandos que se pisan |
 | D9 | Sin repos: la pantalla a1 de DSF-DSK-001 (tres pasos, privacidad, comprobaciones) con la guía de la TUI (`raptor repo add <ruta>`) y la lista de repos descubiertos. El botón "Añadir mi primer repo" y el comando copiable con ruta son de US-DSK-001 | US-DSK-001 es dueña de añadir repos (comando reservado, factor o comando copiable). Esta historia cumple "le propone añadir" con la misma guía que la TUI | Un botón desactivado "llega pronto": promete una acción que no hay |
 | D10 | Con datos ya recibidos, una caída o un motor parado **atenúan** los datos y muestran la banda con la hora; sin datos, el centro muestra el panel del estado. Incompatible, rechazado y sin canal sustituyen siempre el centro | Escenario 2 ("pueden estar desactualizados y desde cuándo") y DSF-DSK-001 § 2.3. Los tres últimos no vuelven solos (US-CKP-003 D2) | Sustituir siempre por el panel, como la TUI con motor no disponible: el escenario 2 pide ver los datos viejos marcados |
@@ -124,7 +127,7 @@ Todo lo que la app necesita ya lo publica el canal (verificado en el código el 
 
 No hay `architecture-constitution.md` en la cascada: rigen `AGENTS.md` y los ADRs citados.
 
-**Depende de**: TS-DSK-001 (andamiaje, patrón de comandos) y TS-DSK-002 (el `Connector` que arranca el motor con el `raptor` del bundle y verifica al daemon, B-3). Los tests de esta historia no necesitan TS-DSK-002: usan `SocketConnector` y el daemon falso.
+**Depende de (`blocked_by`)**: TS-DSK-001 (andamiaje, patrón de comandos) y TS-DSK-002 ([DS-TS-DSK-002](./TS-DSK-002-arranque-motor-binarios-bundle.md)): la costura de `engine/link.rs` (`Link`, `Connector`, `LinkError`, `ConnectFailure`, `Incompatibility`, `IncompatibilityKind`, `ClientLink`, `SocketConnector`, `map_client_error`, `REQUIRED_CAPABILITIES`) y `engine::launcher::BundleConnector`. Esta historia las usa sin redefinirlas; sus tests usan `SocketConnector` y el daemon falso. Ajuste tras la revisión (2026-11-08), validado por Arquitecto / security-expert.
 
 ---
 
@@ -134,8 +137,8 @@ No hay `architecture-constitution.md` en la cascada: rigen `AGENTS.md` y los ADR
 classDiagram
     class EngineHub:::nuevo { <<nuevo T004>> }
     class Supervisor:::nuevo { <<nuevo T004>> }
-    class Connector:::nuevo { <<nuevo T002>> }
-    class Link:::nuevo { <<nuevo T002>> }
+    class Connector:::existente { <<existente T002>> }
+    class Link:::existente { <<existente T002>> }
     class SeqTrack:::nuevo { <<nuevo T004>> }
     class EngineMessage:::nuevo { <<nuevo T004>> }
     class EngineStore:::nuevo { <<nuevo T006>> }
@@ -148,9 +151,10 @@ classDiagram
     EngineMessage ..> EngineStore : applyEngineBatch
     EngineStore --> EngineView : deriva pastilla, banda y centro
     classDef nuevo fill:#dcfce7,stroke:#15803d
+    classDef existente fill:#e5e7eb,stroke:#6b7280
 ```
 
-El webview llama `engine_watch` con un `Channel`; `EngineHub` (estado de Tauri) arranca el `Supervisor` la primera vez y, en las siguientes (recarga del webview), cambia el `Channel` y fuerza instantáneas nuevas. El `Supervisor` usa un `Connector` (TS-DSK-002 en la app; `SocketConnector` en los tests) y lee el `Link`. `EngineView` es una función pura: el único sitio que decide qué se pinta.
+El webview llama `engine_watch` con un `Channel`; `EngineHub` (estado de Tauri) arranca el `Supervisor` la primera vez y, en las siguientes (recarga del webview), cambia el `Channel` y fuerza instantáneas nuevas. El `Supervisor` usa un `Connector` (`BundleConnector` de TS-DSK-002 en la app; `SocketConnector` en los tests) y lee el `Link`. `EngineView` es una función pura: el único sitio que decide qué se pinta.
 
 **Qué ocupa el centro**, evaluado en orden (`engineView().center`):
 
@@ -177,7 +181,7 @@ En las filas 5 a 7, si `conn.kind` ≠ `live`, el centro lleva `data-stale="true
 | # | Tarea | Depende | Aterriza en |
 |---|---|---|---|
 | T001 | Mover el saneador visible a `gitraptor-api` | — | `crates/api`, `apps/cli/src/present` |
-| T002 | Crear la costura del canal y el daemon falso | T001 | `src-tauri/src/engine`, `src-tauri/tests/support` |
+| T002 | Crear el daemon falso y exigir `connection.requester` | T001 | `src-tauri/src/engine/link.rs`, `src-tauri/tests/support` |
 | T003 | Escribir en rojo los tests del supervisor | T002 | `src-tauri/tests/engine_supervisor.rs` |
 | T004 | Implementar el supervisor, la secuencia y los mensajes | T003 | `src-tauri/src/engine` |
 | T005 | Añadir `engine_watch` y `engine_retry` | T004 | `src-tauri`, `src/client` |
@@ -210,35 +214,32 @@ graph LR
 **Reglas**
 - `display.rs` recibe, sin cambios de lógica, `sanitize(raw, max_chars)` (renombrada `visible`), `must_escape`, `push_escape`, `is_combining`, `MAX_COMBINING` y `ELLIPSIS` de `apps/cli/src/present/sanitize.rs`, y las constantes `NAME_MAX_CHARS = 100` y `TEXT_MAX_CHARS = 1024`. Públicas: `visible`, `must_escape`, `NAME_MAX_CHARS`, `TEXT_MAX_CHARS`. Fuera de la feature `client`: no depende de nada nuevo.
 - `lib.rs`: `pub mod display;`.
-- `sanitize.rs`: `SafeText::text`/`name` llaman `gitraptor_api::display::visible`; `must_escape` pasa a ser `pub(crate) use gitraptor_api::display::must_escape;`. Los tests del archivo no cambian y pasan.
+- `sanitize.rs`: `SafeText::text`/`name` llaman `gitraptor_api::display::visible`; `must_escape` pasa a ser `pub(crate) use gitraptor_api::display::must_escape;` y `NAME_MAX_CHARS` y `TEXT_MAX_CHARS` pasan a ser `pub use gitraptor_api::display::{NAME_MAX_CHARS, TEXT_MAX_CHARS};`, sin una segunda definición (Ajuste tras la revisión (2026-11-08), validado por Arquitecto / security-expert, arch 8). Los tests del archivo no cambian y pasan.
 - Los vectores de prueba de `sanitize.rs` (OSC 52, bidi, anchura cero, Tags, "zalgo", corte con `…`) se copian a `display::tests`.
 
 - **Depende:** —
 - **Refs:** D3; SEC-12; ADR-GRP-017 § 2
 - **Aceptación:** `cargo test -p gitraptor-api display` y `cargo test -p gitraptor-cli present` en verde; los snapshots de la TUI no cambian (`cargo insta test -p gitraptor-cli` sin pendientes).
 
-### T002 — Crear la costura del canal y el daemon falso
+### T002 — Crear el daemon falso y exigir `connection.requester`
 
-**Objetivo.** El supervisor habla con un `Link` que obtiene de un `Connector`; los tests, con un daemon falso por socket Unix real.
+**Objetivo.** Los tests hablan con un daemon falso por socket Unix real a través de la costura de DS-TS-DSK-002, y la app exige al daemon la capacidad que publica el solicitante.
 
 **Ubicación.**
-- `apps/desktop/src-tauri/src/engine/mod.rs` (**CREATE**)
-- `apps/desktop/src-tauri/src/engine/link.rs` (**CREATE**)
-- `apps/desktop/src-tauri/src/lib.rs` (**MODIFY**: `pub mod engine;`)
-- `apps/desktop/src-tauri/tests/support/mod.rs` (**CREATE**)
+- `apps/desktop/src-tauri/src/engine/link.rs` (**MODIFY**: `REQUIRED_CAPABILITIES`)
+- `apps/desktop/src-tauri/tests/engine_link.rs` (**MODIFY**: la aserción de la lista)
+- `apps/desktop/src-tauri/tests/support/mod.rs` (**MODIFY**: `pub mod fake_daemon;`)
 - `apps/desktop/src-tauri/tests/support/fake_daemon.rs` (**CREATE**)
-- `apps/desktop/src-tauri/Cargo.toml` (**MODIFY**: dev-dependency `tempfile.workspace = true`)
+- `apps/desktop/src-tauri/Cargo.toml` (**MODIFY**: dev-dependency `tempfile.workspace = true`, si DS-TS-DSK-002 no la añadió)
 
 **Reglas**
-- `link.rs` define `Link`, `Connector`, `ConnectFailure`, `LinkError` y `Incompatibility` (§ Firmas del stack), y dos implementaciones:
-  - `ClientLink(gitraptor_api::client::Client)`: `call` = `Client::call::<Value, Value>`; `next` = `Client::next_incoming` decodificado a `ServerMessage` con `serde_json::from_slice`; un error de I/O es `LinkError::Lost`, un error RPC es `LinkError::Refused { code }`.
-  - `SocketConnector { runtime: PathBuf }`: `Client::connect(&runtime, ClientKind::Cli, PROTOCOL_VERSION)`. Con `start = true` se comporta igual (no sabe arrancar). Traduce `ClientError`: `NotRunning` → `NotRunning`; `Incompatible(d)` → `Incompatible { which: DaemonOlder, daemon_version: Some(d.binary_version), daemon_path: None }`; `ClientTooOld(d)` → `AppOlder`; `ChannelRejected` y `NotAuthentic` → `Rejected`; `TransportUnsupported` → `Unsupported`; `Launch(_)` y `StartTimeout` → `LaunchFailed`; el resto → `Lost`.
-- **Contrato con TS-DSK-002**: su lanzador implementa `Connector` (`BundleConnector`): con `start = true` ejecuta `raptor daemon ensure --json`, y en los dos casos conecta con `Client::connect_runtime` y la verificación B-3, rellenando `daemon_path` (ruta cruda que da `ensure`) en `Incompatibility`. Si TS-DSK-002 se mezcla antes sin esta forma, esta tarea envuelve su lanzador en un `BundleConnector` que la cumpla.
-- `fake_daemon.rs`: `FakeDaemon::start() -> FakeDaemon` crea una carpeta temporal `0700`, escucha `raptor.sock` y atiende una conexión cada vez en un hilo. Responde por línea JSON-RPC con los tipos de `gitraptor_api` (`Response`, `Notification`). Guion configurable: el `HelloResult` (protocolo, perfil, `requester`, capacidades) o un `INCOMPATIBLE_PROTOCOL` con `IncompatibleData`; respuestas de `connection.accept`, `scope.snapshot` (global y por repo), `scope.subscribe` (subscripción creciente), `engine.snapshot`, `discovery.candidates` y `sessions.list`; `push(notification)`; `drop_connection()`; `stop()` (borra el socket) y `restart()`. Registra cada `(método, params)` recibido para que el test lo consulte (`calls()`).
+- La costura (`Link`, `Connector`, `LinkError`, `ConnectFailure`, `Incompatibility`, `IncompatibilityKind`, `ClientLink`, `SocketConnector`, `map_client_error`) y `engine::launcher::BundleConnector` son de DS-TS-DSK-002 y se usan **sin cambiar** nombres, variantes ni firmas.
+- `REQUIRED_CAPABILITIES` suma `methods::CAP_REQUESTER.name` (`connection.requester`, L-01): la lista queda `["scope.activity", "observation.tiers", "prediction.pairs", "connection.requester"]`. `BundleConnector` pasa así un `--require` más a `ensure` sin otro cambio. Ajuste tras la revisión (2026-11-08), validado por Arquitecto / security-expert.
+- `fake_daemon.rs`: `FakeDaemon::start() -> FakeDaemon` crea una carpeta temporal `0700`, escucha `raptor.sock` y atiende una conexión cada vez en un hilo. Responde por línea JSON-RPC con los tipos de `gitraptor_api` (`Response`, `Notification`). Guion configurable: el `HelloResult` (protocolo, perfil, `requester` presente, ausente o `unverified`, capacidades) o un `INCOMPATIBLE_PROTOCOL` con `IncompatibleData`; respuestas de `connection.accept`, `scope.snapshot` (global y por repo), `scope.subscribe` (suscripción creciente), `engine.snapshot`, `discovery.candidates` y `sessions.list`; `push(notification)`; `drop_connection()`; `stop()` (borra el socket) y `restart()`. Registra cada `(método, params)` recibido para que el test lo consulte (`calls()`).
 
 - **Depende:** T001
-- **Refs:** D4, D8; ADR-GRP-014, Enmienda DEP-DSK-5, D1 y D5
-- **Aceptación:** `cargo test -p gitraptor-desktop --test engine_supervisor connects_to_the_fake_daemon` en verde (un `SocketConnector` hacia el falso llega al `hello` y a `connection.accept`); V1 (`tests/boundaries.rs`) sigue en verde.
+- **Refs:** D4, D7, D8; DS-TS-DSK-002 § Firmas del stack; ADR-GRP-014, Enmienda DEP-DSK-5, D1 y D5
+- **Aceptación:** `cargo test -p gitraptor-desktop --test engine_link` en verde con la lista de cuatro; `cargo test -p gitraptor-desktop --test engine_supervisor connects_to_the_fake_daemon` en verde (un `SocketConnector` hacia el falso llega al `hello` y a `connection.accept`); V1 (`tests/boundaries.rs`) sigue en verde.
 
 ### T003 — Escribir en rojo los tests del supervisor
 
@@ -249,7 +250,7 @@ graph LR
 - `apps/desktop/src-tauri/src/engine/supervisor.rs` (**CREATE**, stub)
 
 **Reglas**
-- Cada test arranca `Supervisor::spawn(connector, sink)` con un `sink` que recoge los `EngineMessage` (un `Channel::new` de Tauri en Rust o, para no depender de Tauri en el test, la variante `Sink::Collect(mpsc::Sender)` de § Firmas del stack) y espera mensajes con un plazo de 5 s, sin `sleep` fijos.
+- Cada test arranca `Supervisor::spawn(connector, own_raptor, sink)` con un `sink` que recoge los `EngineMessage` (un `Channel::new` de Tauri en Rust o, para no depender de Tauri en el test, la variante `Sink::Collect(mpsc::Sender)` de § Firmas del stack) y espera mensajes con un plazo de 5 s, sin `sleep` fijos.
 - Los nombres y lo que comprueba cada uno están en [§ 9.4](#94-comportamientos-críticos-verificados).
 
 - **Depende:** T002
@@ -274,12 +275,12 @@ graph LR
 4. `supervisor.rs`, bucle (`run`):
    - Conecta con `start` = `true` en el primer intento tras `spawn` y tras `EngineRetry { start: true }`; si no, `false` (D5). Antes de cada intento manda `conn` `connecting` (intento 0) o `reconnecting { attempt, retryInMs }`; con `start` manda `starting`.
    - Tras conectar: `missing = link.hello().capabilities` frente a `REQUIRED_CAPABILITIES` (D7); si falta alguna, `incompatible { which: missing-capabilities }` y cierra el enlace. Si no, manda `session` (versión, protocolo, `restricted`, `activity`, `discovery`).
-   - Restringida (D6): una llamada `engine.snapshot`, manda `engineOnly { engine }` y `conn live`, y solo lee el enlace hasta que caiga (sin suscribirse).
+   - Restringida (D6: perfil `mcp`, `requester` ausente, `unverified` o con actor agente): una llamada `engine.snapshot`, manda `engineOnly { engine }` y `conn live`, y solo lee el enlace hasta que caiga (sin suscribirse).
    - Normal: `sync(Global)` = `scope.snapshot` → `global` → `scope.subscribe { from_seq: N + 1, run_id }`. Con `discovery.events`, `discovery.candidates` → `discovered`. Luego los ámbitos de repo abiertos (`HubCmd::Open`, lo usa US-DSK-004). Después `conn live`, con `staleSinceMs` a `null`.
    - Lectura en rebanadas de 20 ms, atendiendo órdenes entre lecturas. `scope.event`: `SeqTrack::accept` del ámbito; `Apply` → `ingest::global_event` (`engine.state`, `repo.observation`, `repo.tier`, `repo.attention`, `repo.discovered`) y el mensaje que toque (otros tipos se aplican a la secuencia y se ignoran); `Duplicate` → nada; `Gap` → `conn syncing` y `sync` del ámbito. `scope.resync` → mismo `sync` y `conn` con `resync: <motivo>` hasta volver a `live`. `events.resync` (`slow-consumer`) → `resync` en el siguiente `conn` y fin de sesión como `Lagged` (la racha de espera sigue, como `End::Lagged` de la TUI).
-   - Al caer el enlace: `staleSinceMs` = hora de pared del último `live`, `reconnecting` y espera `backoff(attempt)` = 250 ms × 2^(n−1), con tope 5 s (D11). Un `NotRunning` o `LaunchFailed` manda `stopped { reason }`; `Incompatible`, `incompatible {…}` con `stopCommand = daemon_path.and_then(stop_command)`; `Rejected`, `rejected`; `Unsupported`, `unsupported` y el hilo espera solo a `Shutdown`.
+   - Al caer el enlace: `staleSinceMs` = hora de pared del último `live`, `reconnecting` y espera `backoff(attempt)` = 250 ms × 2^(n−1), con tope 5 s (D11). Un `NotRunning` o `LaunchFailed` manda `stopped { reason }`; `Incompatible`, `incompatible {…}` con `action` (`start` si `which` es `daemon-older` o `missing-capabilities` y `daemon_path` canonicalizado es igual a `own_raptor`; `copy-stop` si hay `stopCommand`; `update-app` con `app-older`; `none` en otro caso, D7) y `stopCommand = daemon_path.and_then(stop_command)` salvo con `action: start`; `Rejected`, `rejected`; `Unsupported`, `unsupported` y el hilo espera solo a `Shutdown`.
    - Nunca llama `daemon.replace`, `daemon.stop` ni ningún método reservado o de escritura.
-5. `engine/mod.rs`: `EngineHub { tx: Mutex<Option<Sender<HubCmd>>>, connector: Mutex<Option<Box<dyn Connector>>> }`. `watch(sink)`: la primera vez lanza el hilo `gitraptor-engine`; las siguientes mandan `HubCmd::Watch(sink)`, y el supervisor reenvía `conn` y `session` actuales y rehace la instantánea de cada ámbito abierto para el oyente nuevo. `retry(start)` → `HubCmd::Retry { start }`. `shutdown()` en `RunEvent::Exit`.
+5. `engine/mod.rs` (de DS-TS-DSK-002, que declara `link`, `launcher` y `autostart`): suma `pub mod supervisor; pub mod seq; pub mod wire; pub mod ingest;` y `EngineHub { tx: Mutex<Option<Sender<HubCmd>>>, connector: Mutex<Option<Box<dyn Connector>>>, own_raptor: Option<PathBuf> }`; `EngineHub::new(connector, own_raptor)`. `watch(sink)`: la primera vez lanza el hilo `gitraptor-engine`; las siguientes mandan `HubCmd::Watch(sink)`, y el supervisor reenvía `conn` y `session` actuales y rehace la instantánea de cada ámbito abierto para el oyente nuevo. `retry(start)` → `HubCmd::Retry { start }`. `shutdown()` en `RunEvent::Exit`.
 
 > **Nota técnica.** El reloj de pared (`SystemTime::now`) solo se usa para `staleSinceMs`; las marcas de rendimiento usan `gitraptor_api::clock::monotonic_ns`. V7 sigue en verde: nada lee el entorno.
 
@@ -305,7 +306,7 @@ graph LR
 **Reglas**
 - `commands.json` = `["app_info", "engine_watch", "engine_retry"]`; la capability suma `allow-engine-watch` y `allow-engine-retry`.
 - Firmas en [§ Contrato de API](#contrato-de-api). `engine_watch` recibe además `webview: tauri::Webview` y `hub: tauri::State<'_, EngineHub>`, y obtiene el `Channel` con `params.channel.channel_on(webview)`.
-- `lib.rs`: `.manage(EngineHub::new(Box::new(launcher::BundleConnector::new())))` (el `Connector` de TS-DSK-002) y `.run` con el manejador de `RunEvent::Exit` que llama `hub.shutdown()`.
+- `lib.rs`: `.manage(EngineHub::new(Box::new(launcher::BundleConnector::new()), launcher::bundled_raptor()))` (el `Connector` de TS-DSK-002 y la ruta de su `raptor`) y `.run` con el manejador de `RunEvent::Exit` que llama `hub.shutdown()`.
 - `commands.ts`: `COMMANDS` con los dos nombres nuevos y sus tipos (§ Contrato de API); `EngineMessage` importado de `./engine-types`.
 
 - **Depende:** T004
@@ -379,7 +380,7 @@ graph LR
 
 - `StatusPill` (en `src/ui`, sin `client`): `role="status"`, `aria-live="polite"`, símbolo con `aria-hidden` y texto siempre visible; tono por `data-tone` (`success`, `warning`, `danger`, `muted`) con tokens `glass.*`. Va en `TitleBar` entre el botón del panel izquierdo y el de tema.
 - `EngineBand`: franja sobre el centro con el texto y su botón; los botones llaman `call("engine_retry", { start })` y quedan `aria-disabled` hasta el siguiente `conn` (respuesta visible ≤ 100 ms, NFR-13.7).
-- `EngineCenter`: los paneles con `StatePanel` (título, mensaje, acción), textos de § Textos del catálogo. Incompatible: `daemon-older` y `missing-capabilities` con versión y ruta si llegan, y `CopyCommand` con `stopCommand` cuando existe (copia con `navigator.clipboard.writeText`, sin plugin); sin `stopCommand`, `engine.incompatible.noCommand`. `app-older`: `engine.incompatible.appOlder`. a1: titular, tres pasos, línea de privacidad, comprobaciones "Motor en marcha" y "Git {version} encontrado" (de `engine.gitVersion`), la guía `empty.noRepos.howTo` con el comando como `<code>`, y la lista de candidatos (`name` y `path` saneados) bajo `empty.noRepos.discovered.title` si hay alguno.
+- `EngineCenter`: los paneles con `StatePanel` (título, mensaje, acción), textos de § Textos del catálogo. Incompatible: `daemon-older` y `missing-capabilities` con versión y ruta si llegan; con `action: start`, botón [`engine.action.start`] (`engine_retry { start: true }`) y el texto `engine.incompatible.ownEngine`; con `action: copy-stop`, `CopyCommand` con `stopCommand` (copia con `navigator.clipboard.writeText`, sin plugin); sin `stopCommand`, `engine.incompatible.noCommand`. `app-older`: `engine.incompatible.appOlder`. a1: titular, tres pasos, línea de privacidad, comprobaciones "Motor en marcha" y "Git {version} encontrado" (de `engine.gitVersion`), la guía `empty.noRepos.howTo` con el comando como `<code>`, y la lista de candidatos (`name` y `path` saneados) bajo `empty.noRepos.discovered.title` si hay alguno.
 - Atenuado: el contenedor del centro lleva `data-stale` y la clase `text-muted`; el lector de pantalla oye la banda (que tiene `role="status"`).
 - `App.tsx`: llama `watchEngine` al montar y pasa cada lote a `useEngineStore.getState().apply` y `applyEngineBatch`. Tras el primer frame en que `engineView` da un estado final (`live` con instantánea global pintada, o `stopped`, `incompatible`, `rejected`, `unsupported`, `waiting-for-git`, `no-repos`), `performance.mark("gr:first-meaningful-paint")` una sola vez (NFR-13.6). US-DSK-004 amplía la condición de `live` a "flota pintada" cuando hay repo abierto.
 - Textos de la UI: nunca un texto del motor tal cual; solo DTO ya saneados, como texto de React.
@@ -412,7 +413,7 @@ graph LR
 crates/api/src/display.rs                 # saneador visible compartido (T001)
 apps/desktop/src-tauri/
 ├── commands.json                         # + engine_watch, engine_retry (T005)
-├── src/engine/{mod,link,supervisor,seq,wire,ingest}.rs   # (T002, T004)
+├── src/engine/{supervisor,seq,wire,ingest}.rs         # (T004); mod.rs y link.rs de TS-DSK-002, modificados
 ├── src/commands/{engine_watch,engine_retry}.rs           # (T005)
 └── tests/{engine_supervisor,engine_wire}.rs, tests/support/fake_daemon.rs
 apps/desktop/src/
@@ -435,9 +436,8 @@ apps/desktop/tests/fixtures/engine-messages.json          # contrato Rust ↔ TS
 | `HubCmd` | `engine/supervisor.rs` | `Watch(Sink)`, `Retry { start: bool }`, `Open { repo_id }` (US-DSK-004), `Shutdown` |
 | `Supervisor` | `engine/supervisor.rs` | `spawn(connector, sink) -> SupervisorHandle`; el bucle de T004 |
 | `SeqTrack` | `engine/seq.rs` | `Waiting` \| `At { run_id, seq }`, como `apps/cli/src/client/sequence.rs` |
-| `ConnectFailure` | `engine/link.rs` | `NotRunning`, `LaunchFailed`, `Incompatible(Incompatibility)`, `Rejected`, `Unsupported`, `Lost` |
-| `Incompatibility` | `engine/link.rs` | `{ which: DaemonOlder \| AppOlder \| MissingCapabilities, daemon_version: Option<String>, daemon_path: Option<String>, missing: Vec<String> }` (crudo; `wire` lo sanea) |
-| `REQUIRED_CAPABILITIES` | `engine/supervisor.rs` | `["scope.activity", "observation.tiers", "prediction.pairs"]` (D7), escritas con las constantes `CAP_*` de `gitraptor_api::methods` |
+| `ConnectFailure`, `Incompatibility`, `IncompatibilityKind`, `Link`, `Connector`, `LinkError` | `engine/link.rs` | De DS-TS-DSK-002 § Firmas del stack; se usan sin cambios |
+| `REQUIRED_CAPABILITIES` | `engine/link.rs` (DS-TS-DSK-002) | Esta historia suma `connection.requester`: `["scope.activity", "observation.tiers", "prediction.pairs", "connection.requester"]` (D7, L-01) |
 | `EngineStore` (`useEngineStore`, estado `EngineState`) | `src/state/engine-store.ts` | `{ conn: ConnState; staleSinceMs: number \| null; resync: ResyncReason \| null; session: SessionInfo \| null }` |
 | `EngineView` | `src/engine/engine-view.ts` | `{ pill: { symbol, tone, key, values }, band: { key, values, action?: "retryNow" \| "start" } \| null, center: CenterKind }` |
 
@@ -458,7 +458,7 @@ apps/desktop/tests/fixtures/engine-messages.json          # contrato Rust ↔ TS
 | `discovered` | `candidates: CandidateDto[]`, `replace: boolean` | `discovery.candidates` (`replace: true`) y `repo.discovered` (añade) |
 | `engineOnly` | `engine: EngineDto` | Vista restringida (D6) |
 
-- `ConnState` = `{kind:"connecting"}` \| `{kind:"starting"}` \| `{kind:"syncing"}` \| `{kind:"live"}` \| `{kind:"reconnecting", attempt, retryInMs}` \| `{kind:"stopped", reason:"not-running"\|"launch-failed"}` \| `{kind:"incompatible", which:"daemon-older"\|"app-older"\|"missing-capabilities", daemonVersion: string\|null, daemonPath: string\|null, stopCommand: string\|null}` \| `{kind:"rejected"}` \| `{kind:"unsupported"}`.
+- `ConnState` = `{kind:"connecting"}` \| `{kind:"starting"}` \| `{kind:"syncing"}` \| `{kind:"live"}` \| `{kind:"reconnecting", attempt, retryInMs}` \| `{kind:"stopped", reason:"not-running"\|"launch-failed"}` \| `{kind:"incompatible", which:"daemon-older"\|"app-older"\|"missing-capabilities", daemonVersion: string\|null, daemonPath: string\|null, stopCommand: string\|null, action:"start"\|"copy-stop"\|"update-app"\|"none"}` \| `{kind:"rejected"}` \| `{kind:"unsupported"}`.
 - `ResyncReason` = `"slow-consumer" | "replay-unavailable" | "daemon-restarted" | "scope-closed" | null` (el de la TUI; `null` si el hueco lo vio el backend).
 - `GlobalDto` = `{ engine: EngineDto, daemon: { version, protocol }, autostart: "registered"|"not-registered"|"unknown", repos: RepoSummaryDto[] }`.
 - `EngineDto` = `{ state: "waiting-for-git"|"no-repos"|"observing", gitVersion: string|null }`.
@@ -478,21 +478,12 @@ apps/desktop/tests/fixtures/engine-messages.json          # contrato Rust ↔ TS
 ### Firmas del stack
 
 ```rust
-// apps/desktop/src-tauri/src/engine/link.rs
-pub trait Link: Send {
-    fn hello(&self) -> &gitraptor_api::messages::HelloResult;
-    fn call(&mut self, method: &str, params: serde_json::Value) -> Result<serde_json::Value, LinkError>;
-    /// The next notification with the `monotonic_ns` reading taken when its frame was read.
-    fn next(&mut self, timeout: std::time::Duration) -> Result<Option<(u64, gitraptor_api::rpc::Notification)>, LinkError>;
-}
-pub trait Connector: Send + 'static {
-    /// Connects; with `start`, starts the engine first when none runs (TS-DSK-002).
-    fn connect(&mut self, start: bool) -> Result<Box<dyn Link>, ConnectFailure>;
-}
-pub enum LinkError { Refused { code: i64 }, Lost }
+// apps/desktop/src-tauri/src/engine/link.rs: Link, Connector, LinkError, ConnectFailure,
+// Incompatibility, IncompatibilityKind, ClientLink, SocketConnector, map_client_error y
+// REQUIRED_CAPABILITIES son de DS-TS-DSK-002 § Firmas del stack.
 // apps/desktop/src-tauri/src/engine/supervisor.rs
 pub enum Sink { Channel(tauri::ipc::Channel<EngineMessage>), Collect(std::sync::mpsc::Sender<EngineMessage>) }
-pub fn spawn(connector: Box<dyn Connector>, sink: Sink) -> SupervisorHandle;
+pub fn spawn(connector: Box<dyn Connector>, own_raptor: Option<std::path::PathBuf>, sink: Sink) -> SupervisorHandle;
 pub fn backoff(attempt: u32) -> std::time::Duration;
 // apps/desktop/src-tauri/src/engine/wire.rs
 pub fn stop_command(path: &str) -> Option<String>;
@@ -543,6 +534,7 @@ Claves nuevas (`en` / `es`). Los comandos van como `<code>` en la UI.
 | `engine.incompatible.title` | Incompatible engine | Motor incompatible |
 | `engine.incompatible.daemonOlder` | The running engine ({{version}}, from {{path}}) is older than this app. Update that GitRaptor installation, or stop its engine from a terminal so the app can start its own: | El motor en marcha ({{version}}, de {{path}}) es más antiguo que esta app. Actualiza esa instalación de GitRaptor, o para su motor desde una terminal para que la app arranque el suyo: |
 | `engine.incompatible.daemonOlderUnknown` | The running engine is older than this app. Update the GitRaptor installation that started it, or stop it with `raptor daemon stop` from that installation. | El motor en marcha es más antiguo que esta app. Actualiza la instalación de GitRaptor que lo arrancó, o páralo con `raptor daemon stop` de esa instalación. |
+| `engine.incompatible.ownEngine` | The running engine is this app's own, from an older version. Start it again to update it. | El motor en marcha es el de esta app, de una versión anterior. Arráncalo de nuevo para actualizarlo. |
 | `engine.incompatible.appOlder` | This app is older than the running engine ({{version}}). Update the app. | Esta app es más antigua que el motor en marcha ({{version}}). Actualiza la app. |
 | `engine.incompatible.noCommand` | The engine's path has characters that can't be copied safely; stop it from the installation that started it. | La ruta del motor tiene caracteres que no se pueden copiar con seguridad; páralo desde la instalación que lo arrancó. |
 | `engine.stopped.title` | Engine stopped | Motor parado |
@@ -649,11 +641,11 @@ Daemon falso en carpeta temporal `0700` por test. Sin repos ni daemon reales sal
 |---|---|---|
 | El motor no está en marcha | `a_stopped_engine_is_reported_and_retry_with_start_launches_it`: sin socket → `stopped { not-running }`; `Retry { start: true }` con un `Connector` de prueba que arranca el falso → `live` | `EngineStates.test.tsx` › `stopped engine says no history is recorded and offers to start it`: texto de `engine.band.stopped`, botón → `engine_retry { start: true }` |
 | Se pierde la conexión | `a_lost_connection_marks_data_stale_and_catches_up_alone`: `live`, `drop_connection` → `reconnecting` con `staleSinceMs`; `restart` → `scope.snapshot` nuevo, `scope.subscribe` con `from_seq = N + 1` del nuevo `run_id`, `live` y `staleSinceMs: null`, sin órdenes del test | `lost connection dims the fleet and says since when` (hora local en en y es; `data-stale`) y `catches up without user action` |
-| Versión incompatible | `an_older_daemon_is_incompatible_with_its_version`, `a_newer_daemon_asks_to_update_the_app`, `a_missing_capability_is_incompatible` | `incompatible engine says how to update` (con y sin `stopCommand`; botón Copiar) |
+| Versión incompatible | `an_older_daemon_is_incompatible_with_its_version`, `a_newer_daemon_asks_to_update_the_app`, `a_missing_capability_is_incompatible`, `the_own_engine_missing_capabilities_offers_start` (`daemon_path` = `own_raptor` → `action: start`, sin `stopCommand`) | `incompatible engine says how to update` (con y sin `stopCommand`; botón Copiar) |
 | Sin repos observados | `no_repos_delivers_the_engine_state_and_the_candidates` | `no repos shows the welcome with discovered repos` |
 | Hueco y duplicado | `a_gap_takes_a_new_snapshot`, `a_duplicate_is_dropped` | — |
 | `scope.resync` y `events.resync` | `a_scope_resync_carries_its_reason_until_live`, `a_slow_consumer_reconnects_with_growing_wait` | `catching up band names the reason` |
-| Abierta por un agente | `an_agent_requester_is_restricted_and_never_subscribes`, `an_mcp_profile_is_restricted` (ningún `scope.subscribe` en `calls()`) | `restricted view shows the agent banner and no repos` |
+| Abierta por un agente | `an_agent_requester_is_restricted_and_never_subscribes`, `an_mcp_profile_is_restricted`, `an_unverified_requester_is_restricted`, `a_missing_requester_is_restricted` (ningún `scope.subscribe` en `calls()`) | `restricted view shows the agent banner and no repos` |
 | Texto no confiable | `untrusted_text_reaches_the_webview_escaped`: candidato con `\u{1b}]52;…` y U+202E llega como `\x1b]52;…` y `\u{202e}` | `engine text is rendered as text`: `textContent` igual al DTO; ningún elemento creado por el texto |
 | La app nunca reemplaza ni para el motor | `never_sends_replace_stop_or_writes`: ningún `daemon.replace`, `daemon.stop`, `repo.add` ni método con `writes` en `calls()` en todos los tests (aserción común en `support`) | — |
 | No solo color (NFR-09) | — | cada estado tiene símbolo y texto visibles; axe sin violaciones |
@@ -681,7 +673,7 @@ macOS (T008) y ubuntu (job `desktop`: el daemon falso usa socket Unix). Windows:
 
 | Ítem / no-objetivo | Historia que lo cubre | Gate (cómo se verifica) |
 |---|---|---|
-| Arrancar el motor con el `raptor` del bundle, `ensure`, B-3 y el `.dmg` | TS-DSK-002 | `src/engine` no lanza procesos (`std::process` no aparece en `src/engine`) |
+| Arrancar el motor con el `raptor` del bundle, `ensure`, B-3 y el `.dmg` | TS-DSK-002 | `src/engine` no lanza procesos: `std::process` no aparece en `src/engine` salvo en `launcher.rs` y `autostart.rs`, que son de TS-DSK-002 |
 | Añadir un repo desde la app y el comando copiable con ruta | US-DSK-001 | a1 no tiene botón "Añadir mi primer repo" |
 | Autoarranque desde Ajustes | TS-DSK-002 (comando) y la historia de Ajustes | `commands.json` sin `autostart_*` en este PR |
 | La flota y la apertura de un repo (`HubCmd::Open`) | US-DSK-004 | `engineKeys.repo` sin escritores en este PR |
@@ -696,7 +688,7 @@ macOS (T008) y ubuntu (job `desktop`: el daemon falso usa socket Unix). Windows:
 | ID | Nota | Acción | Owner |
 |----|------|--------|-------|
 | G1 | El daemon da perfil `mcp` solo a `raptor-mcp` o a quien lo declara (`crates/core/src/channel/conn.rs:535-546`), y no hay clase de cliente `desktop`. ADR-GRP-017 § 3 pide `mcp` para una app con un agente en la ascendencia. La app ya se restringe sola (D6), pero la defensa real es del daemon. No bloquea: esta historia solo lee y falla cerrada | Clase `desktop` y perfil `mcp` con agente en la ascendencia, en el daemon. Hasta entonces la restricción de D6 es cosmética, no un control, y la lectura no es más amplia que la de un agente que ejecuta `raptor`. La detección de `open -a` es de SPIKE-DSK-002 | TS-GRP-009 |
-| G2 | TS-DSK-002 aún no tiene Dev Spec. Debe implementar `Connector` (§ Firmas del stack) y no añadir un comando propio de "Arrancar motor" (D8) | Citar esta Dev Spec en `must_read` de la de TS-DSK-002 | TS-DSK-002 |
+| G2 | Cerrado: DS-TS-DSK-002 crea la costura y `BundleConnector`, y no añade comando propio de "Arrancar motor" (D8). Esta historia solo suma `connection.requester` a `REQUIRED_CAPABILITIES` | Ninguna | — |
 | G3 | DSF-DSK-001 § 2.3 pone la pastilla en la barra de título como supuesto (H-11). Si Rene la mueve, cambia solo `TitleBar.tsx` | Ninguna | Rene |
 | G4 | `commands.json`, `commands/mod.rs`, `capabilities/main.json`, `en.json`, `es.json` y `AppShell.tsx` los tocan también US-DSK-004 y las demás US-DSK (G5 de TS-DSK-001) | Integrar US-DSK-003 antes que US-DSK-004 y rebasar | Orquestador |
 | G5 | La marca `gr:first-meaningful-paint` existe; el escenario de banco que la mide (`desktop-*`) es la enmienda de INF-GRP-002 prevista en NFR-13 § Huecos | Reservarla cuando US-DSK-004 pase a `in-progress` | Orquestador |
