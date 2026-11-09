@@ -1,0 +1,28 @@
+---
+source: apps/cli/src/tui/conflict_toast_tests.rs
+expression: text
+---
+ shop · ✔ live · engine – · –                                        ⚡ –  ⛔ –
+┏━ › Fleet · ↑↓ vs main (local copy, fetch age not available) ━━━━━━━━━━━━━━━━━┓
+┃     Agent                Branch        Files ↑↓          Activity            ┃
+┃  ⚠  agent not available  unavailable: folder missing                         ┃
+┃  ⚠  agent not available  unavailable: folder missing                   ⚡    ┃
+┃  ⚠  agent not available  unavailable: folder missing                   ⚡    ┃
+┃  ⚠  agent not available  unavailable: folder missing                         ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                  │ ⚡ Predicted conflict: claude-1 ↔ claude-2 in src/api.rs  ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+┌─ ⚡ Predicted conflicts ─────────────────────────────────────────────────────┐
+│ ⚡ [new] claude-1 ↔ claude-2  0 s ago                                        │
+│  • src/api.rs 12–18 ↔ 14–20                                                  │
+│ ⚠ uncommitted · ⚡ commits only · no merge drivers or .gitattributes         │
+└──────────────────────────────────────────────────────────────────────────────┘
+ q quit  r retry   ⚠  warning: the text beside it says why               ? help

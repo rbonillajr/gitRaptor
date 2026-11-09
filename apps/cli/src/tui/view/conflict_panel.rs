@@ -6,6 +6,7 @@ use gitraptor_api::prediction::{ConflictKindView, LineRange, PairLevel};
 
 use super::{Say, repo, row_name};
 use crate::model::{Model, SafeText};
+use crate::present::conflict_alert_text::ConflictAlertText;
 use crate::present::freshness_text::FreshnessText;
 use crate::present::prediction_text::PredictionText as T;
 use crate::tui::prediction::{PairRow, PredictionModel, Side};
@@ -51,6 +52,11 @@ pub(super) fn build(model: &Model, say: Say, max_height: u16) -> Option<Conflict
 
 /// A freshness text as the view draws it: folded to ASCII when the symbol set asks for it.
 fn say_fresh(say: Say, text: FreshnessText) -> SafeText {
+    SafeText::text(&say.glyphs.fold(&text.render(say.lang)))
+}
+
+/// A text of the alert catalog as the view draws it, folded to ASCII when the set asks for it.
+pub(super) fn say_alert(say: Say, text: ConflictAlertText<'_>) -> SafeText {
     SafeText::text(&say.glyphs.fold(&text.render(say.lang)))
 }
 
@@ -123,12 +129,22 @@ fn entry(
         },
         stale: freshness::prediction_of(pair) == Prediction::Stale,
         marked,
+        new: model
+            .ui
+            .alerts
+            .is_new(&repo.repo_id, &pair.pair_id)
+            .then(|| say_alert(say, ConflictAlertText::New)),
     }
 }
 
 /// A side by the name that heads its row, or the base branch (P5, AD5). A root no row has is
 /// named by its folder, never empty.
-fn side(model: &Model, repo: &crate::model::RepoView, side: &Side, say: Say) -> AgentRef {
+pub(super) fn side(
+    model: &Model,
+    repo: &crate::model::RepoView,
+    side: &Side,
+    say: Say,
+) -> AgentRef {
     match side {
         Side::Base => AgentRef {
             color_index: AgentRef::BASE,

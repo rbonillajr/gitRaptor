@@ -156,6 +156,8 @@ pub struct ConflictEntry {
     pub stale: bool,
     /// Draw the ⚡ or ⚠. A pair recalculating without either has none, and no files.
     pub marked: bool,
+    /// The ⚡ appeared in this run: "new", for as long as it lasts.
+    pub new: Option<SafeText>,
 }
 
 /// An aggregate line of the panel: pairs calculating, pending, not computable or all clear.
@@ -241,6 +243,12 @@ impl Component for ConflictPanelModel {
             let mut pen = Pen::new(buf, inner, y, styles);
             if entry.marked {
                 pen.symbol(styles.symbol(symbol), styles.fg(token)).gap(1);
+            }
+            if let Some(badge) = &entry.new {
+                pen.text(g.button[0], warn)
+                    .safe(badge, warn.add_modifier(Modifier::BOLD))
+                    .text(g.button[1], warn)
+                    .gap(1);
             }
             pen.safe(&entry.left.name, agent(&entry.left))
                 .gap(1)
