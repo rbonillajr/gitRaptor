@@ -78,3 +78,10 @@ describe("D4-CMD-TS fleet_open", () => {
     expect(result).toEqual({});
   });
 });
+
+describe("D8-CMD (DS-US-DSK-008 D1)", () => {
+  it("no command of the command map is about prediction", () => {
+    const about = [...COMMANDS].filter((name) => /prediction|pair|conflict/.test(name));
+    expect(about, "the predicted-conflict detail travels by the channel, not by a command").toEqual([]);
+  });
+});

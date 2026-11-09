@@ -105,3 +105,122 @@ fn detached_at_passes_only_as_40_or_64_hex() {
         );
     }
 }
+
+mod prediction_ingest {
+    use gitraptor_api::Untrusted;
+    use gitraptor_api::display::{TEXT_MAX_CHARS, visible};
+    use gitraptor_api::prediction::{
+        ConflictFileView, ConflictKindView, ConflictView, LineRange, MergeBaseKind, PairDetail,
+        PairLevel, PairSideView, PairStateView, PairSummary,
+    };
+    use gitraptor_desktop::engine::ingest;
+
+    fn summary(computed: Option<i64>) -> PairSummary {
+        PairSummary {
+            pair_id: "0123456789abcdef".to_owned(),
+            rev: 12,
+            a: PairSideView::Worktree {
+                root: Untrusted::new("/w/wt/feat-pagos"),
+            },
+            b: PairSideView::Base {},
+            state: PairStateView::Current,
+            reason: None,
+            level: Some(PairLevel::Conflict),
+            computed_at_utc_ms: computed,
+            overlap_files: 1,
+            overlap_partial: false,
+            conflict_files: 1,
+            conflict_truncated: false,
+        }
+    }
+
+    fn detail(overlap: &[&str], files: &[&str]) -> PairDetail {
+        PairDetail {
+            summary: summary(Some(-5)),
+            overlap: overlap.iter().map(|p| Untrusted::new(*p)).collect(),
+            conflict: Some(ConflictView {
+                merge_base: MergeBaseKind::Single,
+                files: files
+                    .iter()
+                    .map(|p| ConflictFileView {
+                        path: Untrusted::new(*p),
+                        kind: ConflictKindView::Content,
+                        ours: vec![LineRange { start: 40, len: 19 }],
+                        theirs: vec![LineRange { start: 44, len: 18 }],
+                        hunks_truncated: false,
+                        has_merge_rule: true,
+                    })
+                    .collect(),
+                truncated: true,
+                rewrites_escalated: false,
+            }),
+        }
+    }
+
+    #[test]
+    fn a_negative_computed_at_becomes_null() {
+        assert_eq!(
+            ingest::pair(&summary(Some(-1))).computed_at_utc_ms,
+            None,
+            "D8-WIRE: a negative computedAtUtcMs travels as null"
+        );
+        assert_eq!(
+            ingest::pair(&summary(Some(1_700_000_300_000))).computed_at_utc_ms,
+            Some(1_700_000_300_000),
+            "D8-WIRE: a valid computedAtUtcMs is copied"
+        );
+        let dto = ingest::pair_detail(&detail(&["README.md"], &["pagos.rs"]));
+        assert_eq!(
+            dto.pair.computed_at_utc_ms, None,
+            "D8-WIRE: the pair of a detail follows the same rule"
+        );
+        let conflict = dto
+            .conflict
+            .expect("D8-WIRE: pair_detail carries the conflict files");
+        assert!(
+            conflict.truncated,
+            "D8-WIRE: the truncated flag travels as is"
+        );
+        let file = &conflict.files[0];
+        assert_eq!(
+            (
+                file.ours[0].start,
+                file.ours[0].len,
+                file.theirs[0].start,
+                file.theirs[0].len
+            ),
+            (40, 19, 44, 18),
+            "D8-WIRE: the ranges travel as numbers"
+        );
+        assert!(file.has_merge_rule, "D8-WIRE: hasMergeRule travels as is");
+    }
+
+    #[test]
+    fn pair_detail_paths_pass_through_display_visible() {
+        let hostile = "src/\u{1b}]52;c;QUFB\u{7}pagos\u{202e}.rs";
+        let long = format!("{}.rs", "d/".repeat(TEXT_MAX_CHARS));
+        let dto = ingest::pair_detail(&detail(&[hostile, &long], &[hostile, &long]));
+        let expected = [
+            visible(hostile, TEXT_MAX_CHARS),
+            visible(&long, TEXT_MAX_CHARS),
+        ];
+        assert_eq!(
+            dto.overlap, expected,
+            "D8-WIRE: overlap paths go through display::visible"
+        );
+        let conflict = dto
+            .conflict
+            .expect("D8-WIRE: pair_detail carries the conflict files");
+        let paths: Vec<String> = conflict.files.iter().map(|f| f.path.clone()).collect();
+        assert_eq!(
+            paths, expected,
+            "D8-WIRE: conflict file paths go through display::visible"
+        );
+        for path in &paths {
+            assert!(
+                !path.contains('\u{1b}') && !path.contains('\u{202e}') && !path.contains('\u{7}'),
+                "D8-WIRE: no raw escape or bidi control may reach the webview: {path:?}"
+            );
+        }
+    }
+}

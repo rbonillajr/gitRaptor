@@ -300,3 +300,97 @@ describe("D4 fleet shell", () => {
     await waitFor(() => expect(invoked.filter((i) => i.cmd === "fleet_open").map((i) => (i.args as { params: { repoId: string } }).params.repoId)).toContain("tienda"));
   });
 });
+
+// D8-DETAILVIEW (DS-US-DSK-008 D18): Esc acts on one layer per press; an Esc a layer already consumed never reaches
+// the shell's onEscape.
+describe("D8 Esc by layers", () => {
+  const SESSION = { daemonVersion: "0.1.0", protocol: 9, restricted: false, activity: true, discovery: true };
+  const CONFLICT = {
+    pairId: "c1",
+    rev: 4,
+    a: "key-feat-pagos",
+    b: "key-feat-login",
+    state: "current" as const,
+    reason: null,
+    level: "conflict" as const,
+    computedAtUtcMs: Date.now() - 40_000,
+    overlapFiles: 0,
+    overlapPartial: false,
+    conflictFiles: 1,
+    conflictTruncated: false,
+  };
+
+  async function mountCentre(pairOpen: boolean) {
+    mockIPC((cmd) => (cmd === "app_info" ? { version: "0.0.0", protocol: 1 } : {}));
+    const { useEngineStore } = await import("@/state/engine-store");
+    useEngineStore.setState({ conn: { kind: "live" }, staleSinceMs: null, resync: null, session: SESSION });
+    useUiStore.setState({
+      selectedRepoId: "tienda",
+      center: pairOpen ? { view: "pair", repoId: "tienda", pairId: "c1" } : { view: "main" },
+    });
+    const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } });
+    const row = {
+      repoId: "tienda",
+      name: "tienda",
+      path: "/w/tienda/.git",
+      state: "observed" as const,
+      tier: "active" as const,
+      attention: { conflicts: { state: "counted" as const, count: 1 }, denials: { state: "counted" as const, count: 0 } },
+    };
+    applyEngineBatch(client, [
+      { type: "global", engine: { state: "observing", gitVersion: "2.45.1" }, daemon: { version: "0.1.0", protocol: 9 }, autostart: "unknown", repos: [row] },
+      { type: "repo", fleet: { ...tienda().repo, repoId: "tienda", pairs: [CONFLICT] } },
+      {
+        type: "pairDetails",
+        repoId: "tienda",
+        filled: false,
+        perf: { backendNs: 1 },
+        details: [
+          {
+            pair: CONFLICT,
+            overlap: [],
+            conflict: { files: [{ path: "pagos.rs", kind: "content", ours: [{ start: 40, len: 19 }], theirs: [{ start: 44, len: 18 }], hunksTruncated: false, hasMergeRule: false }], truncated: false },
+          },
+        ],
+      },
+    ]);
+    return render(
+      <QueryClientProvider client={client}>
+        <AppShell />
+      </QueryClientProvider>,
+    );
+  }
+
+  it("Esc inside the center view does not also close the drawer", async () => {
+    setViewportWidth(1200);
+    await mountCentre(true);
+    const right = titleButtons()[2] as HTMLElement;
+    key({ code: "KeyB", metaKey: true, altKey: true });
+    expect(isOn(right), "the drawer is open").toBe(true);
+    const heading = screen.getByRole("heading", { level: 2, name: /collide/ });
+    act(() => heading.focus());
+    fireEvent.keyDown(heading, { key: "Escape", code: "Escape" });
+    expect(useUiStore.getState().center, "the first Esc closes the pair detail").toEqual({ view: "main" });
+    expect(isOn(right), "and leaves the drawer open").toBe(true);
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape", code: "Escape" });
+    expect(isOn(right), "the next Esc closes the drawer").toBe(false);
+  });
+
+  it("an Esc already consumed never reaches onEscape", async () => {
+    setViewportWidth(1200);
+    await mountCentre(false);
+    const right = titleButtons()[2] as HTMLElement;
+    key({ code: "KeyB", metaKey: true, altKey: true });
+    expect(isOn(right), "the drawer is open").toBe(true);
+    const consume = (event: KeyboardEvent) => event.preventDefault();
+    document.addEventListener("keydown", consume);
+    try {
+      fireEvent.keyDown(document.body, { key: "Escape", code: "Escape" });
+    } finally {
+      document.removeEventListener("keydown", consume);
+    }
+    expect(isOn(right), "an Esc with defaultPrevented does not close the drawer").toBe(true);
+    fireEvent.keyDown(document.body, { key: "Escape", code: "Escape" });
+    expect(isOn(right), "an Esc nobody consumed does").toBe(false);
+  });
+});

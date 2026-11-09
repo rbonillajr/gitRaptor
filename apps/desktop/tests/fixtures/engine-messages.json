@@ -78,13 +78,72 @@
     ],
     "type": "global"
   },
+  "pairDetails": {
+    "details": [
+      {
+        "conflict": {
+          "files": [
+            {
+              "hasMergeRule": true,
+              "hunksTruncated": false,
+              "kind": "content",
+              "ours": [
+                {
+                  "len": 19,
+                  "start": 40
+                }
+              ],
+              "path": "pagos.rs",
+              "theirs": [
+                {
+                  "len": 18,
+                  "start": 44
+                }
+              ]
+            }
+          ],
+          "truncated": false
+        },
+        "overlap": [
+          "README.md"
+        ],
+        "pair": {
+          "a": "3333333333333333",
+          "b": "2222222222222222",
+          "computedAtUtcMs": 1762697300000,
+          "conflictFiles": 0,
+          "conflictTruncated": false,
+          "level": "overlap",
+          "overlapFiles": 2,
+          "overlapPartial": false,
+          "pairId": "pair-1",
+          "reason": null,
+          "rev": 13,
+          "state": "recalculating"
+        }
+      }
+    ],
+    "filled": true,
+    "perf": {
+      "backendNs": 700000
+    },
+    "repoId": "repo-alpha",
+    "type": "pairDetails"
+  },
   "prediction": {
     "pairs": [
       {
         "a": "3333333333333333",
         "b": "2222222222222222",
+        "computedAtUtcMs": 1762697300000,
+        "conflictFiles": 0,
+        "conflictTruncated": false,
         "level": "overlap",
+        "overlapFiles": 2,
+        "overlapPartial": false,
         "pairId": "pair-1",
+        "reason": null,
+        "rev": 13,
         "state": "recalculating"
       }
     ],
@@ -103,21 +162,44 @@
         "name": "main",
         "status": "confirmed"
       },
+      "confirmCommand": {
+        "command": "'/Applications/GitRaptor.app/Contents/MacOS/raptor' 'guard' 'confirm' '/Users/me/code/tienda'",
+        "state": "offered",
+        "withPath": true
+      },
       "fetchedUtcMs": 1762690000000,
+      "limits": [
+        "overlap-includes-uncommitted",
+        "local-only"
+      ],
       "name": "tienda",
       "pairs": [
         {
           "a": "3333333333333333",
           "b": "2222222222222222",
+          "computedAtUtcMs": 1762697200000,
+          "conflictFiles": 1,
+          "conflictTruncated": false,
           "level": "conflict",
+          "overlapFiles": 1,
+          "overlapPartial": false,
           "pairId": "pair-1",
+          "reason": null,
+          "rev": 12,
           "state": "current"
         },
         {
           "a": "2222222222222222",
           "b": "base",
+          "computedAtUtcMs": null,
+          "conflictFiles": 0,
+          "conflictTruncated": false,
           "level": null,
+          "overlapFiles": 0,
+          "overlapPartial": false,
           "pairId": "pair-2",
+          "reason": "base-unconfirmed",
+          "rev": 11,
           "state": "pending"
         }
       ],

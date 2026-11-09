@@ -176,3 +176,14 @@ describe("TS003-OVERLAYS Dialog accessibility", () => {
     expect(info.violations.map((v) => `${v.id}: ${v.help}`), "info").toEqual([]);
   });
 });
+
+describe("D18 consumed Esc (DS-US-DSK-008)", () => {
+  it("the Esc that closes it is marked as consumed", () => {
+    render(<ConfirmHarness onConfirm={() => {}} />);
+    open();
+    const event = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    act(() => void (document.activeElement ?? document.body).dispatchEvent(event));
+    expect(screen.queryByRole("alertdialog"), "Esc closes the dialog").toBeNull();
+    expect(event.defaultPrevented, "the Esc it consumed is marked with preventDefault so the shell ignores it").toBe(true);
+  });
+});

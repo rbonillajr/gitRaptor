@@ -147,3 +147,46 @@ fn v1_crate_is_a_member_but_not_a_default_member() {
         "V1: gitraptor-desktop must not be in default-members"
     );
 }
+
+/// D8-NOTIF (DS-US-DSK-008 D14): no OS notifications and no sound, in the crates, the webview
+/// dependencies or the webview code.
+#[test]
+fn no_os_notifications() {
+    let desktop = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    for manifest in ["src-tauri/Cargo.toml", "package.json"] {
+        let text = std::fs::read_to_string(desktop.join(manifest)).expect("D8-NOTIF: manifest");
+        assert!(
+            !text.contains("tauri-plugin-notification") && !text.contains("plugin-notification"),
+            "D8-NOTIF: {manifest} depends on the notification plugin"
+        );
+    }
+    let mut stack = vec![desktop.join("src")];
+    let mut offenders = Vec::new();
+    while let Some(dir) = stack.pop() {
+        for entry in std::fs::read_dir(&dir).expect("D8-NOTIF: src folder") {
+            let path = entry.expect("D8-NOTIF: entry").path();
+            if path.is_dir() {
+                stack.push(path);
+                continue;
+            }
+            let is_source = path
+                .extension()
+                .is_some_and(|e| matches!(e.to_str(), Some("ts" | "tsx")));
+            let is_test = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.contains(".test."));
+            if !is_source || is_test {
+                continue;
+            }
+            let text = std::fs::read_to_string(&path).expect("D8-NOTIF: source");
+            if text.contains("new Notification(") || text.contains("requestPermission") {
+                offenders.push(path.display().to_string());
+            }
+        }
+    }
+    assert!(
+        offenders.is_empty(),
+        "D8-NOTIF: the webview asks for OS notifications in {offenders:?}"
+    );
+}

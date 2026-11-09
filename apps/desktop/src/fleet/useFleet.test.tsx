@@ -104,7 +104,7 @@ describe("D4-USEFLEET useFleet", () => {
     expect(fleetOf(result), "no entry until the repo snapshot is in").toBeUndefined();
     const fleet = tienda();
     await apply({ type: "repo", fleet: fleet.repo });
-    await waitFor(() => expect(fleetOf(result)).toEqual({ repo: fleet.repo, sessions: new Map(), detection: null }));
+    await waitFor(() => expect(fleetOf(result)).toEqual({ repo: fleet.repo, sessions: new Map(), detection: null, details: new Map(), lastComputed: new Map() }));
     await apply({ type: "sessions", repoId: "tienda", detectionAvailable: true, sessions: [...fleet.sessions.values()] });
     await waitFor(() => expect(fleetOf(result)?.sessions.size, "a later message reaches the hook").toBe(2));
     const query = client.getQueryCache().find({ queryKey: engineKeys.repo("tienda") });

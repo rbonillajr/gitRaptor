@@ -6,9 +6,9 @@ import { QueryClient } from "@tanstack/react-query";
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it } from "vitest";
-import type { EngineMessage, GlobalDto, RepoFleet, SessionDto } from "@/client/engine-types";
+import type { EngineMessage, PairDetailDto, PairDto, RepoFleetDto, GlobalDto, RepoFleet, SessionDto } from "@/client/engine-types";
 import { engineKeys } from "@/client/queries";
-import { session as sessionOf, tienda } from "@/fleet/fixtures";
+import { pair as pairFixture, session as sessionOf, tienda } from "@/fleet/fixtures";
 import fixture from "../../tests/fixtures/engine-messages.json";
 import { applyEngineBatch } from "./engine-cache";
 import { useEngineStore } from "./engine-store";
@@ -32,6 +32,7 @@ const VARIANTS = [
   "sessions",
   "repoSession",
   "prediction",
+  "pairDetails",
   "repoClosed",
 ] as const satisfies readonly Variant[];
 
@@ -193,6 +194,11 @@ const fleetOf = (id = "tienda") => client.getQueryData<RepoFleet>(engineKeys.rep
 const base = () => tienda().repo;
 const repoMsg = (id = "tienda"): EngineMessage => ({ type: "repo", fleet: { ...base(), repoId: id } });
 const perf = { backendNs: 1_000_000 };
+const pairOf = (pairId: string, rev: number, over: Partial<PairDto> = {}): PairDto =>
+  pairFixture("feat-login", "feat-pagos", { pairId, rev, ...over });
+const detailOf = (pair: PairDto, overlap: string[] = []): PairDetailDto => ({ pair, overlap, conflict: null });
+const detailsMsg = (details: PairDetailDto[], filled = false, repoId = "tienda"): EngineMessage => ({ type: "pairDetails", repoId, details, filled, perf });
+const repoWith = (pairs: PairDto[], over: Partial<RepoFleetDto> = {}): EngineMessage => ({ type: "repo", fleet: { ...base(), pairs, ...over } });
 const sessionsMsg = (sessions: SessionDto[], detectionAvailable = true, repoId = "tienda"): EngineMessage => ({
   type: "sessions",
   repoId,
@@ -208,7 +214,7 @@ beforeEach(() => {
 describe("D4 fleet cache applyEngineBatch", () => {
   it("fleet cache: repo stores the snapshot with no sessions and no detection yet", () => {
     apply(repoMsg());
-    expect(fleetOf(), "the repo entry").toEqual({ repo: base(), sessions: new Map(), detection: null });
+    expect(fleetOf(), "the repo entry").toEqual({ repo: base(), sessions: new Map(), detection: null, details: new Map(), lastComputed: new Map() });
   });
 
   it("fleet cache: a new repo snapshot replaces the entry and empties the sessions", () => {
@@ -216,7 +222,7 @@ describe("D4 fleet cache applyEngineBatch", () => {
     expect(fleetOf()?.sessions.size, "the sessions are in").toBe(1);
     const next = { ...base(), name: "tienda-renamed" };
     apply({ type: "repo", fleet: next });
-    expect(fleetOf(), "the sessions are asked again after a snapshot").toEqual({ repo: next, sessions: new Map(), detection: null });
+    expect(fleetOf(), "the sessions are asked again after a snapshot").toEqual({ repo: next, sessions: new Map(), detection: null, details: new Map(), lastComputed: new Map() });
   });
 
   it("fleet cache: worktrees replaces the worktrees and the fetch time and keeps the rest", () => {
@@ -238,7 +244,7 @@ describe("D4 fleet cache applyEngineBatch", () => {
     apply({ type: "prediction", repoId: "tienda", pairs: [], removed: [], perf });
     expect(client.getQueryCache().findAll({ queryKey: ["engine", "repo"] }), "no entry without a repo snapshot").toHaveLength(0);
     apply(repoMsg());
-    expect(fleetOf(), "the earlier messages left nothing behind in the next snapshot").toEqual({ repo: base(), sessions: new Map(), detection: null });
+    expect(fleetOf(), "the earlier messages left nothing behind in the next snapshot").toEqual({ repo: base(), sessions: new Map(), detection: null, details: new Map(), lastComputed: new Map() });
   });
 
   it("fleet cache: sessions merges the list by sessionId and sets detection", () => {
@@ -272,8 +278,8 @@ describe("D4 fleet cache applyEngineBatch", () => {
   });
 
   it("fleet cache: prediction upserts pairs by pairId and removes the removed ones", () => {
-    const one = { pairId: "p1", a: "key-feat-login", b: "key-feat-pagos", state: "current", level: "conflict" } as const;
-    const two = { pairId: "p2", a: "key-feat-pagos", b: "base", state: "pending", level: null } as const;
+    const one = pairOf("p1", 1, { a: "key-feat-login", b: "key-feat-pagos" });
+    const two = pairOf("p2", 1, { a: "key-feat-pagos", b: "base", state: "pending", level: null });
     apply(repoMsg(), { type: "prediction", repoId: "tienda", pairs: [one, two], removed: [], perf });
     expect(fleetOf()?.repo.pairs.map((p) => p.pairId).sort()).toEqual(["p1", "p2"]);
     apply({ type: "prediction", repoId: "tienda", pairs: [{ ...one, level: "overlap" }], removed: ["p2"], perf });
@@ -310,7 +316,7 @@ describe("D4 fleet cache applyEngineBatch", () => {
       worktrees: { type: "worktrees", repoId: "tienda", worktrees: [], fetchedUtcMs: 1, perf },
       sessions: sessionsMsg([sessionOf("claude-2", "feat-login")], false),
       repoSession: repoSessionMsg(sessionOf("claude-1", "feat-pagos", { state: "inactive", stateSinceUtcMs: 2000 })),
-      prediction: { type: "prediction", repoId: "tienda", pairs: [{ pairId: "p9", a: "x", b: "base", state: "pending", level: null }], removed: [], perf },
+      prediction: { type: "prediction", repoId: "tienda", pairs: [pairOf("p9", 1, { a: "x", b: "base", state: "pending", level: null })], removed: [], perf },
     };
     apply(messages[variant]);
     expect(previous, "the old entry is untouched").toEqual(copy);
@@ -331,7 +337,7 @@ describe("D4 fleet fixture (serialized from wire.rs)", () => {
     const repo = msg("repo");
     const id = repo.fleet.repoId;
     apply(repo);
-    expect(fleetOf(id), "repo").toEqual({ repo: repo.fleet, sessions: new Map(), detection: null });
+    expect(fleetOf(id), "repo").toEqual({ repo: repo.fleet, sessions: new Map(), detection: null, details: new Map(), lastComputed: new Map() });
 
     const worktrees = msg("worktrees");
     apply(worktrees);
@@ -366,5 +372,82 @@ describe("D4 fleet fixture (serialized from wire.rs)", () => {
     apply(closed);
     expect(fleetOf(closed.repoId), "repoClosed removes the entry").toBeUndefined();
     expect(useUiStore.getState().selectedRepoId, "and deselects it").toBeNull();
+  });
+});
+
+describe("D8 pair details in the fleet cache (DS-US-DSK-008 D4, D10, L-02)", () => {
+  it("an older summary never replaces a newer one", () => {
+    apply(repoWith([pairOf("p1", 5, { level: "conflict" })]));
+    apply({ type: "prediction", repoId: "tienda", pairs: [pairOf("p1", 3, { level: "overlap" })], removed: [], perf });
+    expect(fleetOf()?.repo.pairs, "a prediction with a lower rev does not replace the stored summary").toEqual([pairOf("p1", 5, { level: "conflict" })]);
+    apply(detailsMsg([detailOf(pairOf("p1", 4, { level: "overlap" }), ["old.rs"])]));
+    expect(fleetOf()?.repo.pairs[0]?.rev, "a detail with a lower rev does not replace it either").toBe(5);
+    expect(fleetOf()?.details.has("p1"), "and its detail is discarded").toBe(false);
+    apply({ type: "prediction", repoId: "tienda", pairs: [pairOf("p1", 5, { level: "overlap" })], removed: [], perf });
+    expect(fleetOf()?.repo.pairs[0]?.level, "the same rev does replace (>=)").toBe("overlap");
+  });
+
+  it("a detail with a newer rev brings its summary", () => {
+    apply(repoWith([pairOf("p1", 5, { level: "conflict" })]));
+    const newer = detailOf(pairOf("p1", 7, { level: "overlap", computedAtUtcMs: 123 }), ["a.rs"]);
+    apply(detailsMsg([newer]));
+    expect(fleetOf()?.repo.pairs, "the summary of the detail is adopted").toEqual([newer.pair]);
+    expect(fleetOf()?.details.get("p1"), "and the detail is stored").toEqual(newer);
+    const unknown = detailOf(pairOf("p2", 8), ["b.rs"]);
+    apply(detailsMsg([unknown]));
+    expect(fleetOf()?.repo.pairs.map((p) => p.pairId).sort(), "a pair the cache did not know is added with its summary").toEqual(["p1", "p2"]);
+    const same = detailOf(pairOf("p1", 7, { level: "overlap", computedAtUtcMs: 123 }), ["a.rs", "c.rs"]);
+    apply(detailsMsg([same]));
+    expect(fleetOf()?.details.get("p1")?.overlap, "the same rev stores the detail").toEqual(["a.rs", "c.rs"]);
+  });
+
+  it("filled clears pairsTruncated", () => {
+    apply(repoWith([], { pairsTruncated: true }));
+    apply(detailsMsg([detailOf(pairOf("p1", 2))], false));
+    expect(fleetOf()?.repo.pairsTruncated, "a page without filled keeps it").toBe(true);
+    apply(detailsMsg([detailOf(pairOf("p2", 2))], true));
+    expect(fleetOf()?.repo.pairsTruncated, "the last page of the walk clears it").toBe(false);
+  });
+
+  it("pair details of a repo without a cache entry are dropped", () => {
+    apply(detailsMsg([detailOf(pairOf("p1", 2))], true, "tienda"));
+    expect(client.getQueryCache().findAll({ queryKey: ["engine", "repo"] }), "no entry is created by pairDetails").toHaveLength(0);
+    apply(repoMsg());
+    expect(fleetOf()?.details.size, "and nothing is left for the next snapshot").toBe(0);
+    apply(repoMsg("notas"), detailsMsg([detailOf(pairOf("p1", 2))], false, "notas"));
+    expect(fleetOf("notas")?.details.has("p1"), "control: a repo that has an entry does keep its details").toBe(true);
+  });
+
+  it("a pair that loses its result time remembers the last one and removed forgets it", () => {
+    apply(repoWith([pairOf("p1", 2, { computedAtUtcMs: 1_000 })]));
+    apply({ type: "prediction", repoId: "tienda", pairs: [pairOf("p1", 3, { state: "calculating", level: null, computedAtUtcMs: null })], removed: [], perf });
+    expect(fleetOf()?.lastComputed.get("p1"), "D10: the old time is kept before the result goes away").toBe(1_000);
+    apply(detailsMsg([detailOf(pairOf("p1", 3, { state: "calculating", level: null }))]));
+    apply(repoWith([pairOf("p1", 3, { state: "calculating", level: null })]));
+    expect(fleetOf()?.details.size, "a new snapshot empties the details").toBe(0);
+    expect(fleetOf()?.lastComputed.get("p1"), "but keeps the time of the pairs that are still in it").toBe(1_000);
+    apply(repoWith([]));
+    expect(fleetOf()?.lastComputed.has("p1"), "and drops the time of a pair that is gone").toBe(false);
+    apply(repoWith([pairOf("p1", 2, { computedAtUtcMs: 1_000 })]));
+    apply({ type: "prediction", repoId: "tienda", pairs: [pairOf("p1", 3, { state: "calculating", level: null, computedAtUtcMs: null })], removed: [], perf });
+    apply({ type: "prediction", repoId: "tienda", pairs: [], removed: ["p1"], perf });
+    expect(fleetOf()?.lastComputed.has("p1"), "removed forgets the time").toBe(false);
+    expect(fleetOf()?.details.has("p1"), "and the detail").toBe(false);
+  });
+
+  it("fleet fixture with pair details: pairDetails, rev, freshness, limits and confirmCommand land in the cache", () => {
+    const repo = msg("repo");
+    const details = msg("pairDetails");
+    apply(repo, details);
+    const entry = fleetOf(repo.fleet.repoId);
+    const first = details.details[0];
+    if (!first) throw new Error("the fixture has no detail");
+    expect(entry?.details.get(first.pair.pairId), "the detail of the fixture").toEqual(first);
+    const stored = entry?.repo.pairs.find((p) => p.pairId === first.pair.pairId);
+    expect(stored?.rev, "the detail has a newer rev than the snapshot pair, so its summary is adopted").toBe(first.pair.rev);
+    expect(stored?.computedAtUtcMs, "the freshness travels").toBe(first.pair.computedAtUtcMs);
+    expect(entry?.repo.limits, "limits").toEqual(repo.fleet.limits);
+    expect(entry?.repo.confirmCommand, "confirmCommand").toEqual(repo.fleet.confirmCommand);
+    expect(entry?.repo.pairsTruncated, "filled clears the truncation").toBe(false);
   });
 });

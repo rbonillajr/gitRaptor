@@ -89,3 +89,42 @@ describe("D4 ui store selectedRepoId", () => {
     expect(useUiStore.getState().selectedRepoId, "the choice is not stored, so rehydrating leaves it alone").toBe("tienda");
   });
 });
+
+describe("D8 ui store center (DS-US-DSK-008 D7)", () => {
+  beforeEach(() => {
+    useUiStore.setState({ selectedRepoId: null, center: { view: "main" } });
+  });
+
+  it("the center starts on main", () => {
+    expect(useUiStore.getState().center, "the center has one destination at a time, main by default").toEqual({ view: "main" });
+  });
+
+  it("opening a pair replaces the center view and back returns to main", () => {
+    useUiStore.getState().openPairDetail({ repoId: "tienda", pairId: "p1" });
+    expect(useUiStore.getState().center, "openPairDetail sets the pair destination").toEqual({ view: "pair", repoId: "tienda", pairId: "p1" });
+    useUiStore.getState().openPairDetail({ repoId: "tienda", pairId: "p2" });
+    expect(useUiStore.getState().center, "opening another pair replaces the first").toEqual({ view: "pair", repoId: "tienda", pairId: "p2" });
+    useUiStore.getState().backToMain();
+    expect(useUiStore.getState().center, "backToMain returns to the main view, not to the previous pair").toEqual({ view: "main" });
+    useUiStore.getState().openPairDetail({ repoId: "tienda", pairId: "p1" });
+    useUiStore.getState().closePairDetail();
+    expect(useUiStore.getState().center, "closePairDetail is an alias of backToMain").toEqual({ view: "main" });
+  });
+
+  it("selecting another repo returns to main", () => {
+    useUiStore.getState().selectRepo("tienda");
+    useUiStore.getState().openPairDetail({ repoId: "tienda", pairId: "p1" });
+    expect(useUiStore.getState().center.view, "the pair is open before changing repo").toBe("pair");
+    useUiStore.getState().selectRepo("notas");
+    expect(useUiStore.getState().center, "changing repo leaves the pair view").toEqual({ view: "main" });
+    expect(useUiStore.getState().selectedRepoId).toBe("notas");
+  });
+
+  it("the center is not persisted", () => {
+    useUiStore.getState().openPairDetail({ repoId: "tienda", pairId: "p1" });
+    expect(useUiStore.getState().center.view, "the pair is open in memory").toBe("pair");
+    useUiStore.getState().cycleTheme();
+    expect(Object.keys(stored()?.state ?? {}).sort(), "the four keys stay the only ones").toEqual(["detailOpen", "language", "sidebarOpen", "theme"]);
+    expect(localStorage.getItem(KEY) ?? "", "the pair id never reaches localStorage").not.toContain("p1");
+  });
+});
