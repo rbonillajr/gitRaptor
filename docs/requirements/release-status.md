@@ -10,10 +10,10 @@
 
 | Estado | Fichas |
 |---|---|
-| Implementado (`implemented`) | 72 |
+| Implementado (`implemented`) | 74 |
 | Hecho (`done`) | 3 |
-| Implementado en parte (`partially-implemented`) | 29 |
-| Listo (`ready`) | 23 |
+| Implementado en parte (`partially-implemented`) | 28 |
+| Listo (`ready`) | 22 |
 | Borrador (`draft`) | 58 |
 | Bloqueado (`blocked`) | 1 |
 | **Total** | **186** |
@@ -22,7 +22,7 @@
 
 | Feature | Implementado | Hecho | Implementado en parte | Listo | Borrador | Bloqueado | Total |
 |---|---|---|---|---|---|---|---|
-| [cockpit](#cockpit) | 11 | 0 | 6 | 2 | 19 | 1 | 39 |
+| [cockpit](#cockpit) | 13 | 0 | 5 | 1 | 19 | 1 | 39 |
 | [desktop](#desktop) | 6 | 0 | 1 | 16 | 0 | 0 | 23 |
 | [guardrails](#guardrails) | 14 | 0 | 7 | 1 | 3 | 0 | 25 |
 | [mcp](#mcp) | 7 | 0 | 4 | 0 | 9 | 0 | 20 |
@@ -31,7 +31,7 @@
 
 ### cockpit
 
-39 fichas: 11 implementado, 6 implementado en parte, 2 listo, 19 borrador, 1 bloqueado.
+39 fichas: 13 implementado, 5 implementado en parte, 1 listo, 19 borrador, 1 bloqueado.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -41,19 +41,19 @@
 | [TS-CKP-003](features/cockpit/technical-stories/TS-CKP-003-capa-cockpit-guardrails.md) | Capa cockpit en la decisión de Guardrails, ligada al git del ejecutor y registrada una sola vez | Implementado (`implemented`) | #261 | — |
 | [TS-CKP-004](features/cockpit/technical-stories/TS-CKP-004-tokens-semanticos-simbolos.md) | Tokens semánticos y símbolos con fallback en el tema de la TUI | Implementado (`implemented`) | #50, #115 | — |
 | [TS-CKP-005](features/cockpit/technical-stories/TS-CKP-005-biblioteca-componentes-tui.md) | Biblioteca de componentes TUI v0: los 10 widgets del design system, con snapshots y galería | Implementado (`implemented`) | #111, #115 | — |
+| [TS-CKP-011](features/cockpit/technical-stories/TS-CKP-011-base-confirmada-replanifica.md) | Confirmar la base en runtime refresca la base publicada y replanifica los pares contra la base | Implementado (`implemented`) | — | — |
 | [US-CKP-001](features/cockpit/user-stories/US-CKP-001-flota-en-vivo.md) | El desarrollador ve en vivo qué agente trabaja en cada worktree de un repo | Implementado (`implemented`) | #118, #126, #129, #130, #131, #136, #175 | — |
 | [US-CKP-003](features/cockpit/user-stories/US-CKP-003-estados-motor-conexion.md) | La TUI dice en qué estado está el motor y qué hacer en cada caso | Implementado (`implemented`) | #282 | — |
+| [US-CKP-006](features/cockpit/user-stories/US-CKP-006-conflictos-previstos.md) | El desarrollador ve qué agentes van a chocar antes de hacer merge | Implementado (`implemented`) | — | — |
 | [US-CKP-007](features/cockpit/user-stories/US-CKP-007-frescura-prediccion.md) | Una predicción vieja nunca se presenta como actual | Implementado (`implemented`) | #339 | — |
 | [US-CKP-008](features/cockpit/user-stories/US-CKP-008-alerta-conflicto-nuevo.md) | El desarrollador se entera en la TUI cuando aparece un conflicto previsto nuevo | Implementado (`implemented`) | #340 | — |
 | [US-CKP-026](features/cockpit/user-stories/US-CKP-026-autoria-en-la-flota.md) | El desarrollador ve en la flota de quién es el último commit de cada worktree y con qué agente | Implementado (`implemented`) | #147 | — |
 | [SPIKE-CKP-001](features/cockpit/technical-stories/SPIKE-CKP-001-prediccion-5s.md) | Predicción de conflictos en ≤ 5 s p95 sin escribir en el repo: merge en memoria frente a almacén en el perfil | Implementado en parte (`partially-implemented`) | #266 | 3 |
 | [US-CKP-002](features/cockpit/user-stories/US-CKP-002-orden-atencion-terminadas.md) | La lista pone primero lo que pide atención y no se llena de sesiones viejas | Implementado en parte (`partially-implemented`) | #284 | — |
 | [US-CKP-005](features/cockpit/user-stories/US-CKP-005-terminal-pequena-sin-color.md) | La TUI se puede usar en una terminal pequeña, sin color o en ASCII | Implementado en parte (`partially-implemented`) | #273 | 2 |
-| [US-CKP-006](features/cockpit/user-stories/US-CKP-006-conflictos-previstos.md) | El desarrollador ve qué agentes van a chocar antes de hacer merge | Implementado en parte (`partially-implemented`) | — | — |
 | [US-CKP-020](features/cockpit/user-stories/US-CKP-020-trabajo-de-otro-actor.md) | Tocar el trabajo de otro actor exige confirmar el plan concreto | Implementado en parte (`partially-implemented`) | #220 | 3 |
 | [US-CKP-025](features/cockpit/user-stories/US-CKP-025-tui-repo-no-observado.md) | La TUI ofrece observar el repo en el que se abre y, fuera de un repo, lleva a los ya observados | Implementado en parte (`partially-implemented`) | #165, #170 | 2 |
 | [TS-CKP-010](features/cockpit/technical-stories/TS-CKP-010-agentes-en-vivo-por-repo.md) | Recuento de agentes en vivo por repo en el ámbito global | Listo (`ready`) | — | — |
-| [TS-CKP-011](features/cockpit/technical-stories/TS-CKP-011-base-confirmada-replanifica.md) | Confirmar la base en runtime refresca la base publicada y replanifica los pares contra la base | Listo (`ready`) | — | — |
 | [TS-CKP-006](features/cockpit/technical-stories/TS-CKP-006-diff-de-commit.md) | Consultas del diff de un commit, entre dos commits y del índice de un worktree en el canal | Borrador (`draft`) | — | — |
 | [TS-CKP-007](features/cockpit/technical-stories/TS-CKP-007-ramas-y-commits-paginados.md) | Consulta de todas las ramas del repo y de los commits de cualquier rama, paginada y filtrable | Borrador (`draft`) | — | — |
 | [TS-CKP-008](features/cockpit/technical-stories/TS-CKP-008-preparar-y-quitar-del-indice.md) | Operaciones del catálogo para preparar y quitar del índice por archivo, fragmento y línea | Borrador (`draft`) | — | — |
@@ -289,7 +289,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### M2
 
-105 fichas: 42 implementado, 3 hecho, 22 implementado en parte, 5 listo, 33 borrador.
+105 fichas: 44 implementado, 3 hecho, 21 implementado en parte, 4 listo, 33 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -298,6 +298,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [TS-CKP-003](features/cockpit/technical-stories/TS-CKP-003-capa-cockpit-guardrails.md) | Capa cockpit en la decisión de Guardrails, ligada al git del ejecutor y registrada una sola vez | Implementado (`implemented`) | #261 | — |
 | [TS-CKP-004](features/cockpit/technical-stories/TS-CKP-004-tokens-semanticos-simbolos.md) | Tokens semánticos y símbolos con fallback en el tema de la TUI | Implementado (`implemented`) | #50, #115 | — |
 | [TS-CKP-005](features/cockpit/technical-stories/TS-CKP-005-biblioteca-componentes-tui.md) | Biblioteca de componentes TUI v0: los 10 widgets del design system, con snapshots y galería | Implementado (`implemented`) | #111, #115 | — |
+| [TS-CKP-011](features/cockpit/technical-stories/TS-CKP-011-base-confirmada-replanifica.md) | Confirmar la base en runtime refresca la base publicada y replanifica los pares contra la base | Implementado (`implemented`) | — | — |
 | [TS-GRD-001](features/guardrails/technical-stories/TS-GRD-001-configuracion-commiteada.md) | Lectura commiteada de la configuración del equipo y de la rama principal | Implementado (`implemented`) | #27 | — |
 | [TS-GRP-003](features/motor-local/technical-stories/TS-GRP-003-proceso-motor.md) | Proceso del motor en segundo plano por usuario | Implementado (`implemented`) | #26 | — |
 | [TS-GRP-006](features/motor-local/technical-stories/TS-GRP-006-observacion-por-niveles.md) | Observación por niveles: activo, dormido con centinela y despertar | Implementado (`implemented`) | #164, #167, #173, #178 | — |
@@ -305,6 +306,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [TS-TMC-002](features/time-machine/technical-stories/TS-TMC-002-oplog-diario.md) | Oplog de la Time Machine con diario de intención y recuperación | Implementado (`implemented`) | #32, #176 | — |
 | [TS-TMC-003](features/time-machine/technical-stories/TS-TMC-003-escritura-aplicador.md) | Capa de escritura acotada y aplicador de estados | Implementado (`implemented`) | #45, #171, #172 | — |
 | [US-CKP-003](features/cockpit/user-stories/US-CKP-003-estados-motor-conexion.md) | La TUI dice en qué estado está el motor y qué hacer en cada caso | Implementado (`implemented`) | #282 | — |
+| [US-CKP-006](features/cockpit/user-stories/US-CKP-006-conflictos-previstos.md) | El desarrollador ve qué agentes van a chocar antes de hacer merge | Implementado (`implemented`) | — | — |
 | [US-CKP-007](features/cockpit/user-stories/US-CKP-007-frescura-prediccion.md) | Una predicción vieja nunca se presenta como actual | Implementado (`implemented`) | #339 | — |
 | [US-CKP-008](features/cockpit/user-stories/US-CKP-008-alerta-conflicto-nuevo.md) | El desarrollador se entera en la TUI cuando aparece un conflicto previsto nuevo | Implementado (`implemented`) | #340 | — |
 | [US-CKP-026](features/cockpit/user-stories/US-CKP-026-autoria-en-la-flota.md) | El desarrollador ve en la flota de quién es el último commit de cada worktree y con qué agente | Implementado (`implemented`) | #147 | — |
@@ -347,7 +349,6 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [TS-GRP-005](features/motor-local/technical-stories/TS-GRP-005-clases-trabajo-ahorro-energia.md) | Clases de trabajo del daemon y mecanismo de ahorro de energía | Implementado en parte (`partially-implemented`) | #298, #323 | — |
 | [US-CKP-002](features/cockpit/user-stories/US-CKP-002-orden-atencion-terminadas.md) | La lista pone primero lo que pide atención y no se llena de sesiones viejas | Implementado en parte (`partially-implemented`) | #284 | — |
 | [US-CKP-005](features/cockpit/user-stories/US-CKP-005-terminal-pequena-sin-color.md) | La TUI se puede usar en una terminal pequeña, sin color o en ASCII | Implementado en parte (`partially-implemented`) | #273 | 2 |
-| [US-CKP-006](features/cockpit/user-stories/US-CKP-006-conflictos-previstos.md) | El desarrollador ve qué agentes van a chocar antes de hacer merge | Implementado en parte (`partially-implemented`) | — | — |
 | [US-CKP-020](features/cockpit/user-stories/US-CKP-020-trabajo-de-otro-actor.md) | Tocar el trabajo de otro actor exige confirmar el plan concreto | Implementado en parte (`partially-implemented`) | #220 | 3 |
 | [US-CKP-025](features/cockpit/user-stories/US-CKP-025-tui-repo-no-observado.md) | La TUI ofrece observar el repo en el que se abre y, fuera de un repo, lleva a los ya observados | Implementado en parte (`partially-implemented`) | #165, #170 | 2 |
 | [US-GRD-003](features/guardrails/user-stories/US-GRD-003-retirar-proteccion-sin-rastro.md) | El desarrollador retira la protección y el repo queda exactamente como estaba | Implementado en parte (`partially-implemented`) | #193, #201, #264 | — |
@@ -363,7 +364,6 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [SPIKE-GRD-002](features/guardrails/technical-stories/SPIKE-GRD-002-factor-so-daemon.md) | Factor de autenticación del SO invocado desde el daemon en los tres SO | Listo (`ready`) | — | — |
 | [TD-GRP-002](features/motor-local/technical-stories/TD-GRP-002-motor-bajo-rafaga.md) | Frescura y memoria del motor bajo una ráfaga de archivos | Listo (`ready`) | — | — |
 | [TD-GRP-003](features/motor-local/technical-stories/TD-GRP-003-nfr04-maquina-referencia.md) | Presupuesto de NFR-04 sin gate automático: medirlo en una máquina de referencia | Listo (`ready`) | — | — |
-| [TS-CKP-011](features/cockpit/technical-stories/TS-CKP-011-base-confirmada-replanifica.md) | Confirmar la base en runtime refresca la base publicada y replanifica los pares contra la base | Listo (`ready`) | — | — |
 | [TS-TMC-005](features/time-machine/technical-stories/TS-TMC-005-undo-espera-punto-base.md) | El undo espera, con plazo propio, la captura que da su punto base B en vez de responder `overlap-unverified` de inmediato | Listo (`ready`) | — | — |
 | [TD-TMC-001](features/time-machine/technical-stories/TD-TMC-001-previo-hook-plazo-y-cupo-sin-atribuir.md) | Previo de hook: plazo real, cupo barato y cubo «sin atribuir» acotado, antes de que un fallo deniegue (US-GRD-017) | Borrador (`draft`) | — | — |
 | [TD-TMC-002](features/time-machine/technical-stories/TD-TMC-002-captura-blobs-fuera-del-escritor.md) | Captura continua: blobs fuera del escritor del almacén, para bajar su hashing a background (RES-06) | Borrador (`draft`) | — | — |
@@ -471,12 +471,6 @@ La TUI se puede usar en una terminal pequeña, sin color o en ASCII
 
 - Escenario 4 en Windows (idioma de la interfaz del usuario, sin `LANG`): *Pendiente: etapa de validación multiplataforma*; dueño: esta historia (G1).
 - Linux y Windows en terminales reales: *Pendiente: etapa de validación multiplataforma* (XP-21; [`xplat-pendientes.md`](../architecture/xplat-pendientes.md)).
-
-### [US-CKP-006](features/cockpit/user-stories/US-CKP-006-conflictos-previstos.md)
-
-El desarrollador ve qué agentes van a chocar antes de hacer merge
-
-- *La ficha no lista los pendientes en "Estado de la implementación".*
 
 ### [US-CKP-020](features/cockpit/user-stories/US-CKP-020-trabajo-de-otro-actor.md) — #220
 
