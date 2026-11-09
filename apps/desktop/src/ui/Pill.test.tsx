@@ -4,7 +4,9 @@ import axe from "axe-core";
 import i18n from "i18next";
 import { afterEach, describe, expect, it } from "vitest";
 import "@/i18n";
-import { Pill, type PillKind } from "./Pill";
+import { Pill } from "./Pill";
+
+type PillKind = "reversible" | "confirm" | "irreversible" | "live";
 
 const LABELS: Record<"en" | "es", Record<PillKind, string>> = {
   en: { reversible: "Recoverable", confirm: "Needs confirmation", irreversible: "Can't be undone", live: "Live" },

@@ -19,7 +19,7 @@ function ConfirmHarness({ onConfirm, onOpenChange, extra }: { onConfirm: () => v
       <button type="button" ref={returnRef} onClick={() => setOpen(true)}>Delete branch</button>
       <Dialog
         open={open}
-        onOpenChange={(o) => { setOpen(o); onOpenChange?.(o); }}
+        onOpenChange={(o: boolean) => { setOpen(o); onOpenChange?.(o); }}
         kind="confirm"
         title="Delete feat-pagos?"
         description="The branch will be removed from this repository."

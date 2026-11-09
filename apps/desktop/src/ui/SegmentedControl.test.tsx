@@ -24,7 +24,7 @@ function Harness({ initial = "a", onChange }: { initial?: string; onChange?: (v:
         label="Theme"
         options={OPTIONS}
         value={value}
-        onChange={(v) => {
+        onChange={(v: string) => {
           setValue(v);
           onChange?.(v);
         }}
