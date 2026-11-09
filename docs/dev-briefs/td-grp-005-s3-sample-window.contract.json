@@ -1,0 +1,115 @@
+{
+  "version": 1,
+  "source": [
+    "docs/requirements/features/motor-local/technical-stories/TD-GRP-005-muestra-s3-fuera-de-ventana.md",
+    "docs/dev-briefs/td-grp-005-s3-sample-window.2-plan.md"
+  ],
+  "rigor": "alto",
+  "goal": {
+    "intent": "Que un commit que un agente hace mientras su git sigue vivo salga atribuido al agente también con la máquina cargada, sin que S3 llegue nunca a atribuir a Claude Code el commit de un humano (ante la duda, sin atribuir).",
+    "endState": "sample_loop vacía la cola sin quedarse con un aviso por repo; cada aviso en cola recibe, de una sola lectura de la tabla de procesos, un avistamiento con su propio t_recv y su propio started_before (los avisos con la misma máscara comparten un Sighting con t_recvs); evidence cuenta un avistamiento si alguno de sus t_recvs cae en la ventana del lote; la regla de ADR-GRP-012 no cambia; TD-GRP-005 queda implemented y ADR-GRP-012 lleva la aclaración.",
+    "nonGoals": [
+      "cambiar probed en watch/mod.rs (ya avisa por evento del SO)",
+      "ensanchar la ventana s3_lead o sellar con el aviso más reciente",
+      "el ámbito worktree de S3 y la redirección (TD-GRP-004)",
+      "el umbral de inactividad de las sesiones",
+      "cambiar los tests previos, salvo quitar esperas que dejen de hacer falta",
+      "añadir API pública al Detector"
+    ]
+  },
+  "criteria": [
+    {
+      "id": "TD005-QUEUED-EVIDENCE",
+      "statement": "T001: con los avisos A, B1 y B2 en el mismo lote en cola y el git escritor de la sesión empezado entre B1 y B2, evidence en el t_recv de B2 da Attributed a esa sesión (hoy da NoSighting)",
+      "verify": "cargo test -p gitraptor-core --lib -- --exact detect::tests::queued_notices::a_later_queued_notice_is_evidence_of_its_commit",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/detect/tests/queued_notices.rs"
+      ]
+    },
+    {
+      "id": "TD005-NO-LEAK",
+      "statement": "T001 (guarda): un aviso en cola nunca toma un git empezado después de él (NoSighting, gits_after_notice >= 1), y un git ajeno escritor en el worktree deja el evento de B2 en Ambiguous",
+      "verify": "cargo test -p gitraptor-core --lib -- --exact detect::tests::queued_notices::a_queued_notice_never_takes_a_git_started_after_it detect::tests::queued_notices::a_queued_notice_with_a_foreign_git_still_makes_it_ambiguous",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/detect/tests/queued_notices.rs"
+      ]
+    },
+    {
+      "id": "TD005-BOUNDED",
+      "statement": "T001 (guarda): una ráfaga de 300 avisos en cola no expulsa del ring el avistamiento anterior que vio un git ajeno; evidence en el t_recv de A sigue Ambiguous",
+      "verify": "cargo test -p gitraptor-core --lib -- --exact detect::tests::queued_notices::a_burst_of_queued_notices_keeps_the_foreign_sighting",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/detect/tests/queued_notices.rs"
+      ]
+    }
+  ],
+  "suite": {
+    "command": "node tools/test/nextest-junit.mjs"
+  },
+  "layers": {
+    "runtime": {
+      "commands": [
+        {
+          "id": "suite",
+          "cmd": "node tools/test/nextest-junit.mjs"
+        }
+      ],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "scope": {
+    "projects": [
+      "gitraptor-core",
+      "gitraptor-cli"
+    ]
+  },
+  "constraints": {
+    "deny_paths": [
+      "Cargo.toml",
+      "Cargo.lock",
+      "crates/core/Cargo.toml",
+      "apps/cli/Cargo.toml",
+      "crates/core/src/watch/",
+      "crates/policy/",
+      "crates/theme/",
+      "apps/mcp/",
+      "apps/desktop/",
+      "docs/ARTIFACTS.md"
+    ],
+    "allow_dependency_changes": false
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 600000,
+    "suiteTimeoutMs": 5400000
+  },
+  "hops": {
+    "design": {
+      "agent": "nassa-dev-rust:rust-architect",
+      "model": "opus"
+    },
+    "critic": {
+      "agent": "nassa-core:plan-critic",
+      "model": "opus"
+    },
+    "tester": {
+      "agent": "nassa-core:criterion-tester",
+      "model": "opus"
+    },
+    "build": {
+      "agent": "nassa-dev-rust:rust-expert",
+      "model": "opus"
+    },
+    "review": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "opus"
+    },
+    "conformance": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "sonnet"
+    }
+  }
+}
