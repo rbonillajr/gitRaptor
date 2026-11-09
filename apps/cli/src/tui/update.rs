@@ -67,6 +67,13 @@ pub fn update(model: &mut Model, msg: Msg) -> Vec<Cmd> {
             }) {
                 model.dirty = true;
             }
+            // The ages of the prediction move with the clock too, with no request to the daemon.
+            if repo
+                .and_then(|r| r.prediction.as_ref())
+                .is_some_and(|p| super::freshness::has_ages(&p.pairs))
+            {
+                model.dirty = true;
+            }
             Vec::new()
         }
     }

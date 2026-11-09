@@ -90,7 +90,7 @@ pub enum Fetched {
 }
 
 /// An age in the largest whole unit: seconds, minutes, hours or days.
-fn age(ms: i64) -> (i64, &'static str) {
+pub(crate) fn age(ms: i64) -> (i64, &'static str) {
     let s = ms.max(0) / 1000;
     match s {
         0..60 => (s, "s"),
