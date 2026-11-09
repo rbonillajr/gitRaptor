@@ -158,6 +158,6 @@ export type EngineMessage =
   | { type: "repo"; fleet: RepoFleetDto }
   | { type: "worktrees"; repoId: string; worktrees: WorktreeDto[]; fetchedUtcMs: number | null; perf: FleetPerf }
   | { type: "sessions"; repoId: string; detectionAvailable: boolean; sessions: SessionDto[] }
-  | { type: "session"; repoId: string; session: SessionDto; perf: FleetPerf }
+  | { type: "repoSession"; repoId: string; session: SessionDto; perf: FleetPerf }
   | { type: "prediction"; repoId: string; pairs: PairDto[]; removed: string[]; perf: FleetPerf }
   | { type: "repoClosed"; repoId: string };
