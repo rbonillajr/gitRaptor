@@ -6,6 +6,7 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use gitraptor_api::actor::Actor;
+use gitraptor_api::clock;
 use gitraptor_api::discovery::CandidatesResult;
 use gitraptor_api::display::{NAME_MAX_CHARS, TEXT_MAX_CHARS, visible};
 use gitraptor_api::messages::{
@@ -13,6 +14,9 @@ use gitraptor_api::messages::{
     SessionsListParams, SessionsListResult, Snapshot, UnsubscribeParams,
 };
 use gitraptor_api::methods::{self, CAP_DISCOVERY_EVENTS, CAP_SCOPE_ACTIVITY};
+use gitraptor_api::prediction::{
+    ListPredictionParams, PairDetail, PredictionChanged, PredictionPage,
+};
 use gitraptor_api::rpc::Notification;
 use gitraptor_api::scope::{
     ConnectionRequester, Scope, ScopeEventNotification, ScopeResyncNotification, ScopeSnapshot,
@@ -21,11 +25,14 @@ use gitraptor_api::scope::{
 use serde_json::{Value, json};
 
 use super::ingest;
+use super::launcher;
 use super::link::{
     ConnectFailure, Connector, Incompatibility, IncompatibilityKind, Link, LinkError,
     REQUIRED_CAPABILITIES,
 };
+use super::prediction::PredictionTracker;
 use super::seq::{SeqTrack, Verdict};
+use super::shell_command;
 use super::wire::{
     CandidateDto, ConnState, EngineMessage, IncompatibleAction, IncompatibleWhich, ResyncReason,
     StoppedReason, stop_command,
@@ -149,6 +156,8 @@ struct Ctx {
     last_incompat: Option<Incompatibility>,
     /// The repo the window follows (raw id): it survives reconnections until the engine drops it.
     open: Option<String>,
+    /// Raw paths of the repos of the last global snapshot.
+    global_roots: Vec<PathBuf>,
 }
 
 /// The open repo's scope on one connection.
@@ -157,7 +166,23 @@ struct RepoScope {
     track: SeqTrack,
     /// The engine's subscription id, to cancel it when the window moves to another repo.
     subscription: Option<u32>,
+    /// The predicted pairs and which ones still lack their detail.
+    tracker: PredictionTracker,
+    /// Since when something is waiting to be asked of the engine (the debounce of D2).
+    pending_since: Option<Instant>,
+    /// Changes every time the scope is taken again: a cursor walk that sees it move is stale, so
+    /// two walks never run at once.
+    generation: u64,
+    /// Raw paths of the open repo and its worktrees.
+    roots: Vec<PathBuf>,
 }
+
+/// Wait after the first id that lacks its detail before asking for it.
+const DETAIL_DEBOUNCE: Duration = Duration::from_millis(100);
+
+/// Most pages and bytes of answers one cursor walk takes.
+const WALK_MAX_PAGES: usize = 20;
+const WALK_MAX_BYTES: usize = 2 * 1024 * 1024;
 
 impl Ctx {
     fn send(&mut self, msg: EngineMessage) {
@@ -279,6 +304,7 @@ fn run(
         resync: None,
         last_incompat: None,
         open: None,
+        global_roots: Vec::new(),
     };
     let mut attempt: u32 = 0;
     // The engine is started only when the app opens and when the user asks (D5).
@@ -545,6 +571,11 @@ fn sync_global(
     let Ok(ScopeSnapshot::Global(snapshot)) = serde_json::from_value::<ScopeSnapshot>(value) else {
         return Err(LinkError::Lost);
     };
+    ctx.global_roots = snapshot
+        .repos
+        .iter()
+        .map(|repo| PathBuf::from(repo.path.raw()))
+        .collect();
     ctx.send(EngineMessage::Global(ingest::global(&snapshot)));
     track.reset(&snapshot.run_id, snapshot.scope_seq);
     if subscribe {
@@ -594,18 +625,146 @@ fn stream(
                 Err(TryRecvError::Empty) => break,
             }
         }
-        match link.next(READ_SLICE) {
-            Ok(None) => {}
+        let idle = match link.next(READ_SLICE) {
+            Ok(None) => true,
             Ok(Some((recv_ns, notification))) => {
                 if !restricted
                     && let Some(end) = apply(link, ctx, (track, repo), recv_ns, &notification)
                 {
                     return end;
                 }
+                false
             }
             Err(_) => return End::Reconnect,
+        };
+        if repo.pending_since.is_none() && repo.tracker.has_work() {
+            repo.pending_since = Some(Instant::now());
+        }
+        let due = repo
+            .pending_since
+            .is_some_and(|since| idle || since.elapsed() >= DETAIL_DEBOUNCE);
+        if due && let Some(end) = fetch_prediction(link, ctx, (track, repo)) {
+            return end;
         }
     }
+}
+
+/// Asks the engine for what the pairs still lack: the rest of a truncated snapshot first, then
+/// the detail of the conflict and overlap pairs. `Some` when the link is lost.
+fn fetch_prediction(
+    link: &mut dyn Link,
+    ctx: &mut Ctx,
+    (track, repo): (&mut SeqTrack, &mut RepoScope),
+) -> Option<End> {
+    repo.pending_since = None;
+    let repo_id = ctx.open.clone()?;
+    if repo.tracker.needs_fill() {
+        let generation = repo.generation;
+        if let Some(end) = fill_prediction(link, ctx, (track, repo), &repo_id) {
+            return Some(end);
+        }
+        if repo.generation != generation {
+            return None;
+        }
+    }
+    loop {
+        let ids = repo.tracker.wanted();
+        if ids.is_empty() {
+            return None;
+        }
+        repo.tracker.asked(&ids);
+        let params = ListPredictionParams {
+            repo_id: repo_id.clone(),
+            pair_ids: Some(ids),
+            ..ListPredictionParams::default()
+        };
+        match list_prediction(link, &params) {
+            Ok((page, _)) => deliver_details(ctx, repo, &repo_id, &page.pairs, false),
+            // The pairs stay without detail until their `rev` moves.
+            Err(LinkError::Refused { .. }) => {}
+            Err(LinkError::Lost) => return Some(End::Reconnect),
+        }
+    }
+}
+
+/// One `prediction.list` call and the bytes of its answer.
+fn list_prediction(
+    link: &mut dyn Link,
+    params: &ListPredictionParams,
+) -> Result<(PredictionPage, usize), LinkError> {
+    let value = link.call(methods::PREDICTION_LIST, to_value(params)?)?;
+    let size = value.to_string().len();
+    serde_json::from_value::<PredictionPage>(value)
+        .map(|page| (page, size))
+        .map_err(|_| LinkError::Refused { code: 0 })
+}
+
+/// Remembers `details` and sends them to the window; an empty page is sent only when it closes a
+/// walk.
+fn deliver_details(
+    ctx: &mut Ctx,
+    repo: &mut RepoScope,
+    repo_id: &str,
+    details: &[PairDetail],
+    filled: bool,
+) {
+    repo.tracker.adopt(details);
+    if !details.is_empty() || filled {
+        ctx.send(ingest::pair_details(
+            repo_id,
+            details,
+            filled,
+            clock::monotonic_ns(),
+        ));
+    }
+}
+
+/// Walks the cursor of `prediction.list` for the pairs a truncated snapshot left out: at most
+/// [`WALK_MAX_PAGES`] pages and [`WALK_MAX_BYTES`] of answers. Only a walk that ends for lack of a
+/// next cursor says `filled`. Between pages it attends what the engine sent; if that took the
+/// scope again (a resync), the walk stops there and the next one starts from the new snapshot.
+fn fill_prediction(
+    link: &mut dyn Link,
+    ctx: &mut Ctx,
+    (track, repo): (&mut SeqTrack, &mut RepoScope),
+    repo_id: &str,
+) -> Option<End> {
+    let generation = repo.generation;
+    let mut cursor: Option<String> = None;
+    let mut bytes = 0usize;
+    for _ in 0..WALK_MAX_PAGES {
+        let params = ListPredictionParams {
+            repo_id: repo_id.to_owned(),
+            cursor: cursor.take(),
+            ..ListPredictionParams::default()
+        };
+        let (page, size) = match list_prediction(link, &params) {
+            Ok(answer) => answer,
+            Err(LinkError::Refused { .. }) => break,
+            Err(LinkError::Lost) => return Some(End::Reconnect),
+        };
+        bytes = bytes.saturating_add(size);
+        let finished = page.next_cursor.is_none();
+        deliver_details(ctx, repo, repo_id, &page.pairs, finished);
+        if finished || bytes >= WALK_MAX_BYTES {
+            break;
+        }
+        cursor = page.next_cursor;
+        match link.next(Duration::from_millis(1)) {
+            Ok(None) => {}
+            Ok(Some((recv_ns, notification))) => {
+                if let Some(end) = apply(link, ctx, (track, repo), recv_ns, &notification) {
+                    return Some(end);
+                }
+                if repo.generation != generation || ctx.open.as_deref() != Some(repo_id) {
+                    return None;
+                }
+            }
+            Err(_) => return Some(End::Reconnect),
+        }
+    }
+    repo.tracker.walk_done();
+    None
 }
 
 /// Applies one notification of the stream; `Some` when the session must end.
@@ -691,6 +850,12 @@ fn apply_repo_event(
 ) -> Option<End> {
     match repo.track.accept(event.scope_seq) {
         Verdict::Apply => {
+            if event.event.kind == methods::PREDICTION_CHANGED
+                && let Ok(changed) =
+                    serde_json::from_value::<PredictionChanged>(event.event.data.clone())
+            {
+                repo.tracker.apply(&changed);
+            }
             if let Some(msg) = ingest::repo_event(&event.event, recv_ns) {
                 ctx.send(msg);
             }
@@ -715,7 +880,10 @@ fn close_repo(ctx: &mut Ctx, repo: &mut RepoScope) {
             repo_id: visible(&repo_id, NAME_MAX_CHARS),
         });
     }
-    *repo = RepoScope::default();
+    *repo = RepoScope {
+        generation: repo.generation.wrapping_add(1),
+        ..RepoScope::default()
+    };
 }
 
 /// Follows the open repo on this connection: leaves the previous subscription, takes a snapshot,
@@ -766,8 +934,28 @@ fn take_repo(
     let Ok(ScopeSnapshot::Repo(snapshot)) = serde_json::from_value::<ScopeSnapshot>(value) else {
         return Err(LinkError::Lost);
     };
+    repo.roots = std::iter::once(snapshot.repo.path.raw())
+        .chain(snapshot.repo.worktrees.iter().map(|w| w.path.raw()))
+        .map(PathBuf::from)
+        .collect();
+    let raptor = {
+        let watched: Vec<&Path> = ctx
+            .global_roots
+            .iter()
+            .chain(&repo.roots)
+            .map(PathBuf::as_path)
+            .collect();
+        shell_command::raptor_path(
+            link.daemon_exe(),
+            launcher::bundled_raptor().as_deref(),
+            &watched,
+        )
+    };
+    repo.tracker.reset(snapshot.repo.prediction.as_ref());
+    repo.generation = repo.generation.wrapping_add(1);
+    repo.pending_since = None;
     ctx.send(EngineMessage::Repo {
-        fleet: ingest::repo(&snapshot),
+        fleet: ingest::repo(&snapshot, raptor.as_deref()),
     });
     let params = to_value(&ScopeSubscribeParams {
         scope,
