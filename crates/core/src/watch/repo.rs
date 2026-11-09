@@ -747,14 +747,18 @@ impl Task {
         let Some(hooks) = &self.shared.hooks else {
             return;
         };
+        // A commit in a linked worktree moves its branch in the common directory and may
+        // leave the worktree's own fingerprint (a symbolic `HEAD`) as it was: what moved is
+        // its resolved commit and its `HEAD` reflog.
         let moved: Vec<&PathBuf> = new
             .worktrees
             .iter()
             .filter(|(root, w)| {
-                self.view
-                    .worktrees
-                    .get(*root)
-                    .is_some_and(|old| old.fingerprint != w.fingerprint)
+                self.view.worktrees.get(*root).is_some_and(|old| {
+                    old.commit != w.commit
+                        || old.head_log_len != w.head_log_len
+                        || old.fingerprint != w.fingerprint
+                })
             })
             .map(|(root, _)| root)
             .collect();
