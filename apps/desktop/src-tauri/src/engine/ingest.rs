@@ -23,14 +23,23 @@ use gitraptor_api::scope::{
     AttentionCount, AttentionView, GlobalSnapshot, RepoAttentionData, RepoSnapshot, RepoSummaryView,
 };
 
+use gitraptor_api::guard::{
+    self, GuardLogEntry, GuardLogResult, GuardStatus, LogDetail, LogKind, LogLayer,
+    LoggedOperation, LoggedRef, PendingKind, ProtectionState,
+};
+
+use super::exception_command;
 use super::shell_command;
 use super::wire::{
-    AgentDto, AttentionDto, Autostart, BaseDto, BaseStatus, BoundedCountDto, CandidateDto,
-    ConfirmCommandDto, ConflictFileDto, ConflictFilesDto, ConflictKind, CountDto, CountsDto,
-    DaemonDto, DivergenceDto, EndCause, EngineDto, EngineMessage, EngineStateDto, FleetPerf,
-    GlobalDto, HeadDto, LimitCode, LineRangeDto, PairDetailDto, PairDto, PairLevel, PairReason,
-    PairState, ReadyDto, RepoFleetDto, RepoStateDto, RepoSummaryDto, SessionDto, SessionOrigin,
-    SessionState, Tier, UnavailableReason, WorktreeDto, WorktreeStatusDto,
+    AgentDto, AttentionDto, Autostart, BaseDto, BaseStatus, BlockActorDto, BlockDetail,
+    BlockEntryDto, BlockKind, BlockLayer, BlockRuleDto, BlockWorktreeDto, BoundedCountDto,
+    CandidateDto, ConfirmCommandDto, ConflictFileDto, ConflictFilesDto, ConflictKind, CountDto,
+    CountsDto, DaemonDto, DivergenceDto, EndCause, EngineDto, EngineMessage, EngineStateDto,
+    ExceptionCommandDto, FleetPerf, GlobalDto, GuardBlocksDto, GuardSummaryDto, HeadDto, LimitCode,
+    LineRangeDto, OperationDto, PairDetailDto, PairDto, PairLevel, PairReason, PairState,
+    PendingExceptionDto, ProtectionDto, ProtectionKind, ReadyDto, RefChange, RefDto, RepoFleetDto,
+    RepoStateDto, RepoSummaryDto, SessionDto, SessionOrigin, SessionState, Tier, UnavailableReason,
+    UnloggedDto, WorktreeDto, WorktreeStatusDto,
 };
 
 /// The global snapshot as a DTO.
@@ -536,6 +545,189 @@ fn decode<T: serde::de::DeserializeOwned>(event: &Event) -> Option<T> {
     serde_json::from_value(event.data.clone()).ok()
 }
 
+/// Longest id of a decision shown.
+const DECISION_ID_MAX_CHARS: usize = 128;
+
+/// The guard log of a repo as a DTO: only the entries D4 lists, every text escaped, and for each
+/// denial the copyable command or the reason there is none.
+///
+/// Without a `status` the protection reads as unprotected: the supervisor never builds the list
+/// in that case (it reports the log as unavailable instead).
+#[must_use]
+pub fn guard_blocks(
+    repo_id: &str,
+    status: Option<&GuardStatus>,
+    log: &GuardLogResult,
+    raptor: Option<&Path>,
+) -> GuardBlocksDto {
+    GuardBlocksDto {
+        repo_id: visible(repo_id, NAME_MAX_CHARS),
+        protection: status.map_or(
+            ProtectionDto {
+                state: ProtectionKind::Unprotected,
+            },
+            protection,
+        ),
+        since_ms: log.since_ms,
+        summary: GuardSummaryDto {
+            blocked: log.summary.blocked,
+            exceptions: log.summary.exceptions,
+            exceptions_rejected: log.summary.exceptions_rejected,
+        },
+        entries: log
+            .entries
+            .iter()
+            .filter_map(|entry| guard_entry(entry, raptor))
+            .collect(),
+        pending: status.and_then(|s| pending(s, log, raptor)),
+        unlogged: log
+            .unlogged_periods
+            .iter()
+            .map(|p| UnloggedDto {
+                from_ms: p.from_ms,
+                to_ms: p.to_ms,
+            })
+            .collect(),
+    }
+}
+
+/// The protection of a `guard.status` answer.
+#[must_use]
+pub fn protection(status: &GuardStatus) -> ProtectionDto {
+    ProtectionDto {
+        state: match status.state {
+            ProtectionState::Unprotected => ProtectionKind::Unprotected,
+            ProtectionState::HooksOnly => ProtectionKind::HooksOnly,
+            ProtectionState::McpOnly => ProtectionKind::McpOnly,
+            ProtectionState::Full => ProtectionKind::Full,
+        },
+    }
+}
+
+/// The name an enum has on the wire (`minimum.force-push`, `floor`, `not-fast-forward`).
+fn wire_name<T: serde::Serialize>(value: &T) -> String {
+    match serde_json::to_value(value) {
+        Ok(serde_json::Value::String(name)) => visible(&name, NAME_MAX_CHARS),
+        _ => String::new(),
+    }
+}
+
+fn logged_operation(op: &LoggedOperation) -> Option<OperationDto> {
+    let refs = |refs: &[LoggedRef]| -> Vec<RefDto> {
+        refs.iter()
+            .map(|r| RefDto {
+                name: visible(r.name.raw(), NAME_MAX_CHARS),
+                change: match r.change {
+                    guard::RefChange::Create => RefChange::Create,
+                    guard::RefChange::Update => RefChange::Update,
+                    guard::RefChange::Force => RefChange::Force,
+                    guard::RefChange::Delete => RefChange::Delete,
+                },
+            })
+            .collect()
+    };
+    match op {
+        LoggedOperation::Push { remote, refs: r } => Some(OperationDto::Push {
+            remote: remote.as_ref().map(|r| visible(r.raw(), NAME_MAX_CHARS)),
+            refs: refs(r),
+        }),
+        LoggedOperation::RefTransaction { refs: r } => {
+            Some(OperationDto::RefTransaction { refs: refs(r) })
+        }
+        LoggedOperation::Rebase { .. } => Some(OperationDto::Rebase),
+        LoggedOperation::Commit { .. } => Some(OperationDto::Commit),
+        LoggedOperation::ProtectionState { .. } | LoggedOperation::McpAllowlist { .. } => None,
+    }
+}
+
+/// One log entry as a DTO; `None` for what D4 does not list (a notice, a protection change).
+#[must_use]
+pub fn guard_entry(entry: &GuardLogEntry, raptor: Option<&Path>) -> Option<BlockEntryDto> {
+    let kind = match entry.kind {
+        LogKind::Denial => BlockKind::Denial,
+        LogKind::Exception => BlockKind::Exception,
+        LogKind::ExceptionCancelled => BlockKind::ExceptionCancelled,
+        LogKind::ExceptionRejected => BlockKind::ExceptionRejected,
+        LogKind::Notice | LogKind::ProtectionState => return None,
+    };
+    let operation = logged_operation(&entry.operation)?;
+    Some(BlockEntryDto {
+        decision_id: visible(&entry.decision_id, DECISION_ID_MAX_CHARS),
+        kind,
+        at_ms: entry.at_ms,
+        last_ms: entry.last_ms,
+        count: entry.count,
+        actor: entry.actor.map(|actor| match actor {
+            AgentKind::ClaudeCode => BlockActorDto::ClaudeCode,
+            AgentKind::Other => BlockActorDto::Other,
+        }),
+        worktree: entry.worktree.as_ref().map(|w| BlockWorktreeDto {
+            folder: visible(last_component(w.raw()), NAME_MAX_CHARS),
+            path: visible(w.raw(), TEXT_MAX_CHARS),
+        }),
+        branch: entry
+            .branch
+            .as_ref()
+            .map(|b| visible(b.raw(), NAME_MAX_CHARS)),
+        operation,
+        rules: entry
+            .reasons
+            .iter()
+            .map(|r| BlockRuleDto {
+                rule: wire_name(&r.rule),
+                level: wire_name(&r.level),
+                cause: r.cause.as_ref().map(wire_name),
+            })
+            .collect(),
+        layer: match entry.layer {
+            LogLayer::Hooks => BlockLayer::Hooks,
+            LogLayer::Mcp => BlockLayer::Mcp,
+            LogLayer::Cockpit => BlockLayer::Cockpit,
+        },
+        detail: match entry.detail {
+            LogDetail::Full => BlockDetail::Full,
+            LogDetail::RateLimited => BlockDetail::RateLimited,
+        },
+        exception: (kind == BlockKind::Denial).then(|| {
+            match exception_command::exception(raptor, entry) {
+                Ok(command) => ExceptionCommandDto::Offered { command },
+                Err(reason) => ExceptionCommandDto::NotOffered { reason },
+            }
+        }),
+    })
+}
+
+/// The announced exception of `status`, if any. Its cancel command names the worktree of the
+/// latest denial of the same operation; with none, the supervisor adds the repo path.
+#[must_use]
+pub fn pending(
+    status: &GuardStatus,
+    log: &GuardLogResult,
+    raptor: Option<&Path>,
+) -> Option<PendingExceptionDto> {
+    let action = status.pending.as_ref()?;
+    if action.action != PendingKind::Exception {
+        return None;
+    }
+    let plan = action.exception.as_ref()?;
+    let op = logged_operation(&plan.operation)?;
+    let cancel_command = log
+        .entries
+        .iter()
+        .filter(|e| {
+            e.kind == LogKind::Denial && logged_operation(&e.operation).as_ref() == Some(&op)
+        })
+        .find_map(|e| e.worktree.as_ref())
+        .and_then(|w| exception_command::cancel(raptor, w.raw()));
+    Some(PendingExceptionDto {
+        applies_at_ms: action.applies_at_ms,
+        window_ms: action.window_ms,
+        operation: op,
+        rules: plan.rules.iter().map(wire_name).collect(),
+        cancel_command,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::repo_name;
@@ -547,31 +739,5 @@ mod tests {
         assert_eq!(repo_name("/w/proj"), "proj");
         assert_eq!(repo_name("C:\\w\\proj\\.git"), "proj");
         assert_eq!(repo_name("/"), "");
-    }
-}
-
-/// The guard log of a repo as a DTO (skeleton: neutral content).
-#[must_use]
-pub fn guard_blocks(
-    repo_id: &str,
-    _status: Option<&gitraptor_api::guard::GuardStatus>,
-    _log: &gitraptor_api::guard::GuardLogResult,
-    _raptor: Option<&Path>,
-) -> super::wire::GuardBlocksDto {
-    use super::wire::{GuardBlocksDto, GuardSummaryDto, ProtectionDto, ProtectionKind};
-    GuardBlocksDto {
-        repo_id: repo_id.to_owned(),
-        protection: ProtectionDto {
-            state: ProtectionKind::Unprotected,
-        },
-        since_ms: 0,
-        summary: GuardSummaryDto {
-            blocked: 0,
-            exceptions: 0,
-            exceptions_rejected: 0,
-        },
-        entries: Vec::new(),
-        pending: None,
-        unlogged: Vec::new(),
     }
 }

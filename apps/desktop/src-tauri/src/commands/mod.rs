@@ -15,6 +15,7 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static 
         app_info::app_info,
         engine_watch::engine_watch,
         engine_retry::engine_retry,
-        fleet_open::fleet_open
+        fleet_open::fleet_open,
+        guard_blocks::guard_blocks
     ]
 }

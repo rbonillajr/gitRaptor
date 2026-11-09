@@ -9,6 +9,8 @@ use gitraptor_api::actor::Actor;
 use gitraptor_api::clock;
 use gitraptor_api::discovery::CandidatesResult;
 use gitraptor_api::display::{NAME_MAX_CHARS, TEXT_MAX_CHARS, visible};
+use gitraptor_api::event::RESERVED_AUDIT;
+use gitraptor_api::guard::{GuardLogParams, GuardLogResult, GuardRepoParams, GuardStatus};
 use gitraptor_api::messages::{
     ConnectionProfile, HelloResult, McpSnapshot, ResyncNotification, ResyncReason as ApiResync,
     SessionsListParams, SessionsListResult, Snapshot, UnsubscribeParams,
@@ -24,6 +26,7 @@ use gitraptor_api::scope::{
 };
 use serde_json::{Value, json};
 
+use super::exception_command;
 use super::ingest;
 use super::launcher;
 use super::link::{
@@ -34,8 +37,8 @@ use super::prediction::PredictionTracker;
 use super::seq::{SeqTrack, Verdict};
 use super::shell_command;
 use super::wire::{
-    CandidateDto, ConnState, EngineMessage, IncompatibleAction, IncompatibleWhich, ResyncReason,
-    StoppedReason, stop_command,
+    CandidateDto, ConnState, EngineMessage, GuardUnavailableCause, IncompatibleAction,
+    IncompatibleWhich, ResyncReason, StoppedReason, stop_command,
 };
 
 /// Where the supervisor delivers its messages.
@@ -176,7 +179,25 @@ struct RepoScope {
     generation: u64,
     /// Raw paths of the open repo and its worktrees.
     roots: Vec<PathBuf>,
+    /// Raw path of the open repo, the one `guard.status` and `guard.log` are asked with. It never
+    /// leaves the backend.
+    raw_path: Option<String>,
+    /// The `raptor` the copyable commands name, decided when the repo was taken.
+    raptor: Option<PathBuf>,
+    /// When the last guard read ended.
+    last_guard_read: Option<Instant>,
+    /// When the one joined read of the `reserved.audit` events that arrived meanwhile is due.
+    guard_reread_after: Option<Instant>,
 }
+
+/// Least time between two guard reads asked by the window.
+const GUARD_MIN_GAP: Duration = Duration::from_secs(2);
+
+/// Events of an exception that arrive during a read or this soon after it are joined in one read.
+const GUARD_JOIN: Duration = Duration::from_millis(500);
+
+/// Entries asked of `guard.log`.
+const GUARD_LOG_LIMIT: u32 = 50;
 
 /// Wait after the first id that lacks its detail before asking for it.
 const DETAIL_DEBOUNCE: Duration = Duration::from_millis(100);
@@ -624,7 +645,11 @@ fn stream(
                         return End::Reconnect;
                     }
                 }
-                Ok(HubCmd::GuardBlocks { .. }) => {}
+                Ok(HubCmd::GuardBlocks { repo_id }) => {
+                    if !restricted && let Some(end) = guard_blocks(link, ctx, repo, &repo_id) {
+                        return end;
+                    }
+                }
                 Err(TryRecvError::Empty) => break,
             }
         }
@@ -640,6 +665,14 @@ fn stream(
             }
             Err(_) => return End::Reconnect,
         };
+        if !restricted
+            && repo
+                .guard_reread_after
+                .is_some_and(|due| Instant::now() >= due)
+            && let Some(end) = read_guard(link, ctx, repo)
+        {
+            return end;
+        }
         if repo.pending_since.is_none() && repo.tracker.has_work() {
             repo.pending_since = Some(Instant::now());
         }
@@ -784,7 +817,7 @@ fn apply(
                 serde_json::from_value::<ScopeEventNotification>(notification.params.clone())
                     .ok()?;
             match &event.scope {
-                Scope::Global => apply_global_event(link, ctx, track, &event),
+                Scope::Global => apply_global_event(link, ctx, (track, repo), &event),
                 Scope::Repo { repo_id } if ctx.open.as_deref() == Some(repo_id) => {
                     apply_repo_event(link, ctx, repo, recv_ns, &event)
                 }
@@ -827,7 +860,7 @@ fn apply(
 fn apply_global_event(
     link: &mut dyn Link,
     ctx: &mut Ctx,
-    track: &mut SeqTrack,
+    (track, repo): (&mut SeqTrack, &mut RepoScope),
     event: &ScopeEventNotification,
 ) -> Option<End> {
     match track.accept(event.scope_seq) {
@@ -835,11 +868,121 @@ fn apply_global_event(
             for msg in ingest::global_event(&event.event) {
                 ctx.send(msg);
             }
+            if is_exception_audit(ctx, &event.event) {
+                return exception_changed(link, ctx, repo);
+            }
             None
         }
         Verdict::Duplicate | Verdict::Drop => None,
         Verdict::Gap => resync(link, ctx, track, false),
     }
+}
+
+/// Whether `event` is a `reserved.audit` of a conscious exception in the open repo. Nothing else
+/// of it reaches the window.
+fn is_exception_audit(ctx: &Ctx, event: &gitraptor_api::event::Event) -> bool {
+    event.kind == RESERVED_AUDIT
+        && event
+            .data
+            .get("operation")
+            .and_then(Value::as_str)
+            .is_some_and(|op| op.starts_with("guard.exception"))
+        && ctx.open.is_some()
+        && event.data.get("repo_id").and_then(Value::as_str) == ctx.open.as_deref()
+}
+
+/// An exception of the open repo moved: read the log again, joining a burst into one read. The
+/// daemon also publishes the refused attempts, so an agent in a loop must not drive the reads.
+fn exception_changed(link: &mut dyn Link, ctx: &mut Ctx, repo: &mut RepoScope) -> Option<End> {
+    repo.raw_path.as_ref()?;
+    let recent = repo
+        .last_guard_read
+        .filter(|ended| ended.elapsed() < GUARD_JOIN);
+    match recent {
+        Some(ended) => {
+            repo.guard_reread_after.get_or_insert(ended + GUARD_JOIN);
+            None
+        }
+        None => read_guard(link, ctx, repo),
+    }
+}
+
+/// `guard_blocks` of the window: the open repo's `guard.status` and `guard.log`.
+fn guard_blocks(
+    link: &mut dyn Link,
+    ctx: &mut Ctx,
+    repo: &mut RepoScope,
+    repo_id: &str,
+) -> Option<End> {
+    if ctx.open.as_deref() != Some(repo_id) || repo.raw_path.is_none() {
+        ctx.send(EngineMessage::GuardBlocksUnavailable {
+            repo_id: visible(repo_id, NAME_MAX_CHARS),
+            cause: GuardUnavailableCause::NotOpen,
+            protection: None,
+        });
+        return None;
+    }
+    if repo
+        .last_guard_read
+        .is_some_and(|ended| ended.elapsed() < GUARD_MIN_GAP)
+    {
+        return None;
+    }
+    read_guard(link, ctx, repo)
+}
+
+/// Reads `guard.status` then `guard.log` of the open repo and tells the window; `Some` when the
+/// link is lost. Reads only: no method of the guard family that writes is ever called.
+fn read_guard(link: &mut dyn Link, ctx: &mut Ctx, repo: &mut RepoScope) -> Option<End> {
+    let (Some(repo_id), Some(path)) = (ctx.open.clone(), repo.raw_path.clone()) else {
+        return None;
+    };
+    let status = match link.call(
+        methods::GUARD_STATUS,
+        to_value(&GuardRepoParams { path: path.clone() }).ok()?,
+    ) {
+        Ok(value) => serde_json::from_value::<GuardStatus>(value).ok(),
+        Err(LinkError::Refused { .. }) => None,
+        Err(LinkError::Lost) => return Some(End::Reconnect),
+    };
+    let params = GuardLogParams {
+        path: path.clone(),
+        since_ms: None,
+        limit: Some(GUARD_LOG_LIMIT),
+        layer: None,
+    };
+    let log = match link.call(methods::GUARD_LOG, to_value(&params).ok()?) {
+        Ok(value) => serde_json::from_value::<GuardLogResult>(value)
+            .map_err(|_| GuardUnavailableCause::LogUnavailable),
+        Err(LinkError::Refused { code }) => Err(match code {
+            gitraptor_api::rpc::code::INTERNAL => GuardUnavailableCause::LogUnavailable,
+            gitraptor_api::rpc::code::REPO_REJECTED => GuardUnavailableCause::NotObserved,
+            _ => GuardUnavailableCause::Refused,
+        }),
+        Err(LinkError::Lost) => return Some(End::Reconnect),
+    };
+    repo.last_guard_read = Some(Instant::now());
+    repo.guard_reread_after = None;
+    // A list without the protection state would claim a state it does not know: fail closed.
+    let msg = match (log, &status) {
+        (Ok(log), Some(status)) => {
+            let mut blocks =
+                ingest::guard_blocks(&repo_id, Some(status), &log, repo.raptor.as_deref());
+            if let Some(pending) = blocks.pending.as_mut()
+                && pending.cancel_command.is_none()
+            {
+                pending.cancel_command = exception_command::cancel(repo.raptor.as_deref(), &path);
+            }
+            EngineMessage::GuardBlocks { blocks }
+        }
+        (log, status) => EngineMessage::GuardBlocksUnavailable {
+            repo_id: visible(&repo_id, NAME_MAX_CHARS),
+            cause: log.err().unwrap_or(GuardUnavailableCause::LogUnavailable),
+            protection: status.as_ref().map(ingest::protection),
+        },
+    };
+    ctx.send(msg);
+    None
 }
 
 /// An event of the open repo: the kinds the fleet shows go to the window, the rest only advance
@@ -954,6 +1097,10 @@ fn take_repo(
             &watched,
         )
     };
+    repo.raw_path = Some(snapshot.repo.path.raw().to_owned());
+    repo.raptor.clone_from(&raptor);
+    repo.last_guard_read = None;
+    repo.guard_reread_after = None;
     repo.tracker.reset(snapshot.repo.prediction.as_ref());
     repo.generation = repo.generation.wrapping_add(1);
     repo.pending_since = None;
