@@ -192,7 +192,8 @@ pub fn world() -> World {
     boot_world(true)
 }
 
-/// A world whose engine store cannot be opened, so the daemon has no attribution to give.
+/// A world whose engine store can be neither opened nor rebuilt (a file the daemon has no access
+/// to), so the daemon runs without it and has no attribution to give.
 pub fn world_without_engine() -> World {
     boot_world(false)
 }
@@ -227,6 +228,13 @@ fn boot_world(engine: bool) -> World {
         std::fs::write(
             repos.join(format!("{}.sqlite", entry.repo_id)),
             b"this is not a database",
+        )
+        .unwrap();
+        // The daemon quarantines and rebuilds a corrupt store, but cannot read one it has no
+        // access to: the repo stays without an engine store.
+        std::fs::set_permissions(
+            repos.join(format!("{}.sqlite", entry.repo_id)),
+            std::fs::Permissions::from_mode(0o000),
         )
         .unwrap();
     }
@@ -601,6 +609,18 @@ impl World {
     pub fn agent_commit(&self, agent: &mut Agent, files: &[(&str, &str)], message: &str) -> String {
         let before = self.event_count(true);
         agent.run(&self.commit_script(files, message, true));
+        self.wait_events(true, before + 1);
+        self.head()
+    }
+
+    /// A commit by `agent` that takes `file` out of the index and keeps it in the worktree.
+    pub fn agent_forget(&self, agent: &mut Agent, file: &str, message: &str) -> String {
+        assert!(!message.contains('\'') && !file.contains('\''));
+        let before = self.event_count(true);
+        agent.run(&format!(
+            "git rm --cached -q -- '{file}' && git -c core.hooksPath={} commit -q -m '{message}'",
+            self.hooks.display()
+        ));
         self.wait_events(true, before + 1);
         self.head()
     }
