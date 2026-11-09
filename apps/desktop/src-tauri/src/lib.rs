@@ -3,6 +3,7 @@
 //! command line.
 
 pub mod commands;
+pub mod engine;
 pub mod ipc;
 pub mod window;
 

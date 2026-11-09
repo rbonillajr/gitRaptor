@@ -1528,6 +1528,7 @@ name = "gitraptor-api"
 version = "0.0.0"
 dependencies = [
  "gitraptor-api",
+ "gitraptor-macsys",
  "gitraptor-winsys",
  "nix",
  "rustix",
@@ -1592,6 +1593,7 @@ dependencies = [
  "serde_json",
  "tauri",
  "tauri-build",
+ "tempfile",
 ]
 
 [[package]]

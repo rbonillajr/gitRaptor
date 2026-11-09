@@ -32,6 +32,8 @@ use {
     std::time::Instant,
 };
 
+pub mod ensure;
+pub mod installed;
 pub mod peer;
 pub mod transport;
 
@@ -349,6 +351,19 @@ impl Client {
         }
     }
 
+    /// The pid of the process serving the open connection, as the kernel reports it; `None`
+    /// when it cannot be read.
+    pub fn peer_pid(&self) -> Option<u32> {
+        #[cfg(any(unix, windows))]
+        {
+            peer::peer_cred(&self.stream).ok().map(|cred| cred.pid)
+        }
+        #[cfg(not(any(unix, windows)))]
+        {
+            None
+        }
+    }
+
     /// What the daemon said in the handshake.
     pub fn hello(&self) -> &HelloResult {
         &self.hello
@@ -561,33 +576,91 @@ fn decode(bytes: &[u8]) -> Result<ServerMessage, ClientError> {
     serde_json::from_slice(bytes).map_err(|_| ClientError::Protocol("not a contract message"))
 }
 
+/// Whether a running daemon may be asked to step down (`daemon.replace`, SEC-13).
+pub enum ReplacePolicy<'a> {
+    /// Any daemon may be asked; the daemon itself accepts only the installed binary.
+    Any,
+    /// Only a daemon whose socket peer pid the function accepts: a caller that must never
+    /// replace another installation's daemon (`raptor daemon ensure`, ADR-GRP-014 Enmienda
+    /// DEP-DSK-5 § D2) asks whether the peer runs its own binary. A pid that cannot be read is
+    /// refused without asking.
+    OnlyIf(&'a mut dyn FnMut(u32) -> bool),
+}
+
+impl ReplacePolicy<'_> {
+    #[cfg(any(unix, windows))]
+    fn allows(&mut self, daemon: &Client) -> bool {
+        match self {
+            Self::Any => true,
+            Self::OnlyIf(accept) => daemon.peer_pid().is_some_and(accept),
+        }
+    }
+}
+
+/// A connection from [`ensure_daemon_policy`] and what it took to get it.
+pub struct Ensured {
+    pub client: Client,
+    /// A daemon was launched ([`Launch::launch`] was called).
+    pub started: bool,
+    /// A running daemon accepted to step down.
+    pub replaced: bool,
+}
+
 /// Connects to the daemon, starting it through `launch` if needed (ADR-GRP-005 § 3) and
 /// replacing an older one (SEC-13). `on_launch` is called right before a daemon is started,
 /// so a client can say "starting the engine" apart from "connecting" (ADR-CKP-003 § 4).
+/// Same as [`ensure_daemon_policy`] with [`ReplacePolicy::Any`].
 #[cfg(any(unix, windows))]
 pub fn ensure_daemon_with(
     connect: &Connect,
     launch: &mut dyn Launch,
     on_launch: &mut dyn FnMut(),
 ) -> Result<Client, ClientError> {
+    ensure_daemon_policy(connect, launch, on_launch, ReplacePolicy::Any).map(|e| e.client)
+}
+
+/// Connects to the daemon like [`ensure_daemon_with`], asking `policy` before sending
+/// `daemon.replace`. When the policy refuses a daemon of this protocol that lacks capabilities,
+/// its connection is returned as is (the caller sees what it lacks with
+/// [`Client::missing_capabilities`]); when it refuses an older daemon, the result is
+/// [`ClientError::Incompatible`]. A refused daemon never receives `daemon.replace`.
+#[cfg(any(unix, windows))]
+pub fn ensure_daemon_policy(
+    connect: &Connect,
+    launch: &mut dyn Launch,
+    on_launch: &mut dyn FnMut(),
+    mut policy: ReplacePolicy<'_>,
+) -> Result<Ensured, ClientError> {
+    let mut replaced = false;
     match Client::connect(&connect.runtime, connect.kind, connect.protocol) {
         Ok(client)
             if client
                 .missing_capabilities(&connect.capabilities)
                 .is_empty() =>
         {
-            return Ok(client);
+            return Ok(Ensured {
+                client,
+                started: false,
+                replaced: false,
+            });
         }
         // A daemon of this protocol but older than this binary: replaced if
         // it accepts (only from the installed binary); otherwise the client
         // goes on with what it was granted, as before capabilities.
-        Ok(client) => {
-            if let Some(client) = replace_same_protocol(connect, launch, client)? {
-                return Ok(client);
+        Ok(client) => match replace_same_protocol(connect, launch, client, &mut policy)? {
+            Some(client) => {
+                return Ok(Ensured {
+                    client,
+                    started: false,
+                    replaced: false,
+                });
             }
-        }
+            None => replaced = true,
+        },
         Err(ClientError::NotRunning) => {}
-        Err(ClientError::Incompatible(data)) => replace(connect, launch, &data)?,
+        Err(ClientError::Incompatible(data)) => {
+            replaced = replace(connect, launch, &data, &mut policy)?;
+        }
         Err(err) => return Err(err),
     }
     on_launch();
@@ -595,7 +668,13 @@ pub fn ensure_daemon_with(
     let deadline = Instant::now() + connect.start_timeout;
     loop {
         match Client::connect(&connect.runtime, connect.kind, connect.protocol) {
-            Ok(client) => return Ok(client),
+            Ok(client) => {
+                return Ok(Ensured {
+                    client,
+                    started: true,
+                    replaced,
+                });
+            }
             Err(ClientError::NotRunning) if Instant::now() < deadline => {
                 std::thread::sleep(Duration::from_millis(25));
             }
@@ -657,15 +736,33 @@ pub fn ensure_daemon_with(
     Client::connect(&connect.runtime, connect.kind, connect.protocol)
 }
 
+#[cfg(not(any(unix, windows)))]
+pub fn ensure_daemon_policy(
+    connect: &Connect,
+    _launch: &mut dyn Launch,
+    _on_launch: &mut dyn FnMut(),
+    _policy: ReplacePolicy<'_>,
+) -> Result<Ensured, ClientError> {
+    Client::connect(&connect.runtime, connect.kind, connect.protocol).map(|client| Ensured {
+        client,
+        started: false,
+        replaced: false,
+    })
+}
+
 /// Asks a daemon of this protocol that lacks capabilities of this binary
-/// to step down for it (ADR-GRP-016 § 1). `Some(client)`: it refused, go on
+/// to step down for it (ADR-GRP-016 § 1). `Some(client)`: it or `policy` refused, go on
 /// with that connection; `None`: it stopped and released its lock.
 #[cfg(any(unix, windows))]
 fn replace_same_protocol(
     connect: &Connect,
     launch: &mut dyn Launch,
     mut old: Client,
+    policy: &mut ReplacePolicy<'_>,
 ) -> Result<Option<Client>, ClientError> {
+    if !policy.allows(&old) {
+        return Ok(Some(old));
+    }
     let stop: Result<StopResult, ClientError> = old.call(
         methods::DAEMON_REPLACE,
         ReplaceParams {
@@ -686,17 +783,23 @@ fn replace_same_protocol(
 }
 
 /// Asks an older daemon to step down for this (installed) binary and waits
-/// until it released the instance lock.
+/// until it released the instance lock. `true` when it stepped down; `false` when a
+/// compatible daemon already serves the channel. A daemon `policy` refuses is
+/// [`ClientError::Incompatible`] and never asked.
 #[cfg(any(unix, windows))]
 fn replace(
     connect: &Connect,
     launch: &mut dyn Launch,
     data: &IncompatibleData,
-) -> Result<(), ClientError> {
+    policy: &mut ReplacePolicy<'_>,
+) -> Result<bool, ClientError> {
     let mut old = Client::open_at(&connect.runtime)?;
     match old.greet(connect.kind, connect.protocol)? {
         Greeting::Incompatible(_) => {}
-        Greeting::Ready(_) => return Ok(()),
+        Greeting::Ready(_) => return Ok(false),
+    }
+    if !policy.allows(&old) {
+        return Err(ClientError::Incompatible(data.clone()));
     }
     let stop: StopResult = old
         .call(
@@ -714,7 +817,7 @@ fn replace(
     }
     old.wait_closed(Duration::from_secs(10));
     if launch.wait_released(Duration::from_secs(10)) {
-        Ok(())
+        Ok(true)
     } else {
         Err(ClientError::Incompatible(data.clone()))
     }

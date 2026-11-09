@@ -25,6 +25,9 @@ mod ffi_fsevents;
 mod ffi_kinfo;
 #[cfg(target_os = "macos")]
 #[allow(unsafe_code)]
+mod ffi_pidpath;
+#[cfg(target_os = "macos")]
+#[allow(unsafe_code)]
 mod ffi_procargs;
 #[cfg(target_os = "macos")]
 #[allow(unsafe_code)]

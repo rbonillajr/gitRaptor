@@ -28,7 +28,7 @@
 
 use std::ffi::OsString;
 use std::io;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 #[cfg(unix)]
 use std::time::Duration;
 
@@ -61,10 +61,6 @@ const TOOL_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[cfg_attr(not(windows), allow(dead_code))]
 const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
-
-/// Path components of the npm channel and of the npx cache: a binary there
-/// is not an installation (SEC-14, ADR-GRP-014, INF-GRP-004).
-const TRANSIENT_COMPONENTS: [&str; 2] = ["node_modules", "_npx"];
 
 /// Exit code of `raptor daemon` whose start failed. Started by the service
 /// manager (`--autostart`) it is always 0, whatever failed (another
@@ -474,23 +470,7 @@ impl Autostart {
 /// npx, `pnpm dlx` or `bunx` cache, or under a temporary folder (the same
 /// caches `raptor mcp install` refuses).
 pub fn refuse_transient(exe: &Path, temp: &[PathBuf]) -> Result<(), AutostartError> {
-    let names: Vec<String> = exe
-        .components()
-        .filter_map(|c| match c {
-            Component::Normal(name) => Some(name.to_string_lossy().into_owned()),
-            _ => None,
-        })
-        .collect();
-    let cache = names.iter().enumerate().any(|(i, name)| {
-        TRANSIENT_COMPONENTS.contains(&name.as_str())
-            || name.starts_with("bunx-")
-            || (name == "dlx" && i > 0 && names[i - 1].contains("pnpm"))
-    });
-    let in_temp = temp
-        .iter()
-        .filter(|t| t.parent().is_some())
-        .any(|t| exe.starts_with(t));
-    if cache || in_temp {
+    if gitraptor_api::client::installed::is_transient(exe, temp) {
         return Err(AutostartError::TransientBinary(exe.to_owned()));
     }
     Ok(())

@@ -11,7 +11,14 @@ publish.workspace = true
 # The channel client library (TS-GRP-004, INF-CKP-001 Entrega 2b): connection, the L-06
 # checks before the handshake, and the on-demand start behind the `Launch` trait. Off for
 # whoever only consumes the contract (schemas, a future UI), so the OS crates stay out.
-client = ["rustix/fs", "rustix/net", "rustix/process", "dep:nix", "dep:gitraptor-winsys"]
+client = [
+    "rustix/fs",
+    "rustix/net",
+    "rustix/process",
+    "dep:nix",
+    "dep:gitraptor-winsys",
+    "dep:gitraptor-macsys",
+]
 # Seams of the client's tests (a server of another uid): never on in a binary.
 test-support = ["client"]
 
@@ -27,6 +34,8 @@ rustix = { version = "1.1.5", features = ["time"] }
 # the workspace forbids `unsafe`. The same version as `crates/core`.
 [target."cfg(target_os = \"macos\")".dependencies]
 nix = { version = "=0.31.3", features = ["socket"], optional = true }
+# The executable of the channel's peer (`proc_pidpath`, B-3): the FFI stays in gitraptor-macsys.
+gitraptor-macsys = { workspace = true, optional = true }
 
 # The channel's named pipe and its server's owner (the only crate allowed `unsafe`).
 [target."cfg(windows)".dependencies]
