@@ -15,6 +15,7 @@
 # Affected (ADR-GRP-002, Enmienda 2026-10-07): on a pull request with Rust changes, the general
 # tests run only for the Cargo packages the Nx graph marks as affected and their dependents, in
 # one cargo invocation. fmt, clippy and the `repo_intact` suites stay on the whole workspace.
+# gitraptor-desktop is always excluded: it needs WebKitGTK on Linux and runs in `desktop.yml`.
 # Every doubt runs the whole workspace: main, a global input, an Nx step that failed, or a
 # selection that would recompile (`tools/ci/cargo-test-selection.sh`).
 #
@@ -65,7 +66,9 @@ jobs:
           filters: |
             rust:
               - 'crates/**'
-              - 'apps/**'
+              # Not apps/desktop: the desktop app has its own `desktop` workflow.
+              - 'apps/cli/**'
+              - 'apps/mcp/**'
               - 'Cargo.toml'
               - 'Cargo.lock'
               - 'rust-toolchain.toml'
@@ -166,7 +169,7 @@ jobs:
         run: cargo fmt --all -- --check
       - id: clippy
         if: env.BUILD_RUST != 'false'
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --workspace --exclude gitraptor-desktop --all-targets -- -D warnings
       # The `repo-intact` gate. Always the whole workspace, never `nx affected`: the gate must run
       # every suite. It runs first among the tests, on a runner no other test has loaded yet (as the
       # separate job did), and even when fmt or clippy failed, so the gate reports on its own
@@ -180,13 +183,13 @@ jobs:
           GITRAPTOR_EXEC_AUDIT: ${{ matrix.exec_audit }}
         run: |
           set -o pipefail
-          cargo test --workspace --no-fail-fast -- repo_intact | tee repo-intact-suites.log
+          cargo test --workspace --exclude gitraptor-desktop --no-fail-fast -- repo_intact | tee repo-intact-suites.log
       - name: Core and registered repo_intact suites
         id: suites_windows
         if: ${{ !cancelled() && env.BUILD_RUST != 'false' && matrix.os == 'windows-latest' }}
         env:
           GITRAPTOR_EXEC_AUDIT: ${{ matrix.exec_audit }}
-        run: cargo test --workspace --no-fail-fast -- repo_intact | Tee-Object -FilePath repo-intact-suites.log
+        run: cargo test --workspace --exclude gitraptor-desktop --no-fail-fast -- repo_intact | Tee-Object -FilePath repo-intact-suites.log
         continue-on-error: true
       # Empty-gate guard: the suites pass only if they executed at least `repo_intact_min` tests,
       # counted from every `test result:` line (the libtest ones and the `harness = false` one).
@@ -239,7 +242,7 @@ jobs:
       # gate even when it failed, so a failing suite does not hide the other tests' results.
       - id: test
         if: ${{ !cancelled() && steps.fmt.outcome == 'success' && steps.clippy.outcome == 'success' }}
-        run: cargo test ${{ steps.select.outputs.args || '--workspace' }} --no-fail-fast -- --skip repo_intact
+        run: cargo test ${{ steps.select.outputs.args || '--workspace --exclude gitraptor-desktop' }} --no-fail-fast -- --skip repo_intact
       # Blocking on Windows too: the only crate with `unsafe` and the requester
       # resolution on real processes (ADR-GRP-005, Enmienda 2026-10-05).
       - name: Windows processes and requester (blocking)

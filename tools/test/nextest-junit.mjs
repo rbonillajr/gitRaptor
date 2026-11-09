@@ -6,7 +6,7 @@
 // ruta de archivo y lo compara con `criteria[].tests`. Este script corre nextest y reescribe el
 // informe con un <testsuite> por archivo fuente (nombre = ruta relativa a la raíz del repo).
 //
-// Uso:  node tools/test/nextest-junit.mjs [argumentos de nextest]   (por defecto: --workspace)
+// Uso:  node tools/test/nextest-junit.mjs [argumentos de nextest]   (por defecto: --workspace --exclude gitraptor-desktop)
 //   lee    target/nextest/ci/junit.xml
 //   escribe target/nextest/ci/junit-paths.xml
 //   sale con el mismo código que `cargo nextest run --profile ci`.
@@ -166,7 +166,7 @@ export function run(args, cwd = process.cwd()) {
   rmSync(source, { force: true });
   rmSync(target, { force: true });
 
-  const r = spawnSync("cargo", ["nextest", "run", "--profile", "ci", ...(args.length ? args : ["--workspace"])], { cwd, stdio: "inherit" });
+  const r = spawnSync("cargo", ["nextest", "run", "--profile", "ci", ...(args.length ? args : ["--workspace", "--exclude", "gitraptor-desktop"])], { cwd, stdio: "inherit" });
   const code = r.status ?? (r.error ? 127 : 1);
   if (r.error) console.error(`nextest-junit: no se pudo ejecutar cargo nextest: ${r.error.message}`);
 

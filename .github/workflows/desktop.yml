@@ -1,0 +1,112 @@
+# TS-DSK-001: the desktop app (`apps/desktop`, Tauri + React; ADR-GRP-002 and ADR-GRP-017).
+#
+# The only job that builds `gitraptor-desktop`: the general jobs run `--exclude gitraptor-desktop`,
+# so they never compile Tauri nor need WebKitGTK. Runs the frontend checks (lint with the V5
+# rules, typecheck, tests, build) and then clippy and the crate tests (V1, V2, V7, IPC).
+#
+# A pull request that touches none of its inputs still reports the check, in success, without
+# building. `push` to main always runs it.
+#
+# Actions are pinned by commit SHA.
+name: desktop
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# Pull requests: one run per branch, a new push cancels the previous one. main never cancels.
+concurrency:
+  group: desktop-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  desktop:
+    name: desktop
+    runs-on: ubuntu-latest
+    # A cold build of Tauri and WebKitGTK bindings takes 10-15 minutes.
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      pull-requests: read
+    env:
+      # 'false' only on a pull request whose filter found no input and lists fewer than 3000 files
+      # (the API limit). Not RUST_* or CARGO_*: rust-cache hashes those into its key.
+      BUILD_DESKTOP: ${{ github.event_name != 'pull_request' || github.event.pull_request.changed_files >= 3000 }}
+    steps:
+      - id: filter
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          filters: |
+            changed:
+              - 'apps/desktop/**'
+              - 'packages/design-tokens/**'
+              - 'crates/api/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'rust-toolchain.toml'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - '.github/workflows/desktop.yml'
+      - name: Decide
+        id: run
+        run: echo "build=${{ env.BUILD_DESKTOP == 'true' || steps.filter.outcome != 'success' || steps.filter.outputs.changed != 'false' }}" >> "$GITHUB_OUTPUT"
+      - name: Nothing to check
+        if: steps.run.outputs.build == 'false'
+        run: "echo '::notice::No desktop input changed in this pull request: nothing to build (main always runs it)'"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        if: steps.run.outputs.build == 'true'
+      - name: Linux libraries of Tauri (WebKitGTK 4.1)
+        if: steps.run.outputs.build == 'true'
+        # apt mirrors have hung for hours (2026-10-07); it normally takes under a minute.
+        timeout-minutes: 5
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev build-essential
+      - name: Toolchain from rust-toolchain.toml
+        if: steps.run.outputs.build == 'true'
+        run: rustup show
+      # Version from `packageManager` in package.json.
+      - uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # v4.2.0
+        if: steps.run.outputs.build == 'true'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        if: steps.run.outputs.build == 'true'
+        with:
+          node-version: 22
+          cache: pnpm
+      # Only main saves: pull request caches would evict main's.
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        if: steps.run.outputs.build == 'true'
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Install (no lifecycle scripts)
+        if: steps.run.outputs.build == 'true'
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Known vulnerabilities
+        if: steps.run.outputs.build == 'true'
+        run: pnpm audit
+      - name: Lint (V5)
+        if: steps.run.outputs.build == 'true'
+        run: pnpm --filter @gitraptor/desktop lint
+      - name: Typecheck
+        if: steps.run.outputs.build == 'true'
+        run: pnpm --filter @gitraptor/desktop typecheck
+      - name: Frontend tests
+        if: steps.run.outputs.build == 'true'
+        run: pnpm --filter @gitraptor/desktop test
+      # `generate_context!` embeds `dist`, so the frontend is built before the crate.
+      - name: Frontend build
+        if: steps.run.outputs.build == 'true'
+        run: pnpm --filter @gitraptor/desktop build
+      - name: Clippy of the backend
+        if: steps.run.outputs.build == 'true'
+        run: cargo clippy -p gitraptor-desktop --all-targets -- -D warnings
+      - name: Backend tests (V1, V2, V7, IPC)
+        if: steps.run.outputs.build == 'true'
+        run: cargo test -p gitraptor-desktop
