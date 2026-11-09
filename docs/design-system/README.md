@@ -3,11 +3,11 @@ id: DSYS-GRP-001
 title: GitRaptor Design System
 type: design-system
 status: draft
-version: 0.9
+version: 0.10
 date: 2026-10-01
-updated: 2026-10-28
+updated: 2026-11-08
 owner: Rene Bonilla
-related: [BRD-GRP-001, ADR-GRP-002, ADR-GRP-003, ADR-GRP-004, ADR-CKP-003]
+related: [BRD-GRP-001, ADR-GRP-002, ADR-GRP-003, ADR-GRP-004, ADR-CKP-003, DSYS-GRP-002]
 tags: [design-system, design-tokens, tui, cli, ratatui, accessibility, theming, mvp]
 changelog:
   - 0.1 (2026-10-01): Design system completo (tokens, UI kit React, Storybook, Figma, temas web).
@@ -19,6 +19,7 @@ changelog:
   - 0.7 (2026-10-06): Enmienda de US-CKP-001: fila sin agente, columnas de AgentList que crecen hasta su texto, "–" para un recuento que el motor no publica, y profundidad de color y símbolos detectados del entorno.
   - 0.8 (2026-10-07): **Decisión de Rene (2026-10-07)**: acepta los ajustes de contraste de la paleta A (`#949494` y `#3a3a3a`).
   - 0.9 (2026-10-28): **D7 (decisión de Rene, 2026-10-28)**: la app de escritorio entra en el MVP. Lo diferido para la app (tipografía web, radios, espaciado, salida CSS de los tokens, temas web claro y oscuro de la paleta A, estado de React) se adelanta para UI-1; el UI kit como paquete y Storybook llegan con UI-2 (ADR-GRP-003 y ADR-GRP-004, enmiendas del 2026-10-28). La extensión de VS Code sigue en la Fase 3. Los huecos concretos están en [DSF-DSK-001 § 8 y § 11](../requirements/features/desktop/design/design-flow.md).
+  - 0.10 (2026-11-08): **Decisión de Rene (2026-11-08)**: la app de escritorio usa el estilo «grafito glass» de la propuesta B1. Los tokens web concretos (superficies, texto, acento azul, estado, agente coral, carriles, bordes, radios, espaciado, tipografía del sistema, sombras; oscuro y claro, con contraste AA) viven en [DSYS-GRP-002](tokens-web-grafito-glass.md). Cierra H-1 de [DSF-DSK-001](../requirements/features/desktop/design/design-flow.md). No cambia los tokens de la TUI (§ 2).
 ---
 
 # GitRaptor Design System
@@ -40,6 +41,8 @@ El MVP de GitRaptor (BRD-GRP-001, Fase 1) tiene **tres superficies: CLI, TUI y s
 | Accesibilidad en terminal | Gobierno completo con Changesets y niveles de madurez |
 
 > **Enmienda 2026-10-28 (D7):** la app de escritorio deja de estar diferida y entra en el MVP. Para UI-1 se adelantan de la columna derecha la tipografía web, los radios y el espaciado en px, la salida CSS de los tokens con los temas claro y oscuro de la paleta A y los patrones de UX y estado de React (ADR-GRP-004). El UI kit como paquete (`packages/ui`) y Storybook llegan con UI-2; Motion y el tema `vscode` siguen en la Fase 3 con la extensión. Ver [ADR-GRP-003](../architecture/decisions/ADR-GRP-003-design-system.md) y el [design flow de la app](../requirements/features/desktop/design/design-flow.md).
+
+> **Enmienda 2026-11-08 (tema web de la app):** el aspecto de la app de escritorio es «grafito glass» (propuesta B1, decisión de Rene). Sus valores están en [Tokens web del tema «Grafito glass»](tokens-web-grafito-glass.md) (DSYS-GRP-002). La TUI sigue con la paleta A de § 2; el acento web es azul y el de la TUI, teal.
 
 **Regla para crecer:** los tokens se definen desde ya en un formato neutral (DTCG JSON), así la Fase 3 los reutiliza sin rehacerlos. Todo lo demás se agrega cuando una fase lo requiera.
 
@@ -172,8 +175,7 @@ Widgets ratatui en `apps/cli`, todos con los tokens de `crates/theme`:
 ## 9. Qué se agrega en la Fase 3 (referencia)
 
 Cuando arranque la app de escritorio o la extensión, se amplía este documento según [ADR-GRP-003](../architecture/decisions/ADR-GRP-003-design-system.md) y [ADR-GRP-004](../architecture/decisions/ADR-GRP-004-estado-frontend-ux.md):
-- salida CSS de los tokens;
-- tipografía, espaciado, radios y elevación web;
+- salida CSS de los tokens y tipografía, espaciado, radios y elevación web: adelantados para la app y definidos en [DSYS-GRP-002](tokens-web-grafito-glass.md) (2026-11-08);
 - temas `light` y `vscode`;
 - UI kit React (`@gitraptor/ui`) con Radix, Tailwind y CVA;
 - Storybook y regresión visual;
