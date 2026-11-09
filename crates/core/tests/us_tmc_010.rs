@@ -139,7 +139,7 @@ fn oplog_op(id: &str) -> OpRef {
     OpRef::Oplog(id.to_owned())
 }
 
-/// T004: `since` is served (here: nothing to undo), `agent` is still US-TMC-011's.
+/// T004: `since` is served (here: nothing to undo); a selector without a story is not.
 #[test]
 fn since_is_served_and_agent_is_still_not_implemented() {
     let (fx, wt) = repo_with_login();
@@ -158,11 +158,12 @@ fn since_is_served_and_agent_is_still_not_implemented() {
         "TMC010-SERVED: with nothing in the stack, since is rejected as nothing-to-undo"
     );
 
+    // `agent` is served since US-TMC-011; `operation_id` still has no story.
     let mut p = params(&r.worktree, None);
-    p["agent"] = json!("claude-1");
-    let agent = rpc_error(c.call(gitraptor_api::methods::TM_UNDO, p));
-    assert_eq!(agent.code, code::NOT_IMPLEMENTED);
-    assert_eq!(agent.data.unwrap()["implemented_by"], "US-TMC-011");
+    p["operation_id"] = json!("0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0");
+    let by_id = rpc_error(c.call(gitraptor_api::methods::TM_UNDO, p));
+    assert_eq!(by_id.code, code::NOT_IMPLEMENTED);
+    assert_eq!(by_id.data.unwrap()["implemented_by"], "unassigned");
 }
 
 /// Escenario 1: A outside the period, B and C inside; the undo takes back B and C only.

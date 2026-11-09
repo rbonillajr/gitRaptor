@@ -221,9 +221,9 @@ fn a_declared_identity_changes_nothing() {
             [methods::REQUESTER_RESOLVE, { "actor": { "actor": "unattributed" } }],
             [methods::TM_UNDO, { "human": true }],
             [methods::REQUESTER_RESOLVE, {}],
-            // Attributed over MCP: an undo by agent passes the requester check
-            // and stops at its story (US-TMC-011).
-            [methods::TM_UNDO, { "agent": "claude-1" }],
+            // Attributed over MCP: an undo by operation id passes the requester
+            // check and stops where it has no story yet.
+            [methods::TM_UNDO, { "operation_id": "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0" }],
         ]),
         true,
     );
