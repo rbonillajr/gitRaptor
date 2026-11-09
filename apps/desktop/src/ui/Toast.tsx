@@ -55,7 +55,10 @@ export function ToastSurface({ kind, message, action, onClose, id }: ToastInput 
       role={kind === "error" ? "alert" : "status"}
       tabIndex={-1}
       onKeyDown={(e: KeyboardEvent<HTMLDivElement>) => {
-        if (e.key === "Escape") onClose();
+        if (e.key === "Escape") {
+          e.preventDefault();
+          onClose();
+        }
       }}
       className="flex max-w-(--gr-size-detail) items-center gap-(--gr-space-2) rounded-md bg-surface-raised px-(--gr-space-4) py-(--gr-space-3) text-text-main shadow-(--gr-shadow-popover) gr-ring [font:var(--gr-type-body)]"
     >

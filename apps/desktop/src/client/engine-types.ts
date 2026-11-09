@@ -122,7 +122,15 @@ export type PairReason =
   | "error";
 
 /** The eight prediction limits of `crates/api/src/prediction.rs`, in kebab-case. */
-export type LimitCode = string;
+export type LimitCode =
+  | "overlap-includes-uncommitted"
+  | "conflict-committed-only"
+  | "no-merge-drivers-or-attributes"
+  | "rename-limit"
+  | "insertions-may-merge"
+  | "joined-hunks"
+  | "pair-ignores-base-moves"
+  | "local-only";
 
 export type ConfirmCommandDto =
   | { state: "offered"; command: string; withPath: boolean }

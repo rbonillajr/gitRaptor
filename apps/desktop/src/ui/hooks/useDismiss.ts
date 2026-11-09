@@ -27,7 +27,11 @@ export function useDismiss(
       node instanceof Node && latest.current.inside.some((r) => r.current?.contains(node));
 
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && (latest.current.options?.escape ?? true)) latest.current.onDismiss("escape");
+      if (e.key === "Escape" && (latest.current.options?.escape ?? true)) {
+        // Consumed: the shell's window listener skips an Esc that is already handled (DS-US-DSK-008 D18).
+        e.preventDefault();
+        latest.current.onDismiss("escape");
+      }
     };
     const onPointerDown = (e: Event) => {
       if (!(latest.current.options?.pointerOutside ?? true) || isInside(e.target)) return;

@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { AlertState } from "@/conflicts/alerts";
 import type { ConnState, EngineMessage, ResyncReason, SessionInfo } from "@/client/engine-types";
 
 /** What the engine connection looks like right now. Not persisted: it authorizes nothing (ADR-GRP-017 § 1). */
@@ -10,6 +11,10 @@ export interface EngineState {
   lastRepoBatch: RepoBatchMark | null;
   /** Repos the backend closed (`repoClosed`); skipped by the default choice until the repo list changes. */
   closedRepoIds: ReadonlySet<string>;
+  /** The conflicts each repo already knows, so a conflict alerts once (DS-US-DSK-008 D12). Lives all run, in memory. */
+  alertState: AlertState;
+  /** `attention.conflicts` last seen per repo; `null` until the first global snapshot seeds it (D15). */
+  seededCounts: ReadonlyMap<string, number> | null;
 }
 
 /** The last batch that carried repo messages: `FleetView` measures `gr:fleet-delta` from `receivedAt` (T006). */
@@ -22,6 +27,8 @@ export interface EngineActions {
   noteRepoBatch: (mark: RepoBatchMark) => void;
   markRepoClosed: (repoId: string) => void;
   clearClosedRepos: () => void;
+  setRepoAlerts: (repoId: string, known: ReadonlyMap<string, "seeded" | "alerted"> | null) => void;
+  setSeededCounts: (counts: ReadonlyMap<string, number>) => void;
   /** Folds a batch of channel messages into one state update (one render per frame). */
   apply: (batch: readonly EngineMessage[]) => void;
 }
@@ -33,6 +40,16 @@ export const useEngineStore = create<EngineState & EngineActions>()((set) => ({
   session: null,
   lastRepoBatch: null,
   closedRepoIds: new Set<string>(),
+  alertState: new Map(),
+  seededCounts: null,
+  setRepoAlerts: (repoId, known) =>
+    set((s) => {
+      const alertState = new Map(s.alertState);
+      if (known === null || known.size === 0) alertState.delete(repoId);
+      else alertState.set(repoId, known);
+      return { alertState };
+    }),
+  setSeededCounts: (seededCounts) => set({ seededCounts }),
   markRepoClosed: (repoId) => set((s) => ({ closedRepoIds: new Set(s.closedRepoIds).add(repoId) })),
   clearClosedRepos: () => set((s) => (s.closedRepoIds.size === 0 ? s : { closedRepoIds: new Set<string>() })),
   noteRepoBatch: (mark) => set({ lastRepoBatch: mark }),
