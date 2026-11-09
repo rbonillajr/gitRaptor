@@ -216,7 +216,7 @@ graph LR
 
 - **Depende:** T001
 - **Refs:** D3, D8; DS-US-CKP-001 § 2 y D1; ADR-CKP-003 § 4
-- **Aceptación:** `cargo test -p gitraptor-desktop --test fleet_supervisor --test engine_supervisor --test commands` en verde; `tests/engine_wire.rs` regenera el fixture con las variantes nuevas y pasa.
+- **Aceptación:** `cargo test -p gitraptor-desktop --test fleet_supervisor --test engine_supervisor --test commands` en verde; `tests/engine_wire.rs` compara la fixture congelada con las variantes nuevas (la fixture la produce el tester desde `wire.rs`, no se regenera con variable de entorno) y pasa.
 
 ### T003 — Guardar la flota en la caché del frontend
 
@@ -231,6 +231,7 @@ graph LR
 - `apps/desktop/src/state/ui-store.ts` (**MODIFY**)
 - `apps/desktop/src/state/ui-store.test.ts` (**MODIFY**)
 - `apps/desktop/src/fleet/useFleet.ts` (**CREATE**)
+- `apps/desktop/src/fleet/useFleet.test.tsx` (**CREATE**)
 
 **Reglas**
 - `applyEngineBatch`: `repo` → `setQueryData(engineKeys.repo(id), { repo, sessions: new Map(), detection: null })` (reemplaza y vacía sesiones, D3); `worktrees` → reemplaza `repo.worktrees` y `repo.fetchedUtcMs`; `sessions` → fusiona la lista con la regla de D3 y fija `detection`; `repoSession` → fusiona una; `prediction` → upsert por `pairId` y quita `removed`; `repoClosed` → `removeQueries(engineKeys.repo(id))` y `selectRepo(null)` si era el elegido. Nunca muta el objeto anterior.
@@ -246,10 +247,10 @@ graph LR
 **Objetivo.** `fleetCards`, pura, con las reglas de la TUI.
 
 **Ubicación.**
-- `apps/desktop/src/fleet/fleet-model.ts` (**CREATE**)
-- `apps/desktop/src/fleet/fleet-model.test.ts` (**CREATE**)
-- `apps/desktop/src/fleet/agent-colors.ts` (**CREATE**)
-- `apps/desktop/src/fleet/agent-colors.test.ts` (**CREATE**)
+- `apps/desktop/src/fleet/fleet-model.ts` (ya hecho, commits 584439f0 y 71fb2478 de esta rama; no se reescribe)
+- `apps/desktop/src/fleet/fleet-model.test.ts` (ya hecho, commits 584439f0 y 71fb2478 de esta rama; no se reescribe)
+- `apps/desktop/src/fleet/agent-colors.ts` (ya hecho, commits 584439f0 y 71fb2478 de esta rama; no se reescribe)
+- `apps/desktop/src/fleet/agent-colors.test.ts` (ya hecho, commits 584439f0 y 71fb2478 de esta rama; no se reescribe)
 
 **Reglas**
 - Una tarjeta por `WorktreeDto`, en el orden de D4. El grupo sale de la sesión de mayor rango que la tarjeta enseña (Activa > Inactiva > Terminada visible).
@@ -271,13 +272,13 @@ graph LR
 **Objetivo.** La flota en el centro y el árbol en la barra lateral de B1, en en/es, accesibles.
 
 **Ubicación.**
-- `apps/desktop/src/fleet/FleetView.tsx` (**CREATE**)
-- `apps/desktop/src/fleet/RepoTree.tsx` (**CREATE**)
-- `apps/desktop/src/fleet/useNow.ts` (**CREATE**)
-- `apps/desktop/src/fleet/FleetView.test.tsx` (**CREATE**)
-- `apps/desktop/src/fleet/RepoTree.test.tsx` (**CREATE**)
-- `apps/desktop/src/ui/WorktreeCard.tsx` (**CREATE**)
-- `apps/desktop/src/ui/CardSkeleton.tsx` (**CREATE**)
+- `apps/desktop/src/fleet/FleetView.tsx` (ya hecho, commits 584439f0 y 71fb2478 de esta rama; el cableado lo hace esta corrida)
+- `apps/desktop/src/fleet/RepoTree.tsx` (ya hecho, commits 584439f0 y 71fb2478 de esta rama; el cableado lo hace esta corrida)
+- `apps/desktop/src/fleet/useNow.ts` (ya hecho, commits 584439f0 y 71fb2478 de esta rama; el cableado lo hace esta corrida)
+- `apps/desktop/src/fleet/FleetView.test.tsx` (ya hecho, commits 584439f0 y 71fb2478 de esta rama; el cableado lo hace esta corrida)
+- `apps/desktop/src/fleet/RepoTree.test.tsx` (ya hecho, commits 584439f0 y 71fb2478 de esta rama; el cableado lo hace esta corrida)
+- `apps/desktop/src/ui/WorktreeCard.tsx` (ya hecho, commits 584439f0 y 71fb2478 de esta rama; el cableado lo hace esta corrida)
+- `apps/desktop/src/ui/CardSkeleton.tsx` (ya hecho, commits 584439f0 y 71fb2478 de esta rama; el cableado lo hace esta corrida)
 - `apps/desktop/src/engine/EngineCenter.tsx` (**MODIFY**: fila 7 → `FleetView`)
 - `apps/desktop/src/shell/AppShell.tsx` (**MODIFY**: barra lateral → `RepoTree`)
 - `apps/desktop/src/app/App.tsx` (**MODIFY**: primera pintura útil con repo abierto)
@@ -511,7 +512,7 @@ Sin métodos, eventos ni capacidades nuevos en el canal; ninguna escritura.
 
 | Nivel | Qué | Dónde |
 |---|---|---|
-| Unitarias Rust | `key`, `ingest::*` | `src-tauri/src/engine/ingest.rs` |
+| Unitarias Rust | `key`, `ingest::*` | `src-tauri/tests/fleet_ingest.rs` |
 | Integración Rust con daemon falso | Ámbito del repo de punta a punta | `src-tauri/tests/fleet_supervisor.rs` |
 | Contrato Rust ↔ TS | Fixture dorada ampliada | `tests/engine_wire.rs`, `src/state/engine-cache.test.ts` |
 | Unitarias TS | `fleetCards`, `assignSlots` | `src/fleet/*.test.ts` |
@@ -539,6 +540,12 @@ El guion "tienda" y "notas" del daemon falso (T001) y fixtures de `RepoFleet` co
 | Hueco y `scope.resync` del repo | `a_gap_in_the_repo_scope_takes_a_new_snapshot_and_sessions` | — |
 | Cambio de repo (D8) | `switching_repos_unsubscribes_and_drops_the_old_scope` | `RepoTree.test.tsx` › `choosing a repo opens it and lists its worktrees` |
 | Repo cerrado | `a_closed_repo_is_reported_and_forgotten` | `a closed repo returns to the tree` |
+| Sesión del repo con su nombre propio (decisión 2026-11-09) | `a_repo_session_event_reaches_the_webview_as_repo_session` | `engine-cache.test.ts` › `fleet cache` |
+| Solo lectura | `a_fleet_run_never_sends_replace_stop_or_writes` | — |
+| Marcas del backend (T006) | `fleet_deltas_carry_backend_perf` | `engine-stream.test.ts` › `receivedAt` |
+| Hash de la clave y `detached_at` | `tests/fleet_ingest.rs` › `key_is_fnv1a_64_in_16_lowercase_hex_of_the_raw_bytes`, `detached_at_passes_only_as_40_or_64_hex` | — |
+| Repo por defecto y apertura (D2) | — | `src/fleet/useFleet.test.tsx` › `picks the first repo by name and opens it`, `selectedRepoId` en `ui-store.test.ts` |
+| `fleet_open` en la lista cerrada | `tests/commands.rs` › `fleet_open_is_in_the_closed_list_and_the_capability`, `fleet_open_accepts_params_and_rejects_bad_ids`, `fleet_open_without_a_supervisor_is_not_watching` | `commands.test.ts` › `fleet_open` |
 | Vista restringida | `a_restricted_session_never_opens_a_repo` | — |
 | Texto no confiable (SEC-12) | `untrusted_branch_and_folder_reach_the_webview_escaped` (rama con `\u{1b}]0;x\u{7}`, carpeta con U+202E) | `branch text is rendered as text` |
 | Lo no atribuido nunca es "humano" | — | `no card ever says human` (ningún texto del catálogo en/es contiene "human" ni "humano") |
