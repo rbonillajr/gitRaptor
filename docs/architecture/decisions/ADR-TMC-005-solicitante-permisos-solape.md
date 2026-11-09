@@ -235,3 +235,22 @@ No cambia ninguna decisión. Cómo se aplica el § 3:
 - **Descartado**: usar el previo del undo como B. El previo incluye todo lo posterior al reset, así que haría pasar trabajo ajeno por cambio deshecho (deshacer de más, NFR-01) y dejaría la detección sin intervalos que comparar. Tampoco basta con quedarse como está y que el cliente reintente: obliga a cada agente a saberlo.
 - **Por qué no amplía G4**: el instante de la captura no depende de la espera. B es el mismo que encuentra un reintento.
 - Detalle y criterios: [TS-TMC-005](../../requirements/features/time-machine/technical-stories/TS-TMC-005-undo-espera-punto-base.md).
+
+## Enmienda (2026-11-09, TD-TMC-003)
+
+**Decisión del orquestador (2026-11-09), validada por Arquitecto.** Origen: [TD-TMC-003](../../requirements/features/time-machine/technical-stories/TD-TMC-003-solape-agente-ecos-de-gitraptor.md). Precisa la regla de ramas de la Enmienda (2026-10-28, US-TMC-011): qué es un movimiento «fuera del conjunto» cuando lo causó GitRaptor. No cambia la comparación con el valor final del agente, las dos fases ni D-TMC-34. El `status` sigue en `accepted`.
+
+- **Caso**: claude-1 deshace su trabajo por agente, lo rehace y vuelve a deshacerlo por agente. El eco anclado del undo y del redo nombra la rama después de la base del agente y no está en el conjunto, así que el segundo undo se rechazaba con `overlap`. Era fail-closed, pero bloqueaba un flujo legítimo.
+- **Regla**: antes de la regla de ramas (en las dos fases), un evento crudo se descarta como **eco propio** solo si se cumplen todas estas condiciones:
+  1. cae en la ventana **anclada** de una operación: `engine_mark` de la operación < `seq` ≤ ancla, donde el ancla es una observación con `cause_operation` = esa operación;
+  2. la operación está `Finished`, su ámbito incluye el worktree y su `seq` en el oplog es ≥ el suelo de la generación;
+  3. la operación solo movió trabajo del conjunto: es un `Undo(refs)` con `refs` no vacío y contenido en el conjunto actual, o un `Redo(undo_id)` cuyo undo está `Finished` y cumple lo mismo. El solicitante no entra en el criterio: el mismo undo por agente lo puede pedir «sin atribuir» o el propio agente (§ 2 ya lo autorizó);
+  4. el evento no cae también en la ventana, anclada o no, de otra operación que no cumpla 2 y 3 (mixta = otro, D3);
+  5. su actor crudo no es una sesión de agente identificada distinta del agente del undo.
+- **Cualquier otro eco de GitRaptor cuenta como movimiento**, con el solicitante de su operación como actor, igual que en el undo simple (D3). Ejemplo: si un undo o un redo del trabajo de claude-2 movió la misma rama, el undo por agente de claude-1 se rechaza con `overlap` y actor claude-2. Lo mismo pasa con un undo que abarcó trabajo ajeno, un undo previo más amplio que el conjunto actual, una restauración o una operación `Interrupted`. Los movimientos sin explicar y los de otros actores siguen contando igual.
+- **Riesgo residual aceptado**: un movimiento «sin atribuir» que cae dentro de la ventana anclada de un eco propio y deja la rama en el valor final del agente. Para que pase tienen que coincidir el instante y el valor; aun así, el undo se recupera con su previo y el redo con el suyo (NFR-01). Un commit de otro agente identificado lo excluye la condición 5.
+- **Descartado**:
+  - *Atar el eco con la ventana no anclada de `external_events_in`* (hasta la captura siguiente o `i64::MAX`): sin ancla, la ventana puede abarcar trabajo ajeno posterior y lo haría pasar por eco (deshacer de más). Sin ancla, el evento cuenta como movimiento.
+  - *Descartar todo evento con `caused_by` presente* (la opción mínima de la TD): ocultaría el eco de una operación sobre trabajo de otro actor.
+  - *Descartar por solicitante* («el eco de una operación que pidió el agente es suyo»): el solicitante no dice de quién es el trabajo que se movió. Un «sin atribuir» puede pedir el undo por agente, y el agente pudo pedir operaciones que movieron algo más que su conjunto.
+- **Validación añadida** (tests por implementar en TD-TMC-003): el flujo undo → redo → undo por agente se hace con los mismos `undone_operation_ids`; el eco de un undo del trabajo de claude-2 en la rama da `overlap` con actor claude-2; un eco sin ancla, uno de una operación `Interrupted` y uno de un undo más amplio que el conjunto dan `overlap`; un commit de otro agente dentro de la ventana de un eco propio da `overlap`.
