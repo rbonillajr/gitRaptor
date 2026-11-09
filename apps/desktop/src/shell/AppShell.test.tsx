@@ -1,0 +1,150 @@
+// B1 (TS-DSK-001 T007): the empty B1 window. Regions with accessible names in en and es, shortcuts, theme
+// cycle, a focus-trapping drawer at 1200 px, axe without violations and the gr:shell-painted mark.
+//
+// Assumptions the expert must provide (the plan names none of them):
+//  - `tests/setup.ts` exports `setViewportWidth(px: number)`: it makes the simulated `matchMedia`
+//    answer min-width / max-width queries for that width (default 1440).
+//  - `AppShell` is a named export of ./AppShell; it needs a QueryClientProvider (the test wraps it).
+//  - The title bar has exactly three buttons, in order: left panel, theme, right panel.
+//  - The drawer traps Tab itself: Tab on its last focusable (Shift+Tab on its first) is default-prevented.
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { clearMocks, mockIPC } from "@tauri-apps/api/mocks";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import axe from "axe-core";
+import i18n from "i18next";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import "@/i18n";
+import { useUiStore } from "@/state/ui-store";
+import { setViewportWidth } from "../../tests/setup";
+import { AppShell } from "./AppShell";
+
+const mac = () => vi.spyOn(navigator, "userAgent", "get").mockReturnValue("Mozilla/5.0 (Macintosh; Intel Mac OS X)");
+
+function mount() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={client}>
+      <AppShell />
+    </QueryClientProvider>,
+  );
+}
+
+const titleButtons = () => within(screen.getByRole("banner")).getAllByRole("button");
+const isOn = (b: HTMLElement) => (b.getAttribute("aria-pressed") ?? b.getAttribute("aria-expanded")) === "true";
+const key = (init: KeyboardEventInit) => fireEvent.keyDown(window, init);
+
+beforeEach(async () => {
+  mockIPC(() => ({ version: "0.0.0", protocol: 1 }));
+  useUiStore.setState({ theme: "auto", language: "auto", sidebarOpen: true, detailOpen: true });
+  document.documentElement.removeAttribute("data-theme");
+  setViewportWidth(1440);
+  mac();
+  await act(async () => {
+    await i18n.changeLanguage("en");
+  });
+});
+
+afterEach(() => {
+  cleanup();
+  clearMocks();
+  vi.restoreAllMocks();
+});
+
+describe("B1 empty shell", () => {
+  it("B1: shows title bar, sidebar, center and detail with accessible names in en and es", async () => {
+    const names = async () => {
+      const view = mount();
+      const out = {
+        banner: screen.getByRole("banner"),
+        nav: screen.getByRole("navigation"),
+        main: screen.getByRole("main"),
+        aside: screen.getByRole("complementary"),
+      };
+      const result = [out.nav, out.aside].map((el) => el.getAttribute("aria-label") ?? "");
+      result.push(...titleButtons().map((b) => b.getAttribute("aria-label") ?? ""));
+      expect(titleButtons(), "title bar must have exactly three buttons").toHaveLength(3);
+      for (const n of result) expect(n.trim().length, "every region and button needs an accessible name").toBeGreaterThan(0);
+      view.unmount();
+      return result;
+    };
+    const en = await names();
+    await act(async () => {
+      await i18n.changeLanguage("es");
+    });
+    const es = await names();
+    expect(es, "Spanish names must differ from English ones").not.toEqual(en);
+    for (let i = 0; i < en.length; i += 1) expect(es[i], `name ${i} untranslated`).not.toBe(en[i]);
+  });
+
+  it("B1: Cmd+B toggles the sidebar and Alt+Cmd+B the detail", () => {
+    mount();
+    const [left, , right] = titleButtons() as [HTMLElement, HTMLElement, HTMLElement];
+    expect([isOn(left), isOn(right)]).toEqual([true, true]);
+    key({ code: "KeyB", metaKey: true });
+    expect(useUiStore.getState().sidebarOpen, "Cmd+B must fold the sidebar").toBe(false);
+    expect(isOn(left)).toBe(false);
+    expect(useUiStore.getState().detailOpen, "Cmd+B must not touch the detail").toBe(true);
+    key({ code: "KeyB", metaKey: true });
+    expect(useUiStore.getState().sidebarOpen).toBe(true);
+    key({ code: "KeyB", metaKey: true, altKey: true, key: "∫" });
+    expect(useUiStore.getState().detailOpen, "Alt+Cmd+B must fold the detail (compared by event.code)").toBe(false);
+    expect(isOn(right)).toBe(false);
+    key({ code: "KeyB", metaKey: true, altKey: true, key: "∫" });
+    expect(useUiStore.getState().detailOpen).toBe(true);
+  });
+
+  it("B1: the theme button cycles auto -> light -> dark -> auto and sets data-theme", () => {
+    mount();
+    const root = document.documentElement;
+    const theme = titleButtons()[1] as HTMLElement;
+    expect(root.hasAttribute("data-theme"), "auto removes data-theme").toBe(false);
+    const seen: (string | null)[] = [];
+    for (let i = 0; i < 3; i += 1) {
+      fireEvent.click(theme);
+      seen.push(root.getAttribute("data-theme"));
+    }
+    expect(seen).toEqual(["light", "dark", null]);
+    fireEvent.click(theme);
+    const saved = JSON.parse(localStorage.getItem("gitraptor.ui.v1") ?? "null") as { state: { theme: string } } | null;
+    expect(saved?.state.theme, "theme must persist").toBe("light");
+  });
+
+  it("B1: at 1200 px the detail is a closed drawer that Alt+Cmd+B opens with focus inside and Esc closes", () => {
+    setViewportWidth(1200);
+    mount();
+    const right = titleButtons()[2] as HTMLElement;
+    expect(isOn(right), "the drawer starts closed").toBe(false);
+    right.focus();
+    key({ code: "KeyB", metaKey: true, altKey: true });
+    expect(isOn(right), "Alt+Cmd+B opens the drawer").toBe(true);
+    const aside = screen.getByRole("complementary");
+    expect(aside.contains(document.activeElement), "focus must move inside the drawer").toBe(true);
+
+    const focusable = Array.from(aside.querySelectorAll<HTMLElement>("button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])"));
+    const first = focusable[0] ?? aside;
+    const last = focusable[focusable.length - 1] ?? aside;
+    last.focus();
+    expect(fireEvent.keyDown(last, { key: "Tab" }), "Tab on the last element must be wrapped (default prevented)").toBe(false);
+    expect(aside.contains(document.activeElement), "Tab must not leave the drawer").toBe(true);
+    first.focus();
+    expect(fireEvent.keyDown(first, { key: "Tab", shiftKey: true }), "Shift+Tab on the first element must be wrapped").toBe(false);
+    expect(aside.contains(document.activeElement), "Shift+Tab must not leave the drawer").toBe(true);
+
+    key({ key: "Escape", code: "Escape" });
+    expect(isOn(right), "Esc closes the drawer").toBe(false);
+    expect(document.activeElement, "focus returns to the button").toBe(right);
+  });
+
+  it.each([1440, 1200])("B1: axe finds no violations at %i px", async (width) => {
+    setViewportWidth(width);
+    const { container } = mount();
+    const results = await axe.run(container, { rules: { "color-contrast": { enabled: false } } });
+    expect(results.violations.map((v) => `${v.id}: ${v.help}`)).toEqual([]);
+  });
+
+  it("B1: marks gr:shell-painted", async () => {
+    performance.clearMarks();
+    mount();
+    await waitFor(() => expect(performance.getEntriesByName("gr:shell-painted").length, "gr:shell-painted mark").toBeGreaterThan(0));
+  });
+});
