@@ -259,7 +259,7 @@ fn boot_world(engine: bool) -> World {
     std::fs::write(
         &post_commit,
         "#!/bin/sh\n[ -n \"$RAPTOR_HARNESS_RELEASE\" ] || exit 0\n\
-         i=0\nwhile [ ! -e \"$RAPTOR_HARNESS_RELEASE\" ] && [ $i -lt 2400 ]; do sleep 0.05; i=$((i+1)); done\n\
+         i=0\nwhile [ ! -e \"$RAPTOR_HARNESS_RELEASE\" ] && [ $i -lt 120 ]; do sleep 1; i=$((i+1)); done\n\
          exit 0\n",
     )
     .unwrap();
