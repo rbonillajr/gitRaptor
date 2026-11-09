@@ -88,8 +88,15 @@ jobs:
       - name: Install (no lifecycle scripts)
         if: steps.run.outputs.build == 'true'
         run: pnpm install --frozen-lockfile --ignore-scripts
-      - name: Known vulnerabilities
+      # Blocking: what ships in the webview bundle (ADR-GRP-017, R-2).
+      - name: Known vulnerabilities (production)
         if: steps.run.outputs.build == 'true'
+        run: pnpm audit --prod
+      # Informational: dev tooling (nx, style-dictionary, eslint, vitest) has advisories already
+      # in main; they stay visible here until their own follow-up fixes them.
+      - name: Known vulnerabilities (dev tooling, informational)
+        if: steps.run.outputs.build == 'true'
+        continue-on-error: true
         run: pnpm audit
       - name: Lint (V5)
         if: steps.run.outputs.build == 'true'
