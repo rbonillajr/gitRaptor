@@ -19,6 +19,8 @@ pub enum ToastKind {
     Info,
     Warning,
     Error,
+    /// A predicted conflict: the ⚡ symbol in the warning color.
+    Conflict,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -33,7 +35,8 @@ pub struct ToastStackModel {
     pub toasts: Vec<ToastModel>,
 }
 
-const MAX_WIDTH: u16 = 60;
+/// Wide enough for the longest conflict alert (symbol, text with " and N more", margins).
+const MAX_WIDTH: u16 = 72;
 
 impl ToastModel {
     fn look(&self) -> (SymbolToken, ColorToken) {
@@ -42,6 +45,7 @@ impl ToastModel {
             ToastKind::Info => (SymbolToken::Info, ColorToken::StatusInfo),
             ToastKind::Warning => (SymbolToken::Warning, ColorToken::StatusWarning),
             ToastKind::Error => (SymbolToken::Error, ColorToken::StatusDanger),
+            ToastKind::Conflict => (SymbolToken::Conflict, ColorToken::StatusWarning),
         }
     }
 
@@ -71,11 +75,12 @@ impl ToastModel {
             2 + width(a.keys.as_str()) + 1 + width(a.label.as_str())
         });
         let room = pen.remaining().saturating_sub(action);
-        pen.cell(
-            self.message.as_str(),
-            room,
-            styles.fg(ColorToken::TextDefault),
-        );
+        // A conflict alert is read in the warning color, as a whole: its spaces carry the style.
+        let text = match self.kind {
+            ToastKind::Conflict => accent,
+            _ => styles.fg(ColorToken::TextDefault),
+        };
+        pen.cell(self.message.as_str(), room, text);
         if let Some(a) = &self.action {
             pen.gap(2);
             a.paint(&mut pen, styles);

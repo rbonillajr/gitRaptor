@@ -1,5 +1,6 @@
 //! The Cockpit TUI (ADR-CKP-003): TEA loop, view, keys and terminal.
 
+pub mod alerts;
 pub mod app;
 pub mod engine_state;
 pub mod fleet_order;
@@ -12,12 +13,15 @@ pub mod metrics;
 pub mod prediction;
 pub mod style;
 pub mod term;
+pub mod toasts;
 pub mod update;
 pub mod view;
 pub mod widgets;
 
 pub use term::run;
 
+#[cfg(test)]
+mod conflict_toast_tests;
 #[cfg(test)]
 mod freshness_view_tests;
 #[cfg(test)]

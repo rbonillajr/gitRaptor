@@ -18,6 +18,7 @@ use crate::model::{
     ConnState, Head, LastCommit, Model, Notice, Pick, RepoView, Requester, SafeText, SessionRow,
     WorktreeRow, WorktreeState,
 };
+use crate::present::conflict_alert_text::ConflictAlertText;
 use crate::present::i18n::{Fetched, Lang, Legend, Text};
 use crate::present::prediction_text::PredictionText;
 use crate::tui::engine_state::{self, HeaderNotice};
@@ -25,6 +26,7 @@ use crate::tui::fleet_order::{self, Group, Shown};
 use crate::tui::help;
 use crate::tui::keymap::{Action, BINDINGS, Key};
 use crate::tui::style::{Glyphs, Styles, fill, follow, modal_area};
+use crate::tui::toasts::ToastBody;
 use crate::tui::widgets::Component;
 use crate::tui::widgets::agent_list::{
     AgentColumns, AgentListModel, AgentRowModel, AgentState, Branch, CommitLine, SessionLine,
@@ -32,6 +34,7 @@ use crate::tui::widgets::agent_list::{
 };
 use crate::tui::widgets::key_hints::{KeyHint, KeyHintsModel, LegendRow};
 use crate::tui::widgets::layout::{self, BodyPlan, Connection, StatusBarModel, TooSmallModel};
+use crate::tui::widgets::notification::{ToastKind, ToastModel, ToastStackModel};
 use crate::tui::widgets::observe_prompt::ObservePromptModel;
 use crate::tui::widgets::repo_picker::{RepoChoiceModel, RepoPickerModel};
 use crate::tui::widgets::themed;
@@ -154,8 +157,60 @@ pub fn view(model: &Model, frame: &mut Frame) {
         };
         frame.render_widget(themed(&panel, &styles), area);
     }
+    // Toasts sit in the list, above the alerts region: the limits line is never covered.
+    if fleet_shown(model)
+        && let Some(stack) = toast_stack(model, say)
+    {
+        // Inside the list's frame: the toast never paints over the border.
+        let inner = ratatui::widgets::Block::bordered().inner(regions.list);
+        let area = stack.area(inner, &styles);
+        frame.render_widget(themed(&stack, &styles), area);
+    }
     paint_help(model, say, &styles, frame, regions.header, regions.hints);
     frame.render_widget(themed(&hints, &styles), regions.hints);
+}
+
+/// The toasts of the new conflicts still alive, composed from the model with the names the
+/// panel uses. A toast whose pair is not in the publication anymore is not drawn.
+fn toast_stack(model: &Model, say: Say) -> Option<ToastStackModel> {
+    let repo = repo(model)?;
+    let prediction = repo.prediction.as_ref()?;
+    let toasts: Vec<ToastModel> = model
+        .ui
+        .toasts
+        .iter()
+        .filter_map(|t| {
+            let ToastBody::Conflict {
+                repo_id,
+                pair_id,
+                file,
+            } = &t.body;
+            let pair = prediction.pairs.iter().find(|p| p.pair_id == *pair_id)?;
+            if repo.repo_id != *repo_id {
+                return None;
+            }
+            let left = conflict_panel::side(model, repo, &pair.a, say).name;
+            let right = conflict_panel::side(model, repo, &pair.b, say).name;
+            let first = file
+                .then(|| prediction.details.get(pair_id))
+                .flatten()
+                .filter(|d| d.rev == pair.rev)
+                .and_then(|d| d.conflict.as_ref())
+                .and_then(|c| c.files.first());
+            let text = ConflictAlertText::Toast {
+                left: left.as_str(),
+                right: right.as_str(),
+                file: first.map(|f| f.path.as_str()),
+                more: pair.conflict_files.saturating_sub(1),
+            };
+            Some(ToastModel {
+                kind: ToastKind::Conflict,
+                message: conflict_panel::say_alert(say, text),
+                action: None,
+            })
+        })
+        .collect();
+    (!toasts.is_empty()).then_some(ToastStackModel { toasts })
 }
 
 /// Whether the body is the fleet: no engine state, question or picker takes its place.

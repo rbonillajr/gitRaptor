@@ -9,8 +9,8 @@ use std::sync::{Arc, Mutex};
 use gitraptor_api::Untrusted;
 use gitraptor_api::event::Event;
 use gitraptor_api::messages::{
-    BaseBranchView, BaseStatusView, RepoStateView, RepoView as ApiRepo, ResyncReason,
-    UnavailableReason, WorktreeStatus, WorktreeView,
+    BaseBranchView, BaseStatusView, ChangeCounts, CommitCountView, DivergenceView, HeadView,
+    RepoStateView, RepoView as ApiRepo, ResyncReason, WorktreeStatus, WorktreeView,
 };
 use gitraptor_api::methods::PREDICTION_CHANGED;
 use gitraptor_api::prediction::{
@@ -62,8 +62,31 @@ fn wt(i: usize) -> WorktreeView {
         path: Untrusted::new(root(i)),
         main: i == 0,
         admin_name: None,
-        status: WorktreeStatus::Unavailable {
-            reason: UnavailableReason::Missing,
+        // Ready, on a branch named like its folder, so the fleet rows carry the worktree name.
+        status: WorktreeStatus::Ready {
+            head: HeadView::Branch {
+                name: gitraptor_api::UntrustedName::new(if i == 0 {
+                    "main".to_owned()
+                } else {
+                    format!("claude-{i}")
+                }),
+            },
+            counts: ChangeCounts {
+                staged: 0,
+                unstaged: 0,
+                untracked: 0,
+            },
+            changes: Vec::new(),
+            divergence: DivergenceView::Counted {
+                ahead: CommitCountView {
+                    count: 0,
+                    exact: true,
+                },
+                behind: CommitCountView {
+                    count: 0,
+                    exact: true,
+                },
+            },
         },
     }
 }
@@ -464,7 +487,7 @@ fn s3_a_known_conflict_never_alerts_again_and_a_returning_one_does() {
     update(&mut m, snapshot(vec![bolt("p12", 11, 1, 2)]));
     update(&mut m, resync(ResyncReason::DaemonRestarted));
     update(&mut m, snapshot(vec![calculating("p12", 12, 1, 2)]));
-    update(&mut m, changed(seq, vec![bolt("p12", 13, 1, 2)], &[]));
+    update(&mut m, changed(2, vec![bolt("p12", 13, 1, 2)], &[]));
     for _ in 0..2 {
         t += 1_000;
         tick(&mut m, t);
@@ -475,8 +498,8 @@ fn s3_a_known_conflict_never_alerts_again_and_a_returning_one_does() {
         "a resync or a daemon restart repeated the alert"
     );
     // it disappears (clean) and returns: alerts; same through removed.
-    update(&mut m, changed(seq + 1, vec![clean("p12", 14, 1, 2)], &[]));
-    update(&mut m, changed(seq + 2, vec![bolt("p12", 15, 1, 2)], &[]));
+    update(&mut m, changed(3, vec![clean("p12", 14, 1, 2)], &[]));
+    update(&mut m, changed(4, vec![bolt("p12", 15, 1, 2)], &[]));
     for _ in 0..2 {
         t += 1_000;
         tick(&mut m, t);
@@ -488,8 +511,8 @@ fn s3_a_known_conflict_never_alerts_again_and_a_returning_one_does() {
     );
     t += 60_000;
     tick(&mut m, t);
-    update(&mut m, changed(seq + 3, vec![], &["p12"]));
-    update(&mut m, changed(seq + 4, vec![bolt("p12", 16, 1, 2)], &[]));
+    update(&mut m, changed(5, vec![], &["p12"]));
+    update(&mut m, changed(6, vec![bolt("p12", 16, 1, 2)], &[]));
     for _ in 0..2 {
         t += 1_000;
         tick(&mut m, t);

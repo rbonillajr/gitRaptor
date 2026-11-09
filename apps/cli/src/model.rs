@@ -59,6 +59,8 @@ impl Model {
                 show_ended: false,
                 colors: AgentColors::default(),
                 seen: std::collections::BTreeSet::new(),
+                alerts: crate::tui::alerts::ConflictAlerts::default(),
+                toasts: crate::tui::toasts::Toasts::default(),
             },
             conn: ConnState::Connecting,
             now_ms: 0,
@@ -105,6 +107,10 @@ pub struct Ui {
     pub show_ended: bool,
     /// Stable color slots of the present sessions.
     pub colors: AgentColors,
+    /// The predicted conflicts already known in this run, so only a new one is announced.
+    pub alerts: crate::tui::alerts::ConflictAlerts,
+    /// The toasts on screen.
+    pub toasts: crate::tui::toasts::Toasts,
 }
 
 /// The fewest rows with room for the discovery panel under the fleet.

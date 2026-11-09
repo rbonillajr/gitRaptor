@@ -14,7 +14,7 @@ use gitraptor_api::messages::{
     SessionView, SessionsListResult, WorktreeStateData,
 };
 use gitraptor_api::methods::PREDICTION_CHANGED;
-use gitraptor_api::prediction::PredictionChanged;
+use gitraptor_api::prediction::{PairDetail, PredictionChanged};
 use gitraptor_api::scope::{Scope, ScopeSnapshot};
 use ratatui::crossterm::event::KeyEventKind;
 
@@ -26,8 +26,10 @@ use crate::model::{
     Pick, Requester, ScopeReplica,
 };
 use crate::present::{SafeText, ingest};
+use crate::tui::alerts::{Batch, ConflictAlerts};
 use crate::tui::keymap::{self, Action};
-use crate::tui::prediction;
+use crate::tui::prediction::{self, PairRow, PredictionModel};
+use crate::tui::toasts::ToastBody;
 
 pub fn update(model: &mut Model, msg: Msg) -> Vec<Cmd> {
     match msg {
@@ -72,6 +74,9 @@ pub fn update(model: &mut Model, msg: Msg) -> Vec<Cmd> {
                 .and_then(|r| r.prediction.as_ref())
                 .is_some_and(|p| super::freshness::has_ages(&p.pairs))
             {
+                model.dirty = true;
+            }
+            if tick_alerts(model) {
                 model.dirty = true;
             }
             Vec::new()
@@ -351,7 +356,14 @@ fn on_conn(model: &mut Model, event: ConnEvent) -> Vec<Cmd> {
 fn on_engine(model: &mut Model, msg: EngineMsg) -> Vec<Cmd> {
     match msg {
         EngineMsg::Snapshot(snapshot) => {
+            let repo_id = match &*snapshot {
+                ScopeSnapshot::Repo(repo) => Some(repo.repo.repo_id.clone()),
+                ScopeSnapshot::Global(_) => None,
+            };
             on_snapshot(model, *snapshot);
+            if let Some(repo_id) = repo_id {
+                alert_snapshot(model, &repo_id);
+            }
             prediction::wanted(model)
         }
         EngineMsg::Event {
@@ -394,6 +406,14 @@ fn on_engine(model: &mut Model, msg: EngineMsg) -> Vec<Cmd> {
                 prediction.apply_page(&page);
                 model.dirty = true;
             }
+            if let Some(p) = (model.engine.repo.as_ref())
+                .and_then(|r| r.data.as_ref())
+                .filter(|d| d.repo_id == repo_id)
+                .and_then(|d| d.prediction.as_ref())
+            {
+                feed_alerts(&mut model.ui.alerts, &repo_id, p, Feed::Page(&page.pairs));
+            }
+            settle_alerts(model);
             prediction::wanted(model)
         }
         EngineMsg::Protection { repo_id, hooks } => {
@@ -479,6 +499,124 @@ fn on_snapshot(model: &mut Model, snapshot: ScopeSnapshot) {
     }
 }
 
+/// What the prediction model just ingested, for the set of known conflicts.
+enum Feed<'a> {
+    Page(&'a [PairDetail]),
+    Changed(&'a PredictionChanged),
+}
+
+/// Tells the alert set what was ingested and notes the new conflicts as waiting for their
+/// detail (the toast names the first file).
+fn feed_alerts(alerts: &mut ConflictAlerts, repo_id: &str, p: &PredictionModel, feed: Feed<'_>) {
+    let rows = |ids: Vec<&str>| -> Vec<PairRow> {
+        p.pairs
+            .iter()
+            .filter(|r| ids.contains(&r.pair_id.as_str()))
+            .cloned()
+            .collect()
+    };
+    let new = match feed {
+        Feed::Page(details) => {
+            let pairs = rows(details.iter().map(|d| d.summary.pair_id.as_str()).collect());
+            alerts.observe(Batch::Page {
+                repo_id,
+                pairs: &pairs,
+            })
+        }
+        Feed::Changed(changed) => {
+            // The model's rows, not the event's: a summary older than the kept one was ignored.
+            let pairs = rows(changed.pairs.iter().map(|d| d.pair_id.as_str()).collect());
+            alerts.observe(Batch::Changed {
+                repo_id,
+                pairs: &pairs,
+                removed: &changed.removed,
+            })
+        }
+    };
+    alerts.await_detail(repo_id, new);
+}
+
+fn alert_snapshot(model: &mut Model, repo_id: &str) {
+    let Some(data) = (model.engine.repo.as_ref())
+        .and_then(|r| r.data.as_ref())
+        .filter(|d| d.repo_id == repo_id)
+    else {
+        return;
+    };
+    let Some(p) = data.prediction.as_ref() else {
+        return;
+    };
+    let new = model.ui.alerts.observe(Batch::Snapshot {
+        repo_id,
+        pairs: &p.pairs,
+        complete: !p.truncated,
+    });
+    model.ui.alerts.await_detail(repo_id, new);
+    settle_alerts(model);
+}
+
+/// Shows the toast of every new conflict whose detail (the one of the summary's `rev`) is here.
+fn settle_alerts(model: &mut Model) {
+    let Some(data) = model.engine.repo.as_ref().and_then(|r| r.data.as_ref()) else {
+        return;
+    };
+    let Some(p) = data.prediction.as_ref() else {
+        return;
+    };
+    let ready = model.ui.alerts.ready(&data.repo_id, |id| {
+        let row = p.pairs.iter().find(|r| r.pair_id == id);
+        row.zip(p.details.get(id))
+            .is_some_and(|(r, d)| d.rev == r.rev)
+    });
+    for pair_id in ready {
+        model.ui.toasts.push(
+            ToastBody::Conflict {
+                repo_id: data.repo_id.clone(),
+                pair_id,
+                file: true,
+            },
+            model.now_ms,
+        );
+    }
+    if model.ui.toasts.iter().next().is_some() {
+        model.dirty = true;
+    }
+}
+
+/// The clock moved: conflicts that waited two ticks for their detail go out without a file,
+/// and the toasts expire or go with their pair. Returns whether the stack changed.
+fn tick_alerts(model: &mut Model) -> bool {
+    settle_alerts(model);
+    let now = model.now_ms;
+    let mut changed = false;
+    for (repo_id, pair_id) in model.ui.alerts.tick_pending() {
+        model.ui.toasts.push(
+            ToastBody::Conflict {
+                repo_id,
+                pair_id,
+                file: false,
+            },
+            now,
+        );
+        changed = true;
+    }
+    let data = model.engine.repo.as_ref().and_then(|r| r.data.as_ref());
+    let alerts = &model.ui.alerts;
+    let alive = |body: &ToastBody| match body {
+        ToastBody::Conflict {
+            repo_id, pair_id, ..
+        } => {
+            data.is_some_and(|d| {
+                d.repo_id == *repo_id
+                    && d.prediction
+                        .as_ref()
+                        .is_some_and(|p| p.pairs.iter().any(|r| r.pair_id == *pair_id))
+            }) && alerts.is_new(repo_id, pair_id)
+        }
+    };
+    model.ui.toasts.tick(now, alive) || changed
+}
+
 fn synced<T>(replica: &mut ScopeReplica<T>, run_id: &str, seq: u64) {
     replica.track.reset(run_id, seq);
     replica.stale = false;
@@ -504,6 +642,7 @@ fn on_event(
         Verdict::Gap => start_resync(model, scope.clone(), false),
         Verdict::Apply => {
             apply(model, scope, event);
+            settle_alerts(model);
             prediction::wanted(model)
         }
     }
@@ -586,6 +725,12 @@ fn apply(model: &mut Model, scope: &Scope, event: &gitraptor_api::Event) {
                 && let Some(prediction) = data.prediction.as_mut()
             {
                 prediction.apply_changed(&changed.pairs, &changed.removed);
+                feed_alerts(
+                    &mut model.ui.alerts,
+                    &changed.repo_id,
+                    prediction,
+                    Feed::Changed(&changed),
+                );
             } else if event.kind == GIT_EVENT
                 && let Ok(view) = serde_json::from_value::<GitEventView>(event.data.clone())
                 && view.repo_id == data.repo_id
@@ -602,6 +747,7 @@ fn on_resync(model: &mut Model, scope: Scope, reason: ResyncReason) -> Vec<Cmd> 
     if reason == ResyncReason::ScopeClosed
         && let Scope::Repo { repo_id } = &scope
     {
+        model.ui.alerts.forget(repo_id);
         // The repo is no longer observed: its subscription ended.
         if selected(model, repo_id).is_some() {
             model.engine.repo = None;

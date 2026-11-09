@@ -1,0 +1,28 @@
+---
+source: apps/cli/src/tui/conflict_toast_tests.rs
+expression: text
+---
+ shop · ✔ en vivo · motor – · –                                      ⚡ –  ⛔ –
+┏━ › Flota · ↑↓ respecto a main (copia local, antigüedad no disponible) ━━━━━━━┓
+┃     Agente                Rama         Arch. ↑↓          Actividad           ┃
+┃  ⚠  agente no disponible  no disponible: falta la carpeta                    ┃
+┃  ⚠  agente no disponible  no disponible: falta la carpeta              ⚡    ┃
+┃  ⚠  agente no disponible  no disponible: falta la carpeta              ⚡    ┃
+┃  ⚠  agente no disponible  no disponible: falta la carpeta                    ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                  │ ⚡ Conflicto previsto: claude-1 ↔ claude-2 en src/api.rs  ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+┌─ ⚡ Conflictos previstos ────────────────────────────────────────────────────┐
+│ ⚡ [nuevo] claude-1 ↔ claude-2  hace 0 s                                     │
+│  • src/api.rs 12–18 ↔ 14–20                                                  │
+│ ⚠ con lo sin commitear · ⚡ solo commits · sin drivers ni .gitattributes     │
+└──────────────────────────────────────────────────────────────────────────────┘
+ q salir  r reintentar   ⚠  aviso: el texto de al lado dice por qué     ? ayuda
