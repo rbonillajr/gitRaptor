@@ -45,3 +45,8 @@ El coordinador aprobó (2026-11-09) no tener botón "Arrancar motor" **mientras 
 - **A3 · Fixture dorada.** `tests/fixtures/engine-messages.json` la escribe el tester dentro del criterio `D3-CACHE` (la lee `engine-cache.test.ts`, que nace en rojo). `tests/engine_wire.rs` (el generador/comparador de Rust) lo escribe el experto en T006: con tipos de `wire.rs` reales nacería en verde, así que no es criterio.
 - **A4 · Un solo `cargo test` por comando.** Cada criterio de Rust construye `apps/desktop/dist` antes (`pnpm -C apps/desktop run build`), como `IPC1` de TS-DSK-001.
 - **A5 · Primera compilación.** El `target/` de este worktree se limpió: la primera compilación de `gitraptor-desktop` es desde cero.
+
+## Ronda 2 del crítico (2026-11-09): aprobable
+
+- **PC-11** · el tope de 5 s lo prueba el test unitario `backoff_doubles_from_250_ms_and_caps_at_5_s` (`src/engine/supervisor.rs`), que ya es verde y corre en la suite; `D3-LOST` solo exige la espera creciente observable.
+- **PC-12** · supuesto: ningún fichero de `src/` fuera de `engine/link.rs` nombra `SocketConnector`, ni en comentarios (lo busca `D3-WIRING` como texto literal).
