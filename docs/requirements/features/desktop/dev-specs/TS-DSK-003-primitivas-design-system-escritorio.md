@@ -2,7 +2,7 @@
 id: DS-TS-DSK-003
 title: "Dev Spec — Primitivas del design system de la app de escritorio y catálogo de desarrollo"
 type: dev-spec
-status: spec-ready
+status: implemented
 created: 2026-11-09
 updated: 2026-11-09
 story: TS-DSK-003

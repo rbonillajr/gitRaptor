@@ -4,26 +4,26 @@
 
 > **Archivo generado, no editar a mano.** Sale del frontmatter (`status`) y de la sección "Estado de la implementación" de cada ficha (US, TS, INF, SPIKE y TD) de `docs/requirements/features/`. Para cambiar un estado, edita la ficha y regenera con `node tools/status/release-status.mjs`. El CI (docs-lint) falla si este archivo no coincide con lo que genera el script.
 
-Última actualización de una ficha: 2026-11-08.
+Última actualización de una ficha: 2026-11-09.
 
 ## Totales por estado
 
 | Estado | Fichas |
 |---|---|
-| Implementado (`implemented`) | 63 |
+| Implementado (`implemented`) | 64 |
 | Hecho (`done`) | 3 |
 | Implementado en parte (`partially-implemented`) | 28 |
 | Listo (`ready`) | 28 |
 | Borrador (`draft`) | 58 |
 | Bloqueado (`blocked`) | 1 |
-| **Total** | **181** |
+| **Total** | **182** |
 
 ## Por feature
 
 | Feature | Implementado | Hecho | Implementado en parte | Listo | Borrador | Bloqueado | Total |
 |---|---|---|---|---|---|---|---|
 | [cockpit](#cockpit) | 9 | 0 | 6 | 2 | 21 | 1 | 39 |
-| [desktop](#desktop) | 1 | 0 | 0 | 21 | 0 | 0 | 22 |
+| [desktop](#desktop) | 2 | 0 | 0 | 21 | 0 | 0 | 23 |
 | [guardrails](#guardrails) | 14 | 0 | 7 | 1 | 3 | 0 | 25 |
 | [mcp](#mcp) | 7 | 0 | 4 | 0 | 9 | 0 | 20 |
 | [motor-local](#motor-local) | 17 | 2 | 9 | 3 | 12 | 0 | 43 |
@@ -77,11 +77,12 @@
 
 ### desktop
 
-22 fichas: 1 implementado, 21 listo.
+23 fichas: 2 implementado, 21 listo.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
 | [TS-DSK-001](features/desktop/technical-stories/TS-DSK-001-andamiaje-app-escritorio.md) | Andamiaje de apps/desktop: proyecto Tauri del monorepo, frontera de seguridad y ventana B1 vacía | Implementado (`implemented`) | — | — |
+| [TS-DSK-003](features/desktop/technical-stories/TS-DSK-003-primitivas-design-system-escritorio.md) | Primitivas del design system de la app de escritorio y catálogo de desarrollo | Implementado (`implemented`) | — | — |
 | [SPIKE-DSK-001](features/desktop/technical-stories/SPIKE-DSK-001-identidad-firmada-app.md) | Verificar en el daemon la firma de la app de escritorio desde su audit token sin romper unsafe_code = forbid | Listo (`ready`) | — | — |
 | [SPIKE-DSK-002](features/desktop/technical-stories/SPIKE-DSK-002-lanzamiento-por-agente.md) | Detectar que un agente lanzó la app de escritorio con open -a (evento oapp y keySenderPIDAttr) | Listo (`ready`) | — | — |
 | [TS-DSK-002](features/desktop/technical-stories/TS-DSK-002-arranque-motor-binarios-bundle.md) | Arranque del motor desde la app y binarios del motor dentro del bundle | Listo (`ready`) | — | — |
@@ -441,7 +442,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### Sin hito
 
-33 fichas sin hito asignado.
+34 fichas sin hito asignado.
 
 ## Implementadas en parte: lo que falta
 
