@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-11-08
 date: 2026-10-28
 created: 2026-10-28
-updated: 2026-11-08
+updated: 2026-11-09
 deciders: [Rene Bonilla, Orquestador (autonomía delegada por Rene Bonilla), Arquitecto, security-expert]
 domain: GRP
 feature: desktop
@@ -16,6 +16,7 @@ changelog:
   - 2026-10-28: creado (D7, app de escritorio en el MVP). Decisión del orquestador (2026-10-28), validada por Arquitecto.
   - 2026-10-28: revisión del security-expert ("aprobar con cambios"). Hallazgos A-1 a A-3, M-1 a M-3 y B-1 a B-3 aplicados. Decisión del orquestador (2026-10-28), validada por Arquitecto y security-expert.
   - 2026-11-08: aceptado. Decisiones de Rene sobre Q-DSK-12, Q-DSK-14 y Q-DSK-16 a Q-DSK-19 recogidas; enmiendas de ADR-GRP-005, ADR-CKP-002, ADR-MCP-001, ADR-GRP-014 y ADR-GRD-008 aplicadas. Decisión del orquestador (2026-11-08), decidida por Rene.
+  - 2026-11-09: enmienda US-DSK-007 (G7 de DS-US-DSK-007). § 5 precisa la ruta de reserva del `raptor` del bundle y el descarte de un `raptor` dentro de un repo o worktree observado (L-02); nuevo riesgo R-5b (portapapeles reescrito, M-01); `guard_blocks` como único comando IPC nuevo, de solo lectura. Solo añade; no cambia decisiones aceptadas. Decisión del orquestador (2026-11-09), validada por Arquitecto.
 ---
 
 # ADR-GRP-017 — App de escritorio como cliente del daemon
@@ -138,7 +139,8 @@ El módulo de presencia de ADR-GRD-008 § 6 aún no existe en el código; lo gat
 
 - **La app solo lee.** Cada acción de escritura se muestra con su explicación y con el **comando de terminal equivalente**, con la ruta absoluta del `raptor` que sirve al daemon y un botón "Copiar". La app nunca ejecuta ese comando. Copiar usa el portapapeles del webview, sin plugin.
 - **Forma del comando copiable** (M-1): cada argumento va entre comillas simples POSIX, con `'` escapada como `'\''`. Si algún argumento contiene caracteres de las categorías de SEC-12 (C0, DEL, C1, bidi, anchura cero), el comando **no se ofrece** y la app explica por qué.
-- **Bloqueo de Guardrails**: se explica igual que en la TUI. La excepción consciente se ofrece como `raptor guard exec -- git …`, que pasa por los controles de la terminal.
+- **Qué `raptor` nombra el comando** (Enmienda 2026-11-09, US-DSK-007; implementado en `shell_command::raptor_path` por US-DSK-008): el ejecutable que sirve al daemon según el último informe `ready` de `raptor daemon ensure`, canonicalizado y aceptado como `raptor` instalado. Se descarta si no se puede canonicalizar o si cuelga de un repo o worktree observado (un directorio común `<repo>/.git` cuenta también por su worktree principal), porque un agente puede escribir ahí (L-02). Sin ese ejecutable, el `raptor` del bundle de la app (`launcher::bundled_raptor`), que habla con el mismo daemon por el perfil. Si tampoco lo hay, el comando no se ofrece. Nunca `PATH`.
+- **Bloqueo de Guardrails**: se explica igual que en la TUI. La excepción consciente se ofrece como `raptor guard exec -- git …`, que pasa por los controles de la terminal. El comando copiable **nunca lleva `--yes`**: la terminal enseña el plan normalizado y pregunta antes de anunciar la excepción (R-5b).
 - **Windows y Linux**: la app de Windows depende de Windows Hello (TS-GRP-007) y la de Linux, de polkit. Hasta entonces, solo lectura. **Pendiente: etapa de validación multiplataforma**.
 
 ### 6. Empaquetado, arranque del daemon y firma
@@ -196,6 +198,7 @@ El módulo de presencia de ADR-GRD-008 § 6 aún no existe en el código; lo gat
 | R-3 | Sin firma (alphas), un proceso del usuario reemplaza el binario de la app | Acotado (A-1): con identidad por ruta no hay presencia de sesión. El factor por acción muestra en el diálogo del SO el texto armado por el daemon |
 | R-4 | El humano aprueba por costumbre un diálogo que provocó un agente | Mitigado: el texto lo arma el daemon con el plan; el código de correlación coincide con el de la app; el texto de la sesión dice "si no abriste tú la app, cancela"; ADR-GRD-008 limita la fatiga |
 | R-5 | Un agente con Accesibilidad lee la ventana (`AXValue`) | Aceptado, riesgo bajo (M-2): solo lectura. `sharingType = .none` corta las capturas de pantalla |
+| R-5b | Un agente reescribe el portapapeles (`pbcopy`) entre "Copiar" y pegar, y el humano pega otra excepción (M-01 de la revisión de DS-US-DSK-007) | Mitigado sin leer el portapapeles (Enmienda 2026-11-09): el comando copiable nunca lleva `--yes`, así que la terminal enseña el plan normalizado y pregunta antes de anunciar; el paso de la app lo advierte (`grd.exc.review`: si aparece `--yes` o una operación distinta, cancélala); si llega una excepción anunciada cuya operación o reglas no son las de la fila copiada, la app muestra `grd.exc.mismatch` con el comando de cancelar (D12 de DS-US-DSK-007). La comparación usa lo que la app recuerda haber copiado, nunca el contenido del portapapeles |
 | R-6 | Con identidad por ruta, un agente deja un binario homónimo en `~/Applications` (escribible por el usuario) y lo lanza con `open -a`: obtiene la lectura completa de la app | Aceptado solo para las alphas sin firma: solo lectura, y escribir sigue pidiendo el factor por acción. En v0.1.0 el daemon fija el cdhash o el requisito de firma del ejecutable de la app de su misma versión (§ 3) |
 
 ## Validación (funciones de fitness)
@@ -266,6 +269,17 @@ El architecture-advisor aprobó con cambios las enmiendas del 2026-11-08. **Deci
 | C4 | V4 añade "identidad por ruta + factor por acción dan `cockpit` solo para ese plan" y "push con sesión vigente pide el factor"; la Validación 16 de ADR-CKP-002 exige clase `desktop` y factor | V4; ADR-CKP-002, Validación 16 |
 | C6 | Hueco de lectura con identidad por ruta (`~/Applications` escribible + `open -a`) | § 3, R-6; ADR-MCP-001, Enmienda 2026-11-08 |
 | C7 | Un solo tap, `rbonillajr/homebrew-tap`, con la fórmula `gitraptor` y el cask `gitraptor-app` | § 6; ADR-GRP-014 § 5 y Enmienda 2026-11-08 |
+
+## Enmienda (2026-11-09, US-DSK-007)
+
+Cierra el hueco G7 de [DS-US-DSK-007](../../requirements/features/desktop/dev-specs/US-DSK-007-bloqueo-explicado.md) (D6, D9, D10, D12; M-01 y L-02 de security-expert). Solo añade: ninguna decisión aceptada cambia. **Decisión del orquestador (2026-11-09), validada por Arquitecto.**
+
+| Cambio | Dónde queda |
+|---|---|
+| Ruta de reserva del `raptor` del bundle y descarte de un `raptor` que cuelga de un repo o worktree observado (L-02), como ya implementa `shell_command::raptor_path` (US-DSK-008) | § 5 |
+| El comando de excepción copiable nunca lleva `--yes` | § 5 |
+| Riesgo R-5b (portapapeles reescrito entre "Copiar" y pegar) con su mitigación: D12 (`grd.exc.mismatch`), `grd.exc.review`, sin `--yes`, plan y pregunta en la terminal; la app escribe el portapapeles y nunca lo lee (D10) | Riesgos residuales |
+| `guard_blocks` es el único comando IPC nuevo de US-DSK-007 y es de **solo lectura** (`guard.status` + `guard.log` del daemon). No añade escritura, permiso ni plugin, y V1 a V7 no cambian | § 1, § 2 (sin cambios) |
 
 ## Revisión de seguridad (2026-10-28)
 
