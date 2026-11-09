@@ -2,10 +2,10 @@
 id: US-CKP-008
 title: "El desarrollador se entera en la TUI cuando aparece un conflicto previsto nuevo"
 type: us
-status: draft
+status: implemented
 priority: medium
 created: 2026-10-04
-updated: 2026-10-27
+updated: 2026-11-09
 feature: cockpit
 related:
   context:
@@ -75,3 +75,11 @@ Resumen de la [Dev Spec DS-US-CKP-008](../dev-specs/US-CKP-008-alerta-conflicto-
 
 - **Diseño:** DSYS-GRP-001 (ConflictAlert y aviso efímero).
 - **Dev Spec:** [DS-US-CKP-008](../dev-specs/US-CKP-008-alerta-conflicto-nuevo.md).
+
+## Estado de la implementación (2026-11-09)
+
+Implementado en: PR #340 ([DS-US-CKP-008](../dev-specs/US-CKP-008-alerta-conflicto-nuevo.md)).
+
+Verificado en macOS con pruebas de pantalla por la API pública (`apps/cli/tests/tui_conflict_alert.rs`, S1 a S7) y snapshots sin color y en ASCII, en en/es: aviso de 5 s con la marca "nuevo" que sigue en el panel, sin repetir por recalcular, base movida, resync ni reinicio del daemon, y sin campana ni notificación del SO. G2 (orden de la flota por atención) lo cubrió el PR #284: la fila con ⚡ sube a la zona de atención. Queda para el backlog quitar la marca al revisarla.
+
+Linux y Windows: *Pendiente: etapa de validación multiplataforma* (XP-21; [`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).

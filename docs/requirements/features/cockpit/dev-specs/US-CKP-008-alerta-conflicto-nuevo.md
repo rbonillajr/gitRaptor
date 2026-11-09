@@ -2,7 +2,7 @@
 id: DS-US-CKP-008
 title: "Dev Spec — US-CKP-008: la TUI avisa cuando aparece un conflicto previsto nuevo"
 type: dev-spec
-status: draft
+status: implemented
 created: 2026-10-27
 updated: 2026-11-09
 story: US-CKP-008
@@ -415,3 +415,5 @@ Repo `shop` con los worktrees `claude-1` y `claude-2` y la base `main`, como mod
 | N1 | Una TUI abierta mientras el predictor calcula sus primeros resultados verá avisos de los ⚡ que vayan saliendo: la siembra cubre lo que ya era ⚡ en la instantánea, no lo que estaba en `calculating`. Así lo pide A5 ("un `pair_id` que pasa a ⚡ `current`") | Ninguna | — |
 | N2 | `zbus` y `dbus` están en la lista prohibida porque `notify-rust` los usa en Linux. Si un día otra dependencia legítima los trae, el test se ajusta con un ADR | Ninguna | — |
 | N3 | Solo se verificará en macOS. Linux y Windows siguen la etapa de validación multiplataforma | Etapa de validación | Rene |
+
+Implementado en: PR #340 (2026-11-09).
