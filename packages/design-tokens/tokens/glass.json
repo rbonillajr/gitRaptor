@@ -46,6 +46,15 @@
           }
         }
       },
+      "scrim": {
+        "$value": "rgba(0, 0, 0, 0.55)",
+        "$type": "color",
+        "$extensions": {
+          "dev.gitraptor": {
+            "light": "rgba(20, 24, 32, 0.35)"
+          }
+        }
+      },
       "wall": {
         "$value": "radial-gradient(1100px 620px at 8% 4%, rgba(92, 150, 190, 0.55), transparent 62%), radial-gradient(900px 700px at 100% 100%, rgba(140, 186, 214, 0.42), transparent 60%), #1a222b",
         "$extensions": {
@@ -146,6 +155,15 @@
         "$extensions": {
           "dev.gitraptor": {
             "light": "#2762ce"
+          }
+        }
+      },
+      "hover": {
+        "$value": "#a3c4ff",
+        "$type": "color",
+        "$extensions": {
+          "dev.gitraptor": {
+            "light": "#1f5bc4"
           }
         }
       },
@@ -271,6 +289,15 @@
         "$extensions": {
           "dev.gitraptor": {
             "light": "#975a05"
+          }
+        }
+      },
+      "bg": {
+        "$value": "rgba(245, 165, 36, 0.14)",
+        "$type": "color",
+        "$extensions": {
+          "dev.gitraptor": {
+            "light": "rgba(194, 116, 6, 0.06)"
           }
         }
       }
@@ -497,6 +524,14 @@
       "target-action": {
         "$value": "32px",
         "$type": "dimension"
+      },
+      "ring": {
+        "$value": "2px",
+        "$type": "dimension"
+      },
+      "dialogWidth": {
+        "$value": "480px",
+        "$type": "dimension"
       }
     },
     "font": {
@@ -533,6 +568,36 @@
     "motion": {
       "fast": {
         "$value": "150ms ease"
+      }
+    },
+    "z": {
+      "sticky": {
+        "$value": 10,
+        "$type": "number"
+      },
+      "drawer": {
+        "$value": 20,
+        "$type": "number"
+      },
+      "popover": {
+        "$value": 40,
+        "$type": "number"
+      },
+      "scrim": {
+        "$value": 50,
+        "$type": "number"
+      },
+      "dialog": {
+        "$value": 51,
+        "$type": "number"
+      },
+      "toast": {
+        "$value": 60,
+        "$type": "number"
+      },
+      "tooltip": {
+        "$value": 70,
+        "$type": "number"
       }
     }
   }

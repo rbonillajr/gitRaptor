@@ -7,6 +7,7 @@
   --gr-surface-control: #383b41;
   --gr-surface-raised: #3f4249;
   --gr-surface-hover: #464a52;
+  --gr-surface-scrim: rgba(0, 0, 0, 0.55);
   --gr-surface-wall: radial-gradient(1100px 620px at 8% 4%, rgba(92, 150, 190, 0.55), transparent 62%), radial-gradient(900px 700px at 100% 100%, rgba(140, 186, 214, 0.42), transparent 60%), #1a222b;
   --gr-border-subtle: rgba(255, 255, 255, 0.07);
   --gr-border-strong: rgba(255, 255, 255, 0.13);
@@ -18,6 +19,7 @@
   --gr-text-on-accent: #0b1f1c;
   --gr-accent: #8ab4ff;
   --gr-accent-text: #93baff;
+  --gr-accent-hover: #a3c4ff;
   --gr-accent-glow: rgba(138, 180, 255, 0.14);
   --gr-accent-border: rgba(138, 180, 255, 0.4);
   --gr-success: #5fd68e;
@@ -31,6 +33,7 @@
   --gr-danger-bg: rgba(255, 138, 148, 0.14);
   --gr-live: #f5a524;
   --gr-live-text: #f6aa2f;
+  --gr-live-bg: rgba(245, 165, 36, 0.14);
   --gr-agent-claude: #e8775a;
   --gr-agent-claude-text: #f0a794;
   --gr-lane-1: #e69f00;
@@ -70,6 +73,8 @@
   --gr-size-lane-stroke: 1.5px;
   --gr-size-target-min: 24px;
   --gr-size-target-action: 32px;
+  --gr-size-ring: 2px;
+  --gr-size-dialog-width: 480px;
   --gr-font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
   --gr-font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
   --gr-type-title: 600 17px/1.4 var(--gr-font-ui);
@@ -80,6 +85,13 @@
   --gr-type-caption: 500 11.5px/1.4 var(--gr-font-ui);
   --gr-type-mono: 400 12px/1.4 var(--gr-font-mono);
   --gr-motion-fast: 150ms ease;
+  --gr-z-sticky: 10;
+  --gr-z-drawer: 20;
+  --gr-z-popover: 40;
+  --gr-z-scrim: 50;
+  --gr-z-dialog: 51;
+  --gr-z-toast: 60;
+  --gr-z-tooltip: 70;
 }
 
 :root[data-theme="light"] {
@@ -89,6 +101,7 @@
   --gr-surface-control: #ffffff;
   --gr-surface-raised: #f6f7f9;
   --gr-surface-hover: #e9ebef;
+  --gr-surface-scrim: rgba(20, 24, 32, 0.35);
   --gr-surface-wall: radial-gradient(1100px 620px at 8% 4%, rgba(120, 175, 210, 0.55), transparent 62%), radial-gradient(900px 700px at 100% 100%, rgba(236, 222, 200, 0.7), transparent 60%), #c9dbe6;
   --gr-border-subtle: rgba(20, 24, 32, 0.07);
   --gr-border-strong: rgba(20, 24, 32, 0.13);
@@ -100,6 +113,7 @@
   --gr-text-on-accent: #ffffff;
   --gr-accent: #2a6be0;
   --gr-accent-text: #2762ce;
+  --gr-accent-hover: #1f5bc4;
   --gr-accent-glow: rgba(42, 107, 224, 0.1);
   --gr-accent-border: rgba(42, 107, 224, 0.35);
   --gr-success: #1d9a52;
@@ -113,6 +127,7 @@
   --gr-danger-bg: rgba(207, 58, 76, 0.1);
   --gr-live: #c27406;
   --gr-live-text: #975a05;
+  --gr-live-bg: rgba(194, 116, 6, 0.06);
   --gr-agent-claude: #c9583b;
   --gr-agent-claude-text: #ab4b32;
   --gr-lane-1: #a35f00;
@@ -134,6 +149,7 @@
     --gr-surface-control: #ffffff;
     --gr-surface-raised: #f6f7f9;
     --gr-surface-hover: #e9ebef;
+    --gr-surface-scrim: rgba(20, 24, 32, 0.35);
     --gr-surface-wall: radial-gradient(1100px 620px at 8% 4%, rgba(120, 175, 210, 0.55), transparent 62%), radial-gradient(900px 700px at 100% 100%, rgba(236, 222, 200, 0.7), transparent 60%), #c9dbe6;
     --gr-border-subtle: rgba(20, 24, 32, 0.07);
     --gr-border-strong: rgba(20, 24, 32, 0.13);
@@ -145,6 +161,7 @@
     --gr-text-on-accent: #ffffff;
     --gr-accent: #2a6be0;
     --gr-accent-text: #2762ce;
+    --gr-accent-hover: #1f5bc4;
     --gr-accent-glow: rgba(42, 107, 224, 0.1);
     --gr-accent-border: rgba(42, 107, 224, 0.35);
     --gr-success: #1d9a52;
@@ -158,6 +175,7 @@
     --gr-danger-bg: rgba(207, 58, 76, 0.1);
     --gr-live: #c27406;
     --gr-live-text: #975a05;
+    --gr-live-bg: rgba(194, 116, 6, 0.06);
     --gr-agent-claude: #c9583b;
     --gr-agent-claude-text: #ab4b32;
     --gr-lane-1: #a35f00;
@@ -170,4 +188,116 @@
     --gr-lane-base: #8250df;
     --gr-shadow-popover: 0 18px 40px rgba(20, 24, 32, 0.18), 0 0 0 1px var(--gr-border-strong);
   }
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --gr-surface-window: #26282d;
+  --gr-surface-panel: #2f3237;
+  --gr-surface-control: #383b41;
+  --gr-surface-raised: #3f4249;
+  --gr-surface-hover: #464a52;
+  --gr-surface-scrim: rgba(0, 0, 0, 0.55);
+  --gr-surface-wall: radial-gradient(1100px 620px at 8% 4%, rgba(92, 150, 190, 0.55), transparent 62%), radial-gradient(900px 700px at 100% 100%, rgba(140, 186, 214, 0.42), transparent 60%), #1a222b;
+  --gr-border-subtle: rgba(255, 255, 255, 0.07);
+  --gr-border-strong: rgba(255, 255, 255, 0.13);
+  --gr-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --gr-text-main: #eceef2;
+  --gr-text-muted: #b5b9c2;
+  --gr-text-faint: #a0a5ad;
+  --gr-text-disabled: #767c88;
+  --gr-text-on-accent: #0b1f1c;
+  --gr-accent: #8ab4ff;
+  --gr-accent-text: #93baff;
+  --gr-accent-hover: #a3c4ff;
+  --gr-accent-glow: rgba(138, 180, 255, 0.14);
+  --gr-accent-border: rgba(138, 180, 255, 0.4);
+  --gr-success: #5fd68e;
+  --gr-success-text: #5fd68e;
+  --gr-success-bg: rgba(95, 214, 142, 0.14);
+  --gr-warning: #f5a524;
+  --gr-warning-text: #f6aa2f;
+  --gr-warning-bg: rgba(245, 165, 36, 0.14);
+  --gr-danger: #ff8a94;
+  --gr-danger-text: #ff9ea6;
+  --gr-danger-bg: rgba(255, 138, 148, 0.14);
+  --gr-live: #f5a524;
+  --gr-live-text: #f6aa2f;
+  --gr-live-bg: rgba(245, 165, 36, 0.14);
+  --gr-agent-claude: #e8775a;
+  --gr-agent-claude-text: #f0a794;
+  --gr-lane-1: #e69f00;
+  --gr-lane-2: #56b4e9;
+  --gr-lane-3: #009e73;
+  --gr-lane-4: #f0e442;
+  --gr-lane-5: #4fa3e0;
+  --gr-lane-6: #d55e00;
+  --gr-lane-7: #cc79a7;
+  --gr-lane-base: #bc8cff;
+  --gr-shadow-window: 0 40px 90px -30px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--gr-border-strong), var(--gr-highlight);
+  --gr-shadow-panel: var(--gr-highlight);
+  --gr-shadow-popover: 0 18px 40px rgba(0, 0, 0, 0.45), 0 0 0 1px var(--gr-border-strong);
+  --gr-type-title: 600 17px/1.4 var(--gr-font-ui);
+  --gr-type-body-strong: 500 13.5px/1.4 var(--gr-font-ui);
+  --gr-type-body: 400 13px/1.4 var(--gr-font-ui);
+  --gr-type-secondary: 400 12.5px/1.4 var(--gr-font-ui);
+  --gr-type-meta: 400 12px/1.4 var(--gr-font-ui);
+  --gr-type-caption: 500 11.5px/1.4 var(--gr-font-ui);
+  --gr-type-mono: 400 12px/1.4 var(--gr-font-mono);
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+  --gr-surface-window: #e6e8ec;
+  --gr-surface-panel: #f2f3f5;
+  --gr-surface-control: #ffffff;
+  --gr-surface-raised: #f6f7f9;
+  --gr-surface-hover: #e9ebef;
+  --gr-surface-scrim: rgba(20, 24, 32, 0.35);
+  --gr-surface-wall: radial-gradient(1100px 620px at 8% 4%, rgba(120, 175, 210, 0.55), transparent 62%), radial-gradient(900px 700px at 100% 100%, rgba(236, 222, 200, 0.7), transparent 60%), #c9dbe6;
+  --gr-border-subtle: rgba(20, 24, 32, 0.07);
+  --gr-border-strong: rgba(20, 24, 32, 0.13);
+  --gr-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  --gr-text-main: #1c1f25;
+  --gr-text-muted: #5a606b;
+  --gr-text-faint: #63686f;
+  --gr-text-disabled: #8a909a;
+  --gr-text-on-accent: #ffffff;
+  --gr-accent: #2a6be0;
+  --gr-accent-text: #2762ce;
+  --gr-accent-hover: #1f5bc4;
+  --gr-accent-glow: rgba(42, 107, 224, 0.1);
+  --gr-accent-border: rgba(42, 107, 224, 0.35);
+  --gr-success: #1d9a52;
+  --gr-success-text: #177840;
+  --gr-success-bg: rgba(29, 154, 82, 0.1);
+  --gr-warning: #b8700a;
+  --gr-warning-text: #955b08;
+  --gr-warning-bg: rgba(184, 112, 10, 0.1);
+  --gr-danger: #cf3a4c;
+  --gr-danger-text: #be3546;
+  --gr-danger-bg: rgba(207, 58, 76, 0.1);
+  --gr-live: #c27406;
+  --gr-live-text: #975a05;
+  --gr-live-bg: rgba(194, 116, 6, 0.06);
+  --gr-agent-claude: #c9583b;
+  --gr-agent-claude-text: #ab4b32;
+  --gr-lane-1: #a35f00;
+  --gr-lane-2: #1f6fa8;
+  --gr-lane-3: #00704f;
+  --gr-lane-4: #7a7200;
+  --gr-lane-5: #0b4f8a;
+  --gr-lane-6: #b83a00;
+  --gr-lane-7: #a8457f;
+  --gr-lane-base: #8250df;
+  --gr-shadow-window: 0 40px 90px -30px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--gr-border-strong), var(--gr-highlight);
+  --gr-shadow-panel: var(--gr-highlight);
+  --gr-shadow-popover: 0 18px 40px rgba(20, 24, 32, 0.18), 0 0 0 1px var(--gr-border-strong);
+  --gr-type-title: 600 17px/1.4 var(--gr-font-ui);
+  --gr-type-body-strong: 500 13.5px/1.4 var(--gr-font-ui);
+  --gr-type-body: 400 13px/1.4 var(--gr-font-ui);
+  --gr-type-secondary: 400 12.5px/1.4 var(--gr-font-ui);
+  --gr-type-meta: 400 12px/1.4 var(--gr-font-ui);
+  --gr-type-caption: 500 11.5px/1.4 var(--gr-font-ui);
+  --gr-type-mono: 400 12px/1.4 var(--gr-font-mono);
 }
