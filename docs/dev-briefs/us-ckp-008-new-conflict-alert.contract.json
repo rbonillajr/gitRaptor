@@ -1,0 +1,144 @@
+{
+  "version": 1,
+  "source": [
+    "docs/requirements/features/cockpit/dev-specs/US-CKP-008-alerta-conflicto-nuevo.md"
+  ],
+  "rigor": "alto",
+  "goal": {
+    "intent": "Que la TUI avise, sin ser intrusiva, cuando aparece un conflicto previsto nuevo (BR-CKP-WF-007, US-CKP-008): un aviso efímero de 5 s con '⚡ Conflicto previsto: claude-1 ↔ claude-2 en src/api.rs' y la marca 'nuevo' en el panel de conflictos, una sola vez por ⚡, sin campana ni notificación del SO.",
+    "endState": "apps/cli tiene el conjunto de alertados con su regla (siembra por repo, resync, daemon-restarted, truncado, ScopeClosed), tui/toasts.rs con la pila de toasts (3 máx, caducidad de 5 s en el Tick), ToastKind::Conflict, el catálogo present/conflict_alert_text.rs en/es con '<->' en ASCII, ConflictEntry.new pintado en el panel, y las pruebas estáticas de 'sin BEL ni SO'; la TUI no importa motor ni Git; motor y API sin cambios.",
+    "nonGoals": [
+      "Quitar la marca nuevo al revisarla (backlog)",
+      "PolicyBanner y acción ante pending (US-CKP-009)",
+      "KPI de detección (US-CKP-010)",
+      "Cambios en el motor o la API",
+      "G-B de US-CKP-006 (TS-CKP-011)",
+      "Linux y Windows (etapa de validación multiplataforma)"
+    ]
+  },
+  "suite": {
+    "command": "node tools/test/nextest-junit.mjs"
+  },
+  "layers": {
+    "runtime": {
+      "commands": [
+        {
+          "id": "suite",
+          "cmd": "node tools/test/nextest-junit.mjs"
+        }
+      ],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "criteria": [
+    {
+      "id": "S1",
+      "statement": "Cuando un prediction.changed pasa el par claude-1 ↔ claude-2 a current con level conflict en src/api.rs y el par no estaba en el conjunto de alertados (tras la siembra de la primera instantánea), la TUI muestra un aviso '⚡ Conflicto previsto: claude-1 ↔ claude-2 en src/api.rs', marca la entrada del par en el panel como nueva y las filas de los dos worktrees quedan en la zona de atención",
+      "verify": "cargo test -p gitraptor-cli --test tui_conflict_alert s1_a_new_conflict_records_an_alert_a_toast_and_raises_both_rows",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_conflict_alert.rs"
+      ]
+    },
+    {
+      "id": "S2",
+      "statement": "El texto del aviso sale en es '⚡ Conflicto previsto: … en src/api.rs' (' y N más' con más archivos, con rama base nombrada contra la base) y en en '⚡ Predicted conflict: … in src/api.rs' (' and N more'), con '<->' en lugar de '↔' en ASCII; sin el detalle del par tras dos Msg::Tick sale sin archivo; sin color y en 80x24",
+      "verify": "cargo test -p gitraptor-cli --test tui_conflict_alert s2_the_toast_text_in_en_es_and_ascii_with_files_and_without_detail",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_conflict_alert.rs"
+      ]
+    },
+    {
+      "id": "S3",
+      "statement": "Un ⚡ que ya se conocía no repite la alerta: current ⚡ → recalculating ⚡ → current ⚡ con rev mayor, base movida (calculating sin level y de vuelta), pending o not-computable en medio, resync con el mismo par y daemon-restarted no generan otro toast; solo avisa un ⚡ que no estaba en el conjunto, y uno que desaparece (current sin ⚡ o removed) y vuelve sí avisa",
+      "verify": "cargo test -p gitraptor-cli --test tui_conflict_alert s3_a_known_conflict_never_alerts_again_and_a_returning_one_does",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_conflict_alert.rs"
+      ]
+    },
+    {
+      "id": "S4",
+      "statement": "Al abrir la TUI los ⚡ que ya existen se siembran sin aviso (también los de las páginas de prediction.list), una instantánea truncada no saca del conjunto a un par ausente y ScopeClosed olvida el repo",
+      "verify": "cargo test -p gitraptor-cli --test tui_conflict_alert s4_opening_seeds_without_alerting_and_truncated_or_closed_scopes_are_honest",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_conflict_alert.rs"
+      ]
+    },
+    {
+      "id": "S5",
+      "statement": "El toast dura 5 s (a +4.999 ms sigue, a +5.000 ms se va), la marca nueva del panel sigue cuando el toast desaparece, el toast de un par que desaparece se retira en el siguiente Tick, y la pila no pasa de 3 toasts (sale primero el más viejo)",
+      "verify": "cargo test -p gitraptor-cli --test tui_conflict_alert s5_the_toast_expires_at_5_s_but_the_mark_stays_and_the_stack_is_bounded",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_conflict_alert.rs"
+      ]
+    },
+    {
+      "id": "S6",
+      "statement": "Sin campana ni notificación del SO: la salida del terminal (CrosstermBackend con un Write que guarda los bytes) con la alerta, con una ruta que trae un \\u{7}, no contiene 0x07; las fuentes de la TUI no escriben BEL ni nombran un notificador del SO y apps/cli no depende de un crate de notificaciones",
+      "verify": "cargo test -p gitraptor-cli --test tui_conflict_alert s6_no_bell_and_no_os_notification",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_conflict_alert.rs"
+      ]
+    },
+    {
+      "id": "S7",
+      "statement": "La alerta no es intrusiva y respeta NO_COLOR y ASCII: el toast se ancla en la región de la lista, nunca tapa la región de alertas (la línea de límites sigue visible), se legible sin color y en ASCII sin Unicode fuera del plegado de símbolos propios de la alerta, en en y es, en 80x24",
+      "verify": "cargo test -p gitraptor-cli --test tui_conflict_alert s7_the_alert_is_not_intrusive_and_legible_without_color_and_in_ascii",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_conflict_alert.rs"
+      ]
+    }
+  ],
+  "constraints": {
+    "deny_paths": [
+      "docs/ARTIFACTS.md",
+      "docs/architecture/decisions/ADR-GRD-008*",
+      "crates/core/**",
+      "crates/api/**"
+    ],
+    "allow_dependency_changes": false
+  },
+  "scope": {
+    "projects": [
+      "gitraptor-cli"
+    ]
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 900000,
+    "suiteTimeoutMs": 5400000,
+    "maxOutsidePlan": 3
+  },
+  "hops": {
+    "design": {
+      "agent": "main-loop",
+      "model": "sonnet"
+    },
+    "critic": {
+      "agent": "nassa-core:plan-critic",
+      "model": "opus"
+    },
+    "tester": {
+      "agent": "nassa-core:criterion-tester",
+      "model": "sonnet"
+    },
+    "build": {
+      "agent": "nassa-dev-rust:rust-expert",
+      "model": "sonnet"
+    },
+    "review": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "opus"
+    },
+    "conformance": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "sonnet"
+    }
+  }
+}
