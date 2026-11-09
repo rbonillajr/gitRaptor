@@ -137,7 +137,7 @@ En el bucle TEA, todo ocurre dentro de `update`, que es puro (sin reloj ni I/O).
 | T001 | Escribir en rojo las pruebas estáticas de "sin BEL ni SO" | — | `apps/cli/tests/tui_no_os_alert.rs` |
 | T002 | Crear el conjunto de alertados y su regla (A5, E1, E2) | — | `apps/cli/src/tui/alerts.rs` |
 | T003 | Crear la pila de toasts con su caducidad (E8) y cablearla en `Model` y `update` | T002 | `apps/cli/src/tui/{toasts,update}.rs`, `apps/cli/src/model.rs` |
-| T004 | Pintar el toast y la marca `new` en en/es y ASCII, con snapshots | T003 | `apps/cli/src/tui/{view,widgets/notification,widgets/conflict_alert}.rs`, `present/conflict_alert_text.rs` |
+| T004 | Pintar el toast y la marca `new` en en/es y ASCII, con snapshots | T003 | `apps/cli/src/tui/{view,view/conflict_panel,widgets/notification,widgets/conflict_alert}.rs`, `present/conflict_alert_text.rs` |
 | T005 | Cerrar la historia y la documentación | T001, T004 | `docs` |
 
 ### T001 — Escribir en rojo las pruebas estáticas de "sin BEL ni SO"
@@ -198,7 +198,7 @@ En el bucle TEA, todo ocurre dentro de `update`, que es puro (sin reloj ni I/O).
   - es una `VecDeque<Toast>` de 3 como máximo;
   - `push` descarta el más viejo cuando está llena, y no duplica un toast del mismo `(repo_id, pair_id)` que siga vivo;
   - `until_ms = now_ms + TOAST_TTL_MS` si `model.now_ms > 0`. Si no, queda `None` y lo fija el primer `Tick`.
-- En `update.rs`, una llamada a `ConflictAlerts::observe` justo después de cada ingestión de DS-US-CKP-006: `on_snapshot` (`:388`), la rama `PREDICTION_CHANGED` de `apply` (`:457`) y el brazo de `EngineMsg::PredictionPage`. En `on_resync` con `ScopeClosed` (`update.rs:602`), `alerts.forget(repo_id)`. No se añade ninguna rama a `apply` más allá de esas llamadas.
+- En `update.rs`, una llamada a `ConflictAlerts::observe` justo después de cada ingestión de DS-US-CKP-006: `on_snapshot` (`:442`), la rama `PREDICTION_CHANGED` de `apply` (`:583`) y el brazo de `EngineMsg::PredictionPage`. En `on_resync` con `ScopeClosed` (`update.rs:602`), `alerts.forget(repo_id)`. No se añade ninguna rama a `apply` más allá de esas llamadas.
 - Pendientes (E3):
   - por cada `pair_id` nuevo, si `PredictionModel.details[pair_id].rev` es el `rev` del `PairRow`, `push`; si no, `pending.insert(pair_id, rev, ticks: 0)`;
   - al llegar un detalle con ese `rev` (página o adopción de `early`), `push`;
@@ -223,6 +223,7 @@ En el bucle TEA, todo ocurre dentro de `update`, que es puro (sin reloj ni I/O).
 
 - `apps/cli/src/tui/widgets/notification.rs` (**MODIFY**: `ToastKind::Conflict` y su brazo en `look`, `notification.rs:40`)
 - `apps/cli/src/tui/widgets/conflict_alert.rs` (**MODIFY**: `ConflictEntry.new: Option<SafeText>`, pintada como la de `ConflictAlertModel`, `:71`)
+- `apps/cli/src/tui/view/conflict_panel.rs` (**MODIFY**: `fn entry` pone `new` cuando `is_new`)
 - `apps/cli/src/tui/view.rs` (**MODIFY**: la pila se pinta después del cuerpo y antes de la ayuda, en `view`, `view.rs:82`, dentro de `regions.list`)
 - `apps/cli/src/present/conflict_alert_text.rs` (**CREATE**: `ConflictAlertText`, `render(self, lang: Lang)`, `every()`; E9)
 - `apps/cli/src/present/mod.rs` (**MODIFY**, una línea: `pub mod conflict_alert_text;`)
@@ -323,7 +324,7 @@ Nombres reales de [DS-US-CKP-006](./US-CKP-006-conflictos-previstos.md) (sus T00
 |---|---|
 | Modelo de pares | `RepoView.prediction: Option<PredictionModel>`; `PredictionModel.pairs: Vec<PairRow>` con `pair_id`, `rev`, `state: PairStateView`, `level: Option<PairLevel>` y `conflict_files` (`apps/cli/src/tui/prediction.rs`) |
 | Detalle | `PredictionModel.details: BTreeMap<pair_id, PairDetailRow>`; `PairDetailRow.conflict.files: Vec<ConflictFileRow>` con `path: SafeText`. Lo pide `wanted` (AD3): todos los ⚡/⚠ sin detalle de su `rev`, ⚡ primero, lotes de 50, `early` para un `rev` mayor |
-| Ingestión | `apply_summary` (en `on_snapshot`, `update.rs:442`), `apply_changed` (rama `PREDICTION_CHANGED` de `apply`, `:457`) y `apply_page` (brazo de `EngineMsg::PredictionPage`) |
+| Ingestión | `apply_summary` (en `on_snapshot`, `update.rs:442`), `apply_changed` (rama `PREDICTION_CHANGED` de `apply`, `:583`) y `apply_page` (brazo de `EngineMsg::PredictionPage`) |
 | Nombres | `Side::{Worktree { key, folder }, Base}` → `row_name` (`view.rs:552`, ya existe, AD5) o `RepoView.base`; `↔` es `Glyphs.versus` |
 | Panel | `ConflictPanelModel { entries: Vec<ConflictEntry>, .. }` en `widgets/conflict_alert.rs` (AD6); esta DS añade `ConflictEntry.new` |
 | Filas | `PredictionModel::known_conflict(key)` → `AgentRowModel.conflict` (`view.rs:629`, DS-US-CKP-002 D2) |
