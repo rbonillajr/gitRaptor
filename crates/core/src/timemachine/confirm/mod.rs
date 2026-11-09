@@ -29,6 +29,7 @@ pub const FOREIGN_WORK_CONFIRMABLE: bool = cfg!(unix);
 pub enum PlanKind {
     Undo,
     Restore,
+    Redo,
 }
 
 impl PlanKind {
@@ -36,6 +37,8 @@ impl PlanKind {
         match self {
             Self::Undo => "undo",
             Self::Restore => "restore",
+            // Placeholder until the redo is built: shares the undo's hash.
+            Self::Redo => "undo",
         }
     }
 }
@@ -354,6 +357,8 @@ fn shown_owners(owners: &[Requester]) -> Vec<Actor> {
         .collect()
 }
 
+#[cfg(test)]
+mod redo_tests;
 #[cfg(test)]
 mod review_tests;
 #[cfg(test)]

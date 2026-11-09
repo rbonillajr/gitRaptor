@@ -139,6 +139,11 @@ impl UndoStack {
     pub fn next_redo(&self) -> Option<&str> {
         self.redo.last().map(|(undo, _)| undo.as_str())
     }
+
+    /// The operation that cleared the redo, if a new change after the last undo invalidated it.
+    pub fn redo_invalidated(&self) -> Option<&OpRef> {
+        None
+    }
 }
 
 impl Oplog {
@@ -223,6 +228,10 @@ mod done_tests;
 #[cfg(test)]
 #[path = "stack_barrier_tests.rs"]
 mod barrier_tests;
+
+#[cfg(test)]
+#[path = "stack_redo_tests.rs"]
+mod redo_tests;
 
 #[cfg(test)]
 mod tests {

@@ -20,6 +20,7 @@ use serde_json::json;
 pub(crate) mod confirm;
 pub(crate) mod notices;
 mod overlap;
+mod redo;
 
 #[cfg(test)]
 #[path = "since_tests.rs"]
@@ -401,6 +402,10 @@ fn reason_key(reason: TmRejectReason) -> &'static str {
         TmRejectReason::NotSelectable => "undo.reason.not-selectable",
         TmRejectReason::SelectiveUndoBelow => "undo.reason.selective-undo-below",
         TmRejectReason::AttributionUnavailable => "undo.reason.attribution-unavailable",
+        // Only a redo rejects with these; an undo never does.
+        TmRejectReason::NothingToRedo | TmRejectReason::RedoInvalidated => {
+            "undo.reason.unsupported"
+        }
     }
 }
 

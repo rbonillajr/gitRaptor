@@ -41,6 +41,9 @@ mod timemachine_inferred_tests;
 #[path = "timemachine_overlap_tests.rs"]
 mod timemachine_overlap_tests;
 #[cfg(test)]
+#[path = "timemachine_redo_tests.rs"]
+mod timemachine_redo_tests;
+#[cfg(test)]
 #[path = "timemachine_since_tests.rs"]
 mod timemachine_since_tests;
 pub mod untrusted;
