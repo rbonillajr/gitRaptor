@@ -20,5 +20,48 @@
       "empty": "Nothing to show yet.",
       "version": "GitRaptor {{version}}"
     }
+  },
+  "ui": {
+    "common": {
+      "close": "Close",
+      "cancel": "Cancel",
+      "loading": "Loading…"
+    },
+    "button": {
+      "busy": "In progress"
+    },
+    "chip": {
+      "remove": "Remove {{label}}"
+    },
+    "pill": {
+      "reversible": "Recoverable",
+      "confirm": "Needs confirmation",
+      "irreversible": "Can't be undone",
+      "live": "Live"
+    },
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive",
+      "conflict": "Predicted conflict",
+      "live": "Live"
+    },
+    "tree": {
+      "loading": "Loading repositories…"
+    },
+    "toast": {
+      "region": "Notifications",
+      "kind": {
+        "success": "Done",
+        "warning": "Warning",
+        "error": "Error"
+      }
+    },
+    "tooltip": {
+      "shortcut": "Shortcut: {{keys}}"
+    },
+    "table": {
+      "settings": "Column settings",
+      "loading": "Loading rows…"
+    }
   }
 }
