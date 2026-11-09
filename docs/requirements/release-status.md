@@ -12,11 +12,11 @@
 |---|---|
 | Implementado (`implemented`) | 63 |
 | Hecho (`done`) | 3 |
-| Implementado en parte (`partially-implemented`) | 27 |
+| Implementado en parte (`partially-implemented`) | 28 |
 | Listo (`ready`) | 28 |
 | Borrador (`draft`) | 58 |
 | Bloqueado (`blocked`) | 1 |
-| **Total** | **180** |
+| **Total** | **181** |
 
 ## Por feature
 
@@ -26,8 +26,8 @@
 | [desktop](#desktop) | 1 | 0 | 0 | 21 | 0 | 0 | 22 |
 | [guardrails](#guardrails) | 14 | 0 | 7 | 1 | 3 | 0 | 25 |
 | [mcp](#mcp) | 7 | 0 | 4 | 0 | 9 | 0 | 20 |
-| [motor-local](#motor-local) | 17 | 2 | 9 | 3 | 11 | 0 | 42 |
-| [time-machine](#time-machine) | 15 | 1 | 1 | 1 | 14 | 0 | 32 |
+| [motor-local](#motor-local) | 17 | 2 | 9 | 3 | 12 | 0 | 43 |
+| [time-machine](#time-machine) | 15 | 1 | 2 | 1 | 13 | 0 | 32 |
 
 ### cockpit
 
@@ -215,7 +215,7 @@
 
 ### time-machine
 
-32 fichas: 15 implementado, 1 hecho, 1 implementado en parte, 1 listo, 14 borrador.
+32 fichas: 15 implementado, 1 hecho, 2 implementado en parte, 1 listo, 13 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -236,6 +236,7 @@
 | [US-TMC-023](features/time-machine/user-stories/US-TMC-023-timeline-legible-restaurar-id-corto.md) | El desarrollador lee el timeline de un vistazo y restaura un punto con el id corto que ve en la misma línea | Implementado (`implemented`) | — | — |
 | [SPIKE-TMC-001](features/time-machine/technical-stories/SPIKE-TMC-001-repo-mediano-overhead.md) | Repo mediano de referencia y viabilidad del snapshot en menos de 200 ms | Hecho (`done`) | — | — |
 | [INF-TMC-001](features/time-machine/technical-stories/INF-TMC-001-arnes-caos-recuperable.md) | Arnés de caos y de garantías de los snapshots en los tres SO | Implementado en parte (`partially-implemented`) | — | — |
+| [US-TMC-011](features/time-machine/user-stories/US-TMC-011-undo-por-agente.md) | El desarrollador deshace solo lo que hizo un agente en un periodo | Implementado en parte (`partially-implemented`) | #325 | — |
 | [TS-TMC-005](features/time-machine/technical-stories/TS-TMC-005-undo-espera-punto-base.md) | El undo espera, con plazo propio, la captura que da su punto base B en vez de responder `overlap-unverified` de inmediato | Listo (`ready`) | — | — |
 | [TD-TMC-001](features/time-machine/technical-stories/TD-TMC-001-previo-hook-plazo-y-cupo-sin-atribuir.md) | Previo de hook: plazo real, cupo barato y cubo «sin atribuir» acotado, antes de que un fallo deniegue (US-GRD-017) | Borrador (`draft`) | — | — |
 | [US-TMC-003](features/time-machine/user-stories/US-TMC-003-redo.md) | El desarrollador rehace lo que deshizo por error | Borrador (`draft`) | — | — |
@@ -283,7 +284,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### M2
 
-104 fichas: 39 implementado, 3 hecho, 21 implementado en parte, 5 listo, 36 borrador.
+104 fichas: 39 implementado, 3 hecho, 22 implementado en parte, 5 listo, 35 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
