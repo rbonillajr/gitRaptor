@@ -197,7 +197,7 @@ fn daemon_with_repos() -> Arc<FakeDaemon> {
 }
 
 fn is_repo_scope(params: &Value, repo_id: &str) -> bool {
-    params["scope"] == "repo" && params["repo_id"] == repo_id
+    params["scope"]["scope"] == "repo" && params["scope"]["repo_id"] == repo_id
 }
 
 /// The position in `calls()` of every `scope.snapshot`, `scope.subscribe` or `sessions.list` of
@@ -827,7 +827,7 @@ fn a_restricted_session_never_opens_a_repo() {
         let repo_calls = daemon
             .calls_of(method)
             .into_iter()
-            .filter(|p| p["scope"] != "global")
+            .filter(|p| p["scope"]["scope"] != "global")
             .count();
         assert_eq!(
             repo_calls, 0,

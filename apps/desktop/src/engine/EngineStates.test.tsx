@@ -1,8 +1,10 @@
 // TS-DSK-003 T007 (§ 9.4): every engine state the band and the centre can paint, in en and es, with axe in both themes.
 // The components take props only; the view model comes from the pure `engineView`.
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import axe from "axe-core";
 import i18n from "i18next";
+import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import "@/i18n";
 import type { CandidateDto, ConnState, GlobalDto, SessionInfo } from "@/client/engine-types";
@@ -63,18 +65,21 @@ const SCENARIOS: Scenario[] = [
 function Harness({ input, candidates = [], onRetry = () => {}, pending = false }: Scenario & { onRetry?: (start: boolean) => void; pending?: boolean }) {
   const full = { ...BASE, ...input };
   const view = engineView(full);
+  const [client] = useState(() => new QueryClient());
   return (
-    <div>
-      {view.band ? <EngineBand band={view.band} onRetry={onRetry} pending={pending} /> : null}
-      <EngineCenter
-        center={view.center}
-        conn={full.conn}
-        gitVersion={full.global?.engine.gitVersion ?? null}
-        candidates={candidates}
-        onRetry={onRetry}
-        pending={pending}
-      />
-    </div>
+    <QueryClientProvider client={client}>
+      <div>
+        {view.band ? <EngineBand band={view.band} onRetry={onRetry} pending={pending} /> : null}
+        <EngineCenter
+          center={view.center}
+          conn={full.conn}
+          gitVersion={full.global?.engine.gitVersion ?? null}
+          candidates={candidates}
+          onRetry={onRetry}
+          pending={pending}
+        />
+      </div>
+    </QueryClientProvider>
   );
 }
 const show = (s: Scenario, extra: { onRetry?: (start: boolean) => void; pending?: boolean } = {}) =>
@@ -120,14 +125,14 @@ describe("engine states", () => {
   it("lost connection dims the fleet and says since when", async () => {
     const time = (lang: string) => new Date(STALE_AT).toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" });
     const { container, unmount } = show(scenario("reconnecting"));
-    expect(screen.getByRole("status")).toHaveTextContent(`Lost the connection to the engine. What you see may be out of date since ${time("en-US")}.`);
+    expect(screen.getAllByRole("status")[0]).toHaveTextContent(`Lost the connection to the engine. What you see may be out of date since ${time("en-US")}.`);
     expect(container.querySelector("[data-center]")).toHaveAttribute("data-stale", "true");
     unmount();
 
     await setLang("es");
     const input = { ...scenario("reconnecting").input, locale: "es-ES" };
     const es = show({ name: "es", input });
-    expect(screen.getByRole("status")).toHaveTextContent(`desactualizado desde las ${time("es-ES")}.`);
+    expect(screen.getAllByRole("status")[0]).toHaveTextContent(`desactualizado desde las ${time("es-ES")}.`);
     expect(es.container.querySelector("[data-center]")).toHaveAttribute("data-stale", "true");
   });
 
@@ -149,7 +154,7 @@ describe("engine states", () => {
   it("live data is not dimmed", () => {
     const { container } = show(scenario("content"));
     expect(container.querySelector("[data-center]")).not.toHaveAttribute("data-stale");
-    expect(screen.getByText("Nothing to show yet.")).toBeInTheDocument();
+    expect(screen.queryByText("Nothing to show yet."), "the content state is the fleet now").toBeNull();
   });
 
   it("incompatible engine says how to update, with the stop command and a Copy button", async () => {
@@ -233,7 +238,7 @@ describe("engine states", () => {
 
   it("catching up band names the reason", () => {
     show(scenario("catching up"));
-    const band = screen.getByRole("status");
+    const band = screen.getAllByRole("status")[0];
     expect(band).toHaveTextContent("Checking recent changes; the view may take a few seconds.");
     expect(band).toHaveTextContent("The app fell behind the engine.");
   });

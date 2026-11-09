@@ -1,10 +1,19 @@
 import type { QueryClient } from "@tanstack/react-query";
-import type { CandidateDto, EngineMessage, GlobalDto } from "@/client/engine-types";
+import type { CandidateDto, EngineMessage, GlobalDto, RepoFleet, SessionDto } from "@/client/engine-types";
 import { engineKeys } from "@/client/queries";
 import { useEngineStore } from "./engine-store";
+import { useUiStore } from "./ui-store";
 
 /** The global entry: the last snapshot, or the restricted view of D6 (`restricted`, no repos). */
 export type GlobalEntry = GlobalDto & { restricted?: true };
+
+/** D3 merge: the later `stateSinceUtcMs` wins; on a tie the ended one; otherwise the incoming one. */
+function mergeSession(old: SessionDto | undefined, incoming: SessionDto): SessionDto {
+  if (old === undefined) return incoming;
+  if (old.stateSinceUtcMs !== incoming.stateSinceUtcMs) return old.stateSinceUtcMs > incoming.stateSinceUtcMs ? old : incoming;
+  if (old.state === "ended" && incoming.state !== "ended") return old;
+  return incoming;
+}
 
 /**
  * Folds one batch of channel messages into the app state, in order: `conn` and `session` go to the engine store,
@@ -17,6 +26,9 @@ export function applyEngineBatch(client: QueryClient, batch: readonly EngineMess
     client.setQueryData<GlobalEntry>(engineKeys.global, (old) => (old === undefined ? old : patch(old)));
   const patchRepo = (repoId: string, patch: (repo: GlobalDto["repos"][number]) => GlobalDto["repos"][number]) =>
     patchGlobal((g) => ({ ...g, repos: g.repos.map((r) => (r.repoId === repoId ? patch(r) : r)) }));
+
+  const patchFleet = (repoId: string, patch: (fleet: RepoFleet) => RepoFleet) =>
+    client.setQueryData<RepoFleet>(engineKeys.repo(repoId), (old) => (old === undefined ? old : patch(old)));
 
   for (const message of batch) {
     switch (message.type) {
@@ -61,6 +73,47 @@ export function applyEngineBatch(client: QueryClient, batch: readonly EngineMess
           repos: [],
           restricted: true,
         }));
+        break;
+      case "repo":
+        client.setQueryData<RepoFleet>(engineKeys.repo(message.fleet.repoId), {
+          repo: message.fleet,
+          sessions: new Map(),
+          detection: null,
+        });
+        break;
+      case "worktrees":
+        patchFleet(message.repoId, (f) => ({
+          ...f,
+          repo: { ...f.repo, worktrees: message.worktrees, fetchedUtcMs: message.fetchedUtcMs },
+        }));
+        break;
+      case "sessions":
+        patchFleet(message.repoId, (f) => {
+          const sessions = new Map(f.sessions);
+          for (const s of message.sessions) sessions.set(s.sessionId, mergeSession(sessions.get(s.sessionId), s));
+          return { ...f, sessions, detection: message.detectionAvailable };
+        });
+        break;
+      case "repoSession":
+        patchFleet(message.repoId, (f) => {
+          const sessions = new Map(f.sessions);
+          sessions.set(message.session.sessionId, mergeSession(sessions.get(message.session.sessionId), message.session));
+          return { ...f, sessions };
+        });
+        break;
+      case "prediction":
+        patchFleet(message.repoId, (f) => {
+          const incoming = new Map(message.pairs.map((p) => [p.pairId, p]));
+          const removed = new Set(message.removed);
+          const kept = f.repo.pairs.filter((p) => !removed.has(p.pairId)).map((p) => incoming.get(p.pairId) ?? p);
+          const known = new Set(f.repo.pairs.map((p) => p.pairId));
+          const added = message.pairs.filter((p) => !known.has(p.pairId) && !removed.has(p.pairId));
+          return { ...f, repo: { ...f.repo, pairs: [...kept, ...added] } };
+        });
+        break;
+      case "repoClosed":
+        client.removeQueries({ queryKey: engineKeys.repo(message.repoId), exact: true });
+        if (useUiStore.getState().selectedRepoId === message.repoId) useUiStore.getState().selectRepo(null);
         break;
       case "conn":
       case "session":

@@ -7,9 +7,17 @@ export interface EngineState {
   staleSinceMs: number | null;
   resync: ResyncReason | null;
   session: SessionInfo | null;
+  lastRepoBatch: RepoBatchMark | null;
+}
+
+/** The last batch that carried repo messages: `FleetView` measures `gr:fleet-delta` from `receivedAt` (T006). */
+export interface RepoBatchMark {
+  receivedAt: number;
+  n: number;
 }
 
 export interface EngineActions {
+  noteRepoBatch: (mark: RepoBatchMark) => void;
   /** Folds a batch of channel messages into one state update (one render per frame). */
   apply: (batch: readonly EngineMessage[]) => void;
 }
@@ -19,6 +27,8 @@ export const useEngineStore = create<EngineState & EngineActions>()((set) => ({
   staleSinceMs: null,
   resync: null,
   session: null,
+  lastRepoBatch: null,
+  noteRepoBatch: (mark) => set({ lastRepoBatch: mark }),
   apply: (batch) =>
     set((state) => {
       let next: Partial<EngineState> = {};

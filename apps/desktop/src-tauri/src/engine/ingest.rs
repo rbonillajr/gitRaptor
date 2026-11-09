@@ -1,22 +1,31 @@
 //! Translation of the engine's contract types into the app's DTOs, sanitizing every text that
 //! comes from the file system or an agent before it reaches the webview.
 
+use gitraptor_api::actor::{Actor, AgentKind, AgentOrigin};
+use gitraptor_api::clock;
 use gitraptor_api::discovery::{CandidateView, RepoDiscoveredData};
 use gitraptor_api::display::{NAME_MAX_CHARS, TEXT_MAX_CHARS, visible};
 use gitraptor_api::event::{self, Event};
 use gitraptor_api::messages::{
-    EngineStateView, EngineView, RepoObservationData, RepoStateView, RepoTier, RepoTierData,
-    SessionView, WorktreeView,
+    BaseStatusView, CommitCountView, DivergenceView, EngineStateView, EngineView, HeadView,
+    OperationKindView, RepoObservationData, RepoStateView, RepoTier, RepoTierData,
+    SessionEndCauseView, SessionStateView, SessionView, UnavailableReason as UnavailableReasonView,
+    WorktreeStateData, WorktreeStatus, WorktreeView,
 };
-use gitraptor_api::prediction::PairSummary;
+use gitraptor_api::methods;
+use gitraptor_api::prediction::{
+    PairLevel as ApiPairLevel, PairSideView, PairStateView, PairSummary, PredictionChanged,
+};
 use gitraptor_api::scope::{
     AttentionCount, AttentionView, GlobalSnapshot, RepoAttentionData, RepoSnapshot, RepoSummaryView,
 };
 
 use super::wire::{
-    AttentionDto, Autostart, BaseDto, BaseStatus, CandidateDto, CountDto, DaemonDto, EngineDto,
-    EngineMessage, EngineStateDto, GlobalDto, PairDto, PairState, RepoFleetDto, RepoStateDto,
-    RepoSummaryDto, SessionDto, Tier, UnavailableReason, WorktreeDto, WorktreeStatusDto,
+    AgentDto, AttentionDto, Autostart, BaseDto, BaseStatus, BoundedCountDto, CandidateDto,
+    CountDto, CountsDto, DaemonDto, DivergenceDto, EndCause, EngineDto, EngineMessage,
+    EngineStateDto, FleetPerf, GlobalDto, HeadDto, PairDto, PairLevel, PairState, ReadyDto,
+    RepoFleetDto, RepoStateDto, RepoSummaryDto, SessionDto, SessionOrigin, SessionState, Tier,
+    UnavailableReason, WorktreeDto, WorktreeStatusDto,
 };
 
 /// The global snapshot as a DTO.
@@ -37,57 +46,251 @@ pub fn global(snapshot: &GlobalSnapshot) -> GlobalDto {
 }
 
 /// The FNV-1a 64 key of a raw path, as 16 lowercase hex digits.
-pub fn key(_raw_path: &str) -> String {
-    String::new()
+///
+/// It hashes the bytes the engine sent, never the sanitized text, so two different raw paths
+/// never share a key because they look alike.
+pub fn key(raw_path: &str) -> String {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in raw_path.bytes() {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    format!("{hash:016x}")
 }
 
 /// The open repo's snapshot as a DTO.
-pub fn repo(_snapshot: &RepoSnapshot) -> RepoFleetDto {
+pub fn repo(snapshot: &RepoSnapshot) -> RepoFleetDto {
+    let view = &snapshot.repo;
+    let (pairs, pairs_truncated) = match &view.prediction {
+        Some(prediction) => (
+            prediction.pairs.iter().map(pair).collect(),
+            prediction.pairs_truncated,
+        ),
+        None => (Vec::new(), false),
+    };
     RepoFleetDto {
-        repo_id: String::new(),
-        name: String::new(),
+        repo_id: visible(&view.repo_id, NAME_MAX_CHARS),
+        name: visible(&repo_name(view.path.raw()), NAME_MAX_CHARS),
         base: BaseDto {
-            name: None,
-            status: BaseStatus::Unconfirmed,
+            name: view
+                .base
+                .name
+                .as_ref()
+                .map(|name| visible(name.raw(), NAME_MAX_CHARS)),
+            status: match view.base.status {
+                BaseStatusView::Confirmed => BaseStatus::Confirmed,
+                BaseStatusView::Unconfirmed => BaseStatus::Unconfirmed,
+                BaseStatusView::Invalid => BaseStatus::Invalid,
+            },
         },
-        fetched_utc_ms: None,
-        tier: None,
-        worktrees: Vec::new(),
-        pairs: Vec::new(),
-        pairs_truncated: false,
+        fetched_utc_ms: view.fetched_utc_ms.and_then(non_negative),
+        tier: view.tier.map(tier),
+        worktrees: view.worktrees.iter().map(worktree).collect(),
+        pairs,
+        pairs_truncated,
     }
 }
 
+fn non_negative(ms: i64) -> Option<u64> {
+    u64::try_from(ms).ok()
+}
+
+/// The last non-empty component of a path, as sent.
+fn last_component(path: &str) -> &str {
+    path.rsplit(['/', '\\'])
+        .find(|part| !part.is_empty())
+        .unwrap_or_default()
+}
+
 /// One worktree as a DTO.
-pub fn worktree(_view: &WorktreeView) -> WorktreeDto {
+pub fn worktree(view: &WorktreeView) -> WorktreeDto {
+    let raw = view.path.raw();
     WorktreeDto {
-        key: String::new(),
-        folder: String::new(),
-        path: String::new(),
-        main: false,
-        status: WorktreeStatusDto::Unavailable {
-            reason: UnavailableReason::Unreadable,
+        key: key(raw),
+        folder: visible(last_component(raw), NAME_MAX_CHARS),
+        path: visible(raw, TEXT_MAX_CHARS),
+        main: view.main,
+        status: match &view.status {
+            WorktreeStatus::Ready {
+                head,
+                counts,
+                divergence: div,
+                ..
+            } => WorktreeStatusDto::Ready(ReadyDto {
+                head: match head {
+                    HeadView::Branch { name } => HeadDto::Branch {
+                        name: visible(name.raw(), NAME_MAX_CHARS),
+                    },
+                    HeadView::Unborn { name } => HeadDto::Unborn {
+                        name: visible(name.raw(), NAME_MAX_CHARS),
+                    },
+                    HeadView::Detached => HeadDto::Detached,
+                },
+                counts: CountsDto {
+                    staged: counts.staged,
+                    unstaged: counts.unstaged,
+                    untracked: counts.untracked,
+                },
+                divergence: divergence(div),
+            }),
+            WorktreeStatus::Unavailable { reason } => WorktreeStatusDto::Unavailable {
+                reason: match reason {
+                    UnavailableReasonView::Missing => UnavailableReason::Missing,
+                    UnavailableReasonView::Untrusted => UnavailableReason::Untrusted,
+                    UnavailableReasonView::Unreadable => UnavailableReason::Unreadable,
+                },
+            },
         },
-        last_activity_utc_ms: None,
-        last_activity_in_gap: false,
-        detached_at: None,
-        operation: None,
+        last_activity_utc_ms: view.last_activity_utc_ms.and_then(non_negative),
+        last_activity_in_gap: view.last_activity_in_gap,
+        detached_at: view
+            .detached_at
+            .as_deref()
+            .filter(|hash| is_object_id(hash))
+            .map(str::to_owned),
+        operation: view.operation.map(operation),
+    }
+}
+
+/// A full object id: 40 (SHA-1) or 64 (SHA-256) hex digits, nothing else.
+fn is_object_id(text: &str) -> bool {
+    matches!(text.len(), 40 | 64) && text.bytes().all(|b| b.is_ascii_hexdigit())
+}
+
+fn operation(kind: OperationKindView) -> String {
+    match kind {
+        OperationKindView::Rebase => "rebase",
+        OperationKindView::Merge => "merge",
+        OperationKindView::CherryPick => "cherry-pick",
+        OperationKindView::Revert => "revert",
+        OperationKindView::Am => "am",
+        OperationKindView::Bisect => "bisect",
+    }
+    .to_owned()
+}
+
+fn bounded(count: CommitCountView) -> BoundedCountDto {
+    BoundedCountDto {
+        count: u32::try_from(count.count).unwrap_or(u32::MAX),
+        exact: count.exact,
+    }
+}
+
+fn divergence(view: &DivergenceView) -> DivergenceDto {
+    match view {
+        DivergenceView::Counted { ahead, behind } => DivergenceDto::Counted {
+            ahead: bounded(*ahead),
+            behind: bounded(*behind),
+        },
+        DivergenceView::BaseMissing => DivergenceDto::BaseMissing,
+        DivergenceView::NoBase => DivergenceDto::NoBase,
+        DivergenceView::NoCommits => DivergenceDto::NoCommits,
+        DivergenceView::Unreadable => DivergenceDto::Unreadable,
     }
 }
 
 /// One session as a DTO; `None` when it cannot be attributed to an agent.
-pub fn session(_view: &SessionView) -> Option<SessionDto> {
-    None
+pub fn session(view: &SessionView) -> Option<SessionDto> {
+    let Actor::Agent { kind, name, origin } = &view.actor else {
+        return None;
+    };
+    Some(SessionDto {
+        session_id: visible(&view.session_id, NAME_MAX_CHARS),
+        worktree_key: key(view.worktree.raw()),
+        agent: match kind {
+            AgentKind::ClaudeCode => AgentDto::ClaudeCode,
+            AgentKind::Other => AgentDto::Other {
+                name: visible(name.as_ref().map_or("", |n| n.raw()), NAME_MAX_CHARS),
+            },
+        },
+        origin: match origin {
+            AgentOrigin::Detected => SessionOrigin::Detected,
+            AgentOrigin::Registered => SessionOrigin::Registered,
+        },
+        state: match view.state {
+            SessionStateView::Active => SessionState::Active,
+            SessionStateView::Inactive => SessionState::Inactive,
+            SessionStateView::Ended => SessionState::Ended,
+        },
+        started_utc_ms: non_negative(view.started_utc_ms).unwrap_or(0),
+        state_since_utc_ms: non_negative(view.state_since_utc_ms).unwrap_or(0),
+        ended_utc_ms: view.ended_utc_ms.and_then(non_negative),
+        end_cause: view.end_cause.map(|cause| match cause {
+            SessionEndCauseView::ProcessGone => EndCause::ProcessGone,
+            SessionEndCauseView::EndedDuringGap => EndCause::EndedDuringGap,
+            SessionEndCauseView::RegistrationWithdrawn => EndCause::RegistrationWithdrawn,
+            SessionEndCauseView::WorktreeRemoved => EndCause::WorktreeRemoved,
+        }),
+    })
+}
+
+fn side(side: &PairSideView) -> String {
+    match side {
+        PairSideView::Worktree { root } => key(root.raw()),
+        PairSideView::Base {} => "base".to_owned(),
+    }
 }
 
 /// One predicted pair as a DTO.
-pub fn pair(_summary: &PairSummary) -> PairDto {
+pub fn pair(summary: &PairSummary) -> PairDto {
     PairDto {
-        pair_id: String::new(),
-        a: String::new(),
-        b: String::new(),
-        state: PairState::Pending,
-        level: None,
+        pair_id: visible(&summary.pair_id, NAME_MAX_CHARS),
+        a: side(&summary.a),
+        b: side(&summary.b),
+        state: match summary.state {
+            PairStateView::Calculating => PairState::Calculating,
+            PairStateView::Current => PairState::Current,
+            PairStateView::Recalculating => PairState::Recalculating,
+            PairStateView::Pending => PairState::Pending,
+            PairStateView::NotComputable => PairState::NotComputable,
+        },
+        level: summary.level.map(|level| match level {
+            ApiPairLevel::Clean => PairLevel::None,
+            ApiPairLevel::Overlap => PairLevel::Overlap,
+            ApiPairLevel::Conflict => PairLevel::Conflict,
+        }),
+    }
+}
+
+/// The messages a repo-scope event produces, `backend_ns` after `recv_ns` (the monotonic reading
+/// of when the link read it); empty for events the app ignores or cannot read.
+pub fn repo_event(event: &Event, recv_ns: u64) -> Option<EngineMessage> {
+    match event.kind.as_str() {
+        event::WORKTREE_STATE => {
+            decode::<WorktreeStateData>(event).map(|data| EngineMessage::Worktrees {
+                repo_id: visible(&data.repo_id, NAME_MAX_CHARS),
+                worktrees: data.worktrees.iter().map(worktree).collect(),
+                fetched_utc_ms: data.fetched_utc_ms.and_then(non_negative),
+                perf: perf(recv_ns),
+            })
+        }
+        event::SESSION_STATE => decode::<SessionView>(event).and_then(|view| {
+            session(&view).map(|session| EngineMessage::RepoSession {
+                repo_id: visible(&view.repo_id, NAME_MAX_CHARS),
+                session,
+                perf: perf(recv_ns),
+            })
+        }),
+        methods::PREDICTION_CHANGED => {
+            decode::<PredictionChanged>(event).map(|data| EngineMessage::Prediction {
+                repo_id: visible(&data.repo_id, NAME_MAX_CHARS),
+                pairs: data.pairs.iter().map(pair).collect(),
+                removed: data
+                    .removed
+                    .iter()
+                    .map(|id| visible(id, NAME_MAX_CHARS))
+                    .collect(),
+                perf: perf(recv_ns),
+            })
+        }
+        _ => None,
+    }
+}
+
+/// Time since `recv_ns`, never zero so "no measure" stays distinguishable.
+fn perf(recv_ns: u64) -> FleetPerf {
+    FleetPerf {
+        backend_ns: clock::monotonic_ns().saturating_sub(recv_ns).max(1),
     }
 }
 

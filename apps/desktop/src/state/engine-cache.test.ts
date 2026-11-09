@@ -183,7 +183,7 @@ describe("D3-CACHE keys and writers", () => {
     expect(sources, "D4: useFleet reads engineKeys.repo").toContain("fleet/useFleet.ts");
     const useFleet = readFileSync(`${root}/fleet/useFleet.ts`, "utf8");
     expect(useFleet, "D4: useFleet reads the cache with skipToken, never a network queryFn").toContain("skipToken");
-    expect(useFleet, "D4: useFleet has no queryFn of its own").not.toMatch(/queryFn:\s*(?!skipToken)/);
+    expect(useFleet, "D4: useFleet has no queryFn of its own").not.toMatch(/queryFn:(?!\s*skipToken)/);
   });
 });
 

@@ -31,6 +31,13 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
+/// Longest repo id the app passes on, in bytes.
+const REPO_ID_MAX_BYTES: usize = 128;
+
+fn valid_repo_id(id: &str) -> bool {
+    !id.is_empty() && id.len() <= REPO_ID_MAX_BYTES && !id.chars().any(char::is_control)
+}
+
 impl EngineHub {
     pub fn new(connector: Box<dyn Connector>, own_raptor: Option<PathBuf>) -> Self {
         Self {
@@ -61,11 +68,16 @@ impl EngineHub {
         }
     }
 
-    /// Asks the supervisor to open `repo_id`'s scope.
+    /// Asks the supervisor to open `repo_id`'s scope. The id is checked first, so a bad one is
+    /// `invalid-params` even before any `watch`.
     ///
     /// # Errors
-    /// [`CommandError::NotWatching`] when no `watch` has started the supervisor yet.
+    /// [`CommandError::InvalidParams`] for an empty id, one over 128 bytes or one with control
+    /// characters; [`CommandError::NotWatching`] when no `watch` has started the supervisor yet.
     pub fn open(&self, repo_id: String) -> Result<(), CommandError> {
+        if !valid_repo_id(&repo_id) {
+            return Err(CommandError::InvalidParams);
+        }
         match lock(&self.handle).as_ref() {
             Some(running) if running.send(HubCmd::Open { repo_id }) => Ok(()),
             _ => Err(CommandError::NotWatching),
