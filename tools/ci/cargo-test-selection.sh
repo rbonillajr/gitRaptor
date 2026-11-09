@@ -4,8 +4,10 @@
 #
 #   SCOPE=affected PROJECTS="gitraptor-cli gitraptor-mcp" tools/ci/cargo-test-selection.sh
 #
-# Writes `args` to $GITHUB_OUTPUT (or prints it): `--workspace`, or `--workspace --exclude …` for
-# the packages Nx did not mark as affected. One cargo invocation, never one per package.
+# Writes `args` to $GITHUB_OUTPUT (or prints it): `--workspace --exclude gitraptor-desktop`, plus
+# `--exclude …` for the packages Nx did not mark as affected. One cargo invocation, never one per
+# package. gitraptor-desktop is always out: it needs WebKitGTK on Linux and has its own `desktop`
+# job (ADR-GRP-002, Enmienda 2026-10-28).
 #
 # Cargo unifies features over the selected packages, so a smaller selection can build serde,
 # memchr and everything above them (gix, the workspace crates) with other features and recompile
@@ -21,33 +23,34 @@ emit() {
 
 if [ "${SCOPE:-}" != affected ] || [ -z "${PROJECTS:-}" ]; then
   echo "Whole workspace (scope: ${SCOPE:-none})"
-  emit --workspace
+  emit "--workspace --exclude gitraptor-desktop"
   exit 0
 fi
 
-selection=(--workspace)
+selection=(--workspace --exclude gitraptor-desktop)
 for member in $(cargo metadata --no-deps --format-version 1 | jq -r '.packages[].name' | tr -d '\r'); do
   case " $PROJECTS " in
+    gitraptor-desktop) ;;
     *" $member "*) ;;
     *) selection+=(--exclude "$member") ;;
   esac
 done
-if [ "${#selection[@]}" -eq 1 ]; then
+if [ "${#selection[@]}" -eq 3 ]; then
   echo "Every package is affected"
-  emit --workspace
+  emit "--workspace --exclude gitraptor-desktop"
   exit 0
 fi
 
 tree() { cargo tree -e normal,build,dev -f '{p} {f}' --prefix none "$@" | sed 's/ (\*)$//' | sort -u; }
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
-tree --workspace > "$tmp/workspace"
+tree --workspace --exclude gitraptor-desktop > "$tmp/workspace"
 tree "${selection[@]}" > "$tmp/selection"
 diverging=$(comm -23 "$tmp/selection" "$tmp/workspace")
 if [ -n "$diverging" ]; then
   echo "::notice::Affected packages ($PROJECTS) resolve other features than the workspace build; running the whole workspace instead of recompiling"
   echo "$diverging"
-  emit --workspace
+  emit "--workspace --exclude gitraptor-desktop"
   exit 0
 fi
 echo "Affected packages: $PROJECTS"

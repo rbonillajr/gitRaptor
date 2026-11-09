@@ -114,7 +114,9 @@ const global = changed.filter((f) => GLOBAL.some((re) => re.test(f)));
 // tests cost little, and with them the selection resolves the same features as the workspace build.
 const marked = JSON.parse(nx('show', 'projects', '--affected', `--base=${base}`, `--head=${head}`, '-t', 'test', '--json'));
 const launched = marked.flatMap((p) => (graph.dependencies[p] ?? []).filter((d) => d.type === 'implicit').map((d) => d.target));
-const affected = [...new Set([...marked, ...launched])].filter((p) => members.has(p)).sort();
+// gitraptor-desktop never enters the general jobs (it needs WebKitGTK; its own `desktop` job runs it).
+const EXCLUDED = new Set(['gitraptor-desktop']);
+const affected = [...new Set([...marked, ...launched])].filter((p) => members.has(p) && !EXCLUDED.has(p)).sort();
 
 let scope = 'affected';
 if (!graphOk) scope = 'full';
