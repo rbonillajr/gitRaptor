@@ -20,8 +20,10 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Output, Stdio};
 use std::time::{Duration, Instant};
 
-use gitraptor_api::messages::{ClientKind, EventsHistoryResult, GitEventKind, Snapshot};
-use gitraptor_api::{Actor, AgentKind, PROTOCOL_VERSION, methods};
+use gitraptor_api::messages::{
+    ClientKind, EventsHistoryResult, GitEventKind, SessionStateView, SessionsListResult, Snapshot,
+};
+use gitraptor_api::{Actor, AgentKind, AgentOrigin, PROTOCOL_VERSION, methods};
 use gitraptor_core::client::Client;
 use gitraptor_core::daemon::running_pid;
 use gitraptor_core::profile::ProfileDirs;
@@ -231,10 +233,51 @@ impl Machine {
             .unwrap();
         let stdin = child.stdin.take();
         let stdout = BufReader::new(child.stdout.take().unwrap());
-        FakeClaude {
+        let claude = FakeClaude {
             child,
             stdin,
             stdout,
+        };
+        // The engine decides who made an event once, when it arrives: a commit made before it
+        // has detected this process as a session stays unattributed for good. So nothing is
+        // committed until `sessions.list` shows it (the signal, not a fixed wait).
+        self.claude_session(worktree);
+        claude
+    }
+
+    /// Waits until `sessions.list` shows a present Claude Code session detected in `worktree`.
+    fn claude_session(&self, worktree: &Path) {
+        let start = Instant::now();
+        loop {
+            let r: SessionsListResult = self
+                .client()
+                .call(
+                    methods::SESSIONS_LIST,
+                    json!({"repo_id": self.repo_id(), "include_ended": false}),
+                )
+                .unwrap();
+            let found = r.sessions.iter().any(|s| {
+                Path::new(s.worktree.raw()) == worktree
+                    && s.state != SessionStateView::Ended
+                    && matches!(
+                        &s.actor,
+                        Actor::Agent {
+                            kind: AgentKind::ClaudeCode,
+                            origin: AgentOrigin::Detected,
+                            ..
+                        }
+                    )
+            });
+            if found {
+                return;
+            }
+            assert!(
+                start.elapsed() < DEADLINE,
+                "the engine never showed the fake agent in {} as a Claude Code session: {:#?}",
+                worktree.display(),
+                r.sessions
+            );
+            std::thread::sleep(Duration::from_millis(50));
         }
     }
 
