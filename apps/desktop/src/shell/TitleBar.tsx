@@ -1,6 +1,7 @@
 import type { ReactNode, Ref } from "react";
 import { useTranslation } from "react-i18next";
 import type { Theme } from "@/state/ui-store";
+import { IconButton } from "@/ui";
 
 export interface TitleBarProps {
   sidebarId: string;
@@ -14,11 +15,6 @@ export interface TitleBarProps {
   /** The right panel button, where focus returns when the drawer closes. */
   detailButtonRef: Ref<HTMLButtonElement>;
 }
-
-const BUTTON =
-  "inline-flex size-8 items-center justify-center rounded-md bg-surface-control text-text-muted shadow-(--gr-highlight) " +
-  "hover:bg-surface-hover hover:text-text-main aria-expanded:text-accent-text " +
-  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 
 function Icon({ children }: { children: ReactNode }) {
   return (
@@ -56,31 +52,23 @@ export function TitleBar(props: TitleBarProps) {
   const { t } = useTranslation();
   return (
     <header data-tauri-drag-region className="flex h-(--gr-size-titlebar) shrink-0 items-center gap-(--gr-space-2) pr-(--gr-window-margin) pl-20">
-      <button
-        type="button"
-        className={BUTTON}
-        aria-label={t("shell.sidebar.toggle")}
+      <IconButton
+        label={t("shell.sidebar.toggle")}
+        icon={<PanelIcon side="left" />}
         aria-expanded={props.sidebarOpen}
         aria-controls={props.sidebarId}
         onClick={props.onToggleSidebar}
-      >
-        <PanelIcon side="left" />
-      </button>
+      />
       <div data-tauri-drag-region className="flex-1 self-stretch" />
-      <button type="button" className={BUTTON} aria-label={t(`shell.theme.toggle.${props.theme}`)} onClick={props.onCycleTheme}>
-        <ThemeIcon theme={props.theme} />
-      </button>
-      <button
+      <IconButton label={t(`shell.theme.toggle.${props.theme}`)} icon={<ThemeIcon theme={props.theme} />} onClick={props.onCycleTheme} />
+      <IconButton
         ref={props.detailButtonRef}
-        type="button"
-        className={BUTTON}
-        aria-label={t("shell.detail.toggle")}
+        label={t("shell.detail.toggle")}
+        icon={<PanelIcon side="right" />}
         aria-expanded={props.detailOpen}
         aria-controls={props.detailId}
         onClick={props.onToggleDetail}
-      >
-        <PanelIcon side="right" />
-      </button>
+      />
     </header>
   );
 }

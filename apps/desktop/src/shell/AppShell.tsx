@@ -118,7 +118,7 @@ export function AppShell() {
           className={
             wide
               ? "w-(--gr-size-detail) shrink-0 focus:outline-none"
-              : "absolute top-0 right-(--gr-window-margin) bottom-(--gr-window-margin) z-10 w-(--gr-size-detail) shadow-(--gr-shadow-popover) focus:outline-none"
+              : "absolute top-0 right-(--gr-window-margin) bottom-(--gr-window-margin) z-(--gr-z-drawer) w-(--gr-size-detail) shadow-(--gr-shadow-popover) focus:outline-none"
           }
         />
       </div>
