@@ -190,7 +190,7 @@ En el bucle TEA, todo ocurre dentro de `update`, que es puro (sin reloj ni I/O).
 **Ubicación.**
 - `apps/cli/src/tui/toasts.rs` (**CREATE**)
 - `apps/cli/src/tui/mod.rs` (**MODIFY**, `pub mod toasts;`)
-- `apps/cli/src/model.rs` (**MODIFY**: `Ui.alerts: ConflictAlerts` y `Ui.toasts: Toasts`, con sus valores iniciales en `Model::new`, `model.rs:36`)
+- `apps/cli/src/model.rs` (**MODIFY**: `Ui.alerts: ConflictAlerts` y `Ui.toasts: Toasts`, con sus valores iniciales en `Model::new`, `model.rs:39`)
 - `apps/cli/src/tui/update.rs` (**MODIFY**)
 
 **Reglas**
@@ -198,13 +198,13 @@ En el bucle TEA, todo ocurre dentro de `update`, que es puro (sin reloj ni I/O).
   - es una `VecDeque<Toast>` de 3 como máximo;
   - `push` descarta el más viejo cuando está llena, y no duplica un toast del mismo `(repo_id, pair_id)` que siga vivo;
   - `until_ms = now_ms + TOAST_TTL_MS` si `model.now_ms > 0`. Si no, queda `None` y lo fija el primer `Tick`.
-- En `update.rs`, una llamada a `ConflictAlerts::observe` justo después de cada ingestión de DS-US-CKP-006: `on_snapshot` (`:388`), la rama `PREDICTION_CHANGED` de `apply` (`:457`) y el brazo de `EngineMsg::PredictionPage`. En `on_resync` con `ScopeClosed` (`update.rs:527`), `alerts.forget(repo_id)`. No se añade ninguna rama a `apply` más allá de esas llamadas.
+- En `update.rs`, una llamada a `ConflictAlerts::observe` justo después de cada ingestión de DS-US-CKP-006: `on_snapshot` (`:388`), la rama `PREDICTION_CHANGED` de `apply` (`:457`) y el brazo de `EngineMsg::PredictionPage`. En `on_resync` con `ScopeClosed` (`update.rs:602`), `alerts.forget(repo_id)`. No se añade ninguna rama a `apply` más allá de esas llamadas.
 - Pendientes (E3):
   - por cada `pair_id` nuevo, si `PredictionModel.details[pair_id].rev` es el `rev` del `PairRow`, `push`; si no, `pending.insert(pair_id, rev, ticks: 0)`;
   - al llegar un detalle con ese `rev` (página o adopción de `early`), `push`;
   - si llega un `rev` mayor con el par todavía en ⚡ `current`, se actualiza el `rev` pendiente;
   - si el par sale del conjunto, se descarta el pendiente.
-- `Msg::Tick` (`update.rs:54`):
+- `Msg::Tick` (`update.rs:58`):
   - fija los `until_ms` que falten y quita los toasts con `now_ms >= until_ms`;
   - quita los toasts cuyo par ya no está en `PredictionModel.pairs` (E4);
   - incrementa `ticks` de los pendientes y emite sin archivo los que llegan a 2;
@@ -219,10 +219,11 @@ En el bucle TEA, todo ocurre dentro de `update`, que es puro (sin reloj ni I/O).
 
 **Objetivo.** El texto exacto de P5 en los dos idiomas, el ⚡ pintado por el widget y la marca "nuevo" en la entrada del panel.
 
-**Ubicación.**
+**Ubicación.** (Actualizado 2026-11-09, PC-2: `ConflictEntry` se construye en `apps/cli/src/tui/view/conflict_panel.rs` (`fn entry`), así que ahí, y no en `view.rs`, se pone `new` cuando `is_new`; `view.rs` solo pinta la pila de toasts.)
+
 - `apps/cli/src/tui/widgets/notification.rs` (**MODIFY**: `ToastKind::Conflict` y su brazo en `look`, `notification.rs:40`)
 - `apps/cli/src/tui/widgets/conflict_alert.rs` (**MODIFY**: `ConflictEntry.new: Option<SafeText>`, pintada como la de `ConflictAlertModel`, `:71`)
-- `apps/cli/src/tui/view.rs` (**MODIFY**: la pila se pinta después del cuerpo y antes de la ayuda, en `view`, `view.rs:69`, dentro de `regions.list`)
+- `apps/cli/src/tui/view.rs` (**MODIFY**: la pila se pinta después del cuerpo y antes de la ayuda, en `view`, `view.rs:82`, dentro de `regions.list`)
 - `apps/cli/src/present/conflict_alert_text.rs` (**CREATE**: `ConflictAlertText`, `render(self, lang: Lang)`, `every()`; E9)
 - `apps/cli/src/present/mod.rs` (**MODIFY**, una línea: `pub mod conflict_alert_text;`)
 - `apps/cli/src/tui/snapshots/conflict_toast_80x24_{en,es,ascii}.snap` (**CREATE**)
@@ -322,10 +323,10 @@ Nombres reales de [DS-US-CKP-006](./US-CKP-006-conflictos-previstos.md) (sus T00
 |---|---|
 | Modelo de pares | `RepoView.prediction: Option<PredictionModel>`; `PredictionModel.pairs: Vec<PairRow>` con `pair_id`, `rev`, `state: PairStateView`, `level: Option<PairLevel>` y `conflict_files` (`apps/cli/src/tui/prediction.rs`) |
 | Detalle | `PredictionModel.details: BTreeMap<pair_id, PairDetailRow>`; `PairDetailRow.conflict.files: Vec<ConflictFileRow>` con `path: SafeText`. Lo pide `wanted` (AD3): todos los ⚡/⚠ sin detalle de su `rev`, ⚡ primero, lotes de 50, `early` para un `rev` mayor |
-| Ingestión | `apply_summary` (en `on_snapshot`, `update.rs:388`), `apply_changed` (rama `PREDICTION_CHANGED` de `apply`, `:457`) y `apply_page` (brazo de `EngineMsg::PredictionPage`) |
-| Nombres | `Side::{Worktree { key, folder }, Base}` → `row_name` (`view.rs`, CREATE en DS-US-CKP-006 T004, AD5) o `RepoView.base`; `↔` es `Glyphs.versus` |
+| Ingestión | `apply_summary` (en `on_snapshot`, `update.rs:442`), `apply_changed` (rama `PREDICTION_CHANGED` de `apply`, `:457`) y `apply_page` (brazo de `EngineMsg::PredictionPage`) |
+| Nombres | `Side::{Worktree { key, folder }, Base}` → `row_name` (`view.rs:552`, ya existe, AD5) o `RepoView.base`; `↔` es `Glyphs.versus` |
 | Panel | `ConflictPanelModel { entries: Vec<ConflictEntry>, .. }` en `widgets/conflict_alert.rs` (AD6); esta DS añade `ConflictEntry.new` |
-| Filas | `PredictionModel::known_conflict(key)` → `AgentRowModel.conflict` (`view.rs:518`, DS-US-CKP-002 D2) |
+| Filas | `PredictionModel::known_conflict(key)` → `AgentRowModel.conflict` (`view.rs:629`, DS-US-CKP-002 D2) |
 
 ## Contrato de API
 
@@ -343,6 +344,8 @@ _Sin métodos, campos ni eventos nuevos._ Consume `RepoView.prediction`, `predic
 ---
 
 ## Estrategia de pruebas y cobertura
+
+**Contrato de `/implement` (2026-11-09).** La aceptación de la historia la certifican los tests `s1_…` a `s7_…` de `apps/cli/tests/tui_conflict_alert.rs` (API pública, sin daemon): S1 (escenario 1), S2 (texto en/es/ASCII), S3 (un ⚡ conocido no repite), S4 (siembra, truncado, `ScopeClosed`), S5 (5 s, marca, pila de 3), S6 (sin BEL ni SO, incluidas las comprobaciones estáticas de T001) y S7 (no intrusiva, sin color y ASCII). Los tests de cada tarea (`tui::alerts::tests`, `tui::update::tests::conflict_alert*`, `tui::view::tests::conflict_toast*`, `present::conflict_alert_text`, `tests/tui_no_os_alert.rs`) son **pruebas adicionales de apoyo**; el `Aceptación:` de cada tarea se cumple además con el `sN_…` que le corresponde. Si `tui_no_os_alert.rs` repite las comprobaciones estáticas de S6, se deja una sola copia.
 
 `update` ya es puro y se prueba en su `mod tests` con `update(&mut m, msg)` y mensajes fabricados (`update.rs:557`). La vista se prueba con `TestBackend` e `insta` (`view.rs:628`, `view.rs:949`). Esta DS sigue los mismos dos patrones. El escenario 1 de punta a punta contra el daemon real lo añade DS-US-CKP-006 (prueba de proceso de la TUI). Aquí no se repite.
 
