@@ -16,9 +16,10 @@ export interface ChipProps {
   className?: string;
 }
 
-const FRAME = "inline-flex items-center rounded-pill border bg-surface-control text-text-muted";
-const IDLE = "border-border-strong";
+const FRAME = "inline-flex items-center rounded-pill border";
+const IDLE = "border-border-strong bg-surface-control text-text-muted";
 const SELECTED = "border-accent bg-accent-glow text-text-main";
+const DISABLED = "border-border-strong bg-surface-control text-text-disabled";
 
 /**
  * A static tag, a filter toggle (`onToggle`) or a removable tag (`onRemove`). With `onRemove` the remove
@@ -68,7 +69,7 @@ export function Chip({ label, mono = false, selected = false, onToggle, onRemove
   }
 
   return (
-    <span className={cx(FRAME, on ? SELECTED : IDLE, "gap-(--gr-space-1) pl-(--gr-space-2)", disabled && "text-text-disabled", className)}>
+    <span className={cx(FRAME, disabled ? DISABLED : on ? SELECTED : IDLE, "gap-(--gr-space-1) pl-(--gr-space-2)", className)}>
       {body}
       <IconButton
         label={t("ui.chip.remove", { label })}
