@@ -1046,3 +1046,5 @@ macOS (T010) y ubuntu (job `desktop`). Windows y Linux en máquina real: **Pendi
 | G5 | El plan de la spec UX para el menú Fetch (tres ítems de Pull desactivados con «Disponible en UI-2») es de la historia de la toolbar; la primitiva ya soporta `disabledReason` | El PO lo decide con esa historia | PO |
 | G6 | `glass.css` crece con dos bloques acotados (~45 variables cada uno). Es CSS estático, sin coste de ejecución apreciable | Ninguna | — |
 | G7 | Si al implementar `@source not` o `@custom-variant` se comportan distinto en Tailwind 4.3.3 de lo descrito, el criterio es el resultado: el catálogo fuera del CSS de release y los estados forzados iguales a los reales. Se anota en el PR | Implementador | web-expert |
+
+Implementado en: PR #331. Pendiente de la verificación manual en macOS (T010 pasos 3 a 5: `?catalog` en Safari, VoiceOver, Reducir movimiento y `tauri:dev`) y de la captura del catálogo en claro y oscuro; Windows y Linux, en la etapa de validación multiplataforma.
