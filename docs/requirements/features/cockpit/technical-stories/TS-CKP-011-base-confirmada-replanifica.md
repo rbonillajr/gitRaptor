@@ -2,14 +2,14 @@
 id: TS-CKP-011
 title: "Confirmar la base en runtime refresca la base publicada y replanifica los pares contra la base"
 type: ts
-status: ready
+status: implemented
 feature: cockpit
 domain: GRP
 priority: high
 complexity: medium
 milestone: M2
 created: 2026-11-08
-updated: 2026-11-08
+updated: 2026-11-09
 blocked_by: []
 related:
   adrs: [ADR-CKP-001, ADR-GRP-009, ADR-GRP-011, ADR-GRP-013, ADR-GRP-016, ADR-GRD-004, ADR-GRD-005]
@@ -60,4 +60,6 @@ tags: [cockpit, prediccion-conflictos, rama-base, guardrails, daemon, modulos-da
 
 - En un repo de demo con un worktree que cambia las mismas líneas que `main`: abrir `raptor`, ver el par contra la base "pendiente", ejecutar `raptor guard confirm` desde otra terminal y ver el ⚡ contra `main` sin reiniciar el daemon.
 
-> Dev Spec: [`dev-specs/TS-CKP-011-base-confirmada-replanifica.md`](../dev-specs/TS-CKP-011-base-confirmada-replanifica.md) — `DS-TS-CKP-011` (status: approved).
+> Dev Spec: [`dev-specs/TS-CKP-011-base-confirmada-replanifica.md`](../dev-specs/TS-CKP-011-base-confirmada-replanifica.md) — `DS-TS-CKP-011` (status: implemented).
+
+Implementado en: PR #343. El escenario 3 de US-CKP-006 pasa sin `#[ignore]`; el repo dormido se prueba por lo observable (la confirmación lo despierta antes de refrescar la base) y la rama dormida de `Msg::BaseChanged` con una unitaria (nota N5 de la Dev Spec).

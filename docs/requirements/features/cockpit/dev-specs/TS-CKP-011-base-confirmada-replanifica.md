@@ -2,9 +2,9 @@
 id: DS-TS-CKP-011
 title: "Dev Spec — Confirmar la base en runtime refresca la base publicada y replanifica los pares contra la base"
 type: dev-spec
-status: approved
+status: implemented
 created: 2026-11-08
-updated: 2026-11-08
+updated: 2026-11-09
 story: TS-CKP-011
 feature: cockpit
 domain: GRP
@@ -458,4 +458,4 @@ macOS en local y en CI de Linux para la integración (`#![cfg(any(target_os = "m
 ## Estado
 
 - Hecho: TS-CKP-011 (`ready`) y esta Dev Spec (`approved`), 2026-11-08.
-- Siguiente paso: implementar T001 a T005 en una rama `feat/TS-CKP-011-base-confirmada-replanifica`.
+- Hecho: T001 a T005 implementados en el PR #343 (2026-11-09). Implementado en: PR #343. G-B queda cerrado y el escenario 3 de US-CKP-006 pasa sin `#[ignore]`.

@@ -2,10 +2,10 @@
 id: US-CKP-006
 title: "El desarrollador ve qué agentes van a chocar antes de hacer merge"
 type: us
-status: partially-implemented
+status: implemented
 priority: high
 created: 2026-10-04
-updated: 2026-11-04
+updated: 2026-11-09
 feature: cockpit
 related:
   context:
@@ -96,6 +96,6 @@ Detalle en [DS-US-CKP-006](../dev-specs/US-CKP-006-conflictos-previstos.md). La 
 ## Diseño y Dev Spec
 
 - **Diseño:** DSYS-GRP-001 (ConflictAlert, símbolos ⚡ ⚠).
-- **Dev Spec:** [DS-US-CKP-006](../dev-specs/US-CKP-006-conflictos-previstos.md) (`partially-implemented`).
+- **Dev Spec:** [DS-US-CKP-006](../dev-specs/US-CKP-006-conflictos-previstos.md) (`implemented`).
 
-Implementado en: PR #320 ([DS-US-CKP-006](../dev-specs/US-CKP-006-conflictos-previstos.md)). Pendiente: el escenario 3 (un worktree contra la base confirmada) no puede pasar todavía: confirmar la base en runtime (`guard confirm`) no refresca la base publicada ni vuelve a planificar, así que el par contra la base queda `pending` (hueco G-B del predictor, fuera de este PR; cruza guardrails y motor). Seguimiento: [TS-CKP-011](../technical-stories/TS-CKP-011-base-confirmada-replanifica.md). El resto de los escenarios pasa en macOS con el daemon real.
+Implementado en: PR #320 ([DS-US-CKP-006](../dev-specs/US-CKP-006-conflictos-previstos.md)) y PR #343 ([TS-CKP-011](../technical-stories/TS-CKP-011-base-confirmada-replanifica.md)). El escenario 3 (un worktree contra la base confirmada) quedó pendiente en el #320 por el hueco G-B: confirmar la base en runtime no refrescaba la base publicada. El #343 lo cierra: el escenario 3 pasa sin `#[ignore]`. Todos los escenarios pasan en macOS con el daemon real; Linux y Windows, en la etapa de validación multiplataforma.
