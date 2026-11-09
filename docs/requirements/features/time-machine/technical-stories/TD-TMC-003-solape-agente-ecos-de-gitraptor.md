@@ -2,7 +2,7 @@
 id: TD-TMC-003
 title: "El solape del undo por agente cuenta los ecos anclados de GitRaptor como movimientos sin atribuir"
 type: td
-status: draft
+status: implemented
 feature: time-machine
 domain: GRP
 priority: medium
@@ -29,7 +29,7 @@ tags: [time-machine, deuda-tecnica, solape, undo-por-agente, redo, nfr-01]
 **Quiero** que `raptor undo --agent` reconozca como propios de GitRaptor los movimientos de rama de un undo o redo anterior
 **Para** que el undo por agente no se rechace con un solape falso tras un redo
 
-> Dev Spec: no hace falta (cambio acotado a `overlap.rs` / `undo_agent.rs`; los criterios de abajo bastan) | Pendiente
+> Dev Spec: no hace falta (cambio acotado a `overlap.rs` / `undo_agent.rs`; los criterios de abajo bastan) | Brief: [`td-tmc-003-agent-overlap-echoes.2-plan.md`](../../../../dev-briefs/td-tmc-003-agent-overlap-echoes.2-plan.md)
 
 **Origen.** Implementación de US-TMC-003 (redo), PR del redo: el guard ⛔4.2 original (el agente deshace su trabajo, lo rehace y lo vuelve a deshacer) falla en el último paso. Diagnóstico instrumentado: la fila del redo y su ancla tienen la misma forma que las del undo (`kind: redo`, `scope.refs` con la rama, `engine_mark`, observación con `cause_operation` = el redo y `echo_settled`). **Decisión del coordinador (2026-11-09)**: el arreglo cambia la semántica del solape del undo por agente y se encarga aparte; GUARD-4.2 se enmendó para probar el guard sin pasar por el undo por agente.
 
@@ -57,3 +57,12 @@ tags: [time-machine, deuda-tecnica, solape, undo-por-agente, redo, nfr-01]
 #### Verificación Manual / Sandbox
 
 - En un repo temporal con un agente simulado: `raptor undo --agent <id>`, `raptor redo` y de nuevo `raptor undo --agent <id>`. El segundo undo se hace y el repo vuelve al estado sin el trabajo del agente.
+
+### Estado de la implementación (2026-11-09)
+
+Implementado en: PR #PRNUM.
+
+- **Hecho:** `undo_agent::branch_rule_events` filtra los eventos que lee la regla de ramas en las dos fases (`undo_agent::plan` antes de `check_selected` y `UndoStep::check_selected_tail`). Solo descarta el eco **anclado** de un undo o redo `Finished` del worktree que movió únicamente trabajo del conjunto, sin ventana mixta con otra operación y con actor crudo «sin atribuir» o del propio agente. Cualquier otro eco de GitRaptor cuenta como movimiento con el solicitante de su operación como actor; sin ancla, sin terminar o fuera de ventana cuenta tal cual. Si el oplog no se puede leer, el solape queda `overlap-unverified` (falla cerrado). `overlap.rs` no cambia.
+- **Decisiones:** regla de la [Enmienda (2026-11-09, TD-TMC-003) de ADR-TMC-005](../../../../architecture/decisions/ADR-TMC-005-solicitante-permisos-solape.md), decisión del orquestador (2026-11-09) validada por Arquitecto. Sustituye la «opción mínima» del Alcance (descartar todo evento con `caused_by`), que habría ocultado ecos de trabajo de otro actor. Rigor alto por decisión del coordinador.
+- **Tests:** criterio en `crates/core/tests/td_tmc_003.rs` (undo → redo → undo por agente con los mismos `undone_operation_ids`; un commit de otro agente tras el eco sigue dando `overlap`); 19 unitarios del filtro en `crates/core/src/timemachine/undo_agent_echo_tests.rs`.
+- **Pendiente:** el undo por agente solo lee los eventos del worktree que lo invoca, mientras el § 5 de ADR-TMC-005 habla de eventos de cualquier worktree para las ramas (anotado por el Arquitecto; fuera de alcance). Linux y Windows, en la etapa de validación multiplataforma. Sin certificar (modo rápido).

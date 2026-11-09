@@ -480,8 +480,8 @@ fn a_redo_right_after_an_undo_is_not_invalidated_by_its_echo() {
     );
     assert_eq!(id(&redone, "redone_undo_id"), id(&first, "operation_id"));
     // Authorized amendment (coordinator, 2026-11-09): the guard is checked without a second undo by
-    // agent, whose branch rule counts GitRaptor's own anchored echoes as unattributed moves (a
-    // defect of US-TMC-011, TD-TMC-003; its acceptance takes back this test's original last step).
+    // agent. Its original last step (a second undo by agent after the redo, held by GitRaptor's own
+    // anchored echoes until TD-TMC-003) is `td_tmc_003::an_agent_undoes_its_work_again_after_redoing_it`.
     // (1) The redo's writes are anchored: an observation point caused by the redo itself.
     let redo_id = id(&redone, "operation_id");
     let anchored = w
