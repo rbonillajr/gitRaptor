@@ -69,7 +69,7 @@ tags: [motor-local, recursos, prioridad, qos, nice, ionice, ecoqos, bateria, dae
 
 ## Estado de la implementación (2026-11-08)
 
-Implementado en: PR #298 (PR-A: T001 a T006) y PR #PRB (PR-B: T007 a T014 de DS-TS-GRP-005). Queda en `partially-implemented` por los pendientes de abajo.
+Implementado en: PR #298 (PR-A: T001 a T006) y PR #323 (PR-B: T007 a T014 de DS-TS-GRP-005). Queda en `partially-implemented` por los pendientes de abajo.
 
 - **Hecho en el PR-A (macOS):** `macsys::qos`, `work_class` (clases, tramos y registro de pools), `power` (modo resuelto de `engine.powerSaving` y la fuente), el hilo `raptor-power` y `Daemon::power()`, y las clases de los hilos que no tocan el camino del snapshot previo. Decisión D17: los hilos reciben solo la QoS.
 - **Hecho en el PR-B (macOS):**
