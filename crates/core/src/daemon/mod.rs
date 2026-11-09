@@ -816,6 +816,7 @@ impl Daemon {
             free_space_floor: (!(tm.no_free_space_floor && cfg!(debug_assertions)))
                 .then(crate::timemachine::continuous::FreeSpaceFloor::default),
             after_mark: None,
+            seals: Default::default(),
         }
     }
 

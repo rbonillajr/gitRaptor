@@ -128,6 +128,7 @@ fn daemon(gate: bool) -> Daemon {
         layer: None,
         free_space_floor: None,
         after_mark: None,
+        seals: Default::default(),
     };
     Daemon {
         f,

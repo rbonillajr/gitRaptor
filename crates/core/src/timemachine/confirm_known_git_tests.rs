@@ -154,6 +154,7 @@ fn manual_capture(scope: Scope) -> (Result<manual::ManualCaptured, ManualError>,
         layer: None,
         free_space_floor: None,
         after_mark: None,
+        seals: Default::default(),
     };
     let ask = ManualAsk {
         repo_id: REPO.into(),

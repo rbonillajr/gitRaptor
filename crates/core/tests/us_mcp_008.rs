@@ -532,6 +532,7 @@ impl Daemon {
             layer: None,
             free_space_floor: floor,
             after_mark: None,
+            seals: Default::default(),
         }
     }
 

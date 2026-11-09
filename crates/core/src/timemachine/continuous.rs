@@ -102,6 +102,8 @@ pub struct CaptureDeps {
     /// worktrees, to inject a `git` there. Honored only in debug builds.
     #[doc(hidden)]
     pub after_mark: Option<Arc<dyn Fn() + Send + Sync>>,
+    /// Captures sealed or given up, per repo: what an undo waits on for its base (TS-TMC-005).
+    pub seals: Arc<super::base_wait::CaptureSeals>,
 }
 
 /// The free space under which the continuous capture stops (SEC-TMC-12): the larger of `bytes`

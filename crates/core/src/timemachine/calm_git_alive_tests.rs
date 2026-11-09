@@ -247,6 +247,7 @@ fn confirm_mark_rejects_a_capture_while_a_git_is_alive() {
         after_mark: Some(Arc::new(move || {
             procs.add(4300, 1, GIT, Some(&wt), &["reset"]);
         })),
+        seals: Default::default(),
     };
     let out = observe(
         &deps,
