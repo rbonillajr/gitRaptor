@@ -6,14 +6,17 @@ use gitraptor_api::display::{NAME_MAX_CHARS, TEXT_MAX_CHARS, visible};
 use gitraptor_api::event::{self, Event};
 use gitraptor_api::messages::{
     EngineStateView, EngineView, RepoObservationData, RepoStateView, RepoTier, RepoTierData,
+    SessionView, WorktreeView,
 };
+use gitraptor_api::prediction::PairSummary;
 use gitraptor_api::scope::{
-    AttentionCount, AttentionView, GlobalSnapshot, RepoAttentionData, RepoSummaryView,
+    AttentionCount, AttentionView, GlobalSnapshot, RepoAttentionData, RepoSnapshot, RepoSummaryView,
 };
 
 use super::wire::{
-    AttentionDto, Autostart, CandidateDto, CountDto, DaemonDto, EngineDto, EngineMessage,
-    EngineStateDto, GlobalDto, RepoStateDto, RepoSummaryDto, Tier,
+    AttentionDto, Autostart, BaseDto, BaseStatus, CandidateDto, CountDto, DaemonDto, EngineDto,
+    EngineMessage, EngineStateDto, GlobalDto, PairDto, PairState, RepoFleetDto, RepoStateDto,
+    RepoSummaryDto, SessionDto, Tier, UnavailableReason, WorktreeDto, WorktreeStatusDto,
 };
 
 /// The global snapshot as a DTO.
@@ -30,6 +33,61 @@ pub fn global(snapshot: &GlobalSnapshot) -> GlobalDto {
             gitraptor_api::scope::AutostartView::Unknown => Autostart::Unknown,
         },
         repos: snapshot.repos.iter().map(repo_summary).collect(),
+    }
+}
+
+/// The FNV-1a 64 key of a raw path, as 16 lowercase hex digits.
+pub fn key(_raw_path: &str) -> String {
+    String::new()
+}
+
+/// The open repo's snapshot as a DTO.
+pub fn repo(_snapshot: &RepoSnapshot) -> RepoFleetDto {
+    RepoFleetDto {
+        repo_id: String::new(),
+        name: String::new(),
+        base: BaseDto {
+            name: None,
+            status: BaseStatus::Unconfirmed,
+        },
+        fetched_utc_ms: None,
+        tier: None,
+        worktrees: Vec::new(),
+        pairs: Vec::new(),
+        pairs_truncated: false,
+    }
+}
+
+/// One worktree as a DTO.
+pub fn worktree(_view: &WorktreeView) -> WorktreeDto {
+    WorktreeDto {
+        key: String::new(),
+        folder: String::new(),
+        path: String::new(),
+        main: false,
+        status: WorktreeStatusDto::Unavailable {
+            reason: UnavailableReason::Unreadable,
+        },
+        last_activity_utc_ms: None,
+        last_activity_in_gap: false,
+        detached_at: None,
+        operation: None,
+    }
+}
+
+/// One session as a DTO; `None` when it cannot be attributed to an agent.
+pub fn session(_view: &SessionView) -> Option<SessionDto> {
+    None
+}
+
+/// One predicted pair as a DTO.
+pub fn pair(_summary: &PairSummary) -> PairDto {
+    PairDto {
+        pair_id: String::new(),
+        a: String::new(),
+        b: String::new(),
+        state: PairState::Pending,
+        level: None,
     }
 }
 

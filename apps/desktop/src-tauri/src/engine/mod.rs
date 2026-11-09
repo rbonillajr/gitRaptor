@@ -12,6 +12,7 @@ pub mod seq;
 pub mod supervisor;
 pub mod wire;
 
+use crate::ipc::CommandError;
 use link::Connector;
 use supervisor::{HubCmd, Sink, SupervisorHandle};
 
@@ -57,6 +58,17 @@ impl EngineHub {
         match lock(&self.handle).as_ref() {
             Some(running) if running.send(HubCmd::Retry { start }) => Ok(()),
             _ => Err(NotWatching),
+        }
+    }
+
+    /// Asks the supervisor to open `repo_id`'s scope.
+    ///
+    /// # Errors
+    /// [`CommandError::NotWatching`] when no `watch` has started the supervisor yet.
+    pub fn open(&self, repo_id: String) -> Result<(), CommandError> {
+        match lock(&self.handle).as_ref() {
+            Some(running) if running.send(HubCmd::Open { repo_id }) => Ok(()),
+            _ => Err(CommandError::NotWatching),
         }
     }
 
