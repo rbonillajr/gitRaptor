@@ -49,10 +49,9 @@ use gitraptor_api::timemachine::{
     MAX_REPORTED_PATHS, MAX_REPORTED_REFS, MAX_SINCE_SECS, McpRequesterView, NotRestored,
     NotRestoredReason, NoticesParams, NoticesResult, OperationRunResult, OverlapConflict,
     OverlapSubject, OverlapUndone, PriorFailedData, RedoParams, RedoResult, RequestChannel,
-    RequesterView,
-    ResolveParams, RestoreParams, RestoreResult, SnapshotParams, Surface, TIMELINE_DEFAULT_LIMIT,
-    TimelineParams, TmConfirmData, TmOverlap, TmRejectReason, TmRejectedData, UndoParams,
-    UndoResult, parse_since,
+    RequesterView, ResolveParams, RestoreParams, RestoreResult, SnapshotParams, Surface,
+    TIMELINE_DEFAULT_LIMIT, TimelineParams, TmConfirmData, TmOverlap, TmRejectReason,
+    TmRejectedData, UndoParams, UndoResult, parse_since,
 };
 use gitraptor_git::{ReaderOptions, RepoReader};
 
@@ -99,8 +98,8 @@ use crate::timemachine::timeline::{
 mod exception;
 
 use crate::timemachine::overlap::{OverlapReport, Subject as OverlapSubjectCore};
-use crate::timemachine::timeline::recorded_actor;
 use crate::timemachine::redo::{RedoDone, RedoError, redo_last};
+use crate::timemachine::timeline::recorded_actor;
 use crate::timemachine::undo::TmRepoHandle;
 use crate::timemachine::undo::{
     RawSide, Selection, UndoDone, UndoEnv, UndoError, Undone, tm_scope_for, undo_selected,
