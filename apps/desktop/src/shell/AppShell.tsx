@@ -46,7 +46,7 @@ export function AppShell() {
     if (wide) {
       toggleDetail();
     } else if (drawerOpen) {
-      setDrawerOpen(false);
+      closeDrawer();
     } else {
       flushSync(() => setDrawerOpen(true));
       detail.current?.focus();
