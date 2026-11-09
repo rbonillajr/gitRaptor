@@ -19,6 +19,7 @@ pub mod client;
 pub mod clock;
 pub mod commit_paths;
 pub mod discovery;
+pub mod display;
 pub mod event;
 pub mod framing;
 pub mod guard;
