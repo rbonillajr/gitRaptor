@@ -13,7 +13,7 @@ export interface UiState {
 }
 
 /** What the center shows; never persisted (DS-US-DSK-008 D7). */
-export type CenterView = { view: "main" } | { view: "pair"; repoId: string; pairId: string };
+export type CenterView = { view: "main" } | { view: "guardrails" } | { view: "pair"; repoId: string; pairId: string };
 
 /** The open repo of the fleet; never persisted (DS-US-DSK-004 T003). */
 export interface FleetSelection {
@@ -26,6 +26,7 @@ export interface FleetSelection {
 export interface UiActions {
   selectRepo: (id: string | null) => void;
   openPairDetail: (target: { repoId: string; pairId: string }) => void;
+  openGuardrails: () => void;
   backToMain: () => void;
   closePairDetail: () => void;
   toggleSidebar: () => void;
@@ -48,6 +49,7 @@ export const useUiStore = create<UiState & UiActions & FleetSelection>()(
       previousRepoId: null,
       center: { view: "main" },
       openPairDetail: ({ repoId, pairId }) => set({ center: { view: "pair", repoId, pairId } }),
+      openGuardrails: () => set({ center: { view: "guardrails" } }),
       backToMain: () => set({ center: { view: "main" } }),
       closePairDetail: () => set({ center: { view: "main" } }),
       selectRepo: (id) =>

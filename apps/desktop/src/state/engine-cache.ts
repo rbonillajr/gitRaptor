@@ -1,8 +1,29 @@
 import type { QueryClient } from "@tanstack/react-query";
-import type { CandidateDto, EngineMessage, GlobalDto, RepoFleet, SessionDto } from "@/client/engine-types";
+import type {
+  BlockEntryDto,
+  GuardBlocksDto,
+  GuardUnavailableCause,
+  ProtectionDto,
+  CandidateDto,
+  EngineMessage,
+  GlobalDto,
+  RepoFleet,
+  SessionDto,
+} from "@/client/engine-types";
 import { engineKeys } from "@/client/queries";
 import { useEngineStore } from "./engine-store";
 import { useUiStore } from "./ui-store";
+
+/** Guard blocks of the open repo; `unavailable` keeps the last entries (DS-US-DSK-007 D13). */
+export type GuardBlocks =
+  | ({ state: "ready" } & GuardBlocksDto)
+  | {
+      state: "unavailable";
+      cause: GuardUnavailableCause;
+      protection: ProtectionDto | null;
+      entries: BlockEntryDto[];
+      readAtMs: number | null;
+    };
 
 /** The global entry: the last snapshot, or the restricted view of D6 (`restricted`, no repos). */
 export type GlobalEntry = GlobalDto & { restricted?: true };

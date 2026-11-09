@@ -5,6 +5,7 @@
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
+pub mod exception_command;
 pub mod ingest;
 pub mod launcher;
 pub mod link;
@@ -82,6 +83,21 @@ impl EngineHub {
         }
         match lock(&self.handle).as_ref() {
             Some(running) if running.send(HubCmd::Open { repo_id }) => Ok(()),
+            _ => Err(CommandError::NotWatching),
+        }
+    }
+
+    /// Asks the supervisor to read the open repo's guard log.
+    ///
+    /// # Errors
+    /// [`CommandError::InvalidParams`] for an invalid id; [`CommandError::NotWatching`] when no
+    /// `watch` has started the supervisor yet.
+    pub fn guard_blocks(&self, repo_id: String) -> Result<(), CommandError> {
+        if !valid_repo_id(&repo_id) {
+            return Err(CommandError::InvalidParams);
+        }
+        match lock(&self.handle).as_ref() {
+            Some(running) if running.send(HubCmd::GuardBlocks { repo_id }) => Ok(()),
             _ => Err(CommandError::NotWatching),
         }
     }

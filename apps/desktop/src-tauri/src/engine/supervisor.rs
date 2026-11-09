@@ -59,6 +59,7 @@ pub enum HubCmd {
     Watch(Sink),
     Retry { start: bool },
     Open { repo_id: String },
+    GuardBlocks { repo_id: String },
     Shutdown,
 }
 
@@ -395,6 +396,7 @@ fn wait(ctx: &mut Ctx, rx: &Receiver<HubCmd>, delay: Duration) -> Wake {
             Ok(HubCmd::Retry { start }) => return Wake::Retry(start),
             Ok(HubCmd::Watch(sink)) => ctx.on_watch(sink),
             Ok(HubCmd::Open { repo_id }) => ctx.open = Some(repo_id),
+            Ok(HubCmd::GuardBlocks { .. }) => {}
             Err(RecvTimeoutError::Timeout) => return Wake::Elapsed,
         }
     }
@@ -406,7 +408,7 @@ fn wait_for_shutdown(ctx: &mut Ctx, rx: &Receiver<HubCmd>) {
             HubCmd::Shutdown => return,
             HubCmd::Watch(sink) => ctx.on_watch(sink),
             HubCmd::Open { repo_id } => ctx.open = Some(repo_id),
-            HubCmd::Retry { .. } => {}
+            HubCmd::Retry { .. } | HubCmd::GuardBlocks { .. } => {}
         }
     }
 }
@@ -622,6 +624,7 @@ fn stream(
                         return End::Reconnect;
                     }
                 }
+                Ok(HubCmd::GuardBlocks { .. }) => {}
                 Err(TryRecvError::Empty) => break,
             }
         }
