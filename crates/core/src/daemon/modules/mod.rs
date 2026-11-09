@@ -39,6 +39,9 @@ pub(super) trait DaemonModule: Send {
     /// The engine persisted and published a Git event of a worktree.
     fn git_event(&self, _repo_id: &str, _worktree: &Path, _seq: i64) {}
 
+    /// The repo's published base branch changed; the snapshot already holds it.
+    fn base_changed(&self, _repo_id: &str) {}
+
     /// The declared discovery roots changed (US-GRP-020), with the
     /// canonical home folder.
     fn discovery_roots_changed(&self, _roots: &[DiscoveryRoot], _home: Option<PathBuf>) {}
@@ -95,6 +98,12 @@ impl Modules {
     pub(super) fn git_event(&self, repo_id: &str, worktree: &Path, seq: i64) {
         for module in &self.0 {
             module.git_event(repo_id, worktree, seq);
+        }
+    }
+
+    pub(super) fn base_changed(&self, repo_id: &str) {
+        for module in &self.0 {
+            module.base_changed(repo_id);
         }
     }
 
@@ -155,6 +164,9 @@ mod tests {
         fn git_event(&self, _: &str, _: &Path, _: i64) {
             self.note("event");
         }
+        fn base_changed(&self, _: &str) {
+            self.note("base");
+        }
         fn stop(self: Box<Self>) {
             self.note("stop");
         }
@@ -175,6 +187,7 @@ mod tests {
         modules.repo_retired("r");
         assert_eq!(modules.observer_hooks().count(), 2);
         modules.git_event("r", Path::new("/w"), 1);
+        modules.base_changed("r");
         modules.stop();
         assert_eq!(
             *log.lock().unwrap(),
@@ -185,6 +198,8 @@ mod tests {
                 "hooks:b",
                 "event:a",
                 "event:b",
+                "base:a",
+                "base:b",
                 "stop:a",
                 "stop:b"
             ]

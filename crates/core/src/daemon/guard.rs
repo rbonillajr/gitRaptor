@@ -97,6 +97,11 @@ impl Daemon {
             request,
             GuardRequest::Install { .. } | GuardRequest::UninstallApply { .. }
         );
+        // Both can confirm the base branch, which the snapshot must then publish.
+        let may_confirm_base = matches!(
+            request,
+            GuardRequest::Install { .. } | GuardRequest::Confirm { .. }
+        );
         // The state before a change of ours: the install and the uninstall move the watch.
         let before = self.guard.protection().current(&entry.repo_id);
         let reply = match request {
@@ -463,6 +468,9 @@ impl Daemon {
                 (requester, requester),
                 now,
             );
+        }
+        if may_confirm_base {
+            self.refresh_base(&entry.repo_id);
         }
         self.protection_after(&entry.repo_id, &reply, own.then_some(before));
         let mut reply = reply;
