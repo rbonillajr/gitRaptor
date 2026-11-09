@@ -189,8 +189,8 @@
       "tests": [
         "apps/cli/tests/m2_demo_undo_agent.rs"
       ],
-      "priority": "should",
-      "priorityEvidence": "US-TMC-011 § Estado de la implementación: 'La demo de M2 no es fiable en macOS hasta que eso se arregle en el motor' (TD-GRP-005); Brief us-tmc-003-redo.2-plan.md § Decisiones de preparación P3"
+      "priority": "must",
+      "priorityEvidence": "Enmienda autorizada por el coordinador (2026-11-09, msg_edf245326d06): TD-GRP-005 resuelto en el PR #333; con #333 dentro, la demo pasó 5 de 5 corridas seguidas en local con carga de 30 a 48. Antes: should, porque la demo no era fiable en macOS (US-TMC-011 § Estado de la implementación)"
     }
   ],
   "suite": {
