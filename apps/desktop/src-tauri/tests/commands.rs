@@ -6,6 +6,10 @@
 //! (Serialize), `commands::app_info::{info, AppInfo}` (`info()` is the pure fn the command delegates to).
 
 use gitraptor_desktop::commands::app_info;
+use gitraptor_desktop::commands::engine_retry::EngineRetryParams;
+use gitraptor_desktop::commands::engine_watch::EngineWatchParams;
+use gitraptor_desktop::engine::link::{ConnectFailure, Connector, Link};
+use gitraptor_desktop::engine::{EngineHub, NotWatching};
 use gitraptor_desktop::ipc::{CommandError, from_body, parse};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -163,4 +167,89 @@ fn ipc1_capability_allows_each_command() {
             "IPC1: capability main lacks {permission}"
         );
     }
+}
+
+// ---------------------------------------------------------------- D3-CMDS (DS-US-DSK-003 T005)
+
+fn rejects<P: serde::de::DeserializeOwned>(body: Value) {
+    let got = parse::<P>(&body);
+    let err: CommandError = match got {
+        Ok(_) => panic!("D3-CMDS: {body} must be rejected with invalid-params"),
+        Err(e) => e,
+    };
+    assert_eq!(
+        serde_json::to_value(&err).unwrap(),
+        json!({"code": "invalid-params"}),
+        "D3-CMDS: rejection of {body} must serialise to invalid-params"
+    );
+}
+
+#[test]
+fn d3_cmds_engine_commands_are_listed_and_allowed() {
+    assert_eq!(
+        commands_json(),
+        ["app_info", "engine_retry", "engine_watch"],
+        "D3-CMDS: commands.json is exactly app_info, engine_watch and engine_retry"
+    );
+    let text = std::fs::read_to_string(Path::new(ROOT).join("capabilities/main.json")).unwrap();
+    let cap: Value = serde_json::from_str(&text).unwrap();
+    let perms: Vec<&str> = cap["permissions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p.as_str().unwrap())
+        .collect();
+    for permission in ["allow-engine-watch", "allow-engine-retry"] {
+        assert!(
+            perms.contains(&permission),
+            "D3-CMDS: capability main lacks {permission}"
+        );
+    }
+}
+
+#[test]
+fn d3_cmds_engine_watch_takes_a_channel_and_rejects_unknown_fields() {
+    let channel = json!("__CHANNEL__:1");
+    assert!(
+        parse::<EngineWatchParams>(&json!({"params": {"channel": channel}})).is_ok(),
+        "D3-CMDS: {{\"params\":{{\"channel\":\"__CHANNEL__:1\"}}}} must parse"
+    );
+    rejects::<EngineWatchParams>(json!({"params": {"channel": channel, "x": 1}}));
+    rejects::<EngineWatchParams>(json!({"params": {"channel": channel}, "extra": 1}));
+    rejects::<EngineWatchParams>(json!({"params": {}}));
+}
+
+struct NoEngine;
+
+impl Connector for NoEngine {
+    fn connect(&mut self, _start: bool) -> Result<Box<dyn Link>, ConnectFailure> {
+        Err(ConnectFailure::NotRunning)
+    }
+}
+
+#[test]
+fn d3_cmds_engine_retry_needs_start_rejects_unknown_fields_and_is_not_watching_alone() {
+    for start in [true, false] {
+        let ok = parse::<EngineRetryParams>(&json!({"params": {"start": start}}));
+        assert!(
+            matches!(ok, Ok(ref p) if p.start == start),
+            "D3-CMDS: {{\"params\":{{\"start\":{start}}}}} must parse"
+        );
+    }
+    rejects::<EngineRetryParams>(json!({"params": {"start": true, "x": 1}}));
+    rejects::<EngineRetryParams>(json!({"params": {"start": true}, "extra": 1}));
+    rejects::<EngineRetryParams>(json!({"params": {}}));
+    rejects::<EngineRetryParams>(json!({"params": {"start": "yes"}}));
+
+    let hub = EngineHub::new(Box::new(NoEngine), None);
+    assert_eq!(
+        hub.retry(true),
+        Err(NotWatching),
+        "D3-CMDS: engine_retry without a supervisor is not-watching"
+    );
+    assert_eq!(
+        serde_json::to_value(CommandError::NotWatching).unwrap(),
+        json!({"code": "not-watching"}),
+        "D3-CMDS: NotWatching serialises as not-watching"
+    );
 }

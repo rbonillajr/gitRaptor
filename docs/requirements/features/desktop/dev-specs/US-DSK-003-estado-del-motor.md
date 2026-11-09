@@ -228,7 +228,7 @@ graph LR
 **Ubicación.**
 - `apps/desktop/src-tauri/src/engine/link.rs` (**MODIFY**: `REQUIRED_CAPABILITIES`)
 - `apps/desktop/src-tauri/tests/engine_link.rs` (**MODIFY**: la aserción de la lista)
-- `apps/desktop/src-tauri/tests/support/mod.rs` (**MODIFY**: `pub mod fake_daemon;`)
+- `apps/desktop/src-tauri/tests/support/mod.rs` (**CREATE**: `pub mod fake_daemon;`; el patrón vigente de `engine_launcher.rs` es `#[path]`, cualquiera sirve)
 - `apps/desktop/src-tauri/tests/support/fake_daemon.rs` (**CREATE**)
 - `apps/desktop/src-tauri/Cargo.toml` (**MODIFY**: dev-dependency `tempfile.workspace = true`, si DS-TS-DSK-002 no la añadió)
 
@@ -299,6 +299,7 @@ graph LR
 - `apps/desktop/src-tauri/src/commands/engine_retry.rs` (**CREATE**)
 - `apps/desktop/src-tauri/capabilities/main.json` (**MODIFY**)
 - `apps/desktop/src-tauri/src/lib.rs` (**MODIFY**)
+- `apps/desktop/src-tauri/src/engine/launcher.rs` (**MODIFY**: `bundled_raptor` pasa de privada a `pub(crate)`)
 - `apps/desktop/src-tauri/tests/commands.rs` (**MODIFY**)
 - `apps/desktop/src/client/commands.ts` (**MODIFY**)
 - `apps/desktop/src/client/commands.test.ts` (**MODIFY**)
@@ -651,7 +652,7 @@ Daemon falso en carpeta temporal `0700` por test. Sin repos ni daemon reales sal
 | No solo color (NFR-09) | — | cada estado tiene símbolo y texto visibles; axe sin violaciones |
 | Primera pintura útil | — | `marks first meaningful paint once on a final state` |
 | Git mínimo igual que la TUI | `tests/min_git.rs`: `"2.38"` de `src/engine` igual al `MIN_GIT` de `apps/cli/src/tui/engine_state.rs` (lectura del archivo) | — |
-| `stop_command` (M-1) | `wire::tests::stop_command_quotes_every_argument_and_refuses_sec12` | — |
+| `stop_command` (M-1) | `tests/engine_stop_command.rs` › `stop_command_quotes_every_argument_and_refuses_sec12` | — |
 
 ### 9.5 Plataformas
 

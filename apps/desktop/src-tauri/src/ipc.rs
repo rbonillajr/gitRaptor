@@ -14,12 +14,15 @@ use tauri::ipc::{InvokeBody, Request};
 pub enum CommandError {
     /// The body is not the JSON envelope `{"params": {…}}` of the command.
     InvalidParams,
+    /// `engine_retry` was asked before `engine_watch` started the supervisor.
+    NotWatching,
 }
 
 impl std::fmt::Display for CommandError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::InvalidParams => f.write_str("invalid-params"),
+            Self::NotWatching => f.write_str("not-watching"),
         }
     }
 }
