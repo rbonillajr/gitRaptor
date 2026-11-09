@@ -73,3 +73,31 @@ pub fn peer_cred(stream: &gitraptor_winsys::pipe::PipeStream) -> std::io::Result
     };
     Ok(PeerCred { uid, pid })
 }
+
+/// The executable of `pid` as the kernel reports it, not canonicalized; `None` when it cannot
+/// be read. macOS: `proc_pidpath` (through `gitraptor-macsys`); Linux: `/proc/<pid>/exe`;
+/// elsewhere always `None`.
+pub fn executable_of(pid: u32) -> Option<std::path::PathBuf> {
+    #[cfg(target_os = "macos")]
+    {
+        gitraptor_macsys::process::executable_path(pid)
+    }
+    #[cfg(target_os = "linux")]
+    {
+        std::fs::read_link(format!("/proc/{pid}/exe")).ok()
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    {
+        let _ = pid;
+        None
+    }
+}
+
+/// `true` if `pid` runs an installed `raptor` of this user ([`super::installed::is_installed_raptor`]):
+/// the check B-3 of a channel's server before the handshake (ADR-GRP-017 § 1). That the pid is
+/// this user's is already checked on the socket ([`peer_cred`], L-06). Between reading the pid
+/// and resolving its executable the pid can be reused: the accepted limit of ADR-GRP-014
+/// Enmienda DEP-DSK-5 § D6.
+pub fn installed_raptor_peer(pid: u32) -> bool {
+    executable_of(pid).is_some_and(|exe| super::installed::is_installed_raptor(&exe))
+}

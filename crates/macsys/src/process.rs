@@ -22,6 +22,21 @@ pub fn process_args(pid: u32) -> Option<Vec<OsString>> {
     }
 }
 
+/// The path of the executable of `pid` as the kernel reports it (`proc_pidpath`), not
+/// canonicalized, or `None` when it cannot be read (a gone pid, another user's process). macOS
+/// only; elsewhere always `None`.
+pub fn executable_path(pid: u32) -> Option<std::path::PathBuf> {
+    #[cfg(target_os = "macos")]
+    {
+        crate::ffi_pidpath::pidpath(pid)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = pid;
+        None
+    }
+}
+
 /// Parses a `KERN_PROCARGS2` area: a native-endian `int` argc, the executable path, NUL padding,
 /// then `argc` NUL-terminated strings. The environment that follows is never read. Anything
 /// malformed is `None`.

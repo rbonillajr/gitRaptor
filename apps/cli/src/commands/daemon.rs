@@ -4,12 +4,21 @@
 use std::process::ExitCode;
 use std::time::Duration;
 
-use gitraptor_api::messages::ClientKind;
+use gitraptor_api::client::ensure::{
+    self, AutostartReport, EnsureOutcome, EnsureReport, IncompatibleReport, IncompatibleWhich,
+    UnavailableReason, UnavailableReport,
+};
+use gitraptor_api::client::{
+    Client as ApiClient, Ensured, ReplacePolicy,
+    ensure_daemon_policy, peer,
+};
+use gitraptor_api::messages::{ClientKind, IncompatibleData};
 use gitraptor_api::rpc::code;
 use gitraptor_api::untrusted::sanitize;
-use gitraptor_core::autostart::start_failure_exit;
-use gitraptor_core::client::{Client, ClientError};
+use gitraptor_core::autostart::{Autostart, start_failure_exit};
+use gitraptor_core::client::{Client, ClientError, ClientOptions};
 use gitraptor_core::daemon::{self, DaemonConfig, DaemonError};
+use gitraptor_core::profile::ProfileDirs;
 
 use super::Global;
 use crate::i18n::t;
@@ -40,6 +49,21 @@ enum DaemonAction {
     Enable,
     /// Stop starting the engine at login. The running engine keeps running.
     Disable,
+    /// Connect to the engine, starting it if needed, and print one JSON report line (the
+    /// desktop app's way to the engine, ADR-GRP-014 Enmienda DEP-DSK-5 § D2). Never replaces
+    /// a daemon run from another binary.
+    #[command(hide = true)]
+    Ensure {
+        /// Print the report as one JSON line (required: the only output).
+        #[arg(long, required = true)]
+        json: bool,
+        /// Do not start the engine if it is not running.
+        #[arg(long)]
+        no_start: bool,
+        /// A capability the engine must serve (repeatable).
+        #[arg(long = "require", value_name = "NAME")]
+        require: Vec<String>,
+    },
 }
 
 impl Cmd {
@@ -50,6 +74,11 @@ impl Cmd {
             Some(DaemonAction::Status) => daemon_status(),
             Some(DaemonAction::Enable) => autostart::enable(),
             Some(DaemonAction::Disable) => autostart::disable(),
+            Some(DaemonAction::Ensure {
+                json: _,
+                no_start,
+                require,
+            }) => daemon_ensure(no_start, &require),
         }
     }
 }
@@ -177,4 +206,180 @@ fn daemon_status() -> ExitCode {
         );
     }
     ExitCode::SUCCESS
+}
+
+/// `raptor daemon ensure --json`: one [`EnsureReport`] line on stdout and its exit code
+/// (DS-TS-DSK-002 § Informe de `ensure`). Nothing on stderr: the caller reads only the report.
+/// With `--no-start` it only connects; otherwise it starts the engine on demand and asks a
+/// running daemon to step down only if it runs this very binary (SEC-13, D2).
+fn daemon_ensure(no_start: bool, require: &[String]) -> ExitCode {
+    let report = ensure_report(no_start, require);
+    let Ok(line) = serde_json::to_string(&report) else {
+        return ExitCode::from(EnsureOutcome::Unavailable.exit_code());
+    };
+    println!("{line}");
+    ExitCode::from(report.outcome.exit_code())
+}
+
+fn ensure_report(no_start: bool, require: &[String]) -> EnsureReport {
+    let mut report = EnsureReport {
+        schema: ensure::SCHEMA,
+        outcome: EnsureOutcome::Unavailable,
+        runtime: None,
+        daemon_pid: None,
+        daemon_path: None,
+        daemon_version: None,
+        daemon_protocol: None,
+        started: false,
+        replaced: false,
+        incompatible: None,
+        unavailable: None,
+        autostart: autostart_report(),
+    };
+    let Ok(dirs) = ProfileDirs::resolve() else {
+        report.unavailable = Some(UnavailableReport {
+            reason: UnavailableReason::Profile,
+        });
+        return report;
+    };
+    let mut options = ClientOptions::new(dirs, ClientKind::Cli);
+    options.capabilities = require.iter().map(|name| capability_name(name)).collect();
+    let Ok(connect) = options.connect() else {
+        report.unavailable = Some(UnavailableReport {
+            reason: UnavailableReason::Profile,
+        });
+        return report;
+    };
+    report.runtime = Some(connect.runtime.to_string_lossy().into_owned());
+    // The pid of the last daemon the replace policy was asked about: the only way to name the
+    // daemon of an incompatibility, whose connection `ensure_daemon_policy` does not return.
+    let mut asked: Option<u32> = None;
+    let result = if no_start {
+        ApiClient::connect(&connect.runtime, connect.kind, connect.protocol).map(|client| {
+            Ensured {
+                client,
+                started: false,
+                replaced: false,
+            }
+        })
+    } else {
+        let mut only_same_binary = |pid: u32| {
+            asked = Some(pid);
+            same_binary(pid)
+        };
+        ensure_daemon_policy(
+            &connect,
+            &mut options.launcher(),
+            &mut || {},
+            ReplacePolicy::OnlyIf(&mut only_same_binary),
+        )
+    };
+    match result {
+        Ok(ensured) => {
+            let client = ensured.client;
+            report.started = ensured.started;
+            report.replaced = ensured.replaced;
+            report.daemon_pid = client.peer_pid();
+            report.daemon_path = report.daemon_pid.and_then(executable_text);
+            report.daemon_version = Some(client.hello().binary_version.clone());
+            report.daemon_protocol = Some(client.hello().protocol);
+            let missing = client.missing_capabilities(&connect.capabilities);
+            if missing.is_empty() {
+                report.outcome = EnsureOutcome::Ready;
+            } else {
+                report.outcome = EnsureOutcome::Incompatible;
+                report.incompatible = Some(IncompatibleReport {
+                    which: IncompatibleWhich::MissingCapabilities,
+                    missing: missing.into_iter().map(str::to_owned).collect(),
+                });
+            }
+        }
+        Err(ClientError::NotRunning) => report.outcome = EnsureOutcome::NotRunning,
+        Err(ClientError::Incompatible(data)) => {
+            incompatible(&mut report, IncompatibleWhich::DaemonOlder, &data, asked);
+        }
+        Err(ClientError::ClientTooOld(data)) => {
+            incompatible(&mut report, IncompatibleWhich::AppOlder, &data, asked);
+        }
+        Err(err) => {
+            report.unavailable = Some(UnavailableReport {
+                reason: unavailable_reason(&err),
+            });
+        }
+    }
+    report
+}
+
+fn incompatible(
+    report: &mut EnsureReport,
+    which: IncompatibleWhich,
+    data: &IncompatibleData,
+    pid: Option<u32>,
+) {
+    report.outcome = EnsureOutcome::Incompatible;
+    report.daemon_pid = pid;
+    report.daemon_path = pid.and_then(executable_text);
+    report.daemon_version = Some(data.binary_version.clone());
+    report.daemon_protocol = Some(data.daemon_protocol);
+    report.incompatible = Some(IncompatibleReport {
+        which,
+        missing: Vec::new(),
+    });
+}
+
+/// Why the engine is unavailable. An I/O or protocol failure on the channel has no reason of
+/// its own in the report: the engine could not be brought up, `launch-failed`.
+fn unavailable_reason(err: &ClientError) -> UnavailableReason {
+    match err {
+        ClientError::StartTimeout => UnavailableReason::StartTimeout,
+        ClientError::ChannelRejected | ClientError::NotAuthentic => {
+            UnavailableReason::ChannelRejected
+        }
+        ClientError::TransportUnsupported | ClientError::Unsupported(_) => {
+            UnavailableReason::Unsupported
+        }
+        _ => UnavailableReason::LaunchFailed,
+    }
+}
+
+/// The capability name as `ClientOptions` keeps it (`&'static str`): the contract's own name
+/// when it is known. An unknown name is leaked: `raptor daemon ensure` is a one-shot process
+/// that runs this once, for the few names of its command line, so the memory is bounded and
+/// returned when the process exits.
+fn capability_name(name: &str) -> &'static str {
+    gitraptor_api::capability::all()
+        .map(|c| c.name)
+        .find(|known| *known == name)
+        .unwrap_or_else(|| String::leak(name.to_owned()))
+}
+
+/// `true` if `pid` runs this very binary: both executables, canonical, are the same file
+/// path. Anything unreadable is `false`, so the daemon is never asked to step down.
+fn same_binary(pid: u32) -> bool {
+    let Ok(own) = std::env::current_exe().and_then(|exe| exe.canonicalize()) else {
+        return false;
+    };
+    peer::executable_of(pid)
+        .and_then(|exe| exe.canonicalize().ok())
+        .is_some_and(|exe| exe == own)
+}
+
+fn executable_text(pid: u32) -> Option<String> {
+    peer::executable_of(pid).map(|exe| exe.to_string_lossy().into_owned())
+}
+
+/// The login autostart of the user, as far as it can be read.
+fn autostart_report() -> AutostartReport {
+    match Autostart::for_current_user() {
+        Some(autostart) => AutostartReport {
+            registered: autostart.is_registered(),
+            binary: autostart
+                .registered_exe()
+                .map(|exe| exe.to_string_lossy().into_owned()),
+        },
+        None => AutostartReport {
+            registered: false,
+            binary: None,
+        },
+    }
 }
