@@ -2,12 +2,12 @@
 mode: bulk
 status: expanded
 generated: 2026-10-04
-updated: 2026-10-05
+updated: 2026-11-08
 generator: architect
 domain: GRP
 feature: cockpit
-total_artifacts: 7
-expanded: 7
+total_artifacts: 11
+expanded: 11
 approved: 0
 related:
   context: [CTX-CKP-001]
@@ -22,6 +22,8 @@ related:
 > **Criterio de inclusión (Enabler Decision Gate)**: solo entra el trabajo técnico **sin historia de usuario dueña y sin resultado observable** por el usuario. La columna "Habilita" apunta a capacidades del BRD (BR-04 a BR-07), a reglas BR-CKP y al Servidor MCP (F-001-05). Las historias US-CKP-001 a 024 llegaron a main después de estos enablers; cada ficha las enlaza en `related.stories` (validación final, 2026-10-04) y el destino de cada trabajo que no es enabler está en su tabla. Hay **7 enablers**: 6 nuevos más SPIKE-CKP-001. TS-CKP-005 (biblioteca de componentes) se añadió el 2026-10-05 por decisión de Rene: los componentes de DSYS-GRP-001 § 3 se construyen antes de las historias. El resto del trabajo técnico tendrá una historia dueña y va a su Dev Spec: ver [Trabajo técnico que no es enabler](#trabajo-técnico-que-no-es-enabler).
 >
 > **Conjunto mínimo**: decisión del orquestador (2026-10-04), validada por Arquitecto. No se crea un INF de arnés ni de banco para la predicción ni para el ejecutor: se reutilizan INF-GRP-001 e INF-GRP-002 con suites y escenarios que entran con TS-CKP-001, TS-CKP-002 e INF-CKP-001.
+>
+> **App de escritorio (2026-11-08)**: TS-CKP-006 a 009 cubren las lecturas y operaciones de DEP-DSK-3 y DEP-DSK-4 ([contexto de desktop](../desktop/context.md) § 8) que tienen más de una historia dueña; son trabajo del canal y del catálogo del motor, por eso llevan el slug CKP. Las de una sola dueña van en los Requisitos Técnicos de US-DSK-012, 014, 015 y 017 (tabla "Trabajo técnico que no es enabler"). Decisión del orquestador (2026-11-08), validada por Arquitecto.
 
 ## Índice
 
@@ -34,6 +36,10 @@ related:
 | [INF-CKP-001](./technical-stories/INF-CKP-001-esqueleto-tui.md) | INF | Esqueleto de la TUI: cliente del canal, bucle TEA, saneado único y gate de 100 ms | Mismo bucle, cliente y saneador para todas las pantallas; una regresión de latencia rompe el CI | ADR-CKP-003 | BR-04 a BR-07 (todas sus historias); CLI de solo lectura (Q-CKP-20) | TS-GRP-004 (N1 a N7); TS-CKP-004; INF-GRP-002 | Medium | implemented (PR #100, #139, #174 (ajuste en #153)) |
 | [TS-CKP-004](./technical-stories/TS-CKP-004-tokens-semanticos-simbolos.md) | TS | Tokens semánticos y símbolos con fallback en el tema | Ningún literal de color ni de glifo; se lee igual en todas las profundidades de color y en ASCII (NFR-09) | ADR-GRP-003, ADR-CKP-003 § 10 | BR-04 a BR-07 (todas las pantallas); NFR-09; BR-CKP-EDGE-006 | — | Low | implemented (PR #50, #115); [Dev Spec](./dev-specs/TS-CKP-004-tokens-semanticos-simbolos.md) |
 | [TS-CKP-005](./technical-stories/TS-CKP-005-biblioteca-componentes-tui.md) | TS | Biblioteca de componentes TUI v0 | Los 10 widgets de DSYS-GRP-001 § 3, puros, con snapshots en los 6 modos y la galería `raptor ui gallery`; cada US-CKP solo arma su vista | ADR-CKP-003 § 7, § 8, § 10 y § 12 | BR-04 a BR-07 (las US-CKP de la TUI, todas menos US-CKP-010 y 011); NFR-09 | TS-CKP-004; INF-CKP-001 (`SafeText`, target de biblioteca) | Medium | implemented (PR #111, #115); [DS](./dev-specs/TS-CKP-005-biblioteca-componentes-tui.md) |
+| [TS-CKP-006](./technical-stories/TS-CKP-006-diff-de-commit.md) | TS | Consultas del diff de un commit, entre dos commits y del índice de un worktree | `diff.commit`, `diff.between` y `diff.index`: el diff de UI-2 sale del motor, sin filtros, acotado y solo a quien lo pide | ADR-GRP-009, ADR-GRP-017 | DEP-DSK-3; US-DSK-009, 017; `diff.index` para US-DSK-010, 011 y 014 | US-CKP-012 (pool de consultas y módulo `diff`) | Medium | draft (2026-11-08) |
+| [TS-CKP-007](./technical-stories/TS-CKP-007-ramas-y-commits-paginados.md) | TS | Todas las ramas y los commits de cualquier rama, paginados y filtrables | `refs.list` y `log.page` con cursor y filtro literal: ramas sin agente, historial y búsqueda de commits en 100K commits (NFR-05) | ADR-GRP-009, ADR-GRP-011, ADR-GRP-017 | DEP-DSK-3; US-DSK-012, 017 (y 005 en UI-2, 015) | US-CKP-012, US-CKP-022 | Medium | draft (2026-11-08) |
+| [TS-CKP-008](./technical-stories/TS-CKP-008-preparar-y-quitar-del-indice.md) | TS | Preparar y quitar del índice por archivo, fragmento y línea | Operaciones `stage` y `unstage` del catálogo con plan fijado al contenido, snapshot previo y presencia de sesión en la app | ADR-CKP-002, ADR-TMC-004, ADR-GRP-017 | DEP-DSK-4; US-DSK-011, 014 | TS-CKP-002, US-CKP-012, TS-CKP-006 | High | draft (2026-11-08) |
+| [TS-CKP-009](./technical-stories/TS-CKP-009-commit-capa-cockpit.md) | TS | `commit` del catálogo abierto a la capa `cockpit` | La misma operación del MCP para el humano: autoría a su nombre, políticas, snapshot previo y Deshacer; versión mayor del catálogo | ADR-CKP-002 § 1, ADR-GRP-017 | DEP-DSK-4; US-DSK-010, 011 | TS-CKP-002, TS-CKP-003, US-MCP-009 | Medium | draft (2026-11-08) |
 
 ## DAG de enablers
 
@@ -181,6 +187,11 @@ Trabajo con una sola historia dueña o con resultado observable. Va en los `Requ
 | `commit` con el mensaje por stdin (ADR-CKP-002 § 1 y § 6) | Una historia; solo MCP | Historia de `safe_commit` (F-001-05) | DEP-MCP-2 |
 | `snapshot` manual (ADR-CKP-002 § 1) | Una historia; solo MCP | Historia de `snapshot` (F-001-05), sobre la API de captura pendiente de la Time Machine | DEP-MCP-2 |
 | Modo atómico del rebase con su abort (ADR-CKP-002 § 9) | Una historia; solo MCP | Historia de `safe_rebase` (F-001-05) | DEP-MCP-5 |
+| Ramas: crear, cambiar y borrar (DEP-DSK-4) | Una historia | US-DSK-012 (`create-branch`, `switch-branch`, `delete-branch`) | DEP-DSK-4 |
+| Continuar tras resolver y escribir la resolución (DEP-DSK-4) | Una historia | US-DSK-014 (`diff.conflict`, `resolve-conflict`, `continue-in-progress`) | DEP-DSK-4 |
+| Push, pull y fetch (DEP-DSK-4, Q-DSK-14) | Una historia; solo el humano desde la app | US-DSK-015 (`fetch`, `pull`, `push`) | DEP-DSK-4 |
+| Búsqueda de rutas (DEP-DSK-3) | Una historia | US-DSK-017 (`paths.search`) | DEP-DSK-3 |
+| Integrar y poner al día la rama de un agente desde la app | Ya en el catálogo | `merge-into-base` y `rebase-onto-base` (US-DSK-013 los reutiliza) | — |
 
 ## Destino de las dependencias DEP-CKP
 

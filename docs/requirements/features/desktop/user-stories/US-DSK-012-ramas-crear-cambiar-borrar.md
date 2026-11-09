@@ -77,7 +77,15 @@ Entonces la copia principal no cambia
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección)._
+Completado por el Arquitecto (2026-11-08). **Decisión del orquestador (2026-11-08), validada por Arquitecto**: las operaciones de rama tienen una sola historia dueña, esta, así que van aquí y no en una TS (Enabler Decision Gate); la lista de ramas sale de TS-CKP-007. **Bloqueada por**: TS-CKP-007, TS-CKP-002 y TS-CKP-003 (implementadas las dos últimas), y para la app, la presencia de sesión o el factor de ADR-GRP-017 § 4.
+
+- Tres operaciones nuevas del catálogo (ADR-CKP-002 § 1, versión menor), servidas por `operation.prepare` y `operation.run`, cada una en su módulo del ejecutor (ADR-GRP-016): `create-branch` (rama local desde un oid del plan, sin sacarla), `switch-branch` (sacar una rama local en el worktree del solicitante) y `delete-branch` (borrar una rama local). Marcas: Cockpit sí, MCP no.
+- Nombres de rama con las reglas L-02 de ADR-CKP-002 § 1 y siempre con el nombre completo de la ref.
+- Punto previo (NFR-01): snapshot `previo_garantizado` antes de cualquier efecto; "Deshacer" de la Time Machine recrea la rama borrada en su oid, vuelve a la rama anterior y devuelve los cambios sin commitear (US-TMC-001, US-GRD-017).
+- `switch-branch` con trabajo sin commitear: el plan lo dice y, al ejecutar, el snapshot lo guarda, la copia queda limpia y se cambia de rama (escenario 2). Clase destructiva. Una rama sacada en otro worktree se rechaza nombrando ese worktree (escenario 4, precondición común de ADR-CKP-002 § 1).
+- Guardrails: `delete-branch` es gobernada como "borrar rama" (rama protegida de US-GRD-008 y mínimo de la rama base); `switch-branch` que descarta cambios sin commitear se gobierna como `reset-hard`; `create-branch` no es gobernada. El plan avisa de los commits que solo están en la rama que se borra.
+- Capa (ADR-GRP-017 § 4): en la app, `cockpit` con presencia de sesión, porque todo se revierte en local; con identidad por ruta, factor por acción ligado al plan; desde la TUI, la capa `cockpit` de siempre; un agente solicitante o `raptor-mcp`, "no disponible". Borrar ramas **remotas** queda fuera (efecto remoto: ADR-CKP-002, Enmienda 2026-11-08).
+- Pruebas: los cuatro escenarios en repo temporal; con el almacén lleno, `aborted` y repo igual (INF-GRP-001); captura de red: 0 conexiones; matriz de capa V4 de ADR-GRP-017 con el doble del factor.
 
 ## Diseño y Dev Spec
 
