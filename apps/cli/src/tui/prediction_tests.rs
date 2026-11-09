@@ -43,6 +43,7 @@ fn wt(path: &str, main: bool) -> WorktreeView {
         detached_at: None,
         operation: None,
         unmerged_paths: 0,
+        changes_actor: None,
         path: Untrusted::new(path),
         main,
         admin_name: None,
