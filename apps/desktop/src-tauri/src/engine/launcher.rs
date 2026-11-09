@@ -142,7 +142,7 @@ fn outcome(report: &EnsureReport) -> Result<(), ConnectFailure> {
 
 /// The `raptor` next to the app's own canonical executable, canonical, in that same folder and
 /// an installed `raptor` ([`installed::is_installed_raptor`]); `None` otherwise. Never `PATH`.
-fn bundled_raptor() -> Option<PathBuf> {
+pub(crate) fn bundled_raptor() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?.canonicalize().ok()?;
     sibling_raptor(&exe)
 }

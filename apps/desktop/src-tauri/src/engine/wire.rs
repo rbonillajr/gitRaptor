@@ -199,8 +199,18 @@ pub enum Autostart {
     Unknown,
 }
 
-/// The command that stops the daemon at `path`, safe to paste in a POSIX shell.
-// STUB: the real quoting and the `must_escape` refusal land with the supervisor.
-pub fn stop_command(_path: &str) -> Option<String> {
-    None
+/// The command that stops the daemon at `path`, safe to paste in a POSIX shell: every argument in
+/// single quotes (a quote written `'\''`). `None` when `path` has a character that
+/// [`gitraptor_api::display::must_escape`] flags: it could act on the terminal it is pasted in.
+pub fn stop_command(path: &str) -> Option<String> {
+    if path.chars().any(gitraptor_api::display::must_escape) {
+        return None;
+    }
+    let quote = |arg: &str| format!("'{}'", arg.replace('\'', "'\\''"));
+    Some(format!(
+        "{} {} {}",
+        quote(path),
+        quote("daemon"),
+        quote("stop")
+    ))
 }

@@ -14,14 +14,24 @@ pub mod window;
 /// Panics if the Tauri runtime cannot start (no webview available, for example): there is no
 /// window to report the error in.
 pub fn run() {
-    let result = tauri::Builder::default()
+    let hub = engine::EngineHub::new(
+        Box::new(engine::launcher::BundleConnector::new()),
+        engine::launcher::bundled_raptor(),
+    );
+    let app = tauri::Builder::default()
+        .manage(hub)
         .invoke_handler(commands::handler())
         .setup(|app| {
             window::create(app)?;
             Ok(())
         })
-        .run(tauri::generate_context!());
-    if let Err(e) = result {
-        panic!("the desktop app could not start: {e}");
+        .build(tauri::generate_context!());
+    match app {
+        Ok(app) => app.run(|handle, event| {
+            if let tauri::RunEvent::Exit = event {
+                tauri::Manager::state::<engine::EngineHub>(handle).shutdown();
+            }
+        }),
+        Err(e) => panic!("the desktop app could not start: {e}"),
     }
 }

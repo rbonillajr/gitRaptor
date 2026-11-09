@@ -9,5 +9,9 @@ pub mod engine_watch;
 
 /// The invoke handler with every command of the list.
 pub fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
-    tauri::generate_handler![app_info::app_info]
+    tauri::generate_handler![
+        app_info::app_info,
+        engine_watch::engine_watch,
+        engine_retry::engine_retry
+    ]
 }
