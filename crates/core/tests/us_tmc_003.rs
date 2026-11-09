@@ -52,6 +52,62 @@ fn assert_same(before: &Snapshot, after: &Snapshot, why: &str) {
     assert!(changes.is_empty(), "{why}: {changes:#?}");
 }
 
+/// What a redo must give back: the worktree's files (kind, size, content, executable bit), HEAD and
+/// its branch, `git status` and the branch, tag and stash refs. Not the repo's internals (`.git`
+/// gets a pack, a rewritten index and reflog lines with any apply), nor mtime/inode/ctime.
+#[derive(Debug, PartialEq, Eq)]
+struct State {
+    files: BTreeMap<PathBuf, (String, u64, u64, bool)>,
+    head: String,
+    branch: String,
+    status: String,
+    refs: String,
+}
+
+fn state_of(r: &Running) -> State {
+    let label = r
+        .worktree
+        .file_name()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let print = r.fx.fingerprint();
+    let files: BTreeMap<_, _> = print
+        .entries
+        .iter()
+        .filter(|((scope, _), _)| *scope == label)
+        .map(|((_, path), e)| {
+            #[cfg(unix)]
+            let exec = e.mode & 0o111 != 0;
+            #[cfg(not(unix))]
+            let exec = false;
+            (
+                path.clone(),
+                (format!("{:?}", e.kind), e.size, e.hash, exec),
+            )
+        })
+        .collect();
+    assert!(!files.is_empty(), "the worktree scope {label} is empty");
+    let git = |args: &[&str]| r.fx.git_in(&r.worktree, args);
+    State {
+        files,
+        head: git(&["rev-parse", "HEAD"]),
+        branch: git(&["rev-parse", "--abbrev-ref", "HEAD"]),
+        status: git(&["status", "--porcelain=v1"]),
+        refs: git(&[
+            "for-each-ref",
+            "--format=%(refname) %(objectname)",
+            "refs/heads",
+            "refs/tags",
+            "refs/stash",
+        ]),
+    }
+}
+
+fn assert_same_state(before: &State, after: &State, why: &str) {
+    assert_eq!(before, after, "{why}");
+}
+
 fn id(value: &Value, key: &str) -> String {
     value[key]
         .as_str()
@@ -115,7 +171,7 @@ fn redo_returns_to_the_state_before_the_undo() {
         !r.worktree.join("b.rs").exists(),
         "the operation deleted b.rs"
     );
-    let after_operation = r.fx.fingerprint();
+    let after_operation = state_of(&r);
     let mut c = r.client();
     let undo = undo_ok(&r, &mut c);
     assert!(r.worktree.join("b.rs").exists(), "the undo recovered b.rs");
@@ -126,9 +182,9 @@ fn redo_returns_to_the_state_before_the_undo() {
         !r.worktree.join("b.rs").exists(),
         "TMC003-S1: the redo deletes b.rs again"
     );
-    assert_same(
+    assert_same_state(
         &after_operation,
-        &r.fx.fingerprint(),
+        &state_of(&r),
         "TMC003-S1: the worktree is back to the state after the operation",
     );
     assert_eq!(
@@ -239,28 +295,6 @@ fn nothing_to_redo_changes_nothing() {
     assert_eq!(redos[0].reason.as_deref(), Some("nothing-to-redo"));
 }
 
-/// Runs `call` and, if the daemon asks to confirm (the work is an agent's), again with the token
-/// of its challenge, as the interactive seam does.
-fn confirmed(mut call: impl FnMut(Option<&str>) -> Result<Value, ClientError>) -> Value {
-    match call(None) {
-        Ok(done) => done,
-        Err(e) => {
-            let (_, data) = rejected(Err::<Value, _>(e));
-            let data = data.unwrap_or(Value::Null);
-            assert_eq!(
-                data["reason"], "confirmation-required",
-                "TMC003: only a confirmation may stop this call: {data}"
-            );
-            let token = data["challenge"]["token"]
-                .as_str()
-                .expect("a challenge to confirm with")
-                .to_owned();
-            call(Some(&token))
-                .unwrap_or_else(|e| panic!("TMC003: the confirmed call failed: {e:?}"))
-        }
-    }
-}
-
 // ----- Escenario 4 (engine world: the commit is a raw Git event) --------------------------------
 
 /// Escenario 4: undo, a new commit in the worktree and the redo is `redo-invalidated`.
@@ -303,9 +337,9 @@ fn consecutive_redos_walk_forward() {
     // State before the second operation: `c.rs` staged (the reset deletes it).
     std::fs::write(r.worktree.join("c.rs"), "fn c() {}\n").unwrap();
     r.fx.git_in(&r.worktree, &["add", "c.rs"]);
-    let middle = r.fx.fingerprint();
+    let middle = state_of(&r);
     r.reset_hard();
-    let end = r.fx.fingerprint();
+    let end = state_of(&r);
     let mut c = r.client();
     undo_ok(&r, &mut c);
     undo_ok(&r, &mut c);
@@ -315,15 +349,15 @@ fn consecutive_redos_walk_forward() {
     );
 
     redo_ok(&r, &mut c);
-    assert_same(
+    assert_same_state(
         &middle,
-        &r.fx.fingerprint(),
+        &state_of(&r),
         "TMC003-WALK: the first redo goes back to the state before the second undo",
     );
     redo_ok(&r, &mut c);
-    assert_same(
+    assert_same_state(
         &end,
-        &r.fx.fingerprint(),
+        &state_of(&r),
         "TMC003-WALK: the second redo goes back to the end",
     );
     let (error, data) = rejected(redo(&r, &mut c));
@@ -340,13 +374,13 @@ fn consecutive_redos_walk_forward() {
 fn an_undo_after_a_redo_takes_back_the_operation_again() {
     let r = running_with_staged_b();
     let op = r.reset_hard();
-    let after_operation = r.fx.fingerprint();
+    let after_operation = state_of(&r);
     let mut c = r.client();
     undo_ok(&r, &mut c);
     redo_ok(&r, &mut c);
-    assert_same(
+    assert_same_state(
         &after_operation,
-        &r.fx.fingerprint(),
+        &state_of(&r),
         "TMC003-WALK: after the redo",
     );
 
@@ -382,33 +416,41 @@ fn an_undo_after_a_redo_takes_back_the_operation_again() {
 /// redo, those writes would be later unattributed changes of the branch: the next undo of the same
 /// work would stop on `overlap` (and, with other undos pending, they would clear their redo).
 ///
-/// The work is an agent's commit taken back by an undo by agent (a plain undo of a raw commit has no
-/// captured point in this world); the redo is asked right away by the test's own client.
+/// claude-1 itself undoes its own work, redoes and undoes again (three writes, each by its own
+/// session: the requester write burst is per requester).
 #[test]
 fn a_redo_right_after_an_undo_is_not_invalidated_by_its_echo() {
     let w = us_tmc_011_common::world();
     let mut claude1 = w.spawn_agent();
     w.agent_commit(&mut claude1, &[("one.rs", "fn one() {}")], "claude-1 one");
     let with_work = w.head();
-    let first = w.confirmed_agent_undo(&claude1.session);
+    let first = agent_ok(
+        &self_undo(&w, &mut claude1),
+        "TMC003-GUARD-4.2: the agent's own undo",
+    );
     let without_work = w.head();
     assert_ne!(without_work, with_work, "the undo took the commit away");
-    let mut c = w.client();
 
     // Right away: the undo's own echo (its writes seen by the engine) must not count as news.
-    let redone = confirmed(|t| w.redo_call(&mut c, t));
+    let redone = agent_ok(
+        &redo_as(&w, &mut claude1),
+        "TMC003-GUARD-4.2: the redo right after the undo",
+    );
 
     assert_eq!(
         w.head(),
         with_work,
         "TMC003-GUARD-4.2: the redo brought the commit back"
     );
-    assert_eq!(id(&redone, "redone_undo_id"), first.operation_id);
+    assert_eq!(id(&redone, "redone_undo_id"), id(&first, "operation_id"));
     // The redo's writes are anchored: the work is still the agent's, as it was, and a new undo of
     // it is served and takes back the same operations.
-    let second = w.confirmed_agent_undo(&claude1.session);
+    let second = agent_ok(
+        &self_undo(&w, &mut claude1),
+        "TMC003-GUARD-4.2: the next undo is served",
+    );
     assert_eq!(
-        second.undone_operation_ids, first.undone_operation_ids,
+        second["undone_operation_ids"], first["undone_operation_ids"],
         "TMC003-GUARD-4.2: the next undo takes back the same work: the redo's writes are not raw Git"
     );
     assert_eq!(
@@ -416,6 +458,27 @@ fn a_redo_right_after_an_undo_is_not_invalidated_by_its_echo() {
         without_work,
         "TMC003-GUARD-4.2: the new undo returns to the state without the work"
     );
+}
+
+/// An undo by `agent` itself over its own work, as the agent's process saw it (`{ok}` or `{code, data}`).
+fn self_undo(w: &us_tmc_011_common::World, agent: &mut us_tmc_011_common::Agent) -> Value {
+    let session = agent.session.clone();
+    w.as_agent(
+        agent,
+        methods::TM_UNDO,
+        w.undo_params(Some(&session), Some("20m"), None),
+    )
+}
+
+fn redo_as(w: &us_tmc_011_common::World, agent: &mut us_tmc_011_common::Agent) -> Value {
+    w.as_agent(agent, methods::TM_REDO, params(&w.worktree, None))
+}
+
+fn agent_ok(answer: &Value, what: &str) -> Value {
+    answer
+        .get("ok")
+        .cloned()
+        .unwrap_or_else(|| panic!("{what} must be done: {answer}"))
 }
 
 // ----- T005 ----------------------------------------------------------------------------------------
