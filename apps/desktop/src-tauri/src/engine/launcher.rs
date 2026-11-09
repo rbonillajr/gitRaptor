@@ -100,11 +100,11 @@ impl Connector for BundleConnector {
             .as_deref()
             .map(PathBuf::from)
             .filter(|runtime| runtime.is_absolute());
-        if runtime.is_some() {
-            self.runtime.clone_from(&runtime);
-        }
+        // Only a runtime the report called ready is remembered: after an incompatible or
+        // rejected report the next attempt must ask `ensure` again, which says why.
         outcome(&report)?;
         let runtime = runtime.ok_or(ConnectFailure::LaunchFailed)?;
+        self.runtime = Some(runtime.clone());
         self.open(&runtime)
     }
 }
