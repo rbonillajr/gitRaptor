@@ -2,10 +2,10 @@
 id: US-TMC-003
 title: "El desarrollador rehace lo que deshizo por error"
 type: us
-status: draft
+status: implemented
 priority: medium
 created: 2026-10-03
-updated: 2026-10-27
+updated: 2026-11-09
 domain: GRP
 epic: E-001
 feature: time-machine
@@ -90,6 +90,18 @@ Entonces la petición se rechaza con el motivo
 
 - **Diseño (flujo/UX):** Pendiente de diseño.
 - **Dev Spec:** [DS-US-TMC-003](../dev-specs/US-TMC-003-redo.md)
+
+## Estado de la implementación (2026-11-09)
+
+Implementado en: PR #NNN.
+
+- **Hecho:** `raptor redo [--json]` (CLI, en/es) y `timemachine.redo` sin `operation_id` en el canal del daemon. Rehace el último undo pendiente del worktree del cwd (redos seguidos rehacen undos seguidos, D-TMC-26) como operación protegida con su propio punto previo y su ancla. Sin undo pendiente responde `nothing-to-redo`; si una operación posterior lo invalidó, `redo-invalidated`; el repo no cambia. Permisos sobre el solicitante del undo y los dueños de lo que deshizo, con la confirmación interactiva de ADR-TMC-005 § 3. Solape de US-TMC-012: se detiene con `overlap` y conserva (`kept`) lo que otro actor cambió después. Se rechaza entero si una parte no se puede rehacer. El redo de un undo por agente (US-TMC-011) rehace los mismos ids y quita la barrera `selective-undo-below`. `operation_id` sigue sin implementar; no se ofrece por MCP.
+- **Tests:** unitarios en `crates/api/src/timemachine_redo_tests.rs`, `crates/core/src/timemachine/oplog/stack_redo_tests.rs`, `confirm/redo_tests.rs`, `redo_tests.rs`, `redo_tamper_tests.rs` y `apps/cli/src/undo/redo_tests.rs`; integración con daemon y Git reales en `crates/core/tests/us_tmc_003.rs` y `us_tmc_003_agents.rs` (agentes `raptor-fake-agent`, independientes de la sesión de Claude Code); los pendientes de redo de US-TMC-011 en `crates/core/tests/us_tmc_011.rs`; e2e en `apps/cli/tests/redo_process.rs` y el paso de redo de la demo M2 (`apps/cli/tests/m2_demo_undo_agent.rs`).
+- **Decisiones de la implementación:** ver [DS-US-TMC-003, Enmienda 2026-11-09](../dev-specs/US-TMC-003-redo.md).
+- **Pendiente:**
+  - Linux y Windows (XP-70, etapa de validación multiplataforma).
+  - La demo M2 depende de TD-GRP-005 (atribución bajo carga).
+  - Sin certificar: modo rápido (sin línea base de suite completa).
 
 ## Dependencias
 

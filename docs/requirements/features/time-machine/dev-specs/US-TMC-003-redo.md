@@ -4,7 +4,7 @@ title: "Dev Spec — Rehacer el último undo del worktree (raptor redo)"
 type: dev-spec
 status: draft
 created: 2026-10-27
-updated: 2026-10-28
+updated: 2026-11-09
 story: US-TMC-003
 scope: backend
 frontend_surface: false
@@ -590,6 +590,21 @@ Aplicada el 2026-10-27 en [US-TMC-003](../user-stories/US-TMC-003-redo.md): el P
 - Su plan llama a `on_remote::check(common_dir, &refs, &target_meta, now_ms)` después de sus precondiciones y antes de `ProtectedRequest`; añade `on_remote::warnings` **solo** a `req.warnings` (nunca a `RedoDone.warnings`); `RedoDone` gana `on_remote: RemoteNotice` y `RedoResult` gana `on_remote: Option<OnRemoteReport>` con `CAP_TM_ON_REMOTE`; la CLI de `raptor redo` imprime `tm.on-remote*` y `tm.on-remote-next`.
 - **Obligatorio**: amplía `no_undo_redo_or_restore_reaches_the_remote` al redo; el escenario 3 de US-TMC-014 para el redo se certifica ahí.
 - Si esta Dev Spec aterriza después de DS-US-TMC-014, lo hace en su PR.
+
+## Enmienda (2026-11-09, implementación)
+
+Implementado en: PR #NNN. Decisiones tomadas al implementar. Cada una es una **decisión del orquestador (2026-11-09)**, salvo donde se dice otra cosa. Brief de la corrida: [`docs/dev-briefs/us-tmc-003-redo.2-plan.md`](../../../../dev-briefs/us-tmc-003-redo.2-plan.md) (deriva D-A a D-G y decisiones P1 a P4).
+
+| # | Decisión | Por qué |
+|---|---|---|
+| I1 | `RedoResult` lleva también `kept_total`, como `UndoResult` (D-A) | Misma regla de corte de `kept` que el undo desde US-TMC-012 |
+| I2 | `UndoStep.subtype` es un campo: `"undo"`, `"agent"` (undo selectivo) o `"redo"`; el restore pone `"undo"` y su registro no cambia (D-C) | El subtipo era calculado; el redo necesita el suyo |
+| I3 | El redo registra sus rechazos con su propia función (`kind: redo`, `Target::None` o `Target::Redo(U)`) (D-D) | `record_rejection` del undo fija `kind: undo` |
+| I4 | `gate_over` recibe `taken_back` vacío; el undo rehecho entra en el hash por `undone_id` y `PlanKind::Redo` separa el hash del de un undo (D-B) | `gate_over` ganó `taken_back` con US-TMC-010 |
+| I5 | El redo de un undo por agente (US-TMC-011) vuelve entero al previo de ese undo; lo que otro actor cambió después se conserva con el `keep` del solape, y la pila rehace los mismos ids de `Target::Undo(set)` y quita la barrera `selective-undo-below` | DS-US-TMC-011 § "US-TMC-003 (redo)" |
+| I6 | Los escenarios 5 y 6 se prueban en integración con los agentes simulados de US-TMC-011 (`us_tmc_003_agents.rs`), no en el e2e (P1) | El arnés con agentes en integración no existía cuando se escribió la spec |
+| I7 | Revisión de seguridad M-01: una operación deshecha cuya fila del oplog está alterada cuenta como "sin atribuir" entre los dueños del redo | SEC-TMC-09: el oplog leído de vuelta no es de confianza |
+| I8 | Enmiendas de tests autorizadas por el coordinador: `kept` en la forma de cable de `KeptPath` (`untrusted`); S1 y WALK comparan el worktree (tipo, tamaño, contenido y bit de ejecución), `HEAD`, `git status` y las refs, no `.git` entero; GUARD-4.2 lo hace el propio agente (3 escrituras, por la ráfaga de 5); WALK reintenta solo ante `RATE_LIMITED`; el undo simple tras el redo de un undo por agente se comprueba por motivo y destino, no por completarse (el arnés no puede dejar un punto antes de un commit crudo mientras `timemachine.snapshot` siga sin implementar, US-TMC-005) | El aplicador siempre escribe en `.git`; el límite S-03 por solicitante |
 
 ## Notas del autor
 
