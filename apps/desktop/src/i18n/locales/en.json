@@ -63,5 +63,93 @@
       "settings": "Column settings",
       "loading": "Loading rows…"
     }
+  },
+  "engine": {
+    "pill": {
+      "live": "Live",
+      "connecting": "Connecting to the engine…",
+      "starting": "Starting the engine…",
+      "catchingUp": "Catching up…",
+      "idle": "Idle",
+      "disconnected": "No connection · retrying in {{seconds}} s",
+      "stopped": "Engine stopped",
+      "incompatible": "Engine version not compatible",
+      "rejected": "Engine channel refused",
+      "unsupported": "No engine channel",
+      "waitingForGit": "Git {{min}} or later missing",
+      "restricted": "Opened by an agent: restricted view"
+    },
+    "band": {
+      "catchingUp": "Checking recent changes; the view may take a few seconds.",
+      "disconnected": "Lost the connection to the engine. What you see may be out of date since {{time}}.",
+      "stopped": "The GitRaptor engine is not running: no history is being recorded for your repos.",
+      "launchFailed": "It could not be started.",
+      "restricted": "An agent opened this window. You see what it sees and can't make changes from here."
+    },
+    "resync": {
+      "slowConsumer": "The app fell behind the engine.",
+      "replayUnavailable": "Too many changes to replay.",
+      "daemonRestarted": "The engine restarted.",
+      "scopeClosed": "The repo stopped being observed."
+    },
+    "action": {
+      "retryNow": "Retry now",
+      "start": "Start engine",
+      "copy": "Copy"
+    },
+    "incompatible": {
+      "title": "Incompatible engine",
+      "daemonOlder": "The running engine ({{version}}, from {{path}}) is older than this app. Update that GitRaptor installation, or stop its engine from a terminal so the app can start its own:",
+      "daemonOlderUnknown": "The running engine is older than this app. Update the GitRaptor installation that started it, or stop it with `raptor daemon stop` from that installation.",
+      "ownEngine": "The running engine is this app's own, from an older version. Start it again to update it.",
+      "appOlder": "This app is older than the running engine ({{version}}). Update the app.",
+      "noCommand": "The engine's path has characters that can't be copied safely; stop it from the installation that started it."
+    },
+    "stopped": {
+      "title": "Engine stopped",
+      "howTo": "Start it from a terminal:"
+    },
+    "rejected": {
+      "title": "Engine channel refused",
+      "message": "The GitRaptor runtime folder is not private → check that only your user can open it."
+    },
+    "unsupported": {
+      "title": "No engine channel",
+      "message": "This platform has no engine channel yet."
+    },
+    "restricted": {
+      "title": "Restricted view",
+      "message": "This window shows no repos because an agent opened it. Open GitRaptor yourself to see your fleet."
+    }
+  },
+  "empty": {
+    "waitingForGit": {
+      "title": "Waiting for Git",
+      "message": "Git {{min}} or later not found → install or update it; the engine starts on its own once it finds it."
+    },
+    "noRepos": {
+      "headline": "Work with AI agents without fear of losing your code",
+      "step1": {
+        "title": "See your agents",
+        "body": "What each agent does, on which branch, and which changes will clash before they do."
+      },
+      "step2": {
+        "title": "Recover what went wrong",
+        "body": "GitRaptor keeps restore points. One button takes you back."
+      },
+      "step3": {
+        "title": "Stop what's dangerous",
+        "body": "If an agent tries to delete or rewrite your main branch, it's stopped and explained."
+      },
+      "privacy": "Everything stays on your computer. No account, and your code is never sent anywhere.",
+      "howTo": "Add your first repo from a terminal:",
+      "discovered": {
+        "title": "Repos GitRaptor found on your disk"
+      },
+      "check": {
+        "engine": "Engine running",
+        "git": "Git {{version}} found"
+      }
+    }
   }
 }

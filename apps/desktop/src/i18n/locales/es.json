@@ -63,5 +63,93 @@
       "settings": "Ajustes de columnas",
       "loading": "Cargando filas…"
     }
+  },
+  "engine": {
+    "pill": {
+      "live": "En vivo",
+      "connecting": "Conectando con el motor…",
+      "starting": "Arrancando el motor…",
+      "catchingUp": "Poniéndose al día…",
+      "idle": "En reposo",
+      "disconnected": "Sin conexión · reintentando en {{seconds}} s",
+      "stopped": "Motor parado",
+      "incompatible": "Versión del motor no compatible",
+      "rejected": "El motor rechazó el canal",
+      "unsupported": "Sin canal con el motor",
+      "waitingForGit": "Falta Git {{min}} o superior",
+      "restricted": "Abierta por un agente: vista restringida"
+    },
+    "band": {
+      "catchingUp": "Revisando cambios recientes; la vista puede tardar unos segundos.",
+      "disconnected": "Se perdió la conexión con el motor. Lo que ves puede estar desactualizado desde las {{time}}.",
+      "stopped": "El motor de GitRaptor no está en marcha: no se está guardando historial de tus repos.",
+      "launchFailed": "No se pudo arrancar.",
+      "restricted": "Esta ventana la abrió un agente. Ves lo mismo que él y no puedes hacer cambios desde aquí."
+    },
+    "resync": {
+      "slowConsumer": "La app se quedó atrás del motor.",
+      "replayUnavailable": "Demasiados cambios para repetirlos.",
+      "daemonRestarted": "El motor se reinició.",
+      "scopeClosed": "El repo dejó de observarse."
+    },
+    "action": {
+      "retryNow": "Reintentar ahora",
+      "start": "Arrancar motor",
+      "copy": "Copiar"
+    },
+    "incompatible": {
+      "title": "Motor incompatible",
+      "daemonOlder": "El motor en marcha ({{version}}, de {{path}}) es más antiguo que esta app. Actualiza esa instalación de GitRaptor, o para su motor desde una terminal para que la app arranque el suyo:",
+      "daemonOlderUnknown": "El motor en marcha es más antiguo que esta app. Actualiza la instalación de GitRaptor que lo arrancó, o páralo con `raptor daemon stop` de esa instalación.",
+      "ownEngine": "El motor en marcha es el de esta app, de una versión anterior. Arráncalo de nuevo para actualizarlo.",
+      "appOlder": "Esta app es más antigua que el motor en marcha ({{version}}). Actualiza la app.",
+      "noCommand": "La ruta del motor tiene caracteres que no se pueden copiar con seguridad; páralo desde la instalación que lo arrancó."
+    },
+    "stopped": {
+      "title": "Motor parado",
+      "howTo": "Arráncalo desde una terminal:"
+    },
+    "rejected": {
+      "title": "El motor rechazó el canal",
+      "message": "La carpeta de ejecución de GitRaptor no es privada → comprueba que solo tu usuario puede abrirla."
+    },
+    "unsupported": {
+      "title": "Sin canal con el motor",
+      "message": "Esta plataforma aún no tiene canal con el motor."
+    },
+    "restricted": {
+      "title": "Vista restringida",
+      "message": "Esta ventana no muestra repos porque la abrió un agente. Abre GitRaptor tú mismo para ver tu flota."
+    }
+  },
+  "empty": {
+    "waitingForGit": {
+      "title": "Esperando Git",
+      "message": "Falta Git {{min}} o superior → instálalo o actualízalo; el motor empieza solo al detectarlo."
+    },
+    "noRepos": {
+      "headline": "Trabaja con agentes de IA sin miedo a perder tu código",
+      "step1": {
+        "title": "Ve a tus agentes",
+        "body": "Qué hace cada agente, en qué rama, y qué cambios van a chocar antes de que choquen."
+      },
+      "step2": {
+        "title": "Recupera lo que salió mal",
+        "body": "GitRaptor guarda puntos de restauración. Con un botón vuelves atrás."
+      },
+      "step3": {
+        "title": "Frena lo peligroso",
+        "body": "Si un agente intenta borrar o reescribir tu rama principal, se frena y te lo explica."
+      },
+      "privacy": "Todo pasa en tu equipo. Sin cuenta y sin enviar tu código a ningún sitio.",
+      "howTo": "Añade tu primer repo desde una terminal:",
+      "discovered": {
+        "title": "Repos que GitRaptor encontró en tu disco"
+      },
+      "check": {
+        "engine": "Motor en marcha",
+        "git": "Git {{version}} encontrado"
+      }
+    }
   }
 }
