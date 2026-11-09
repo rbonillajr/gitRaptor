@@ -46,11 +46,12 @@ use gitraptor_api::scope::{
 use gitraptor_api::timemachine::EntryOrigin;
 use gitraptor_api::timemachine::{
     ConfirmationToken, Invalid as TmInvalid, KeptPath, MAX_KEPT_PATHS, MAX_OVERLAP_CONFLICTS,
-    MAX_REPORTED_PATHS, MAX_REPORTED_REFS, McpRequesterView, NotRestored, NotRestoredReason,
-    NoticesParams, NoticesResult, OperationRunResult, OverlapConflict, OverlapSubject,
-    OverlapUndone, PriorFailedData, RedoParams, RequestChannel, RequesterView, ResolveParams,
-    RestoreParams, RestoreResult, SnapshotParams, Surface, TIMELINE_DEFAULT_LIMIT, TimelineParams,
-    TmConfirmData, TmOverlap, TmRejectReason, TmRejectedData, UndoParams, UndoResult, parse_since,
+    MAX_REPORTED_PATHS, MAX_REPORTED_REFS, MAX_SINCE_SECS, McpRequesterView, NotRestored,
+    NotRestoredReason, NoticesParams, NoticesResult, OperationRunResult, OverlapConflict,
+    OverlapSubject, OverlapUndone, PriorFailedData, RedoParams, RequestChannel, RequesterView,
+    ResolveParams, RestoreParams, RestoreResult, SnapshotParams, Surface, TIMELINE_DEFAULT_LIMIT,
+    TimelineParams, TmConfirmData, TmOverlap, TmRejectReason, TmRejectedData, UndoParams,
+    UndoResult, parse_since,
 };
 use gitraptor_git::{ReaderOptions, RepoReader};
 
@@ -4214,9 +4215,9 @@ impl Connection<'_> {
     }
 
     /// `timemachine.undo` (US-TMC-002): the last operation of the named
-    /// worktree, or with `since` every operation of the period (US-TMC-010),
-    /// as one protected operation of the Time Machine. The other selectors
-    /// (`agent`, `operation_id`) stay with their stories.
+    /// worktree, with `since` every operation of the period (US-TMC-010), or
+    /// with `agent` that agent's operations of the period (US-TMC-011), as one
+    /// protected operation of the Time Machine. `operation_id` has no story yet.
     fn tm_undo(
         &self,
         spec: &MethodSpec,
@@ -4225,15 +4226,8 @@ impl Connection<'_> {
         let p: UndoParams = request.params()?;
         p.validate().map_err(tm_invalid)?;
         self.check_confirmation_param(p.confirmation.as_ref().map(ConfirmationToken::as_str))?;
-        let selector = if p.agent.is_some() {
-            Some("US-TMC-011")
-        } else if p.operation_id.is_some() {
-            Some("unassigned")
-        } else {
-            None
-        };
-        if let Some(story) = selector {
-            return self.tm_command(spec, request, story);
+        if p.operation_id.is_some() {
+            return self.tm_command(spec, request, "unassigned");
         }
         let channel = self.request_channel(p.surface)?;
         let named = self.named_worktree(p.worktree.as_deref())?;
@@ -4274,14 +4268,23 @@ impl Connection<'_> {
         let with_detail = !self.is_mcp() && self.has(methods::CAP_TM_OVERLAP.name);
         // The period is counted by the daemon's clock (SEC-TMC-07) once the undo holds the repo;
         // `validate` already parsed it.
-        let selection = match p.since.as_deref() {
-            Some(since) => {
-                let secs = parse_since(since).map_err(tm_invalid)?;
-                Selection::Within {
-                    span_ms: i64::try_from(secs.saturating_mul(1_000)).unwrap_or(i64::MAX),
-                }
-            }
-            None => Selection::Last,
+        let span_ms = |secs: u64| i64::try_from(secs.saturating_mul(1_000)).unwrap_or(i64::MAX);
+        let since_secs = p
+            .since
+            .as_deref()
+            .map(parse_since)
+            .transpose()
+            .map_err(tm_invalid)?;
+        // An undo by agent without `since` covers the retention (D-TMC-33).
+        let selection = match (p.agent.as_deref(), since_secs) {
+            (Some(agent), secs) => Selection::Agent {
+                selector: agent.to_owned(),
+                span_ms: span_ms(secs.unwrap_or(MAX_SINCE_SECS)),
+            },
+            (None, Some(secs)) => Selection::Within {
+                span_ms: span_ms(secs),
+            },
+            (None, None) => Selection::Last,
         };
         let done = undo_selected(
             &repo,
