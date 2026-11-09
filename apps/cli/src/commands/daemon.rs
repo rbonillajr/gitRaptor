@@ -281,7 +281,7 @@ fn ensure_report(no_start: bool, require: &[String]) -> EnsureReport {
             report.replaced = ensured.replaced;
             report.daemon_pid = client.peer_pid();
             report.daemon_path = report.daemon_pid.and_then(executable_text);
-            report.daemon_version = Some(client.hello().binary_version.clone());
+            report.daemon_version = Some(sanitize(&client.hello().binary_version));
             report.daemon_protocol = Some(client.hello().protocol);
             let missing = client.missing_capabilities(&connect.capabilities);
             if missing.is_empty() {
@@ -296,10 +296,12 @@ fn ensure_report(no_start: bool, require: &[String]) -> EnsureReport {
         }
         Err(ClientError::NotRunning) => report.outcome = EnsureOutcome::NotRunning,
         Err(ClientError::Incompatible(data)) => {
-            incompatible(&mut report, IncompatibleWhich::DaemonOlder, &data, asked);
+            let pid = asked.or_else(|| peer_of(&connect.runtime));
+            incompatible(&mut report, IncompatibleWhich::DaemonOlder, &data, pid);
         }
         Err(ClientError::ClientTooOld(data)) => {
-            incompatible(&mut report, IncompatibleWhich::AppOlder, &data, asked);
+            let pid = asked.or_else(|| peer_of(&connect.runtime));
+            incompatible(&mut report, IncompatibleWhich::AppOlder, &data, pid);
         }
         Err(err) => {
             report.unavailable = Some(UnavailableReport {
@@ -319,7 +321,7 @@ fn incompatible(
     report.outcome = EnsureOutcome::Incompatible;
     report.daemon_pid = pid;
     report.daemon_path = pid.and_then(executable_text);
-    report.daemon_version = Some(data.binary_version.clone());
+    report.daemon_version = Some(sanitize(&data.binary_version));
     report.daemon_protocol = Some(data.daemon_protocol);
     report.incompatible = Some(IncompatibleReport {
         which,
@@ -364,8 +366,27 @@ fn same_binary(pid: u32) -> bool {
         .is_some_and(|exe| exe == own)
 }
 
+/// The executable of `pid`, sanitized: the report may be read in a terminal, and a daemon of
+/// the same user chooses its own path (SEC-12).
 fn executable_text(pid: u32) -> Option<String> {
-    peer::executable_of(pid).map(|exe| exe.to_string_lossy().into_owned())
+    peer::executable_of(pid).map(|exe| sanitize(&exe.to_string_lossy()))
+}
+
+/// The pid serving the channel in `runtime`, read from the kernel without sending anything: the
+/// check refuses, so the connection closes before the handshake. Names the daemon of an
+/// incompatibility the replace policy was never asked about (`--no-start`, a newer daemon).
+fn peer_of(runtime: &std::path::Path) -> Option<u32> {
+    let mut seen = None;
+    let _ = ApiClient::connect_runtime(
+        runtime,
+        ClientKind::Cli,
+        gitraptor_api::PROTOCOL_VERSION,
+        |pid| {
+            seen = Some(pid);
+            false
+        },
+    );
+    seen
 }
 
 /// The login autostart of the user, as far as it can be read.
@@ -375,7 +396,7 @@ fn autostart_report() -> AutostartReport {
             registered: autostart.is_registered(),
             binary: autostart
                 .registered_exe()
-                .map(|exe| exe.to_string_lossy().into_owned()),
+                .map(|exe| sanitize(&exe.to_string_lossy())),
         },
         None => AutostartReport {
             registered: false,
