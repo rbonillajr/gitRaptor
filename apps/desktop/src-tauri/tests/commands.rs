@@ -6,10 +6,11 @@
 //! (Serialize), `commands::app_info::{info, AppInfo}` (`info()` is the pure fn the command delegates to).
 
 use gitraptor_desktop::commands::app_info;
-use gitraptor_desktop::ipc::{CommandError, parse};
+use gitraptor_desktop::ipc::{CommandError, from_body, parse};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
+use tauri::ipc::InvokeBody;
 
 const ROOT: &str = env!("CARGO_MANIFEST_DIR");
 
