@@ -1,0 +1,62 @@
+@import "tailwindcss";
+@import "@gitraptor/tokens/glass.css";
+
+/* Tailwind utilities over the grafito glass tokens (DSYS-GRP-002): bg-surface-panel, text-text-main, rounded-lg… */
+@theme inline {
+  --color-surface-window: var(--gr-surface-window);
+  --color-surface-panel: var(--gr-surface-panel);
+  --color-surface-control: var(--gr-surface-control);
+  --color-surface-raised: var(--gr-surface-raised);
+  --color-surface-hover: var(--gr-surface-hover);
+  --color-border-subtle: var(--gr-border-subtle);
+  --color-border-strong: var(--gr-border-strong);
+  --color-text-main: var(--gr-text-main);
+  --color-text-muted: var(--gr-text-muted);
+  --color-text-faint: var(--gr-text-faint);
+  --color-text-disabled: var(--gr-text-disabled);
+  --color-text-on-accent: var(--gr-text-on-accent);
+  --color-accent: var(--gr-accent);
+  --color-accent-text: var(--gr-accent-text);
+  --color-accent-glow: var(--gr-accent-glow);
+  --color-accent-border: var(--gr-accent-border);
+  --color-success: var(--gr-success);
+  --color-success-text: var(--gr-success-text);
+  --color-success-bg: var(--gr-success-bg);
+  --color-warning: var(--gr-warning);
+  --color-warning-text: var(--gr-warning-text);
+  --color-warning-bg: var(--gr-warning-bg);
+  --color-danger: var(--gr-danger);
+  --color-danger-text: var(--gr-danger-text);
+  --color-danger-bg: var(--gr-danger-bg);
+  --color-live: var(--gr-live);
+  --color-live-text: var(--gr-live-text);
+  --color-agent-claude: var(--gr-agent-claude);
+  --color-agent-claude-text: var(--gr-agent-claude-text);
+  --color-lane-1: var(--gr-lane-1);
+  --color-lane-2: var(--gr-lane-2);
+  --color-lane-3: var(--gr-lane-3);
+  --color-lane-4: var(--gr-lane-4);
+  --color-lane-5: var(--gr-lane-5);
+  --color-lane-6: var(--gr-lane-6);
+  --color-lane-7: var(--gr-lane-7);
+  --color-lane-base: var(--gr-lane-base);
+  --radius-xs: var(--gr-radius-xs);
+  --radius-sm: var(--gr-radius-sm);
+  --radius-md: var(--gr-radius-md);
+  --radius-lg: var(--gr-radius-lg);
+  --radius-window: var(--gr-radius-window);
+  --radius-pill: var(--gr-radius-pill);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--gr-surface-wall);
+  color: var(--gr-text-main);
+  font-family: var(--gr-font-ui);
+  margin: 0;
+}
