@@ -122,7 +122,7 @@ Entonces la petición se rechaza con el motivo
 
 ## Estado de la implementación (2026-11-08)
 
-Implementado en: PR #PR_NUM (parcial).
+Implementado en: PR #325 (parcial).
 
 - **Hecho:** `raptor undo --agent <id> [--since <duración>] [--json]` (CLI) y `timemachine.undo` con `agent` en el canal del daemon. En el worktree del cwd y como un solo undo con su previo, deshace solo las operaciones del agente en el periodo (por defecto, la retención de 30 días). El agente se elige por id de sesión o por nombre, con la atribución vigente leída una vez al planificar. Cada ruta, rama y `HEAD` que esas operaciones cambiaron vuelve a su valor anterior al primer cambio (aplicador en modo selectivo); lo demás no se escribe. Se detiene con `overlap` si otro actor cambió después un sujeto (fases 1 y 2), y rechaza la petición entera con `not-selectable`, `attribution-unavailable` u `other-actor`. Un undo sin agente no baja por debajo de un undo por agente activo (`selective-undo-below`). Es el criterio 2 de M2 (`undo --agent --since`).
 - **Tests:** escenarios con daemon y Git reales en `crates/core/tests/us_tmc_011.rs` (arnés `us_tmc_011_common`, con agentes `raptor-fake-agent` independientes de la sesión de Claude Code); e2e en `apps/cli/tests/us_tmc_011_process.rs` (en/es) y la demo M2 en `apps/cli/tests/m2_demo_undo_agent.rs` (4 sesiones en 4 worktrees, confirmación en pty); unitarios en `agent_selector_tests.rs`, `undo_agent_tests.rs`, `undo_agent_more_tests.rs`, `overlap_selected_tests.rs`, `stack_barrier_tests.rs`, `tm_attribution_tests.rs`, `changed_paths_tree_diff_tests.rs`, `tm_apply_selective.rs`, `timemachine_agent_tests.rs` y `apps/cli/src/undo/agent_tests.rs`.

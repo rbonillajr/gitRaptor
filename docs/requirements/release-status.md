@@ -240,7 +240,6 @@
 | [US-TMC-003](features/time-machine/user-stories/US-TMC-003-redo.md) | El desarrollador rehace lo que deshizo por error | Borrador (`draft`) | — | — |
 | [US-TMC-007](features/time-machine/user-stories/US-TMC-007-timeline-filtros-huecos.md) | El desarrollador filtra el timeline por worktree, agente o periodo y ve lo que no se observó | Borrador (`draft`) | — | — |
 | [US-TMC-008](features/time-machine/user-stories/US-TMC-008-timeline-atribucion-vigente.md) | El timeline refleja las correcciones de atribución sin reescribir quién deshizo qué | Borrador (`draft`) | — | — |
-| [US-TMC-011](features/time-machine/user-stories/US-TMC-011-undo-por-agente.md) | El desarrollador deshace solo lo que hizo un agente en un periodo | Borrador (`draft`) | — | — |
 | [US-TMC-014](features/time-machine/user-stories/US-TMC-014-undo-ya-empujado.md) | El desarrollador sabe cuándo lo que deshizo sigue en el remoto | Borrador (`draft`) | — | — |
 | [US-TMC-015](features/time-machine/user-stories/US-TMC-015-operacion-git-en-curso.md) | El desarrollador no rompe un rebase o un merge a medias al deshacer o restaurar | Borrador (`draft`) | — | — |
 | [US-TMC-016](features/time-machine/user-stories/US-TMC-016-retencion-por-defecto.md) | Los snapshots no llenan el disco y nunca se pierde el último punto antes de una operación destructiva | Borrador (`draft`) | — | — |
@@ -350,6 +349,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-MCP-009](features/mcp/user-stories/US-MCP-009-safe-commit.md) | Un agente commitea por MCP con las reglas del repo y con un punto de recuperación previo | Implementado en parte (`partially-implemented`) | #289 | — |
 | [US-MCP-010](features/mcp/user-stories/US-MCP-010-safe-commit-rutas.md) | Un agente commitea solo los archivos que nombra y nunca fuera de su worktree | Implementado en parte (`partially-implemented`) | #289 | — |
 | [US-MCP-013](features/mcp/user-stories/US-MCP-013-confirmacion-sin-cola.md) | Un agente sabe que una acción necesita al desarrollador y a quién acudir | Implementado en parte (`partially-implemented`) | #267 | — |
+| [US-TMC-011](features/time-machine/user-stories/US-TMC-011-undo-por-agente.md) | El desarrollador deshace solo lo que hizo un agente en un periodo | Implementado en parte (`partially-implemented`) | #325 | — |
 | [SPIKE-GRD-002](features/guardrails/technical-stories/SPIKE-GRD-002-factor-so-daemon.md) | Factor de autenticación del SO invocado desde el daemon en los tres SO | Listo (`ready`) | — | — |
 | [TD-GRP-002](features/motor-local/technical-stories/TD-GRP-002-motor-bajo-rafaga.md) | Frescura y memoria del motor bajo una ráfaga de archivos | Listo (`ready`) | — | — |
 | [TD-GRP-003](features/motor-local/technical-stories/TD-GRP-003-nfr04-maquina-referencia.md) | Presupuesto de NFR-04 sin gate automático: medirlo en una máquina de referencia | Listo (`ready`) | — | — |
@@ -384,7 +384,6 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-MCP-019](features/mcp/user-stories/US-MCP-019-create-worktree.md) | Un agente prepara un worktree nuevo desde la rama base para otro trabajo | Borrador (`draft`) | — | — |
 | [US-TMC-003](features/time-machine/user-stories/US-TMC-003-redo.md) | El desarrollador rehace lo que deshizo por error | Borrador (`draft`) | — | — |
 | [US-TMC-007](features/time-machine/user-stories/US-TMC-007-timeline-filtros-huecos.md) | El desarrollador filtra el timeline por worktree, agente o periodo y ve lo que no se observó | Borrador (`draft`) | — | — |
-| [US-TMC-011](features/time-machine/user-stories/US-TMC-011-undo-por-agente.md) | El desarrollador deshace solo lo que hizo un agente en un periodo | Borrador (`draft`) | — | — |
 | [US-TMC-014](features/time-machine/user-stories/US-TMC-014-undo-ya-empujado.md) | El desarrollador sabe cuándo lo que deshizo sigue en el remoto | Borrador (`draft`) | — | — |
 | [US-TMC-015](features/time-machine/user-stories/US-TMC-015-operacion-git-en-curso.md) | El desarrollador no rompe un rebase o un merge a medias al deshacer o restaurar | Borrador (`draft`) | — | — |
 | [US-TMC-016](features/time-machine/user-stories/US-TMC-016-retencion-por-defecto.md) | Los snapshots no llenan el disco y nunca se pierde el último punto antes de una operación destructiva | Borrador (`draft`) | — | — |
@@ -627,5 +626,11 @@ Clases de trabajo del daemon y mecanismo de ahorro de energía
 ### [INF-TMC-001](features/time-machine/technical-stories/INF-TMC-001-arnes-caos-recuperable.md)
 
 Arnés de caos y de garantías de los snapshots en los tres SO
+
+- *La ficha no lista los pendientes en "Estado de la implementación".*
+
+### [US-TMC-011](features/time-machine/user-stories/US-TMC-011-undo-por-agente.md) — #325
+
+El desarrollador deshace solo lo que hizo un agente en un periodo
 
 - *La ficha no lista los pendientes en "Estado de la implementación".*
