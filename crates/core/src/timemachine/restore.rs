@@ -827,6 +827,7 @@ pub fn restore_to(
         // The restore's own overlap check is US-TMC-024.
         tail: None,
         overlap: None,
+        refused: None,
     };
     let protected = ProtectedOperation {
         oplog,
