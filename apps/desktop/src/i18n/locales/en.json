@@ -16,9 +16,7 @@
       }
     },
     "center": {
-      "title": "Graph",
-      "empty": "Nothing to show yet.",
-      "version": "GitRaptor {{version}}"
+      "title": "Graph"
     }
   },
   "ui": {

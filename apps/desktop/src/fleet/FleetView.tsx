@@ -15,6 +15,8 @@ export interface FleetViewProps {
   activity: boolean;
 }
 
+const MAX_TIMING_ENTRIES = 1000;
+
 const sameSlots = (a: ReadonlyMap<string, number>, b: ReadonlyMap<string, number>) =>
   a.size === b.size && [...a].every(([k, v]) => b.get(k) === v);
 
@@ -32,6 +34,11 @@ function useFleetDeltaMarks(): void {
       measured.current = batch;
       performance.measure("gr:fleet-delta", { start: batch.receivedAt });
       performance.mark("gr:fleet-delta-painted");
+      // The platform never clears the User Timing buffer: cap it.
+      if (performance.getEntriesByName("gr:fleet-delta").length > MAX_TIMING_ENTRIES) {
+        performance.clearMeasures("gr:fleet-delta");
+        performance.clearMarks("gr:fleet-delta-painted");
+      }
     });
     return () => cancelAnimationFrame(frame);
   }, [batch]);

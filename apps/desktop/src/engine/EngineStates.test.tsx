@@ -84,6 +84,12 @@ function Harness({ input, candidates = [], onRetry = () => {}, pending = false }
 }
 const show = (s: Scenario, extra: { onRetry?: (start: boolean) => void; pending?: boolean } = {}) =>
   render(<Harness {...s} {...extra} />);
+/** The status region of the band, found by its text (the fleet skeleton is a status region too). */
+const bandWith = (text: RegExp): HTMLElement => {
+  const found = screen.getAllByRole("status").find((el) => text.test(el.textContent ?? ""));
+  if (!found) throw new Error(`no status region with ${String(text)}`);
+  return found;
+};
 const scenario = (name: string): Scenario => {
   const s = SCENARIOS.find((x) => x.name === name);
   if (!s) throw new Error(`no scenario ${name}`);
@@ -125,14 +131,14 @@ describe("engine states", () => {
   it("lost connection dims the fleet and says since when", async () => {
     const time = (lang: string) => new Date(STALE_AT).toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" });
     const { container, unmount } = show(scenario("reconnecting"));
-    expect(screen.getAllByRole("status")[0]).toHaveTextContent(`Lost the connection to the engine. What you see may be out of date since ${time("en-US")}.`);
+    expect(bandWith(/Lost the connection/)).toHaveTextContent(`Lost the connection to the engine. What you see may be out of date since ${time("en-US")}.`);
     expect(container.querySelector("[data-center]")).toHaveAttribute("data-stale", "true");
     unmount();
 
     await setLang("es");
     const input = { ...scenario("reconnecting").input, locale: "es-ES" };
     const es = show({ name: "es", input });
-    expect(screen.getAllByRole("status")[0]).toHaveTextContent(`desactualizado desde las ${time("es-ES")}.`);
+    expect(bandWith(/desactualizado desde las/)).toHaveTextContent(`desactualizado desde las ${time("es-ES")}.`);
     expect(es.container.querySelector("[data-center]")).toHaveAttribute("data-stale", "true");
   });
 
@@ -154,7 +160,7 @@ describe("engine states", () => {
   it("live data is not dimmed", () => {
     const { container } = show(scenario("content"));
     expect(container.querySelector("[data-center]")).not.toHaveAttribute("data-stale");
-    expect(screen.queryByText("Nothing to show yet."), "the content state is the fleet now").toBeNull();
+    expect(container.querySelector("[data-fleet]"), "the content state is the fleet (skeleton or list), never empty").not.toBeNull();
   });
 
   it("incompatible engine says how to update, with the stop command and a Copy button", async () => {
@@ -238,7 +244,7 @@ describe("engine states", () => {
 
   it("catching up band names the reason", () => {
     show(scenario("catching up"));
-    const band = screen.getAllByRole("status")[0];
+    const band = bandWith(/Checking recent changes/);
     expect(band).toHaveTextContent("Checking recent changes; the view may take a few seconds.");
     expect(band).toHaveTextContent("The app fell behind the engine.");
   });
