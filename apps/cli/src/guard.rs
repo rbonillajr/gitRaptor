@@ -637,6 +637,38 @@ fn ask(question: &str) -> Answer {
     }
 }
 
+/// The most invalid answers `ask_retrying` tolerates before it cancels.
+const MAX_INVALID: usize = 3;
+
+/// The question of the conscious exception: like `ask`, but an empty line is No (the default
+/// of the `[…/N]` suffix), an invalid answer explains the valid ones and asks again, and the
+/// third invalid one in a row ends as No after saying so. `question` is built for each ask (the
+/// time left changes); `invalid` and `exhausted` are the texts of both outcomes. No terminal or
+/// end of input is `Answer::None`, as in `ask`.
+fn ask_retrying(question: impl Fn() -> String, invalid: &str, exhausted: &str) -> Answer {
+    let stdin = std::io::stdin();
+    if !stdin.is_terminal() {
+        eprintln!("raptor: {}", t("common.confirm-needs-terminal", &[]));
+        return Answer::None;
+    }
+    for attempt in 1..=MAX_INVALID {
+        eprint!("{} ", question());
+        let _ = std::io::stderr().flush();
+        let mut line = String::new();
+        match stdin.lock().read_line(&mut line) {
+            Ok(0) | Err(_) => return Answer::None,
+            Ok(_) => match line.trim().to_lowercase().as_str() {
+                "y" | "yes" | "s" | "si" | "sí" => return Answer::Yes,
+                "" | "n" | "no" => return Answer::No,
+                _ if attempt < MAX_INVALID => eprintln!("raptor: {invalid}"),
+                _ => {}
+            },
+        }
+    }
+    eprintln!("raptor: {exhausted}");
+    Answer::No
+}
+
 /// The first line of `raptor guard status`: whether the repo is protected and by which base
 /// branch. Installed hooks that are not active (another tool moved Git's hooks, a lost or altered
 /// dispatcher) never read as protected; a daemon that predates the hook layer is trusted with its
