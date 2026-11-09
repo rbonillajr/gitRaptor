@@ -5,6 +5,7 @@ use std::sync::atomic::AtomicI64;
 
 use super::*;
 
+mod queued_notices;
 mod s3_scope;
 
 const AGENT: &str = "fake-claude";
