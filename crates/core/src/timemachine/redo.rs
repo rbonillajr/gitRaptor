@@ -207,8 +207,19 @@ fn plan(oplog_lock: &Mutex<Oplog>, input: &PlanInput<'_>) -> Result<RedoPlan, Re
     );
     let external = external_events(oplog, input.raw, &key, &wt_key);
     let stack = oplog
-        .undo_stack_in(&StackScope::Worktree(key.clone()), &external, input.raw.floor)
-        .map_err(|_| (TmRejectReason::TargetUnavailable, own_scope.clone(), None, None))?;
+        .undo_stack_in(
+            &StackScope::Worktree(key.clone()),
+            &external,
+            input.raw.floor,
+        )
+        .map_err(|_| {
+            (
+                TmRejectReason::TargetUnavailable,
+                own_scope.clone(),
+                None,
+                None,
+            )
+        })?;
     let Some(undo_id) = stack.next_redo().map(str::to_owned) else {
         let reason = if stack.redo_invalidated().is_some() {
             TmRejectReason::RedoInvalidated
@@ -284,8 +295,7 @@ fn plan(oplog_lock: &Mutex<Oplog>, input: &PlanInput<'_>) -> Result<RedoPlan, Re
 
     let registered = registered_worktrees(input.common_dir)
         .map_err(|_| refuse(TmRejectReason::WorktreeUnavailable))?;
-    let (mut worktrees, mut refs) =
-        materialize(input.common_dir, &meta, &scope).map_err(refuse)?;
+    let (mut worktrees, mut refs) = materialize(input.common_dir, &meta, &scope).map_err(refuse)?;
     // Phase 1 of the overlap check (ADR-TMC-005 § 5) from the undo: its requester is the
     // reference, its anchor the base. Before `ref-in-use`: a kept branch never moves.
     let reference = vec![undo.requester.clone()];
@@ -593,8 +603,13 @@ pub fn redo_last(
             Err(_) => None,
         };
         if let Some(id) = id {
-            let settled =
-                await_moved_branches(deps, repo_id, &req.worktree_paths, &tips_before, engine_mark);
+            let settled = await_moved_branches(
+                deps,
+                repo_id,
+                &req.worktree_paths,
+                &tips_before,
+                engine_mark,
+            );
             anchor(deps, repo_id, &req.worktree_paths, id, settled);
         }
     }
