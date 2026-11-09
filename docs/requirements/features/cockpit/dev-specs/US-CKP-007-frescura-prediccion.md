@@ -82,9 +82,7 @@ El trabajo es solo de la TUI. El motor decide qué par se recalcula y cuándo (D
 
 ## ⚠️ Gaps y violaciones de la constitución
 
-| ID | Gap | Tipo | Bloquea | Cierre | Owner |
-|----|-----|------|---------|--------|-------|
-| G1 | T009 y el resto del PR-B de TS-CKP-001: `PairSummary`, `prediction.changed` y la regla de base movida | Bloqueante | T001 a T004 | **Cerrado por #314** (2026-11-09). Nombres comprobados contra `main`: `PairSummary`, `PairStateView`, `PairReason`, `PairLevel` (`none` en el cable) y `PredictionChanged` en `crates/api/src/prediction.rs`; coinciden con esta DS | Orquestador |
+_No gaps. Ready to implement._ G1 (T009 y el resto del PR-B de TS-CKP-001: `PairSummary`, `prediction.changed` y la regla de base movida) quedó **cerrado por #314** (2026-11-09). Los nombres que usa esta DS (`PairSummary`, `PairStateView`, `PairReason`, `PairLevel` con `none` en el cable, `PredictionChanged`, `computed_at_utc_ms`, `rev`, `pair_id`) coinciden con los de `main` (`crates/api/src/prediction.rs`); no hizo falta ajustar nada. La regla de base movida existe en `crates/core/src/predict/state.rs` y la prueba `base_move_turns_base_pair_calculating_and_drops_level` en `crates/core/tests/predict_publish.rs`.
 
 **Dependencia (no es gap):** [DS-US-CKP-006](./US-CKP-006-conflictos-previstos.md) ya está escrita y se implementa antes que esta DS: `PredictionModel` y `PairRow` en `apps/cli/src/tui/prediction.rs`, `RepoView.prediction` y el panel `ConflictPanelModel` en `apps/cli/src/tui/widgets/conflict_alert.rs`.
 
@@ -228,6 +226,8 @@ sequenceDiagram
 
 ## Contratos compartidos
 
+### 6.1 Tipos compartidos
+
 **Contrato de API.** Ninguno propio. Lee `RepoView.prediction` y `prediction.changed` con la forma de [DS-TS-CKP-001 § Contrato de API](./TS-CKP-001-predictor-conflictos.md#contrato-de-api) (A1). No usa `prediction.list`.
 
 **Tipos de la TUI.**
@@ -245,6 +245,22 @@ sequenceDiagram
 | `fn age(ms) -> (i64, &str)` | `apps/cli/src/present/i18n.rs:92` | **MODIFY** a `pub(crate)` (E2) |
 | `FreshnessText` | `apps/cli/src/present/freshness_text.rs` | **CREATE** (T001, E1) |
 | `tui::freshness` | `apps/cli/src/tui/freshness.rs` | **CREATE** (T002); firmas libres, puras, sin E/S |
+
+### 6.2 Ciclos de vida (DI)
+
+_No aplica — la TUI no usa contenedor de dependencias: `tui::freshness` son funciones puras sobre `PredictionModel`._
+
+### 6.3 Firmas del stack
+
+Las de `tui::freshness` (libres, puras, sin E/S), `FreshnessText::render(self, lang: Lang)` y `every()` de la tabla anterior.
+
+### 7.1 Forma del error
+
+_No aplica — la historia no añade errores ni códigos de salida; un par sin hora de cálculo se presenta como `calculating` (E4)._
+
+### 7.3 Valores numéricos
+
+Antigüedad en s (< 60), min (< 60), h (< 24), d (P4); negativa vale 0 (A4); tick de 1 Hz; 80×24.
 
 ---
 
