@@ -49,6 +49,213 @@ pub enum EngineMessage {
     EngineOnly {
         engine: EngineDto,
     },
+    Repo {
+        fleet: RepoFleetDto,
+    },
+    Worktrees {
+        repo_id: String,
+        worktrees: Vec<WorktreeDto>,
+        fetched_utc_ms: Option<u64>,
+        perf: FleetPerf,
+    },
+    Sessions {
+        repo_id: String,
+        detection_available: bool,
+        sessions: Vec<SessionDto>,
+    },
+    RepoSession {
+        repo_id: String,
+        session: SessionDto,
+        perf: FleetPerf,
+    },
+    Prediction {
+        repo_id: String,
+        pairs: Vec<PairDto>,
+        removed: Vec<String>,
+        perf: FleetPerf,
+    },
+    RepoClosed {
+        repo_id: String,
+    },
+}
+
+/// Time the backend spent turning an engine event into a message.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FleetPerf {
+    pub backend_ns: u64,
+}
+
+/// The open repo: its worktrees and predicted pairs.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RepoFleetDto {
+    pub repo_id: String,
+    pub name: String,
+    pub base: BaseDto,
+    pub fetched_utc_ms: Option<u64>,
+    pub tier: Option<Tier>,
+    pub worktrees: Vec<WorktreeDto>,
+    pub pairs: Vec<PairDto>,
+    pub pairs_truncated: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct BaseDto {
+    pub name: Option<String>,
+    pub status: BaseStatus,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum BaseStatus {
+    Confirmed,
+    Unconfirmed,
+    Invalid,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorktreeDto {
+    pub key: String,
+    pub folder: String,
+    pub path: String,
+    pub main: bool,
+    pub status: WorktreeStatusDto,
+    pub last_activity_utc_ms: Option<u64>,
+    pub last_activity_in_gap: bool,
+    pub detached_at: Option<String>,
+    pub operation: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "state", rename_all = "kebab-case")]
+pub enum WorktreeStatusDto {
+    Ready(ReadyDto),
+    Unavailable { reason: UnavailableReason },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum UnavailableReason {
+    Missing,
+    Untrusted,
+    Unreadable,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ReadyDto {
+    pub head: HeadDto,
+    pub counts: CountsDto,
+    pub divergence: DivergenceDto,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+pub enum HeadDto {
+    Branch { name: String },
+    Unborn { name: String },
+    Detached,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct CountsDto {
+    pub staged: u32,
+    pub unstaged: u32,
+    pub untracked: u32,
+}
+
+/// A commit count and whether it is exact or a lower bound.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct BoundedCountDto {
+    pub count: u32,
+    pub exact: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(tag = "state", rename_all = "kebab-case")]
+pub enum DivergenceDto {
+    Counted {
+        ahead: BoundedCountDto,
+        behind: BoundedCountDto,
+    },
+    BaseMissing,
+    NoBase,
+    NoCommits,
+    Unreadable,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionDto {
+    pub session_id: String,
+    pub worktree_key: String,
+    pub agent: AgentDto,
+    pub origin: SessionOrigin,
+    pub state: SessionState,
+    pub started_utc_ms: u64,
+    pub state_since_utc_ms: u64,
+    pub ended_utc_ms: Option<u64>,
+    pub end_cause: Option<EndCause>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+pub enum AgentDto {
+    ClaudeCode,
+    Other { name: String },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SessionOrigin {
+    Detected,
+    Registered,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SessionState {
+    Active,
+    Inactive,
+    Ended,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum EndCause {
+    ProcessGone,
+    EndedDuringGap,
+    RegistrationWithdrawn,
+    WorktreeRemoved,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PairDto {
+    pub pair_id: String,
+    pub a: String,
+    pub b: String,
+    pub state: PairState,
+    pub level: Option<PairLevel>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PairState {
+    Calculating,
+    Current,
+    Recalculating,
+    Pending,
+    NotComputable,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PairLevel {
+    None,
+    Overlap,
+    Conflict,
 }
 
 /// State of the connection to the engine.

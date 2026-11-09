@@ -1,0 +1,206 @@
+{
+  "source": [
+    "docs/requirements/features/desktop/dev-specs/US-DSK-004-flota-en-vivo.md",
+    "docs/requirements/features/desktop/user-stories/US-DSK-004-flota-en-vivo.md"
+  ],
+  "goal": {
+    "intent": "Que quien abre un repo en la app vea una tarjeta por copia de trabajo, con su agente, su estado y lo que pide atención primero, actualizada en vivo.",
+    "endState": "El supervisor sigue el repo abierto (snapshot N, subscribe N+1, sessions.list, resync, unsubscribe al cambiar) y manda repo, worktrees, sessions, repoSession, prediction y repoClosed saneados; el webview los guarda por mensajes en la caché, elige el repo por defecto, pinta RepoTree en la barra lateral y FleetView en el centro, y deja las marcas gr:fleet-delta.",
+    "nonGoals": [
+      "No pinta el grafo ni la autoría de commits (US-DSK-005)",
+      "No añade métodos, eventos ni capacidades al canal ni escribe nada en el motor",
+      "No muestra Agentes · N en vivo ni ramas en el árbol",
+      "No hay filtro de terminadas ni acciones por tarjeta",
+      "No corre el banco desktop-modify"
+    ]
+  },
+  "suite": {
+    "command": "pnpm -C apps/desktop run build && node tools/test/nextest-junit.mjs --workspace && pnpm -C apps/desktop run test"
+  },
+  "layers": {
+    "runtime": {
+      "commands": [
+        {
+          "id": "suite",
+          "cmd": "pnpm -C apps/desktop run build && node tools/test/nextest-junit.mjs --workspace && pnpm -C apps/desktop run test"
+        }
+      ],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "scope": {
+    "projects": [
+      "@gitraptor/desktop",
+      "gitraptor-desktop"
+    ]
+  },
+  "constraints": {
+    "deny_paths": [
+      "docs/ARTIFACTS.md",
+      "docs/architecture/decisions/ADR-GRD-008*"
+    ],
+    "allow_dependency_changes": false
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 900000,
+    "suiteTimeoutMs": 5400000,
+    "maxOutsidePlan": 5
+  },
+  "hops": {
+    "design": {
+      "agent": "main-loop",
+      "model": "sonnet"
+    },
+    "critic": {
+      "agent": "nassa-core:plan-critic",
+      "model": "opus"
+    },
+    "tester": {
+      "agent": "nassa-core:criterion-tester",
+      "model": "sonnet"
+    },
+    "build": {
+      "agent": "nassa-dev-rust:rust-expert",
+      "model": "sonnet"
+    },
+    "review": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "opus"
+    },
+    "conformance": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "sonnet"
+    }
+  },
+  "criteria": [
+    {
+      "id": "D4-OPEN",
+      "statement": "HubCmd::Open abre un repo: events.unsubscribe del anterior, scope.snapshot de repo, scope.subscribe N+1 y sessions.list, y entrega repo, worktrees y sessions con claves iguales entre worktree y sesión; un cambio de worktree.state llega en orden como worktrees",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test fleet_supervisor -- --list 2>/dev/null | grep -q '^opening_a_repo_delivers_its_worktrees_and_sessions_with_matching_keys: test' && cargo test -p gitraptor-desktop --test fleet_supervisor -- --list 2>/dev/null | grep -q '^a_worktree_state_event_reaches_the_webview_in_order: test' && cargo test -p gitraptor-desktop --test fleet_supervisor -- --list 2>/dev/null | grep -q '^switching_repos_unsubscribes_and_drops_the_old_scope: test' && cargo test -p gitraptor-desktop --test fleet_supervisor opening_a_repo_delivers_its_worktrees_and_sessions_with_matching_keys -- --exact && cargo test -p gitraptor-desktop --test fleet_supervisor a_worktree_state_event_reaches_the_webview_in_order -- --exact && cargo test -p gitraptor-desktop --test fleet_supervisor switching_repos_unsubscribes_and_drops_the_old_scope -- --exact",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "apps/desktop/src-tauri/tests/fleet_supervisor.rs",
+        "apps/desktop/src-tauri/tests/support/fake_daemon.rs"
+      ]
+    },
+    {
+      "id": "D4-EVENTS",
+      "statement": "session.state llega como repoSession y prediction.changed como prediction con claves de worktree; un repo sin sesiones informa detection y ninguna sesión; un snapshot nuevo del repo vuelve a pedir sesiones",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test fleet_supervisor -- --list 2>/dev/null | grep -q '^a_prediction_change_reaches_the_webview_with_worktree_keys: test' && cargo test -p gitraptor-desktop --test fleet_supervisor -- --list 2>/dev/null | grep -q '^a_repo_without_sessions_reports_detection_and_no_sessions: test' && cargo test -p gitraptor-desktop --test fleet_supervisor -- --list 2>/dev/null | grep -q '^a_new_repo_snapshot_asks_for_the_sessions_again: test' && cargo test -p gitraptor-desktop --test fleet_supervisor -- --list 2>/dev/null | grep -q '^a_repo_session_event_reaches_the_webview_as_repo_session: test' && cargo test -p gitraptor-desktop --test fleet_supervisor a_prediction_change_reaches_the_webview_with_worktree_keys -- --exact && cargo test -p gitraptor-desktop --test fleet_supervisor a_repo_without_sessions_reports_detection_and_no_sessions -- --exact && cargo test -p gitraptor-desktop --test fleet_supervisor a_new_repo_snapshot_asks_for_the_sessions_again -- --exact && cargo test -p gitraptor-desktop --test fleet_supervisor a_repo_session_event_reaches_the_webview_as_repo_session -- --exact",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "apps/desktop/src-tauri/tests/fleet_supervisor.rs"
+      ]
+    },
+    {
+      "id": "D4-RESYNC",
+      "statement": "Un hueco en el ámbito del repo toma instantánea y sesiones de nuevo; un repo rechazado o scope-closed manda repoClosed y se olvida",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test fleet_supervisor -- --list 2>/dev/null | grep -q '^a_gap_in_the_repo_scope_takes_a_new_snapshot_and_sessions: test' && cargo test -p gitraptor-desktop --test fleet_supervisor -- --list 2>/dev/null | grep -q '^a_closed_repo_is_reported_and_forgotten: test' && cargo test -p gitraptor-desktop --test fleet_supervisor a_gap_in_the_repo_scope_takes_a_new_snapshot_and_sessions -- --exact && cargo test -p gitraptor-desktop --test fleet_supervisor a_closed_repo_is_reported_and_forgotten -- --exact",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "apps/desktop/src-tauri/tests/fleet_supervisor.rs"
+      ]
+    },
+    {
+      "id": "D4-SAFE",
+      "statement": "En vista restringida Open no abre nada; la rama y la carpeta no confiables llegan saneadas (OSC y U+202E); ningún método de escritura aparece en calls()",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test fleet_supervisor -- --list 2>/dev/null | grep -q '^a_restricted_session_never_opens_a_repo: test' && cargo test -p gitraptor-desktop --test fleet_supervisor -- --list 2>/dev/null | grep -q '^untrusted_branch_and_folder_reach_the_webview_escaped: test' && cargo test -p gitraptor-desktop --test fleet_supervisor -- --list 2>/dev/null | grep -q '^a_fleet_run_never_sends_replace_stop_or_writes: test' && cargo test -p gitraptor-desktop --test fleet_supervisor a_restricted_session_never_opens_a_repo -- --exact && cargo test -p gitraptor-desktop --test fleet_supervisor untrusted_branch_and_folder_reach_the_webview_escaped -- --exact && cargo test -p gitraptor-desktop --test fleet_supervisor a_fleet_run_never_sends_replace_stop_or_writes -- --exact",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "apps/desktop/src-tauri/tests/fleet_supervisor.rs"
+      ]
+    },
+    {
+      "id": "D4-INGEST",
+      "statement": "ingest::key es FNV-1a 64 en 16 hex minúscula sobre los bytes crudos, igual para el mismo texto; detached_at solo pasa con 40 o 64 hex",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test fleet_ingest -- --list 2>/dev/null | grep -q '^key_is_fnv1a_64_in_16_lowercase_hex_of_the_raw_bytes: test' && cargo test -p gitraptor-desktop --test fleet_ingest -- --list 2>/dev/null | grep -q '^detached_at_passes_only_as_40_or_64_hex: test' && cargo test -p gitraptor-desktop --test fleet_ingest key_is_fnv1a_64_in_16_lowercase_hex_of_the_raw_bytes -- --exact && cargo test -p gitraptor-desktop --test fleet_ingest detached_at_passes_only_as_40_or_64_hex -- --exact",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "apps/desktop/src-tauri/tests/fleet_ingest.rs"
+      ]
+    },
+    {
+      "id": "D4-CMD",
+      "statement": "fleet_open está en commands.json y en la capability; acepta {params:{repoId}} y rechaza campos desconocidos, id vacío, de más de 128 bytes o con control (invalid-params); sin supervisor da not-watching; V2 sigue cerrada",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test commands --test tauri_surface",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "apps/desktop/src-tauri/tests/commands.rs",
+        "apps/desktop/src-tauri/tests/tauri_surface.rs"
+      ]
+    },
+    {
+      "id": "D4-CMD-TS",
+      "statement": "commands.ts declara fleet_open con { repoId } y lo invoca con el envoltorio params",
+      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/client/commands.test.ts",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "apps/desktop/src/client/commands.test.ts"
+      ]
+    },
+    {
+      "id": "D4-WIRE",
+      "statement": "El contrato Rust y TS de los mensajes del repo coincide con la fixture congelada (repo, worktrees, sessions, repoSession, prediction, repoClosed)",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test engine_wire -- --list 2>/dev/null | grep -q '^the_frozen_fixture_matches_the_wire_types: test' && cargo test -p gitraptor-desktop --test engine_wire the_frozen_fixture_matches_the_wire_types -- --exact && pnpm --filter @gitraptor/desktop exec vitest run src/state/engine-cache.test.ts",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "apps/desktop/src-tauri/tests/engine_wire.rs",
+        "apps/desktop/src/state/engine-cache.test.ts",
+        "apps/desktop/tests/fixtures/engine-messages.json"
+      ]
+    },
+    {
+      "id": "D4-CACHE",
+      "statement": "applyEngineBatch guarda la flota solo por mensajes y sin mutar: repo vacía sesiones, worktrees reemplaza, sessions y repoSession fusionan con la regla de D3 (una terminada con el mismo stateSince gana), prediction hace upsert y quita removed, repoClosed quita la entrada y deselecciona",
+      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/state/engine-cache.test.ts src/state/ui-store.test.ts",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "apps/desktop/src/state/engine-cache.test.ts",
+        "apps/desktop/src/state/ui-store.test.ts"
+      ]
+    },
+    {
+      "id": "D4-USEFLEET",
+      "statement": "useFleet elige el repo por defecto (primero por nombre y repoId) cuando llega global sin elegido o el elegido desaparece, llama fleet_open en cada cambio de selectedRepoId y lee la caché sin queryFn de red; selectedRepoId no se persiste",
+      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/fleet/useFleet.test.tsx src/state/ui-store.test.ts",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "apps/desktop/src/fleet/useFleet.test.tsx"
+      ]
+    },
+    {
+      "id": "D4-SHELL",
+      "statement": "AppShell monta RepoTree en la barra lateral y EngineCenter pinta FleetView con el repo abierto (esqueleto con aria-busy sin instantánea del repo); la primera pintura útil con repo elegido espera la instantánea",
+      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/shell/AppShell.test.tsx src/app/App.test.tsx",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "apps/desktop/src/shell/AppShell.test.tsx",
+        "apps/desktop/src/app/App.test.tsx"
+      ]
+    },
+    {
+      "id": "D4-FRESH",
+      "statement": "El lote lleva receivedAt y FleetView mide gr:fleet-delta una sola vez por lote tras el primer requestAnimationFrame y marca gr:fleet-delta-painted; el backend manda perf.backendNs en worktrees, repoSession y prediction",
+      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/fleet/FleetView.test.tsx src/client/engine-stream.test.ts && pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test fleet_supervisor -- --list 2>/dev/null | grep -q '^fleet_deltas_carry_backend_perf: test' && cargo test -p gitraptor-desktop --test fleet_supervisor fleet_deltas_carry_backend_perf -- --exact",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "apps/desktop/src/fleet/FleetView.test.tsx",
+        "apps/desktop/src/client/engine-stream.test.ts",
+        "apps/desktop/src-tauri/tests/fleet_supervisor.rs"
+      ]
+    }
+  ]
+}
