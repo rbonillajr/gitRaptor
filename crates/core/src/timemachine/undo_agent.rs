@@ -282,7 +282,7 @@ pub(super) fn plan(input: &AgentPlanInput<'_, '_>) -> Result<Planned, PlanRefusa
             .collect()
     };
     let mut waited = Duration::ZERO;
-    let pending = snaps.as_deref().map(&missing).unwrap_or_default();
+    let pending = snaps.as_deref().map(missing).unwrap_or_default();
     if let Some(wait) = super::base_wait::wait_for_bases(input.engine, input.repo_id, &pending) {
         snaps = lock(input.oplog).snapshots(&super::oplog::SnapshotFilter::default());
         let found = snaps
