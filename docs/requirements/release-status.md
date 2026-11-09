@@ -13,8 +13,8 @@
 | Implementado (`implemented`) | 62 |
 | Hecho (`done`) | 3 |
 | Implementado en parte (`partially-implemented`) | 26 |
-| Listo (`ready`) | 3 |
-| Borrador (`draft`) | 73 |
+| Listo (`ready`) | 21 |
+| Borrador (`draft`) | 55 |
 | Bloqueado (`blocked`) | 1 |
 | **Total** | **168** |
 
@@ -23,7 +23,7 @@
 | Feature | Implementado | Hecho | Implementado en parte | Listo | Borrador | Bloqueado | Total |
 |---|---|---|---|---|---|---|---|
 | [cockpit](#cockpit) | 9 | 0 | 5 | 0 | 18 | 1 | 33 |
-| [desktop](#desktop) | 0 | 0 | 0 | 0 | 18 | 0 | 18 |
+| [desktop](#desktop) | 0 | 0 | 0 | 18 | 0 | 0 | 18 |
 | [guardrails](#guardrails) | 14 | 0 | 7 | 1 | 3 | 0 | 25 |
 | [mcp](#mcp) | 7 | 0 | 4 | 0 | 9 | 0 | 20 |
 | [motor-local](#motor-local) | 17 | 2 | 9 | 2 | 11 | 0 | 41 |
@@ -71,28 +71,28 @@
 
 ### desktop
 
-18 fichas: 18 borrador.
+18 fichas: 18 listo.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
-| [US-DSK-001](features/desktop/user-stories/US-DSK-001-anadir-repo-sin-terminal.md) | El novato añade su repo a GitRaptor desde la app sin abrir una terminal | Borrador (`draft`) | — | — |
-| [US-DSK-002](features/desktop/user-stories/US-DSK-002-proteger-repo-con-un-clic.md) | El novato protege su repo con un clic, sabe qué se instaló y puede quitarlo | Borrador (`draft`) | — | — |
-| [US-DSK-003](features/desktop/user-stories/US-DSK-003-estado-del-motor.md) | El usuario sabe si GitRaptor está funcionando y qué hacer cuando no | Borrador (`draft`) | — | — |
-| [US-DSK-004](features/desktop/user-stories/US-DSK-004-flota-en-vivo.md) | El usuario ve en vivo qué agente trabaja en cada copia de su repo y cuál pide atención | Borrador (`draft`) | — | — |
-| [US-DSK-005](features/desktop/user-stories/US-DSK-005-grafo-de-carriles.md) | El usuario ve crecer la rama de cada agente como un carril sobre la rama base | Borrador (`draft`) | — | — |
-| [US-DSK-006](features/desktop/user-stories/US-DSK-006-deshacer-de-un-boton.md) | El usuario deshace con un botón lo que hizo un agente o él mismo, y puede rehacerlo | Borrador (`draft`) | — | — |
-| [US-DSK-007](features/desktop/user-stories/US-DSK-007-bloqueo-explicado.md) | El usuario entiende por qué GitRaptor frenó una operación y cómo hacerla a conciencia | Borrador (`draft`) | — | — |
-| [US-DSK-008](features/desktop/user-stories/US-DSK-008-conflictos-previstos.md) | El usuario ve qué agentes van a chocar antes de que choquen y en qué archivos | Borrador (`draft`) | — | — |
-| [US-DSK-009](features/desktop/user-stories/US-DSK-009-diff-visual.md) | El usuario revisa en la app qué cambió en una copia de trabajo o en un commit | Borrador (`draft`) | — | — |
-| [US-DSK-010](features/desktop/user-stories/US-DSK-010-commit-desde-la-app.md) | El usuario guarda sus cambios en un commit desde la app y puede deshacerlo | Borrador (`draft`) | — | — |
-| [US-DSK-011](features/desktop/user-stories/US-DSK-011-staging-por-fragmento.md) | El usuario elige qué fragmentos o líneas de un archivo entran en el commit | Borrador (`draft`) | — | — |
-| [US-DSK-012](features/desktop/user-stories/US-DSK-012-ramas-crear-cambiar-borrar.md) | El usuario crea, cambia y borra ramas desde la app sin perder trabajo | Borrador (`draft`) | — | — |
-| [US-DSK-013](features/desktop/user-stories/US-DSK-013-integrar-y-poner-al-dia.md) | El usuario integra o pone al día la rama de un agente desde la app y puede deshacerlo | Borrador (`draft`) | — | — |
-| [US-DSK-014](features/desktop/user-stories/US-DSK-014-resolver-conflictos.md) | El usuario resuelve un conflicto de merge dentro de la app y termina la integración | Borrador (`draft`) | — | — |
-| [US-DSK-015](features/desktop/user-stories/US-DSK-015-sincronizar-con-el-remoto.md) | El usuario sube y trae los cambios del remoto desde la app con la protección del repo | Borrador (`draft`) | — | — |
-| [US-DSK-016](features/desktop/user-stories/US-DSK-016-worktree-para-agente.md) | El usuario prepara una copia de trabajo para un agente nuevo y descarta la de uno que terminó | Borrador (`draft`) | — | — |
-| [US-DSK-017](features/desktop/user-stories/US-DSK-017-busqueda.md) | El usuario encuentra un commit, una rama o un archivo escribiendo lo que busca | Borrador (`draft`) | — | — |
-| [US-DSK-018](features/desktop/user-stories/US-DSK-018-atajos-de-teclado.md) | El usuario hace las acciones frecuentes con el teclado y las descubre en una paleta de comandos | Borrador (`draft`) | — | — |
+| [US-DSK-001](features/desktop/user-stories/US-DSK-001-anadir-repo-sin-terminal.md) | El novato añade su repo a GitRaptor desde la app sin abrir una terminal | Listo (`ready`) | — | — |
+| [US-DSK-002](features/desktop/user-stories/US-DSK-002-proteger-repo-con-un-clic.md) | El novato protege su repo con un clic, sabe qué se instaló y puede quitarlo | Listo (`ready`) | — | — |
+| [US-DSK-003](features/desktop/user-stories/US-DSK-003-estado-del-motor.md) | El usuario sabe si GitRaptor está funcionando y qué hacer cuando no | Listo (`ready`) | — | — |
+| [US-DSK-004](features/desktop/user-stories/US-DSK-004-flota-en-vivo.md) | El usuario ve en vivo qué agente trabaja en cada copia de su repo y cuál pide atención | Listo (`ready`) | — | — |
+| [US-DSK-005](features/desktop/user-stories/US-DSK-005-grafo-de-carriles.md) | El usuario ve crecer la rama de cada agente como un carril sobre la rama base | Listo (`ready`) | — | — |
+| [US-DSK-006](features/desktop/user-stories/US-DSK-006-deshacer-de-un-boton.md) | El usuario deshace con un botón lo que hizo un agente o él mismo, y puede rehacerlo | Listo (`ready`) | — | — |
+| [US-DSK-007](features/desktop/user-stories/US-DSK-007-bloqueo-explicado.md) | El usuario entiende por qué GitRaptor frenó una operación y cómo hacerla a conciencia | Listo (`ready`) | — | — |
+| [US-DSK-008](features/desktop/user-stories/US-DSK-008-conflictos-previstos.md) | El usuario ve qué agentes van a chocar antes de que choquen y en qué archivos | Listo (`ready`) | — | — |
+| [US-DSK-009](features/desktop/user-stories/US-DSK-009-diff-visual.md) | El usuario revisa en la app qué cambió en una copia de trabajo o en un commit | Listo (`ready`) | — | — |
+| [US-DSK-010](features/desktop/user-stories/US-DSK-010-commit-desde-la-app.md) | El usuario guarda sus cambios en un commit desde la app y puede deshacerlo | Listo (`ready`) | — | — |
+| [US-DSK-011](features/desktop/user-stories/US-DSK-011-staging-por-fragmento.md) | El usuario elige qué fragmentos o líneas de un archivo entran en el commit | Listo (`ready`) | — | — |
+| [US-DSK-012](features/desktop/user-stories/US-DSK-012-ramas-crear-cambiar-borrar.md) | El usuario crea, cambia y borra ramas desde la app sin perder trabajo | Listo (`ready`) | — | — |
+| [US-DSK-013](features/desktop/user-stories/US-DSK-013-integrar-y-poner-al-dia.md) | El usuario integra o pone al día la rama de un agente desde la app y puede deshacerlo | Listo (`ready`) | — | — |
+| [US-DSK-014](features/desktop/user-stories/US-DSK-014-resolver-conflictos.md) | El usuario resuelve un conflicto de merge dentro de la app y termina la integración | Listo (`ready`) | — | — |
+| [US-DSK-015](features/desktop/user-stories/US-DSK-015-sincronizar-con-el-remoto.md) | El usuario sube y trae los cambios del remoto desde la app con la protección del repo | Listo (`ready`) | — | — |
+| [US-DSK-016](features/desktop/user-stories/US-DSK-016-worktree-para-agente.md) | El usuario prepara una copia de trabajo para un agente nuevo y descarta la de uno que terminó | Listo (`ready`) | — | — |
+| [US-DSK-017](features/desktop/user-stories/US-DSK-017-busqueda.md) | El usuario encuentra un commit, una rama o un archivo escribiendo lo que busca | Listo (`ready`) | — | — |
+| [US-DSK-018](features/desktop/user-stories/US-DSK-018-atajos-de-teclado.md) | El usuario hace las acciones frecuentes con el teclado y las descubre en una paleta de comandos | Listo (`ready`) | — | — |
 
 ### guardrails
 
@@ -271,7 +271,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### M2
 
-112 fichas: 39 implementado, 3 hecho, 20 implementado en parte, 3 listo, 46 borrador, 1 bloqueado.
+102 fichas: 39 implementado, 3 hecho, 20 implementado en parte, 3 listo, 37 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -347,7 +347,6 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-CKP-008](features/cockpit/user-stories/US-CKP-008-alerta-conflicto-nuevo.md) | El desarrollador se entera en la TUI cuando aparece un conflicto previsto nuevo | Borrador (`draft`) | — | — |
 | [US-CKP-009](features/cockpit/user-stories/US-CKP-009-base-pendiente.md) | Con la rama base sin confirmar, la predicción contra la base queda pendiente | Borrador (`draft`) | — | — |
 | [US-CKP-010](features/cockpit/user-stories/US-CKP-010-kpi-deteccion.md) | El desarrollador sabe qué parte de los conflictos reales se vio antes de ocurrir | Borrador (`draft`) | — | — |
-| [US-CKP-011](features/cockpit/user-stories/US-CKP-011-cli-solo-lectura.md) | El desarrollador consulta la flota y los conflictos desde la línea de comandos | Borrador (`draft`) | — | — |
 | [US-CKP-012](features/cockpit/user-stories/US-CKP-012-ver-diff.md) | El desarrollador revisa lo que un agente integraría antes de hacer merge | Borrador (`draft`) | — | — |
 | [US-CKP-013](features/cockpit/user-stories/US-CKP-013-abrir-en-editor.md) | El desarrollador abre el worktree de un agente en su editor | Borrador (`draft`) | — | — |
 | [US-CKP-014](features/cockpit/user-stories/US-CKP-014-integrar-rama-agente.md) | El desarrollador integra la rama de un agente con una tecla y puede deshacerlo | Borrador (`draft`) | — | — |
@@ -360,58 +359,56 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-CKP-022](features/cockpit/user-stories/US-CKP-022-grafo-carriles.md) | El desarrollador ve crecer la rama de cada agente sobre la base | Borrador (`draft`) | — | — |
 | [US-CKP-024](features/cockpit/user-stories/US-CKP-024-integrar-casos-limite.md) | Integrar sigue siendo seguro cuando el estado cambia, choca o la base no está sacada | Borrador (`draft`) | — | — |
 | [US-GRD-011](features/guardrails/user-stories/US-GRD-011-configuracion-ilegible.md) | Una configuración rota no deja pasar las operaciones peligrosas | Borrador (`draft`) | — | — |
-| [US-GRD-013](features/guardrails/user-stories/US-GRD-013-comando-edicion-configuracion.md) | El desarrollador cambia la configuración con un comando sin perder lo que editó a mano | Borrador (`draft`) | — | — |
-| [US-GRD-015](features/guardrails/user-stories/US-GRD-015-cola-de-confirmacion.md) | El desarrollador aprueba o rechaza las acciones de riesgo que un agente deja en espera | Borrador (`draft`) | — | — |
-| [US-GRP-006](features/motor-local/user-stories/US-GRP-006-retirar-y-volver-a-anadir.md) | El desarrollador recupera el historial de un repo que retiró y volvió a añadir | Borrador (`draft`) | — | — |
 | [US-GRP-011](features/motor-local/user-stories/US-GRP-011-worktree-compartido.md) | El desarrollador ve todas las sesiones de un worktree compartido | Borrador (`draft`) | — | — |
-| [US-GRP-013](features/motor-local/user-stories/US-GRP-013-umbral-inactividad-por-repo.md) | El desarrollador ajusta para un repo cuándo una sesión pasa a inactiva | Borrador (`draft`) | — | — |
-| [US-GRP-016](features/motor-local/user-stories/US-GRP-016-rama-base-configuracion-equipo.md) | La rama base la define la configuración del equipo | Borrador (`draft`) | — | — |
 | [US-MCP-006](features/mcp/user-stories/US-MCP-006-registrar-agente.md) | Un agente sin soporte completo se declara por MCP y su trabajo queda a su nombre | Borrador (`draft`) | — | — |
 | [US-MCP-007](features/mcp/user-stories/US-MCP-007-confused-deputy.md) | Un hook lanzado por una escritura de un agente no puede usar los poderes del desarrollador | Borrador (`draft`) | — | — |
 | [US-MCP-011](features/mcp/user-stories/US-MCP-011-escritura-en-el-worktree-correcto.md) | La escritura de un agente cae en el worktree que espera, o no ocurre | Borrador (`draft`) | — | — |
 | [US-MCP-012](features/mcp/user-stories/US-MCP-012-undo-de-lo-propio.md) | Un agente deshace por MCP su última operación sin tocar el trabajo de otros | Borrador (`draft`) | — | — |
-| [US-MCP-014](features/mcp/user-stories/US-MCP-014-confirmacion-pendiente-en-cola.md) | La acción de riesgo de un agente queda en espera del desarrollador sin bloquear al agente | Borrador (`draft`) | — | — |
 | [US-MCP-015](features/mcp/user-stories/US-MCP-015-medicion-del-mcp.md) | El desarrollador mide cuánto paró y cuánto recuperó el MCP | Borrador (`draft`) | — | — |
 | [US-MCP-017](features/mcp/user-stories/US-MCP-017-explain-history.md) | Un agente entiende qué pasó en su repo sin ver mensajes ni contenido | Borrador (`draft`) | — | — |
 | [US-MCP-018](features/mcp/user-stories/US-MCP-018-safe-rebase-atomico.md) | Un agente se pone al día con la rama base y, si choca, su rama queda como estaba | Borrador (`draft`) | — | — |
 | [US-MCP-019](features/mcp/user-stories/US-MCP-019-create-worktree.md) | Un agente prepara un worktree nuevo desde la rama base para otro trabajo | Borrador (`draft`) | — | — |
 | [US-TMC-003](features/time-machine/user-stories/US-TMC-003-redo.md) | El desarrollador rehace lo que deshizo por error | Borrador (`draft`) | — | — |
 | [US-TMC-007](features/time-machine/user-stories/US-TMC-007-timeline-filtros-huecos.md) | El desarrollador filtra el timeline por worktree, agente o periodo y ve lo que no se observó | Borrador (`draft`) | — | — |
-| [US-TMC-008](features/time-machine/user-stories/US-TMC-008-timeline-atribucion-vigente.md) | El timeline refleja las correcciones de atribución sin reescribir quién deshizo qué | Borrador (`draft`) | — | — |
 | [US-TMC-011](features/time-machine/user-stories/US-TMC-011-undo-por-agente.md) | El desarrollador deshace solo lo que hizo un agente en un periodo | Borrador (`draft`) | — | — |
 | [US-TMC-014](features/time-machine/user-stories/US-TMC-014-undo-ya-empujado.md) | El desarrollador sabe cuándo lo que deshizo sigue en el remoto | Borrador (`draft`) | — | — |
 | [US-TMC-015](features/time-machine/user-stories/US-TMC-015-operacion-git-en-curso.md) | El desarrollador no rompe un rebase o un merge a medias al deshacer o restaurar | Borrador (`draft`) | — | — |
 | [US-TMC-016](features/time-machine/user-stories/US-TMC-016-retencion-por-defecto.md) | Los snapshots no llenan el disco y nunca se pierde el último punto antes de una operación destructiva | Borrador (`draft`) | — | — |
 | [US-TMC-018](features/time-machine/user-stories/US-TMC-018-garantias-snapshots.md) | Los snapshots no se publican, no se pierden con el mantenimiento de Git y ningún agente los altera | Borrador (`draft`) | — | — |
 | [US-TMC-020](features/time-machine/user-stories/US-TMC-020-overhead-snapshot.md) | El desarrollador y sus agentes no notan el coste de los snapshots | Borrador (`draft`) | — | — |
-| [US-TMC-022](features/time-machine/user-stories/US-TMC-022-tope-disco.md) | La Time Machine nunca pasa del tope de disco que fijé | Borrador (`draft`) | — | — |
 | [US-TMC-024](features/time-machine/user-stories/US-TMC-024-solape-restauracion.md) | Una restauración nunca retira trabajo de otro actor sin que el desarrollador lo vea y lo confirme | Borrador (`draft`) | — | — |
-| [US-CKP-023](features/cockpit/user-stories/US-CKP-023-cola-confirmacion.md) | El desarrollador aprueba o rechaza desde la TUI las acciones que un agente deja en espera | Bloqueado (`blocked`) | — | — |
 
 ### M3
 
-3 fichas: 3 implementado en parte.
+6 fichas: 3 implementado en parte, 3 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
 | [SPIKE-GRD-001](features/guardrails/technical-stories/SPIKE-GRD-001-interceptabilidad-hooks.md) | Interceptabilidad, coexistencia y coste de la capa de hooks en los tres SO | Implementado en parte (`partially-implemented`) | #22, #25, #121 | 2 |
 | [SPIKE-GRP-002](features/motor-local/technical-stories/SPIKE-GRP-002-viabilidad-observador.md) | Viabilidad del observador de cambios a escala en los tres SO | Implementado en parte (`partially-implemented`) | #17, #23 | 2 |
 | [TD-GRP-001](features/motor-local/technical-stories/TD-GRP-001-acl-windows.md) | Verificación de ACL en Windows: git.exe (SEC-10) y perfil (SEC-06) | Implementado en parte (`partially-implemented`) | #72 | 2 |
+| [US-GRD-013](features/guardrails/user-stories/US-GRD-013-comando-edicion-configuracion.md) | El desarrollador cambia la configuración con un comando sin perder lo que editó a mano | Borrador (`draft`) | — | — |
+| [US-GRP-016](features/motor-local/user-stories/US-GRP-016-rama-base-configuracion-equipo.md) | La rama base la define la configuración del equipo | Borrador (`draft`) | — | — |
+| [US-TMC-022](features/time-machine/user-stories/US-TMC-022-tope-disco.md) | La Time Machine nunca pasa del tope de disco que fijé | Borrador (`draft`) | — | — |
 
 ### M4
 
-4 fichas: 2 implementado en parte, 2 borrador.
+8 fichas: 2 implementado en parte, 6 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
 | [INF-GRP-003](features/motor-local/technical-stories/INF-GRP-003-pipeline-release.md) | Pipeline de release: 6 targets, firma, checksums, SBOM y borrador de GitHub Release | Implementado en parte (`partially-implemented`) | #51 | 3 |
 | [INF-GRP-004](features/motor-local/technical-stories/INF-GRP-004-canales-distribucion.md) | Canales de distribución: Homebrew, winget, npm y scripts de instalación verificados | Implementado en parte (`partially-implemented`) | #51 | 2 |
+| [US-CKP-011](features/cockpit/user-stories/US-CKP-011-cli-solo-lectura.md) | El desarrollador consulta la flota y los conflictos desde la línea de comandos | Borrador (`draft`) | — | — |
+| [US-GRP-006](features/motor-local/user-stories/US-GRP-006-retirar-y-volver-a-anadir.md) | El desarrollador recupera el historial de un repo que retiró y volvió a añadir | Borrador (`draft`) | — | — |
+| [US-GRP-013](features/motor-local/user-stories/US-GRP-013-umbral-inactividad-por-repo.md) | El desarrollador ajusta para un repo cuándo una sesión pasa a inactiva | Borrador (`draft`) | — | — |
 | [US-GRP-014](features/motor-local/user-stories/US-GRP-014-git-ausente-o-antiguo.md) | El desarrollador sabe qué Git le falta y el motor empieza solo cuando lo instala | Borrador (`draft`) | — | — |
 | [US-GRP-015](features/motor-local/user-stories/US-GRP-015-primer-repo-maquina-nueva.md) | El desarrollador recién instalado sabe cómo añadir su primer repo | Borrador (`draft`) | — | — |
+| [US-TMC-008](features/time-machine/user-stories/US-TMC-008-timeline-atribucion-vigente.md) | El timeline refleja las correcciones de atribución sin reescribir quién deshizo qué | Borrador (`draft`) | — | — |
 
 ### Sin hito
 
-30 fichas sin hito asignado.
+33 fichas sin hito asignado.
 
 ## Implementadas en parte: lo que falta
 
