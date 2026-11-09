@@ -47,7 +47,20 @@ fn commit_tree_diff_returns_entries_uncut() {
     f.write("edit.rs", "two\n");
     f.write("new/deep/file.rs", "fresh\n");
     f.write("tool.sh", "#!/bin/sh\n");
+    // Mode bit on the work-tree file: `commit` runs `git add -A`, which under core.filemode=true
+    // would undo an index-only `--chmod`. Without Unix modes (Windows, core.filemode=false) the
+    // index bit survives `add -A`.
+    #[cfg(not(unix))]
     f.git(&["update-index", "--add", "--chmod=+x", "tool.sh"]);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(
+            f.repo.join("tool.sh"),
+            std::fs::Permissions::from_mode(0o755),
+        )
+        .unwrap();
+    }
     f.git(&["rm", "-q", "gone.rs"]);
     let b = commit(&f, "b");
 
