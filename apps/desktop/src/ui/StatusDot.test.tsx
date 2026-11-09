@@ -4,7 +4,9 @@ import axe from "axe-core";
 import i18n from "i18next";
 import { afterEach, describe, expect, it } from "vitest";
 import "@/i18n";
-import { StatusDot, type StatusTone } from "./StatusDot";
+import { StatusDot } from "./StatusDot";
+
+type StatusTone = "active" | "inactive" | "conflict" | "live";
 
 const NAMES: Record<"en" | "es", Record<StatusTone, string>> = {
   en: { active: "Active", inactive: "Inactive", conflict: "Predicted conflict", live: "Live" },

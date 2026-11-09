@@ -25,13 +25,13 @@ function Grid(p: Props) {
       label="Commit graph"
       columns={COLUMNS}
       rows={ROWS}
-      getRowId={(r) => r.id}
-      getRowLabel={(r) => `${r.msg} by Ana`}
-      renderCell={(r, col) =>
+      getRowId={(r: Row) => r.id}
+      getRowLabel={(r: Row) => `${r.msg} by Ana`}
+      renderCell={(r: Row, col: string) =>
         col === "sha" ? <button type="button" tabIndex={-1}>copy {r.id}</button> : col === "msg" ? r.msg : col}
       selectedId={p.selectedId ?? null}
-      onSelect={(id) => { p.calls?.push(`select:${id}`); p.onSelect?.(id); }}
-      onActivate={(id) => { p.calls?.push(`activate:${id}`); p.onActivate?.(id); }}
+      onSelect={(id: string) => { p.calls?.push(`select:${id}`); p.onSelect?.(id); }}
+      onActivate={(id: string) => { p.calls?.push(`activate:${id}`); p.onActivate?.(id); }}
       {...(p.wipId === undefined ? {} : { wipId: p.wipId })}
       {...(p.disabled === undefined ? {} : { disabled: p.disabled })}
       {...(p.loading === undefined ? {} : { loading: p.loading })}
