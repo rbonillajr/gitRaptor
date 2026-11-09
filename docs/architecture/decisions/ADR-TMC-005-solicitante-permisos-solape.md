@@ -5,7 +5,7 @@ type: adr
 status: accepted
 accepted: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-27
+updated: 2026-11-08
 date: 2026-10-03
 domain: GRP
 feature: time-machine
@@ -225,3 +225,13 @@ No cambia ninguna decisión. Cómo se aplica el § 3:
 - **Resultado**: los motivos `overlap` y `overlap-unverified` de la Enmienda 2026-10-27, con actor y momento; por MCP, solo el motivo y recuentos (SEC-12).
 
 **Validación añadida** (definida en DS-US-TMC-011 T006 y § 9.4; tests por implementar): una edición posterior al último cambio del agente detiene el undo; los commits del propio agente sobre un archivo no se solapan entre sí; un commit de otro actor en la rama después del primer cambio del agente lo detiene; uno anterior no; un punto anterior al último cambio del agente no da conflicto en la fase 1.
+
+## Nota (2026-11-08, TS-TMC-005)
+
+**Decisión del orquestador (2026-11-08), validada por Arquitecto.** Origen: PR #317, sección «Pendiente». Precisa D7 (`overlap-unverified`) de la Enmienda (2026-10-27, US-TMC-012); no cambia la regla de fallar cerrado. El `status` sigue en `accepted`.
+
+- **Caso**: un agente hace `raptor undo` justo después de un `git reset --hard` crudo. La captura que da su base B aún no se ha sellado, así que el undo responde `overlap-unverified` aunque reintentar funcione.
+- **Decisión**: cuando falta B, la referencia es un agente y la captura continua tiene pendiente la que puede producirlo, el undo espera esa captura con un plazo propio (`BASE_WAIT`, 2 s, ⚠️ **ASSUMPTION**), avisado por una señal y nunca con `sleep`. Espera sin retener el lock del oplog ni el writer del almacén. Si el plazo vence, o si no hay captura pendiente, responde `overlap-unverified` como hoy. El plazo de 1,5 s de las dos fases empieza después.
+- **Descartado**: usar el previo del undo como B. El previo incluye todo lo posterior al reset, así que haría pasar trabajo ajeno por cambio deshecho (deshacer de más, NFR-01) y dejaría la detección sin intervalos que comparar. Tampoco basta con quedarse como está y que el cliente reintente: obliga a cada agente a saberlo.
+- **Por qué no amplía G4**: el instante de la captura no depende de la espera. B es el mismo que encuentra un reintento.
+- Detalle y criterios: [TS-TMC-005](../../requirements/features/time-machine/technical-stories/TS-TMC-005-undo-espera-punto-base.md).
