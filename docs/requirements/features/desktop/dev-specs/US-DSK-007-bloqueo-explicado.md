@@ -722,3 +722,5 @@ Tabla idéntica en DS-US-DSK-008, DS-US-DSK-007 y DS-US-DSK-005. Orden de integr
 | `src/shell/TitleBar.tsx` | píldora ⚡ | sin cambios | sin cambios |
 | Primitivas de `src/ui` | `CopyCommand` (anuncio, `onCopied`), `Esc` consumido en `Dialog`, `Popover` y `Toast`; `ConflictBand` nuevo y su línea en `index.ts` | `Toast` (`srLabel`) | `Table` (props aditivas) |
 | `src/i18n/locales/{en,es}.json` | `conflicts.*`, `ui.common.copied`, `ui.common.copyFailed` | `grd.*` | `graph.*`, `detail.agents.*`; reescribe `grd.view.back` y `conflicts.detail.back` |
+
+Implementado en: PR #348 (T001 a T006 de la Dev Spec). Pendiente: la verificación manual en macOS con el motor real (T007: `writeText` en WKWebView, la excepción real anunciada y cancelada, el registro ilegible) y el glosario de D17 (el botón «?» con `Popover`; los textos `grd.gloss.*` ya están en el catálogo).
