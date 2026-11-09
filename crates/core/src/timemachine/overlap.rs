@@ -395,6 +395,38 @@ fn clean_points_after<'s>(input: &OverlapInput<'s>, base: &Point<'_>) -> Vec<Poi
     out
 }
 
+/// The latest clean, usable point of the worktree `wt_key` and its engine mark: where phase 1 of
+/// an undo by agent compares. `None` when there is none.
+pub(crate) fn last_clean_point(
+    snaps: &[SnapshotView],
+    wt_key: &str,
+    raw: &RawSide,
+) -> Option<(String, i64)> {
+    let views: Vec<&SnapshotView> = snaps
+        .iter()
+        .filter(|s| s.record.worktrees.iter().any(|k| k == wt_key))
+        .filter(|s| s.record.engine_mark.is_some())
+        .collect();
+    let anchors = settled_anchors(snaps);
+    let points: Vec<PointFacts> = views
+        .iter()
+        .filter_map(|s| PointFacts::of(s, &anchors))
+        .collect();
+    if points.len() != views.len() {
+        return None;
+    }
+    let mut seqs: Vec<i64> = raw.events.iter().map(|e| e.seq).collect();
+    seqs.sort_unstable();
+    let clean = clean_mask(&points, &seqs, raw.floor);
+    views
+        .iter()
+        .zip(clean)
+        .filter(|(s, c)| *c && usable(s))
+        .filter_map(|(s, _)| as_point(s))
+        .max_by_key(|p| (p.mark, p.seq))
+        .map(|p| (p.id.to_owned(), p.mark))
+}
+
 /// Agents are the same actor by session; every unattributed change is one class (D4).
 fn same_actor(a: &Requester, b: &Requester) -> bool {
     match (a, b) {

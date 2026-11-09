@@ -169,7 +169,7 @@ impl Selection {
 
 /// How far ahead of the daemon's clock a moment may be and still count as in the period: a
 /// later one is the mark of a clock that stepped back, and the walk stops there (D2).
-const FUTURE_MARGIN_MS: i64 = 5_000;
+pub(super) const FUTURE_MARGIN_MS: i64 = 5_000;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UndoError {
@@ -207,14 +207,14 @@ pub enum UndoError {
 const OVERLAP_BUDGET: Duration = Duration::from_millis(1500);
 
 /// The overlap part of a refused plan.
-struct OverlapRefusal {
-    report: Box<OverlapReport>,
-    undone: Box<Undone>,
+pub(super) struct OverlapRefusal {
+    pub(super) report: Box<OverlapReport>,
+    pub(super) undone: Box<Undone>,
 }
 
 /// Why `plan` refused: the reason, the scope and target to record it under, and the overlap
 /// detail when that is the reason.
-type PlanRefusal = (TmRejectReason, Scope, Vec<OpRef>, Option<OverlapRefusal>);
+pub(super) type PlanRefusal = (TmRejectReason, Scope, Vec<OpRef>, Option<OverlapRefusal>);
 
 /// The base permission rule (ADR-TMC-005 § 2) for undoing work of `owner`.
 /// The actor of a GitRaptor operation is its frozen requester. An agent
@@ -292,18 +292,21 @@ pub struct Undone {
 }
 
 /// What an undo is about to do.
-struct Planned {
+pub(super) struct Planned {
     /// What it takes back, oldest first (one for the undo of the last operation).
-    undone: Vec<Undone>,
-    target: String,
-    scope: Scope,
-    worktrees: Vec<PlanWorktree>,
-    refs: BTreeSet<String>,
-    warnings: Vec<String>,
+    pub(super) undone: Vec<Undone>,
+    /// The point it returns to; empty for a selective undo, whose target is its own prior.
+    pub(super) target: String,
+    pub(super) scope: Scope,
+    pub(super) worktrees: Vec<PlanWorktree>,
+    pub(super) refs: BTreeSet<String>,
+    pub(super) warnings: Vec<String>,
     /// A confirmation challenge of this very plan was redeemed.
-    confirmed: bool,
+    pub(super) confirmed: bool,
     /// Phase 1 of the overlap check: where the tail starts.
-    overlap: OverlapReport,
+    pub(super) overlap: OverlapReport,
+    /// An undo by agent: the subjects it writes, each with its value.
+    pub(super) selective: Option<super::undo_agent::SelectivePlan>,
 }
 
 /// The engine's side of an undo's plan (US-TMC-004): the worktree's raw Git
@@ -878,6 +881,7 @@ fn plan(
         warnings,
         confirmed,
         overlap: report,
+        selective: None,
     })
 }
 
@@ -944,6 +948,9 @@ pub(super) struct UndoStep<'a> {
     pub(super) tail: Option<Tail<'a>>,
     /// What phase 2 found, once it ran.
     pub(super) overlap: Option<OverlapReport>,
+    /// Why the step refused after the prior, other than an overlap (the operation is already
+    /// `rejected`).
+    pub(super) refused: Option<TmRejectReason>,
 }
 
 /// What phase 2 of the overlap check needs besides the step's plan.
@@ -962,6 +969,8 @@ pub(super) struct Tail<'a> {
     pub(super) budget: Duration,
     /// The mark of the undo's request: the tail's events end there.
     pub(super) intent_mark: i64,
+    /// An undo by agent: phase 2 compares subject by subject.
+    pub(super) selected: Option<super::undo_agent::SelectivePlan>,
 }
 
 impl UndoStep<'_> {
@@ -973,6 +982,9 @@ impl UndoStep<'_> {
         let Some(tail) = &self.tail else {
             return Ok(());
         };
+        if tail.selected.is_some() {
+            return self.check_selected_tail(ctx);
+        }
         let refs: BTreeSet<String> = match &self.plan.refs {
             RefScope::Only(names) => names.clone(),
             _ => BTreeSet::new(),
@@ -1045,9 +1057,108 @@ impl UndoStep<'_> {
     }
 }
 
+impl UndoStep<'_> {
+    /// `ready → rejected` for `reason`, from the step.
+    fn refuse(&mut self, ctx: &StepCtx<'_>, reason: TmRejectReason) -> StepError {
+        let annotated = lock(ctx.oplog()).advance_operation(
+            ctx.operation_id(),
+            OperationTransition::Rejected {
+                reason: &reason_code(reason),
+            },
+            now_ms(),
+        );
+        self.refused = Some(reason);
+        StepError::new(match annotated {
+            Ok(_) => "rejected",
+            Err(_) => "rejected: the rejection could not be recorded",
+        })
+    }
+
+    /// Phase 2 of an undo by agent, after its prior: a path of the target the prior left out
+    /// has no copy for the redo (`not-selectable`, D7); then every subject against the prior.
+    fn check_selected_tail(&mut self, ctx: &StepCtx<'_>) -> Result<(), StepError> {
+        let Some(tail) = &self.tail else {
+            return Ok(());
+        };
+        let Some(sel) = &tail.selected else {
+            return Ok(());
+        };
+        let prior = ctx.prior_snapshot_id().to_owned();
+        let Ok(meta) = self.store.meta(&prior) else {
+            return Err(self.refuse(ctx, TmRejectReason::TargetUnavailable));
+        };
+        let excluded = sel.target.paths.iter().any(|(key, paths)| {
+            paths
+                .keys()
+                .any(|path| super::undo_agent::is_excluded(&meta.exclusions, key, path))
+        });
+        if excluded {
+            return Err(self.refuse(ctx, TmRejectReason::NotSelectable));
+        }
+        // The events again, now that the repo is held: what ran since the plan counts.
+        let events = match tail.engine {
+            Some(deps) => deps
+                .engine
+                .raw_events(&tail.repo_id, &tail.worktree)
+                .map(|events| {
+                    events
+                        .into_iter()
+                        .filter(|e| e.seq <= tail.intent_mark)
+                        .collect::<Vec<_>>()
+                }),
+            None => Some(Vec::new()),
+        };
+        let report = match events {
+            Some(events) => overlap::check_selected_tail(
+                self.store,
+                &overlap::SelectedInput {
+                    worktree_key: &sel.worktree_key,
+                    finals: &sel.finals,
+                    first_base: &sel.first_base,
+                    set: &tail.undone,
+                    events: &events,
+                    last_point: None,
+                    deadline: Instant::now() + tail.budget,
+                },
+                &prior,
+            ),
+            None => OverlapReport {
+                unverified: true,
+                ..OverlapReport::default()
+            },
+        };
+        if report.stops() {
+            let reason = if report.unverified {
+                TmRejectReason::OverlapUnverified
+            } else {
+                TmRejectReason::Overlap
+            };
+            let annotated = lock(ctx.oplog()).advance_operation(
+                ctx.operation_id(),
+                OperationTransition::Rejected {
+                    reason: &reason_code(reason),
+                },
+                now_ms(),
+            );
+            self.overlap = Some(report);
+            return Err(StepError::new(match annotated {
+                Ok(_) => "overlap",
+                Err(_) => "overlap: the rejection could not be recorded",
+            }));
+        }
+        self.overlap = Some(report);
+        Ok(())
+    }
+}
+
 impl ProtectedStep for UndoStep<'_> {
     fn subtype(&self) -> &str {
-        "undo"
+        // An undo by agent is recorded with its subtype: the stack reads its barrier from it.
+        if self.plan.selective.is_some() {
+            super::oplog::SELECTIVE_UNDO_SUBTYPE
+        } else {
+            "undo"
+        }
     }
 
     fn scope(&self) -> StepScope {
@@ -1060,6 +1171,10 @@ impl ProtectedStep for UndoStep<'_> {
 
     fn run(&mut self, ctx: &mut StepCtx<'_>) -> Result<StepOutput, StepError> {
         self.plan.prior_snapshot = ctx.prior_snapshot_id().to_owned();
+        if self.plan.selective.is_some() {
+            // A selective undo writes its subjects over its own prior (D7).
+            self.plan.target_snapshot = self.plan.prior_snapshot.clone();
+        }
         self.check_tail(ctx)?;
         let applier = Applier::new(
             self.store,
@@ -1090,9 +1205,6 @@ pub fn undo_selected(
     env: &UndoEnv<'_>,
     mut selection: Selection,
 ) -> Result<UndoDone, UndoError> {
-    if matches!(selection, Selection::Agent { .. }) {
-        return Err(UndoError::Internal("agent: not built".to_owned()));
-    }
     let oplog = &repo.repo.oplog;
     let worktree = repo.repo.worktree.as_path();
     let repo_id = repo.repo.repo_id.as_str();
@@ -1172,10 +1284,15 @@ pub fn undo_selected(
         };
     }
     // The period, once the repo is held and the engine calm (the wait does not stretch it).
-    if let Selection::Within { span_ms } = selection {
-        selection = Selection::Since {
-            since_ms: now_ms().saturating_sub(span_ms),
-        };
+    let mut agent_since: Option<i64> = None;
+    match selection {
+        Selection::Within { span_ms } => {
+            selection = Selection::Since {
+                since_ms: now_ms().saturating_sub(span_ms),
+            };
+        }
+        Selection::Agent { span_ms, .. } => agent_since = Some(now_ms().saturating_sub(span_ms)),
+        Selection::Last | Selection::Since { .. } => {}
     }
     let rejected = |scope, target, reason| {
         record_rejection(oplog, scope, target, who, channel, engine_mark, reason)
@@ -1185,20 +1302,42 @@ pub fn undo_selected(
     let events_complete = events_complete && others_settled;
     let overlap_started = Instant::now();
 
-    let planned = plan(
-        oplog,
-        repo.store.as_deref(),
-        &repo.repo.common_dir,
-        worktree,
-        who,
-        channel,
-        confirm,
-        &raw,
-        &raw_all,
-        events_complete,
-        overlap_started + OVERLAP_BUDGET,
-        selection.clone(),
-    );
+    let planned = match (&selection, agent_since) {
+        (Selection::Agent { selector, .. }, Some(since_ms)) => {
+            // The one read of the current attribution, with the repo held and the engine calm.
+            let sessions = env
+                .engine
+                .and_then(|d| d.engine.session_attribution(repo_id));
+            super::undo_agent::plan(&super::undo_agent::AgentPlanInput {
+                oplog,
+                store: repo.store.as_deref(),
+                common_dir: &repo.repo.common_dir,
+                worktree,
+                who,
+                channel,
+                confirm,
+                raw: &raw,
+                sessions: sessions.as_ref(),
+                selector,
+                since_ms,
+                deadline: overlap_started + OVERLAP_BUDGET,
+            })
+        }
+        _ => plan(
+            oplog,
+            repo.store.as_deref(),
+            &repo.repo.common_dir,
+            worktree,
+            who,
+            channel,
+            confirm,
+            &raw,
+            &raw_all,
+            events_complete,
+            overlap_started + OVERLAP_BUDGET,
+            selection.clone(),
+        ),
+    };
     let planned = match planned {
         Ok(p) => p,
         Err((reason, scope, target, None)) => return Err(rejected(scope, target, reason)),
@@ -1239,7 +1378,7 @@ pub fn undo_selected(
         prior_snapshot: String::new(),
         worktrees: planned.worktrees.clone(),
         refs: RefScope::Only(planned.refs.clone()),
-        selective: None,
+        selective: planned.selective.as_ref().map(|s| s.target.clone()),
     };
     // Git preconditions before the undo's prior (ADR-TMC-005 § 4); the
     // applier runs them again under its locks.
@@ -1293,8 +1432,10 @@ pub fn undo_selected(
             worktree: worktree.to_path_buf(),
             budget: tail_budget,
             intent_mark: engine_mark,
+            selected: planned.selective.clone(),
         }),
         overlap: None,
+        refused: None,
     };
     let protected = ProtectedOperation {
         oplog,
@@ -1337,9 +1478,14 @@ pub fn undo_selected(
     match ran {
         Ok(outcome) => Ok(UndoDone {
             operation_id: outcome.operation_id,
+            // A selective undo's target is its own prior.
+            target_snapshot_id: if planned.selective.is_some() {
+                outcome.prior.snapshot_id.clone()
+            } else {
+                planned.target
+            },
             prior_snapshot_id: outcome.prior.snapshot_id,
             undone: oldest,
-            target_snapshot_id: planned.target,
             report: match step.result {
                 Some(Ok(report)) => report,
                 _ => ApplyReport::default(),
@@ -1356,6 +1502,12 @@ pub fn undo_selected(
             operation_id,
         }),
         Err(ProtectedError::Oplog(e)) => Err(UndoError::Internal(format!("oplog: {e}"))),
+        Err(ProtectedError::Step { operation_id, .. }) if step.refused.is_some() => {
+            Err(UndoError::Rejected {
+                reason: step.refused.unwrap_or(TmRejectReason::NotSelectable),
+                operation_id: Some(operation_id),
+            })
+        }
         Err(ProtectedError::Step {
             operation_id,
             message,

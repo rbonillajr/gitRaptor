@@ -596,7 +596,15 @@ impl ProtectedOperation<'_> {
         req: &ProtectedRequest,
         step: &mut dyn ProtectedStep,
     ) -> Result<ProtectedOutcome, ProtectedError> {
-        let subtype = (req.kind == OperationKind::Protected).then(|| step.subtype().to_owned());
+        // An undo records a subtype only when it is selective (an undo by agent): the stack
+        // reads its barrier from it.
+        let subtype = match req.kind {
+            OperationKind::Protected => Some(step.subtype().to_owned()),
+            OperationKind::Undo if step.subtype() == super::oplog::SELECTIVE_UNDO_SUBTYPE => {
+                Some(step.subtype().to_owned())
+            }
+            _ => None,
+        };
         let new = NewOperation {
             kind: req.kind,
             subtype,

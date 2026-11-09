@@ -54,7 +54,7 @@ pub use recovery::{
     AbsentStore, FileIdentity, KeptLock, KeptLockReason, ProcessProbe, RecoveryOptions,
     RecoveryReport, SnapshotRefs, SystemProbe, file_identity,
 };
-pub use stack::{ExternalEvent, StackItem, StackScope, UndoStack};
+pub use stack::{ExternalEvent, SELECTIVE_UNDO_SUBTYPE, StackItem, StackScope, UndoStack};
 
 /// Folder of the Time Machine inside the data folder.
 pub const TM_DIR: &str = "tm";
