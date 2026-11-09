@@ -56,3 +56,36 @@ describe("FE2 ui store", () => {
     expect({ theme: s.theme, language: s.language, sidebarOpen: s.sidebarOpen, detailOpen: s.detailOpen }).toEqual(state);
   });
 });
+
+describe("D4 ui store selectedRepoId", () => {
+  beforeEach(() => {
+    useUiStore.setState({ selectedRepoId: null });
+  });
+
+  it("selectedRepoId: starts null and selectRepo sets and clears it", () => {
+    expect(useUiStore.getState().selectedRepoId, "the chosen repo starts as null").toBeNull();
+    expect(typeof useUiStore.getState().selectRepo, "the store has selectRepo").toBe("function");
+    useUiStore.getState().selectRepo("tienda");
+    expect(useUiStore.getState().selectedRepoId).toBe("tienda");
+    useUiStore.getState().selectRepo(null);
+    expect(useUiStore.getState().selectedRepoId).toBeNull();
+  });
+
+  it("selectedRepoId: is not persisted, the four keys stay the only ones", () => {
+    expect(typeof useUiStore.getState().selectRepo, "the store has selectRepo").toBe("function");
+    useUiStore.getState().selectRepo("tienda-id-from-the-engine");
+    useUiStore.getState().cycleTheme();
+    const saved = stored();
+    expect(saved, "something is persisted").not.toBeNull();
+    expect(Object.keys(saved?.state ?? {}).sort(), "no fifth key").toEqual(["detailOpen", "language", "sidebarOpen", "theme"]);
+    expect(localStorage.getItem(KEY) ?? "", "the engine id never reaches localStorage").not.toContain("tienda-id-from-the-engine");
+  });
+
+  it("selectedRepoId: lives in memory, a rehydrate does not clear it", async () => {
+    expect(typeof useUiStore.getState().selectRepo, "the store has selectRepo").toBe("function");
+    useUiStore.getState().selectRepo("tienda");
+    localStorage.setItem(KEY, JSON.stringify({ state: { theme: "dark", language: "es", sidebarOpen: false, detailOpen: false }, version: 1 }));
+    await useUiStore.persist.rehydrate();
+    expect(useUiStore.getState().selectedRepoId, "the choice is not stored, so rehydrating leaves it alone").toBe("tienda");
+  });
+});

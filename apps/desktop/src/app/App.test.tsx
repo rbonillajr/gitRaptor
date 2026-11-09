@@ -6,7 +6,9 @@ import i18n from "i18next";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import "@/i18n";
 import type { ConnState, EngineMessage } from "@/client/engine-types";
+import { tienda } from "@/fleet/fixtures";
 import { queryClient } from "@/state/query-client";
+import { useUiStore } from "@/state/ui-store";
 import { App } from "./App";
 
 const GLOBAL: Extract<EngineMessage, { type: "global" }> = {
@@ -106,5 +108,44 @@ describe("D3-SHELL App", () => {
 
     send(conn({ kind: "reconnecting", attempt: 2, retryInMs: 4000 }, Date.now()));
     await waitFor(() => expect(screen.getByRole("button", { name: "Retry now" })).not.toHaveAttribute("aria-disabled", "true"));
+  });
+});
+
+// D4-SHELL (DS-US-DSK-004 T005): with a repo chosen, the first useful paint also needs the repo snapshot painted.
+describe("D4 App first paint with the repo snapshot", () => {
+  const TIENDA_ROW = {
+    repoId: "tienda",
+    name: "tienda",
+    path: "/w/tienda/.git",
+    state: "observed" as const,
+    tier: "active" as const,
+    attention: { conflicts: { state: "counted" as const, count: 0 }, denials: { state: "counted" as const, count: 0 } },
+  };
+  const GLOBAL_WITH_REPO: EngineMessage = { ...GLOBAL, repos: [TIENDA_ROW] };
+  const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+  beforeEach(() => {
+    useUiStore.setState({ selectedRepoId: null });
+  });
+
+  it("repo snapshot: the first meaningful paint waits for the repo snapshot when a repo is chosen", async () => {
+    render(<App />);
+    await ready();
+    send(SESSION, GLOBAL_WITH_REPO, conn({ kind: "live" }));
+    await screen.findByText("Live");
+    await waitFor(() => expect(calls("fleet_open"), "the repo is chosen and opened").toHaveLength(1));
+    await waitFor(() => expect(document.querySelector('[aria-busy="true"]'), "the fleet waits for the snapshot").not.toBeNull());
+    await frame();
+    await frame();
+    expect(paintMarks(), "a skeleton is not a useful paint").toHaveLength(0);
+
+    send({ type: "repo", fleet: tienda().repo });
+    await screen.findByRole("list", { name: "Worktrees of tienda" });
+    await waitFor(() => expect(paintMarks(), "the repo snapshot is painted").toHaveLength(1));
+
+    send({ type: "repoTier", repoId: "tienda", tier: "dormant" });
+    await frame();
+    await frame();
+    expect(paintMarks(), "later messages do not mark again").toHaveLength(1);
   });
 });

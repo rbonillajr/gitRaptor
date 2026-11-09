@@ -34,7 +34,7 @@ describe("FE1 client commands", () => {
 
 describe("D3-CMDS-TS engine commands", () => {
   it("D3-CMDS-TS: COMMANDS declares engine_watch and engine_retry", () => {
-    expect([...COMMANDS].sort(), "the closed list gains exactly the two engine commands").toEqual(["app_info", "engine_retry", "engine_watch"]);
+    expect([...COMMANDS], "the closed list keeps the engine commands").toEqual(expect.arrayContaining(["app_info", "engine_retry", "engine_watch"]));
   });
 
   it('D3-CMDS-TS: call("engine_retry", { start }) invokes engine_retry with { params: { start } }', async () => {
@@ -58,5 +58,23 @@ describe("D3-CMDS-TS engine commands", () => {
     const channel = new Channel<EngineMessage>();
     await (call as (c: string, p: unknown) => Promise<unknown>)("engine_watch", { channel });
     expect(seen).toEqual([{ cmd: "engine_watch", args: { params: { channel } } }]);
+  });
+});
+
+describe("D4-CMD-TS fleet_open", () => {
+  it("D4-CMD-TS: COMMANDS declares fleet_open", () => {
+    expect([...COMMANDS], "fleet_open must be a declared command").toContain("fleet_open");
+  });
+
+  it('D4-CMD-TS: call("fleet_open", { repoId }) invokes fleet_open with { params: { repoId } }', async () => {
+    expect(COMMANDS, "fleet_open must be a declared command").toContain("fleet_open");
+    const seen: { cmd: string; args: unknown }[] = [];
+    mockIPC((cmd, args) => {
+      seen.push({ cmd, args });
+      return {};
+    });
+    const result = await (call as (c: string, p: unknown) => Promise<unknown>)("fleet_open", { repoId: "tienda" });
+    expect(seen).toEqual([{ cmd: "fleet_open", args: { params: { repoId: "tienda" } } }]);
+    expect(result).toEqual({});
   });
 });

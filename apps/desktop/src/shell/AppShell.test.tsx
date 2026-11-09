@@ -14,6 +14,9 @@ import axe from "axe-core";
 import i18n from "i18next";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import "@/i18n";
+import type { EngineMessage } from "@/client/engine-types";
+import { tienda } from "@/fleet/fixtures";
+import { applyEngineBatch } from "@/state/engine-cache";
 import { useUiStore } from "@/state/ui-store";
 import { setViewportWidth } from "../../tests/setup";
 import { AppShell } from "./AppShell";
@@ -212,5 +215,88 @@ describe("D3-CENTER engine states in the window", () => {
     if (!start) throw new Error("no Start engine button");
     fireEvent.click(start);
     expect(invoked.filter((i) => i.cmd === "engine_retry")).toEqual([{ cmd: "engine_retry", args: { params: { start: true } } }]);
+  });
+});
+
+// D4-SHELL (DS-US-DSK-004 T005): the sidebar holds the RepoTree, the centre holds the FleetView of the open repo
+// (skeletons with aria-busy until the repo snapshot is in), and choosing a repo in the tree opens it.
+describe("D4 fleet shell", () => {
+  const SESSION = { daemonVersion: "0.1.0", protocol: 9, restricted: false, activity: true, discovery: true };
+  let invoked: { cmd: string; args: unknown }[] = [];
+  const repoRow = (repoId: string, name: string) => ({
+    repoId,
+    name,
+    path: `/w/${name}/.git`,
+    state: "observed" as const,
+    tier: "active" as const,
+    attention: { conflicts: { state: "counted" as const, count: 0 }, denials: { state: "counted" as const, count: 0 } },
+  });
+
+  async function mountFleet(messages: (client: QueryClient, fleet: ReturnType<typeof tienda>) => void) {
+    invoked = [];
+    mockIPC((cmd, args) => {
+      invoked.push({ cmd, args });
+      return cmd === "app_info" ? { version: "0.0.0", protocol: 1 } : {};
+    });
+    const { useEngineStore } = await import("@/state/engine-store");
+    useEngineStore.setState({ conn: { kind: "live" }, staleSinceMs: null, resync: null, session: SESSION });
+    useUiStore.setState({ selectedRepoId: null });
+    const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } });
+    messages(client, tienda());
+    return render(
+      <QueryClientProvider client={client}>
+        <AppShell />
+      </QueryClientProvider>,
+    );
+  }
+  const globalWith = (...names: string[]): EngineMessage => ({
+    type: "global",
+    engine: { state: "observing", gitVersion: "2.45.1" },
+    daemon: { version: "0.1.0", protocol: 9 },
+    autostart: "unknown",
+    repos: names.map((n) => repoRow(n, n)),
+  });
+
+  it("fleet shell: the sidebar holds the repo tree with a row per repo", async () => {
+    await mountFleet((client) => applyEngineBatch(client, [globalWith("notas", "tienda")]));
+    const nav = screen.getByRole("navigation");
+    const tree = within(nav).getByRole("tree");
+    expect(within(tree).getAllByRole("treeitem", { name: /^(notas|tienda)/ }).length, "one row per repo").toBeGreaterThanOrEqual(2);
+    expect(within(nav).getByText("Repos"), "the tree header").toBeInTheDocument();
+  });
+
+  it("fleet shell: the centre paints the fleet of the open repo and the tree lists its worktrees", async () => {
+    await mountFleet((client, fleet) => applyEngineBatch(client, [globalWith("tienda", "zeta"), { type: "repo", fleet: fleet.repo }]));
+    const main = screen.getByRole("main");
+    await within(main).findByRole("list", { name: "Worktrees of tienda" });
+    expect(within(main).getAllByRole("article"), "one card per worktree").toHaveLength(3);
+    expect(useUiStore.getState().selectedRepoId, "the first repo by name is open by default").toBe("tienda");
+  });
+
+  it("fleet shell: the open repo defaults to the first by name and fleet_open is called for it", async () => {
+    await mountFleet((client) => applyEngineBatch(client, [globalWith("tienda", "notas")]));
+    await waitFor(() => expect(invoked.filter((i) => i.cmd === "fleet_open")).toEqual([{ cmd: "fleet_open", args: { params: { repoId: "notas" } } }]));
+  });
+
+  it("fleet shell: without the repo snapshot the centre is skeletons with aria-busy, never no agents", async () => {
+    await mountFleet((client) => applyEngineBatch(client, [globalWith("tienda")]));
+    const main = screen.getByRole("main");
+    await waitFor(() => expect(main.querySelector('[aria-busy="true"]'), "a busy region while the snapshot is out").not.toBeNull());
+    expect(within(main).queryByText(/No agents are working/), "never says no agents without the snapshot").toBeNull();
+    expect(within(main).queryAllByRole("article"), "no card yet").toHaveLength(0);
+  });
+
+  it("fleet shell: choosing a repo in the tree opens it", async () => {
+    await mountFleet((client, fleet) =>
+      applyEngineBatch(client, [globalWith("notas", "tienda"), { type: "repo", fleet: { ...fleet.repo, repoId: "notas", name: "notas" } }]),
+    );
+    const nav = screen.getByRole("navigation");
+    const row = within(nav)
+      .getAllByRole("treeitem")
+      .find((r) => r.getAttribute("aria-level") === "1" && /^tienda/.test(r.getAttribute("aria-label") ?? r.textContent ?? ""));
+    if (!row) throw new Error("no tienda row in the tree");
+    fireEvent.click(row);
+    await waitFor(() => expect(useUiStore.getState().selectedRepoId).toBe("tienda"));
+    await waitFor(() => expect(invoked.filter((i) => i.cmd === "fleet_open").map((i) => (i.args as { params: { repoId: string } }).params.repoId)).toContain("tienda"));
   });
 });

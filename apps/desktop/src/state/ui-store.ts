@@ -12,7 +12,13 @@ export interface UiState {
   detailOpen: boolean;
 }
 
+/** The open repo of the fleet; never persisted (DS-US-DSK-004 T003). */
+export interface FleetSelection {
+  selectedRepoId: string | null;
+}
+
 export interface UiActions {
+  selectRepo: (id: string | null) => void;
   toggleSidebar: () => void;
   toggleDetail: () => void;
   cycleTheme: () => void;
@@ -22,13 +28,15 @@ export interface UiActions {
 const NEXT_THEME: Record<Theme, Theme> = { auto: "light", light: "dark", dark: "auto" };
 
 /** The window store, persisted in `localStorage` under `gitraptor.ui.v1` (version 1). */
-export const useUiStore = create<UiState & UiActions>()(
+export const useUiStore = create<UiState & UiActions & FleetSelection>()(
   persist(
     (set) => ({
       theme: "auto",
       language: "auto",
       sidebarOpen: true,
       detailOpen: true,
+      selectedRepoId: null,
+      selectRepo: () => undefined,
       toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
       toggleDetail: () => set((s) => ({ detailOpen: !s.detailOpen })),
       cycleTheme: () => set((s) => ({ theme: NEXT_THEME[s.theme] })),

@@ -26,16 +26,21 @@ use gitraptor_api::client::transport;
 use gitraptor_api::discovery::{CandidateView, CandidatesResult};
 use gitraptor_api::event::Event;
 use gitraptor_api::messages::{
-    ConnectionProfile, DaemonView, EngineStateView, EngineView, HelloResult, IncompatibleData,
-    McpSnapshot, ResyncNotification, ResyncReason, Snapshot,
+    BaseBranchView, BaseStatusView, ChangeCounts, CommitCountView, ConnectionProfile, DaemonView,
+    DivergenceView, EngineStateView, EngineView, HeadView, HelloResult, IncompatibleData,
+    McpSnapshot, RepoStateView, RepoTier, RepoView, ResyncNotification, ResyncReason,
+    SessionStateView, SessionView, SessionsListParams, Snapshot, UnsubscribeParams, WorktreeStatus,
+    WorktreeView,
 };
 use gitraptor_api::methods;
+use gitraptor_api::prediction::{LimitCode, PredictionSummary};
 use gitraptor_api::rpc::{ErrorObject, Id, Notification, Request, Response, code};
 use gitraptor_api::scope::{
-    AutostartView, ConnectionRequester, GlobalSnapshot, RepoSnapshot, Scope,
-    ScopeEventNotification, ScopeResyncNotification, ScopeSnapshot, ScopeSnapshotParams,
-    ScopeSubscribeParams, ScopeSubscribeResult,
+    AttentionView, AutostartView, ConnectionRequester, GlobalSnapshot, RepoSnapshot,
+    RepoSummaryView, Scope, ScopeEventNotification, ScopeResyncNotification, ScopeSnapshot,
+    ScopeSnapshotParams, ScopeSubscribeParams, ScopeSubscribeResult,
 };
+use gitraptor_api::{Untrusted, UntrustedName};
 use gitraptor_desktop::engine::link::{ConnectFailure, Connector, Link, SocketConnector};
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -64,6 +69,9 @@ pub struct Script {
     /// The global snapshot (its `run_id` and `scope_seq` are the stream position too).
     pub global: GlobalSnapshot,
     pub repos: HashMap<String, RepoSnapshot>,
+    /// `sessions.list` per repo: `(detection_available, sessions)`. A repo without an entry
+    /// answers `(true, [])`.
+    pub sessions: HashMap<String, (bool, Vec<SessionView>)>,
     pub candidates: Vec<CandidateView>,
 }
 
@@ -97,6 +105,7 @@ impl Default for Script {
                 repos: Vec::new(),
             },
             repos: HashMap::new(),
+            sessions: HashMap::new(),
             candidates: Vec::new(),
         }
     }
@@ -111,6 +120,8 @@ struct Shared {
     changed: Condvar,
     conns: Mutex<Vec<Arc<Mutex<UnixStream>>>>,
     subscriptions: AtomicU32,
+    /// The subscription id the fake gave to each scope, so a pushed `scope.event` carries it.
+    scope_subscriptions: Mutex<HashMap<Scope, u32>>,
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -153,6 +164,7 @@ impl FakeDaemon {
                 changed: Condvar::new(),
                 conns: Mutex::new(Vec::new()),
                 subscriptions: AtomicU32::new(0),
+                scope_subscriptions: Mutex::new(HashMap::new()),
             }),
             listening: Mutex::new(None),
         })
@@ -234,6 +246,63 @@ impl FakeDaemon {
                 },
             },
         ))
+    }
+
+    /// Pushes one `scope.event` of the repo scope `repo_id`, with the subscription the fake gave
+    /// that scope (the global one when it never subscribed).
+    pub fn push_repo_event(
+        &self,
+        repo_id: &str,
+        scope_seq: u64,
+        kind: &str,
+        data: impl Serialize,
+    ) -> bool {
+        let scope = Scope::Repo {
+            repo_id: repo_id.to_owned(),
+        };
+        let subscription = lock(&self.shared.scope_subscriptions)
+            .get(&scope)
+            .copied()
+            .unwrap_or(1);
+        let version = gitraptor_api::event::kind(kind).map_or(1, |k| k.version);
+        self.push(&Notification::new(
+            methods::NOTIFY_SCOPE_EVENT,
+            ScopeEventNotification {
+                subscription,
+                scope,
+                scope_seq,
+                event: Event {
+                    seq: scope_seq,
+                    kind: kind.to_owned(),
+                    version,
+                    wall_ms: 0,
+                    timings: None,
+                    data: serde_json::to_value(data).expect("event data"),
+                },
+            },
+        ))
+    }
+
+    /// Pushes `scope.resync` for the repo scope `repo_id`.
+    pub fn push_repo_resync(&self, repo_id: &str, reason: ResyncReason) -> bool {
+        self.push(&Notification::new(
+            methods::NOTIFY_SCOPE_RESYNC,
+            ScopeResyncNotification {
+                scope: Scope::Repo {
+                    repo_id: repo_id.to_owned(),
+                },
+                reason,
+            },
+        ))
+    }
+
+    /// The subscription id the fake gave to the repo scope, `None` before it subscribed.
+    pub fn repo_subscription(&self, repo_id: &str) -> Option<u32> {
+        lock(&self.shared.scope_subscriptions)
+            .get(&Scope::Repo {
+                repo_id: repo_id.to_owned(),
+            })
+            .copied()
     }
 
     /// Pushes `scope.resync` for the global scope.
@@ -427,6 +496,7 @@ fn answer(shared: &Shared, request: &Request, params: Value) -> Response {
         methods::SCOPE_SUBSCRIBE => match serde_json::from_value::<ScopeSubscribeParams>(params) {
             Ok(p) => {
                 let subscription = shared.subscriptions.fetch_add(1, Ordering::SeqCst) + 1;
+                lock(&shared.scope_subscriptions).insert(p.scope.clone(), subscription);
                 Response::ok(
                     id,
                     ScopeSubscribeResult {
@@ -470,8 +540,22 @@ fn answer(shared: &Shared, request: &Request, params: Value) -> Response {
             },
         ),
         methods::SESSIONS_LIST => {
-            Response::ok(id, json!({"detection_available": true, "sessions": []}))
+            let Ok(p) = serde_json::from_value::<SessionsListParams>(params) else {
+                return invalid(&id);
+            };
+            let (detection, sessions) = p
+                .repo_id
+                .and_then(|repo| script.sessions.get(&repo).cloned())
+                .unwrap_or((true, Vec::new()));
+            Response::ok(
+                id,
+                json!({"detection_available": detection, "sessions": sessions}),
+            )
         }
+        methods::EVENTS_UNSUBSCRIBE => match serde_json::from_value::<UnsubscribeParams>(params) {
+            Ok(_) => Response::ok(id, json!({})),
+            Err(_) => invalid(&id),
+        },
         _ => Response::err(
             Some(id),
             ErrorObject::new(code::METHOD_NOT_FOUND, "method not found"),
@@ -570,4 +654,178 @@ pub fn assert_read_only(calls: &[Call]) {
             }
         }
     }
+}
+
+// ------------------------------------------------------------ DS-US-DSK-004 scripts
+
+/// The raw root of the main worktree of "tienda".
+pub const TIENDA_MAIN: &str = "/w/tienda";
+pub const TIENDA_PAGOS: &str = "/w/wt/feat-pagos";
+pub const TIENDA_LOGIN: &str = "/w/wt/feat-login";
+pub const NOTAS_MAIN: &str = "/w/notas";
+/// Where the fake's repos are at in their streams.
+pub const REPO_RUN: &str = "run-1";
+pub const REPO_SEQ: u64 = 10;
+
+/// A worktree on `branch`, `ahead`/`behind` the base, with `files` unstaged files.
+pub fn worktree_view(
+    root: &str,
+    main: bool,
+    branch: &str,
+    ahead: u64,
+    behind: u64,
+    files: u32,
+) -> WorktreeView {
+    WorktreeView {
+        path: Untrusted::new(root),
+        main,
+        admin_name: None,
+        status: WorktreeStatus::Ready {
+            head: HeadView::Branch {
+                name: UntrustedName::new(branch),
+            },
+            counts: ChangeCounts {
+                staged: 0,
+                unstaged: files,
+                untracked: 0,
+            },
+            changes: Vec::new(),
+            divergence: DivergenceView::Counted {
+                ahead: CommitCountView {
+                    count: ahead,
+                    exact: true,
+                },
+                behind: CommitCountView {
+                    count: behind,
+                    exact: true,
+                },
+            },
+        },
+        last_activity_utc_ms: Some(1_700_000_000_000),
+        last_activity_in_gap: false,
+        detached_at: None,
+        operation: None,
+        unmerged_paths: 0,
+        changes_actor: None,
+    }
+}
+
+/// A snapshot of the repo `repo_id` at `/<...>/.git` with these worktrees.
+pub fn repo_snapshot(
+    repo_id: &str,
+    git_dir: &str,
+    scope_seq: u64,
+    worktrees: Vec<WorktreeView>,
+) -> RepoSnapshot {
+    RepoSnapshot {
+        run_id: REPO_RUN.to_owned(),
+        scope_seq,
+        repo: RepoView {
+            repo_id: repo_id.to_owned(),
+            state: RepoStateView::Observed,
+            path: Untrusted::new(git_dir),
+            base: BaseBranchView {
+                name: Some(UntrustedName::new("main")),
+                status: BaseStatusView::Confirmed,
+            },
+            worktrees,
+            fetched_utc_ms: Some(1_699_990_000_000),
+            tier: Some(RepoTier::Active),
+            checked_utc_ms: None,
+            kept_temps: None,
+            prediction: Some(PredictionSummary {
+                limits: LimitCode::ALL.to_vec(),
+                pairs: Vec::new(),
+                pairs_truncated: false,
+            }),
+        },
+    }
+}
+
+/// A present Claude Code session of `repo_id` in the worktree `root`.
+pub fn session_view(
+    repo_id: &str,
+    session_id: &str,
+    root: &str,
+    state: SessionStateView,
+    state_since: i64,
+) -> SessionView {
+    SessionView {
+        repo_id: repo_id.to_owned(),
+        session_id: session_id.to_owned(),
+        worktree: Untrusted::new(root),
+        actor: Actor::Agent {
+            kind: gitraptor_api::actor::AgentKind::ClaudeCode,
+            name: None,
+            origin: gitraptor_api::actor::AgentOrigin::Detected,
+        },
+        state,
+        started_utc_ms: 1_700_000_000_000,
+        state_since_utc_ms: state_since,
+        utc_offset_s: 0,
+        ended_utc_ms: None,
+        end_cause: None,
+    }
+}
+
+/// The three worktrees of "tienda": main, `feat-pagos` (up 3, down 1, 2 files) and `feat-login`
+/// (up 1, down 0).
+pub fn tienda_worktrees() -> Vec<WorktreeView> {
+    vec![
+        worktree_view(TIENDA_MAIN, true, "main", 0, 0, 0),
+        worktree_view(TIENDA_PAGOS, false, "feat-pagos", 3, 1, 2),
+        worktree_view(TIENDA_LOGIN, false, "feat-login", 1, 0, 0),
+    ]
+}
+
+/// Scripts the repos "tienda" (`/w/tienda/.git`, three worktrees, `claude-1` active in
+/// `feat-pagos`, `claude-2` active in `feat-login`, detection available) and "notas" (main only,
+/// no sessions), and lists both in the global snapshot.
+pub fn script_tienda_and_notas(s: &mut Script) {
+    s.global.repos = ["tienda", "notas"]
+        .iter()
+        .map(|name| RepoSummaryView {
+            repo_id: (*name).to_owned(),
+            state: RepoStateView::Observed,
+            path: Untrusted::new(format!("/w/{name}/.git")),
+            attention: AttentionView::unpublished(),
+            tier: None,
+        })
+        .collect();
+    s.repos.insert(
+        "tienda".to_owned(),
+        repo_snapshot("tienda", "/w/tienda/.git", REPO_SEQ, tienda_worktrees()),
+    );
+    s.repos.insert(
+        "notas".to_owned(),
+        repo_snapshot(
+            "notas",
+            "/w/notas/.git",
+            REPO_SEQ,
+            vec![worktree_view(NOTAS_MAIN, true, "main", 0, 0, 0)],
+        ),
+    );
+    s.sessions.insert(
+        "tienda".to_owned(),
+        (
+            true,
+            vec![
+                session_view(
+                    "tienda",
+                    "claude-1",
+                    TIENDA_PAGOS,
+                    SessionStateView::Active,
+                    1_700_000_100_000,
+                ),
+                session_view(
+                    "tienda",
+                    "claude-2",
+                    TIENDA_LOGIN,
+                    SessionStateView::Active,
+                    1_700_000_200_000,
+                ),
+            ],
+        ),
+    );
+    s.sessions.insert("notas".to_owned(), (true, Vec::new()));
 }

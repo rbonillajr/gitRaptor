@@ -6,6 +6,7 @@
 pub mod app_info;
 pub mod engine_retry;
 pub mod engine_watch;
+pub mod fleet_open;
 
 /// The invoke handler with every command of the list.
 pub fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
