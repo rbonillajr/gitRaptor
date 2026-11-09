@@ -220,9 +220,12 @@ impl Rig {
         (err, set)
     }
 
-    fn since(&self, secs_ago: i64) -> Selection {
+    /// The period starts `secs_ago` before `now`, the instant the test anchored its operations at:
+    /// never the wall clock at call time, which drifts by seconds on a loaded runner (the real
+    /// snapshots of `operation` are slow on Windows) and would push them out of the period.
+    fn since(&self, now: i64, secs_ago: i64) -> Selection {
         Selection::Since {
-            since_ms: now_ms() - secs_ago * 1_000,
+            since_ms: now - secs_ago * 1_000,
         }
     }
 }
@@ -260,7 +263,7 @@ fn a_moment_ahead_of_the_clock_stops_the_walk() {
     // Recorded an hour ahead: the clock stepped back since. It is never undone silently.
     let (_future, _) = r.operation("future", now + 3_600_000, 2);
 
-    let (err, set) = r.attempt(Vec::new(), r.since(10));
+    let (err, set) = r.attempt(Vec::new(), r.since(now, 10));
     assert_eq!(reason(&err), TmRejectReason::NothingToUndo);
     assert!(
         set.is_empty(),
@@ -268,7 +271,7 @@ fn a_moment_ahead_of_the_clock_stops_the_walk() {
     );
 
     let (c, _) = r.operation("c", now - 500, 3);
-    let (_, set) = r.attempt(Vec::new(), r.since(10));
+    let (_, set) = r.attempt(Vec::new(), r.since(now, 10));
     assert_eq!(
         set,
         vec![oplog_op(&c)],
@@ -284,10 +287,10 @@ fn an_older_raw_commit_between_two_operations_stops_the_walk() {
     let commit = commit_event(2, now - 30_000, GitEventKind::Commit);
     let (b, _) = r.operation("b", now - 1_000, 3);
 
-    let (_, set) = r.attempt(vec![commit.clone()], r.since(10));
+    let (_, set) = r.attempt(vec![commit.clone()], r.since(now, 10));
     assert_eq!(set, vec![oplog_op(&b)], "only the recent operation");
 
     // The commit is the stack's own item: a period that holds it takes it too.
-    let (_, set) = r.attempt(vec![commit], r.since(45));
+    let (_, set) = r.attempt(vec![commit], r.since(now, 45));
     assert_eq!(set, vec![OpRef::GitEvent(2), oplog_op(&b)]);
 }
