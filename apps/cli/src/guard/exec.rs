@@ -23,7 +23,7 @@ use gitraptor_api::rpc::{ErrorObject, code};
 use gitraptor_api::{PROTOCOL_VERSION, methods};
 use gitraptor_core::client::{Client, ClientError};
 
-use super::{Answer, WINDOW_POLL, ask, guard_error, now_ms, operation_text, param};
+use super::{Answer, WINDOW_POLL, ask_retrying, guard_error, now_ms, operation_text, param};
 use crate::i18n::t;
 use crate::{refusal_text, shown};
 
@@ -123,8 +123,8 @@ pub fn exec(yes: bool, argv: Vec<OsString>) -> ExitCode {
             }
             Err(err) => return call_error(err, &path, &argv),
         };
-    show_plan(&path, &plan, &pending);
-    let answer = (!yes).then(spawn_question);
+    show_plan(&path, &plan, &pending, yes);
+    let answer = (!yes).then(|| spawn_question(pending.applies_at_ms));
     match window(&mut client, &repo, &pending, answer, interrupted.as_deref()) {
         Window::Closed => {}
         Window::Cancelled => {
@@ -132,13 +132,13 @@ pub fn exec(yes: bool, argv: Vec<OsString>) -> ExitCode {
             return ExitCode::FAILURE;
         }
         Window::Declined(key) => {
-            cancel(&mut client, &repo);
+            let key = cancel_text(cancel(&mut client, &repo), key);
             eprintln!("{CMD}: {}", t(key, &[]));
             return ExitCode::FAILURE;
         }
         Window::Interrupted => {
-            cancel(&mut client, &repo);
-            eprintln!("{CMD}: {}", t("guardexec.cancelled", &[]));
+            let key = cancel_text(cancel(&mut client, &repo), "guardexec.cancelled");
+            eprintln!("{CMD}: {}", t(key, &[]));
             return ExitCode::from(INTERRUPTED);
         }
         Window::Failed(err) => return guard_error(CMD, &path, err),
@@ -248,7 +248,7 @@ fn rules_text(rules: &[Rule]) -> String {
         .join(", ")
 }
 
-fn show_plan(path: &Path, plan: &ExceptionPlanView, pending: &PendingAction) {
+fn show_plan(path: &Path, plan: &ExceptionPlanView, pending: &PendingAction, yes: bool) {
     println!(
         "{}",
         t(
@@ -269,18 +269,34 @@ fn show_plan(path: &Path, plan: &ExceptionPlanView, pending: &PendingAction) {
     println!(
         "{}",
         t(
-            "guardexec.window",
+            if yes {
+                "guardexec.window"
+            } else {
+                "guardexec.window-ask"
+            },
             &[("seconds", &pending.window_ms.div_ceil(1000).to_string())]
         )
     );
     let _ = std::io::stdout().flush();
 }
 
-/// The question, asked on its own thread so the window keeps being watched meanwhile.
-fn spawn_question() -> mpsc::Receiver<Answer> {
+/// The question, asked on its own thread so the window keeps being watched meanwhile. Each ask
+/// states the seconds left until the window closes (the deadline to answer).
+fn spawn_question(applies_at_ms: i64) -> mpsc::Receiver<Answer> {
     let (tx, rx) = mpsc::channel();
     std::thread::spawn(move || {
-        let _ = tx.send(ask(&t("guardexec.confirm", &[])));
+        let question = || {
+            let left = u64::try_from(applies_at_ms - now_ms()).unwrap_or(0);
+            t(
+                "guardexec.confirm",
+                &[("seconds", &left.div_ceil(1000).to_string())],
+            )
+        };
+        let _ = tx.send(ask_retrying(
+            question,
+            &t("guardexec.invalid", &[]),
+            &t("guardexec.invalid-exhausted", &[]),
+        ));
     });
     rx
 }
@@ -322,8 +338,14 @@ fn window(
             }
         }
         let left = pending.applies_at_ms - now_ms();
-        if left <= 0 && answer.is_none() {
-            return Window::Closed;
+        if left <= 0 {
+            // The window is the deadline to answer: no answer in time cancels, even if the
+            // question thread is still reading (retries never extend it).
+            return if answer.is_none() {
+                Window::Closed
+            } else {
+                Window::Declined("guardexec.timeout")
+            };
         }
         let nap = u64::try_from(left).unwrap_or(0).max(1);
         std::thread::sleep(WINDOW_POLL.min(Duration::from_millis(nap)));
@@ -342,9 +364,20 @@ fn window(
     }
 }
 
-/// `guard.cancel` for the announcement this process made; a failure leaves it to expire.
-fn cancel(client: &mut Client, repo: &GuardRepoParams) {
-    let _ = client.call::<_, GuardStatus>(methods::GUARD_CANCEL, repo);
+/// `guard.cancel` for the announcement this process made.
+fn cancel(client: &mut Client, repo: &GuardRepoParams) -> Result<(), ClientError> {
+    client
+        .call::<_, GuardStatus>(methods::GUARD_CANCEL, repo)
+        .map(drop)
+}
+
+/// The key to print after trying to cancel: `done` when the daemon confirmed it, otherwise the
+/// text that says the cancellation is unconfirmed (never that it was audited).
+fn cancel_text(result: Result<(), ClientError>, done: &'static str) -> &'static str {
+    match result {
+        Ok(()) => done,
+        Err(_) => "guardexec.cancel-unconfirmed",
+    }
 }
 
 /// Call 2: the token, once the daemon's clock says the window closed.
@@ -508,6 +541,23 @@ mod tests {
             acting_dir(cwd, &args(&["git", "push"])),
             PathBuf::from("/w")
         );
+    }
+
+    #[test]
+    fn an_unconfirmed_cancellation_never_claims_it_was_done() {
+        assert_eq!(cancel_text(Ok(()), "guardexec.kept"), "guardexec.kept");
+        assert_eq!(
+            cancel_text(Err(ClientError::NotRunning), "guardexec.kept"),
+            "guardexec.cancel-unconfirmed"
+        );
+        for key in ["guardexec.cancel-unconfirmed", "guardexec.timeout"] {
+            for lang in crate::i18n::feature_files("guardexec") {
+                assert!(
+                    lang.lines().any(|l| l.starts_with(&format!("{key} = "))),
+                    "{key} missing"
+                );
+            }
+        }
     }
 
     #[test]

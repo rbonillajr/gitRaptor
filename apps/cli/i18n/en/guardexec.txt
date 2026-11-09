@@ -6,8 +6,13 @@
 guardexec.header = Conscious exception in {repo}: {operation}.
 guardexec.skips = It will skip: {rules}.
 guardexec.no-prior = If the recovery point cannot be saved, the operation will run anyway.
-guardexec.confirm = Run this operation once, skipping those rules? [y/N]
+guardexec.confirm = Run this operation once, skipping those rules? {seconds} s left to answer; no answer cancels it. [y/N]
 guardexec.window = Announced to every client. It runs in {seconds} s; to cancel it: raptor guard cancel (in any terminal) or Ctrl-C here.
+guardexec.window-ask = Announced to every client. You have {seconds} s to answer; if you do not, it is cancelled and nothing runs. To cancel it sooner: answer n, raptor guard cancel (in any terminal) or Ctrl-C here.
+guardexec.invalid = that is not a valid answer. Answer y or yes to run it; n, no or Enter to cancel it.
+guardexec.invalid-exhausted = three invalid answers in a row: cancelled, the operation did not run.
+guardexec.timeout = no answer before the window closed: cancelled, the operation did not run. Repeat the command and answer in time, or use --yes to run it when the window closes.
+guardexec.cancel-unconfirmed = the cancellation could not be confirmed with GitRaptor: the operation was not started here, but check it with raptor guard status.
 guardexec.cancelled = cancelled: the operation did not run.
 guardexec.kept = nothing ran: the protection stays as it was.
 guardexec.no-answer = no answer: nothing ran.

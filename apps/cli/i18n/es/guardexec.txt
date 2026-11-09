@@ -7,8 +7,13 @@
 guardexec.header = Excepción consciente en {repo}: {operation}.
 guardexec.skips = Se saltará: {rules}.
 guardexec.no-prior = Si no se puede guardar el punto de recuperación, la operación se ejecutará igualmente.
-guardexec.confirm = ¿Ejecutar esta operación una sola vez saltándote esas reglas? [s/N]
+guardexec.confirm = ¿Ejecutar esta operación una sola vez saltándote esas reglas? Quedan {seconds} s para responder; sin respuesta se cancela. [s/N]
 guardexec.window = Anunciada a todos los clientes. Se ejecuta en {seconds} s; para cancelarla: raptor guard cancel (en cualquier terminal) o Ctrl-C aquí.
+guardexec.window-ask = Anunciada a todos los clientes. Tienes {seconds} s para responder; si no respondes, se cancela y no se ejecuta nada. Para cancelarla antes: responde n, raptor guard cancel (en cualquier terminal) o Ctrl-C aquí.
+guardexec.invalid = esa respuesta no es válida. Responde s, si o sí para ejecutarla; n, no o Enter para cancelarla.
+guardexec.invalid-exhausted = tres respuestas no válidas seguidas: cancelada, la operación no se ejecutó.
+guardexec.timeout = sin respuesta antes de que se cerrara la ventana: cancelada, la operación no se ejecutó. Repite el comando y responde a tiempo, o usa --yes para ejecutarla al cerrarse la ventana.
+guardexec.cancel-unconfirmed = no se pudo confirmar la cancelación con GitRaptor: la operación no se lanzó desde aquí, pero compruébalo con raptor guard status.
 guardexec.cancelled = cancelada: la operación no se ejecutó.
 guardexec.kept = no se ejecutó nada: la protección sigue como estaba.
 guardexec.no-answer = sin respuesta: no se ejecutó nada.
