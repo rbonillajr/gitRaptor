@@ -17,10 +17,14 @@ fn placeholders(text: &str) -> Vec<&str> {
 
 #[test]
 fn since_messages_exist_in_en_and_es() {
-    let expected: [(&str, &[&str]); 3] = [
+    let expected: [(&str, &[&str]); 4] = [
         (
-            "undo.done-since",
+            "undo.done-since.many",
             &["count", "id", "oldest", "since", "worktree"],
+        ),
+        (
+            "undo.done-since.one",
+            &["id", "oldest", "since", "worktree"],
         ),
         ("undo.reason.nothing-in-period", &["since"]),
         ("undo.invalid-since", &[]),

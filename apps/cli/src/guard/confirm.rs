@@ -14,7 +14,7 @@ use gitraptor_api::{Untrusted, UntrustedName, methods};
 use gitraptor_core::client::{Client, ClientError};
 
 use super::{Answer, WINDOW_POLL, ask, guard_error, now_ms, uninstall_refusal};
-use crate::i18n::t;
+use crate::i18n::{t, tn};
 use crate::{command_path, engine, shown};
 
 const CMD: &str = "raptor guard confirm";
@@ -188,9 +188,10 @@ pub fn confirm(path: Option<PathBuf>) -> ExitCode {
     let question = if plan.relaxations.is_empty() {
         t("guard.confirm.question", &[("to", &to)])
     } else {
-        t(
+        tn(
             "guard.confirm.question-relaxations",
-            &[("to", &to), ("count", &plan.relaxations.len().to_string())],
+            u64::try_from(plan.relaxations.len()).unwrap_or(u64::MAX),
+            &[("to", &to)],
         )
     };
     let _ = std::io::stdout().flush();

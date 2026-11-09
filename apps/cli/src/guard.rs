@@ -28,7 +28,7 @@ use gitraptor_api::timemachine::{HookPriorFailure, HookPriorSnapshot};
 use gitraptor_core::client::ClientError;
 use gitraptor_core::guardrails::hook::{self, Degraded, HookArgs, HookEnv};
 
-use crate::i18n::{Tr, t};
+use crate::i18n::{Tr, t, tn};
 use crate::{command_path, engine, error_text, refusal_text, repo_error, shown};
 
 mod confirm;
@@ -1039,13 +1039,7 @@ pub fn status(path: Option<PathBuf>, json: bool) -> ExitCode {
                     &log_params(&path, LOG_DEFAULT_DAYS, Some(1)),
                 )
             {
-                println!(
-                    "{}",
-                    t(
-                        "guard.status.blocked",
-                        &[("count", &log.summary.blocked.to_string())]
-                    )
-                );
+                println!("{}", tn("guard.status.blocked", log.summary.blocked, &[]));
             }
             ExitCode::SUCCESS
         }
@@ -1540,33 +1534,29 @@ pub fn log_entry_lines(e: &GuardLogEntry) -> Vec<String> {
 
 /// The whole text of `raptor guard log`: the count, what was not logged, then the entries.
 pub fn log_lines(log: &GuardLogResult, days: u32) -> Vec<String> {
-    let mut out = vec![t(
+    let period = tn("guard.log.period", u64::from(days), &[]);
+    let mut out = vec![tn(
         "guard.log.summary",
-        &[
-            ("count", &log.summary.blocked.to_string()),
-            ("days", &days.to_string()),
-        ],
+        log.summary.blocked,
+        &[("period", &period)],
     )];
     if log.summary.notices > 0 {
-        out.push(t(
-            "guard.log.notices",
-            &[("count", &log.summary.notices.to_string())],
-        ));
+        out.push(tn("guard.log.notices", log.summary.notices, &[]));
     }
     if log.summary.exceptions > 0 || log.summary.exceptions_rejected > 0 {
+        let used = tn("guard.log.exceptions-used", log.summary.exceptions, &[]);
+        let rejected = tn(
+            "guard.log.exceptions-rejected",
+            log.summary.exceptions_rejected,
+            &[],
+        );
         out.push(t(
             "guard.log.exceptions",
-            &[
-                ("used", &log.summary.exceptions.to_string()),
-                ("rejected", &log.summary.exceptions_rejected.to_string()),
-            ],
+            &[("used", &used), ("rejected", &rejected)],
         ));
     }
     if log.summary.rate_limited > 0 {
-        out.push(t(
-            "guard.log.rate-limited",
-            &[("count", &log.summary.rate_limited.to_string())],
-        ));
+        out.push(tn("guard.log.rate-limited", log.summary.rate_limited, &[]));
     }
     let offset = log.entries.first().map_or(0, |e| e.utc_offset_s);
     for gap in &log.unlogged_periods {
@@ -1725,7 +1715,11 @@ mod tests {
             .collect();
         assert!(keys.len() > 20, "{keys:?}");
         for key in keys {
-            assert!(has_key(key), "{key}");
+            // A counted message lives as `<key>.one` and `<key>.many`.
+            assert!(
+                has_key(key) || (has_key(&format!("{key}.one")) && has_key(&format!("{key}.many"))),
+                "{key}"
+            );
         }
         assert!(has_key("guard.restart-engine"));
     }
