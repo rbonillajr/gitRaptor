@@ -1,0 +1,146 @@
+{
+  "source": {
+    "kind": "request",
+    "ref": "docs/dev-briefs/guard-exec-ux.2-plan.md"
+  },
+  "goal": {
+    "intent": "Rene probó raptor guard exec y raptor agent correct en su Mac y los avisos confundían: una respuesta inválida terminaba sin explicar, no quedaba claro qué pasa si no respondes ni cuánto tiempo hay, salía '1 blocked actions' y el error de agent correct no decía por qué ni qué hacer.",
+    "endState": "El aviso de guard exec explica las respuestas válidas y vuelve a preguntar, dice el tiempo y qué pasa sin respuesta, y toda cancelación (inválida, n, ventana cerrada sin respuesta, Ctrl-C) deja exception-cancelled sin ejecutar nada; los contadores de guard status y guard log usan singular/plural en en y es (los demás catálogos con contador se corrigen con el mismo helper, sin criterio propio); agent correct explica por qué falla y qué hacer.",
+    "nonGoals": [
+      "No cambia la duración de la ventana ni el flujo de tokens del daemon (ADR-GRD-007)",
+      "No toca guard cancel desde otra terminal, uninstall, confirm ni repair, que comparten ask()",
+      "No añade soporte Windows nuevo: el aviso en consola real queda como XP para la ronda de Windows"
+    ]
+  },
+  "suite": {
+    "command": "node tools/test/nextest-junit.mjs"
+  },
+  "layers": {
+    "runtime": {
+      "commands": [
+        {
+          "id": "suite",
+          "cmd": "node tools/test/nextest-junit.mjs"
+        }
+      ],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 900000,
+    "suiteTimeoutMs": 5400000
+  },
+  "criteria": [
+    {
+      "id": "UX1",
+      "statement": "Una respuesta inválida (r) en el aviso de guard exec explica qué respuestas valen (y/yes/s/si/sí, n/no; Enter = no) y vuelve a preguntar; tras 3 inválidas cancela diciéndolo; git no se lanza, el remoto no cambia y queda un exception-cancelled en el registro",
+      "verify": "cargo test -p gitraptor-cli --test guard_exec_ux -- --list 2>/dev/null | grep -q '^invalid_answer_explains_asks_again_and_cancels_after_three: test' && cargo test -p gitraptor-cli --test guard_exec_ux invalid_answer_explains_asks_again_and_cancels_after_three -- --exact",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "apps/cli/tests/guard_exec_ux.rs"
+      ]
+    },
+    {
+      "id": "UX2",
+      "statement": "Responder n o solo Enter cancela con el mismo mensaje claro (nada se ejecutó, la protección sigue igual), git no se lanza y queda un exception-cancelled",
+      "verify": "cargo test -p gitraptor-cli --test guard_exec_ux -- --list 2>/dev/null | grep -q '^answer_no_cancels_and_logs: test' && cargo test -p gitraptor-cli --test guard_exec_ux answer_no_cancels_and_logs -- --exact",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "apps/cli/tests/guard_exec_ux.rs"
+      ]
+    },
+    {
+      "id": "UX3",
+      "statement": "Si la ventana se cierra sin respuesta, exec cancela por sí mismo (no espera indefinidamente), lo dice, git no se lanza y queda un exception-cancelled",
+      "verify": "cargo test -p gitraptor-cli --test guard_exec_ux -- --list 2>/dev/null | grep -q '^no_answer_at_window_close_cancels_and_logs: test' && cargo test -p gitraptor-cli --test guard_exec_ux no_answer_at_window_close_cancels_and_logs -- --exact",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "apps/cli/tests/guard_exec_ux.rs"
+      ]
+    },
+    {
+      "id": "UX4",
+      "statement": "Ctrl-C en el aviso interactivo (sin --yes) cancela, git no se lanza y queda un exception-cancelled",
+      "verify": "cargo test -p gitraptor-cli --test guard_exec_ux -- --list 2>/dev/null | grep -q '^ctrl_c_at_the_prompt_cancels_and_logs: test' && cargo test -p gitraptor-cli --test guard_exec_ux ctrl_c_at_the_prompt_cancels_and_logs -- --exact",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "apps/cli/tests/guard_exec_ux.rs"
+      ]
+    },
+    {
+      "id": "UX5",
+      "statement": "El aviso dice cuántos segundos hay para responder y que no responder cancela, en en y es; con --yes no pregunta y dice cuándo corre",
+      "verify": "cargo test -p gitraptor-cli --test guard_exec_ux -- --list 2>/dev/null | grep -q '^prompt_states_time_and_default_in_en_and_es: test' && cargo test -p gitraptor-cli --test guard_exec_ux prompt_states_time_and_default_in_en_and_es -- --exact",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "apps/cli/tests/guard_exec_ux.rs"
+      ]
+    },
+    {
+      "id": "UX6",
+      "statement": "Con un solo elemento, los mensajes con contador de guard status y guard log usan el singular en en y es (1 blocked action / 1 acción bloqueada); con varios, el plural",
+      "verify": "cargo test -p gitraptor-cli --test guard_plurals -- --list 2>/dev/null | grep -q '^one_item_uses_the_singular_in_en_and_es: test' && cargo test -p gitraptor-cli --test guard_plurals one_item_uses_the_singular_in_en_and_es -- --exact",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "apps/cli/tests/guard_plurals.rs"
+      ]
+    },
+    {
+      "id": "UX7",
+      "statement": "raptor agent correct sobre un worktree sin sesión detectada dice por qué no pudo (solo corrige sesiones detectadas por GitRaptor) y qué hacer (raptor sessions para verlas; register para atribuir), en en y es",
+      "verify": "cargo test -p gitraptor-cli --test agent_correct_message -- --list 2>/dev/null | grep -q '^correct_without_detected_session_explains_why_and_what_to_do: test' && cargo test -p gitraptor-cli --test agent_correct_message correct_without_detected_session_explains_why_and_what_to_do -- --exact",
+      "layer": "runtime",
+      "origin": "story",
+      "tests": [
+        "apps/cli/tests/agent_correct_message.rs"
+      ]
+    }
+  ],
+  "hops": {
+    "design": {
+      "agent": "main-loop",
+      "model": "sonnet"
+    },
+    "critic": {
+      "agent": "nassa-core:plan-critic",
+      "model": "opus"
+    },
+    "tester": {
+      "agent": "nassa-core:criterion-tester",
+      "model": "sonnet"
+    },
+    "build": {
+      "agent": "nassa-dev-rust:rust-expert",
+      "model": "sonnet"
+    },
+    "review": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "opus"
+    },
+    "conformance": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "sonnet"
+    }
+  },
+  "constraints": {
+    "deny_paths": [
+      "docs/ARTIFACTS.md",
+      "docs/architecture/decisions/ADR-GRD-008*",
+      "Cargo.lock",
+      "**/Cargo.toml"
+    ],
+    "allow_dependency_changes": false
+  },
+  "scope": {
+    "projects": [
+      "gitraptor-cli"
+    ]
+  }
+}
