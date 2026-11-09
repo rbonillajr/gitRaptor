@@ -2,7 +2,11 @@ import { useQuery } from "@tanstack/react-query";
 import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { useTranslation } from "react-i18next";
+import { call } from "@/client/ipc";
 import { appInfoQuery } from "@/client/queries";
+import { EngineBand } from "@/engine/EngineBand";
+import { EngineCenter } from "@/engine/EngineCenter";
+import { useEngine } from "@/engine/useEngine";
 import { useUiStore } from "@/state/ui-store";
 import { Panel } from "@/ui/Panel";
 import { TitleBar } from "./TitleBar";
@@ -32,6 +36,15 @@ export function AppShell() {
   const sidebarId = useId();
   const detailId = useId();
   const info = useQuery(appInfoQuery);
+  const engine = useEngine();
+  // A retry stays pending until the next connection state arrives (a new `conn` object, NFR-13.7).
+  const [retriedAt, setRetriedAt] = useState<unknown>(null);
+  const retryPending = retriedAt === engine.conn;
+
+  function onRetry(start: boolean) {
+    setRetriedAt(engine.conn);
+    call("engine_retry", { start }).catch(() => setRetriedAt(null));
+  }
 
   useTheme(theme);
 
@@ -86,6 +99,7 @@ export function AppShell() {
         sidebarOpen={sidebarOpen}
         detailOpen={detailVisible}
         theme={theme}
+        pill={engine.view.pill}
         onToggleSidebar={toggleSidebar}
         onToggleDetail={onToggleDetail}
         onCycleTheme={cycleTheme}
@@ -100,11 +114,23 @@ export function AppShell() {
           hidden={!sidebarOpen}
           className="w-(--gr-size-sidebar) shrink-0"
         />
-        <Panel as="main" className="min-w-0 flex-1 items-center justify-center gap-(--gr-space-2) text-center">
-          <p className="m-0 text-text-muted">{t("shell.center.empty")}</p>
-          {info.data ? (
-            <p className="m-0 text-text-faint [font:var(--gr-type-meta)]">{t("shell.center.version", { version: info.data.version })}</p>
-          ) : null}
+        <Panel as="main" className="min-w-0 flex-1 overflow-hidden p-0!">
+          {engine.view.band ? <EngineBand band={engine.view.band} onRetry={onRetry} pending={retryPending} /> : null}
+          <EngineCenter
+            center={engine.view.center}
+            conn={engine.conn}
+            gitVersion={engine.gitVersion}
+            candidates={engine.candidates}
+            onRetry={onRetry}
+            pending={retryPending}
+          >
+            <div className="flex flex-1 flex-col items-center justify-center gap-(--gr-space-2) text-center">
+              <p className="m-0 text-text-muted">{t("shell.center.empty")}</p>
+              {info.data ? (
+                <p className="m-0 text-text-faint [font:var(--gr-type-meta)]">{t("shell.center.version", { version: info.data.version })}</p>
+              ) : null}
+            </div>
+          </EngineCenter>
         </Panel>
         <Panel
           as="aside"

@@ -1,7 +1,8 @@
 import type { ReactNode, Ref } from "react";
 import { useTranslation } from "react-i18next";
 import type { Theme } from "@/state/ui-store";
-import { IconButton } from "@/ui";
+import type { EngineView } from "@/engine/engine-view";
+import { IconButton, StatusPill } from "@/ui";
 
 export interface TitleBarProps {
   sidebarId: string;
@@ -9,6 +10,8 @@ export interface TitleBarProps {
   sidebarOpen: boolean;
   detailOpen: boolean;
   theme: Theme;
+  /** The engine connection pill (from `engineView`). */
+  pill: EngineView["pill"];
   onToggleSidebar: () => void;
   onToggleDetail: () => void;
   onCycleTheme: () => void;
@@ -50,6 +53,7 @@ const ThemeIcon = ({ theme }: { theme: Theme }) => (
  */
 export function TitleBar(props: TitleBarProps) {
   const { t } = useTranslation();
+  const { pill } = props;
   return (
     <header data-tauri-drag-region className="flex h-(--gr-size-titlebar) shrink-0 items-center gap-(--gr-space-2) pr-(--gr-window-margin) pl-20">
       <IconButton
@@ -59,6 +63,7 @@ export function TitleBar(props: TitleBarProps) {
         aria-controls={props.sidebarId}
         onClick={props.onToggleSidebar}
       />
+      <StatusPill symbol={pill.symbol} tone={pill.tone} label={t(pill.key, pill.values)} />
       <div data-tauri-drag-region className="flex-1 self-stretch" />
       <IconButton label={t(`shell.theme.toggle.${props.theme}`)} icon={<ThemeIcon theme={props.theme} />} onClick={props.onCycleTheme} />
       <IconButton
