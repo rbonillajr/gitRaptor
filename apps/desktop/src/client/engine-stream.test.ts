@@ -35,7 +35,7 @@ describe("D3-STREAM watchEngine", () => {
       return {};
     });
     const batches: EngineMessage[][] = [];
-    await watchEngine((batch) => batches.push(batch));
+    await watchEngine((batch: EngineMessage[]) => batches.push(batch));
 
     expect(
       invoked.map((i) => i.cmd),
