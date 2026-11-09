@@ -7,7 +7,8 @@
 //! the set that touched it; anything of the set that cannot be undone on its own refuses the whole
 //! request (NFR-01).
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::cell::OnceCell;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -28,7 +29,7 @@ use super::protected::{registered_worktrees, worktree_key};
 use super::store::SnapshotStore;
 use super::undo::{
     FUTURE_MARGIN_MS, OverlapRefusal, PlanRefusal, Planned, RawSide, Undone, external_events,
-    head_branch, lock, now_ms,
+    head_branch, lock, now_ms, raw_candidates,
 };
 use crate::channel::requester::Who;
 
@@ -167,6 +168,8 @@ pub(super) fn plan(input: &AgentPlanInput<'_, '_>) -> Result<Planned, PlanRefusa
     let latest = now_ms().saturating_add(FUTURE_MARGIN_MS);
     let in_period = |at: i64| input.since_ms <= at && at <= latest;
     let mut undone: Vec<Undone> = Vec::new();
+    // Per oplog operation of the set: whether it spans other worktrees, and its prior.
+    let mut oplog_facts: HashMap<String, (bool, Option<String>)> = HashMap::new();
     for op in stack.done() {
         match op {
             OpRef::GitEvent(seq) => {
@@ -196,6 +199,8 @@ pub(super) fn plan(input: &AgentPlanInput<'_, '_>) -> Result<Planned, PlanRefusa
                 }
                 let owner = operation_owner(view.record.kind, &view.record.requester, sessions);
                 if selector.selects(&owner) {
+                    let spans_others = view.record.scope.worktrees.iter().any(|w| *w != key);
+                    oplog_facts.insert(id.clone(), (spans_others, view.prior_snapshot.clone()));
                     undone.push(Undone {
                         op: op.clone(),
                         id: view.record.operation_id.clone(),
@@ -218,34 +223,79 @@ pub(super) fn plan(input: &AgentPlanInput<'_, '_>) -> Result<Planned, PlanRefusa
     let read_until = Instant::now() + CHANGE_READ_LIMIT;
     let reader = RepoReader::open(input.worktree, &ReaderOptions::default())
         .map_err(|_| reject(TmRejectReason::TargetUnavailable, &own_scope, &set))?;
-    let mut changes: Vec<(OpChange, i64)> = Vec::with_capacity(set.len());
+    let mut event_seqs: Vec<i64> = input.raw.events.iter().map(|e| e.seq).collect();
+    event_seqs.sort_unstable();
+    let between = Between {
+        store: input.store,
+        snaps: snaps.as_deref().ok(),
+        worktree: PlanWorktree {
+            key: wt_key.clone(),
+            root: PathBuf::from(&key),
+            recreate_id: None,
+            keep: BTreeSet::new(),
+        },
+        raw: input.raw,
+        raw_by_root: OnceCell::new(),
+        deadline: read_until,
+    };
+    // Per operation: its change, the mark of its last write and the mark its branch rule starts
+    // after.
+    let mut changes: Vec<(OpChange, i64, i64)> = Vec::with_capacity(set.len());
     let mut tips: Vec<String> = Vec::new();
     for u in &undone {
-        let OpRef::GitEvent(seq) = &u.op else {
-            // An operation of the oplog (a restore, a protected command) has no change of its
-            // own to read here: it is not undone on its own.
-            return Err(reject(TmRejectReason::NotSelectable, &own_scope, &set));
-        };
-        let Some(event) = input.raw.events.iter().find(|e| e.seq == *seq) else {
-            return Err(reject(TmRejectReason::TargetUnavailable, &own_scope, &set));
-        };
-        if !is_undoable(event.kind) {
-            return Err(reject(TmRejectReason::RawGitNotCovered, &own_scope, &set));
-        }
-        // An inferred worktree is not known to be this one's.
-        if event.inferred {
-            return Err(reject(TmRejectReason::NotSelectable, &own_scope, &set));
-        }
-        let change = match event.kind {
-            GitEventKind::Commit | GitEventKind::Merge | GitEventKind::Rebase => {
-                commit_change(&reader, event, &wt_key, read_until)
-                    .map_err(|reason| reject(reason, &own_scope, &set))?
+        let change = match &u.op {
+            OpRef::GitEvent(seq) => {
+                let Some(event) = input.raw.events.iter().find(|e| e.seq == *seq) else {
+                    return Err(reject(TmRejectReason::TargetUnavailable, &own_scope, &set));
+                };
+                if !is_undoable(event.kind) {
+                    return Err(reject(TmRejectReason::RawGitNotCovered, &own_scope, &set));
+                }
+                // An inferred worktree is not known to be this one's.
+                if event.inferred {
+                    return Err(reject(TmRejectReason::NotSelectable, &own_scope, &set));
+                }
+                match event.kind {
+                    GitEventKind::Commit | GitEventKind::Merge | GitEventKind::Rebase => {
+                        let change = commit_change(&reader, event, &wt_key, read_until)
+                            .map_err(|reason| reject(reason, &own_scope, &set))?;
+                        tips.extend(event.old_commit.iter().cloned());
+                        (change, *seq, *seq - 1)
+                    }
+                    // A reset or a branch move: what differs between the state before it and
+                    // the state it left.
+                    _ => {
+                        let before = between
+                            .raw_target(&event_seqs, *seq, input.raw.floor, &wt_key)
+                            .ok_or_else(|| {
+                                reject(TmRejectReason::TargetUnavailable, &own_scope, &set)
+                            })?;
+                        let (change, _) = between
+                            .change(&u.op, &u.requester, &before)
+                            .map_err(|reason| reject(reason, &own_scope, &set))?;
+                        (change, *seq, *seq - 1)
+                    }
+                }
             }
-            // A reset or a branch move has no commits of its own to diff.
-            _ => return Err(reject(TmRejectReason::NotSelectable, &own_scope, &set)),
+            OpRef::Oplog(id) => {
+                let Some((spans_others, prior)) = oplog_facts.get(id) else {
+                    return Err(reject(TmRejectReason::TargetUnavailable, &own_scope, &set));
+                };
+                // An operation over other worktrees (a restore) cannot be undone in this one.
+                if *spans_others {
+                    return Err(reject(TmRejectReason::NotSelectable, &own_scope, &set));
+                }
+                let before = prior
+                    .as_deref()
+                    .ok_or_else(|| reject(TmRejectReason::TargetUnavailable, &own_scope, &set))?;
+                let (change, base_mark) = between
+                    .change(&u.op, &u.requester, before)
+                    .map_err(|reason| reject(reason, &own_scope, &set))?;
+                // Its own echo runs up to the state it left: the branch rule starts there.
+                (change, base_mark, base_mark)
+            }
         };
-        tips.extend(event.old_commit.iter().cloned());
-        changes.push((change, *seq));
+        changes.push(change);
     }
 
     // The target of each subject: its value before the oldest change that touched it; the
@@ -253,10 +303,10 @@ pub(super) fn plan(input: &AgentPlanInput<'_, '_>) -> Result<Planned, PlanRefusa
     let mut target: BTreeMap<Subject, Value> = BTreeMap::new();
     let mut finals: BTreeMap<Subject, (Value, i64)> = BTreeMap::new();
     let mut first_base: BTreeMap<String, i64> = BTreeMap::new();
-    for (change, mark) in changes {
+    for (change, mark, base_mark) in changes {
         for (subject, value) in change.before {
             if let Subject::Ref(full) = &subject {
-                first_base.entry(full.clone()).or_insert(mark - 1);
+                first_base.entry(full.clone()).or_insert(base_mark);
             }
             target.entry(subject).or_insert(value);
         }
@@ -408,6 +458,175 @@ pub(super) fn plan(input: &AgentPlanInput<'_, '_>) -> Result<Planned, PlanRefusa
     })
 }
 
+/// What reading the change of a reset, a branch move or an oplog operation needs: the store's
+/// points of the worktree around it.
+struct Between<'a> {
+    store: Option<&'a SnapshotStore>,
+    snaps: Option<&'a [super::oplog::SnapshotView]>,
+    worktree: PlanWorktree,
+    raw: &'a RawSide,
+    /// The raw side by root, as the base rule reads it; built on first use.
+    raw_by_root: OnceCell<HashMap<PathBuf, RawSide>>,
+    deadline: Instant,
+}
+
+impl Between<'_> {
+    /// T of a raw event: the point before it, intact in the store.
+    fn raw_target(&self, event_seqs: &[i64], seq: i64, floor: i64, wt_key: &str) -> Option<String> {
+        let (store, snaps) = (self.store?, self.snaps?);
+        raw_candidates(snaps, wt_key, event_seqs, seq, floor)
+            .into_iter()
+            .find(|id| store.verify(id).is_ok())
+    }
+
+    /// The change of `op` (owned by `owner`) from the point `before` (T) to its base B, and B's
+    /// engine mark: every path of the worktree and every branch that differs between them, and
+    /// its `HEAD` when it changed. Without a base, `overlap-unverified`: the change cannot be
+    /// told from what came after it.
+    fn change(
+        &self,
+        op: &OpRef,
+        owner: &Requester,
+        before: &str,
+    ) -> Result<(OpChange, i64), TmRejectReason> {
+        let (Some(store), Some(snaps)) = (self.store, self.snaps) else {
+            return Err(TmRejectReason::TargetUnavailable);
+        };
+        let raw = self
+            .raw_by_root
+            .get_or_init(|| HashMap::from([(self.worktree.root.clone(), self.raw.clone())]));
+        let (base, base_mark) =
+            overlap::agent_base(snaps, &self.worktree, raw, owner, before, op, self.deadline)
+                .ok_or(TmRejectReason::OverlapUnverified)?;
+        let unavailable = |_| TmRejectReason::TargetUnavailable;
+        let key = self.worktree.key.as_str();
+        let changed = store
+            .changed_between(before, &base, key, self.deadline)
+            .map_err(unavailable)?;
+        let (at_t, at_b) = (
+            PointSide::read(store, before, key, !changed.paths.is_empty()).map_err(unavailable)?,
+            PointSide::read(store, &base, key, !changed.paths.is_empty()).map_err(unavailable)?,
+        );
+        let mut out = OpChange {
+            op: op.clone(),
+            before: BTreeMap::new(),
+            after: BTreeMap::new(),
+        };
+        for path in changed.paths {
+            // A path that cannot be written as it is is never cut: the request is refused.
+            if path.len() > MAX_PATH_BYTES {
+                return Err(TmRejectReason::NotSelectable);
+            }
+            let (t, b) = (at_t.path(&path)?, at_b.path(&path)?);
+            let subject = Subject::Path {
+                worktree_key: key.to_owned(),
+                path,
+            };
+            out.before.insert(subject.clone(), t);
+            out.after.insert(subject, b);
+        }
+        for name in changed.refs {
+            let (t, b) = (at_t.branch(&name)?, at_b.branch(&name)?);
+            let subject = Subject::Ref(format!("refs/heads/{name}"));
+            out.before.insert(subject.clone(), Value::Ref(t));
+            out.after.insert(subject, Value::Ref(b));
+        }
+        let (t, b) = (at_t.head(key), at_b.head(key));
+        if t != b {
+            // A `HEAD` that cannot be read on either side cannot be written back.
+            let (Some(t), Some(b)) = (t, b) else {
+                return Err(TmRejectReason::NotSelectable);
+            };
+            let subject = Subject::Head {
+                worktree_key: key.to_owned(),
+            };
+            out.before.insert(subject.clone(), Value::Head(t));
+            out.after.insert(subject, Value::Head(b));
+        }
+        Ok((out, base_mark))
+    }
+}
+
+type StoreEntry = (gitraptor_git::tm_write::store::TreeEntryKind, Oid);
+
+/// What a point of the store holds for one worktree: its files, its index and its meta.
+struct PointSide {
+    files: HashMap<String, StoreEntry>,
+    index: HashMap<String, StoreEntry>,
+    meta: super::store::Meta,
+}
+
+impl PointSide {
+    fn read(
+        store: &SnapshotStore,
+        point: &str,
+        key: &str,
+        with_paths: bool,
+    ) -> Result<Self, super::store::CaptureError> {
+        let listed =
+            |entries: Vec<(String, gitraptor_git::tm_write::store::TreeEntryKind, Oid)>| {
+                entries
+                    .into_iter()
+                    .map(|(path, kind, id)| (path, (kind, id)))
+                    .collect::<HashMap<_, _>>()
+            };
+        let (files, index) = if with_paths {
+            (
+                listed(store.files(point, key)?),
+                listed(store.staged(point, key)?),
+            )
+        } else {
+            (HashMap::new(), HashMap::new())
+        };
+        Ok(Self {
+            files,
+            index,
+            meta: store.meta(point)?,
+        })
+    }
+
+    /// The file and index entries of `path`; a submodule or a tree there cannot be written on
+    /// its own.
+    fn path(&self, path: &str) -> Result<Value, TmRejectReason> {
+        use gitraptor_git::tm_write::store::TreeEntryKind as T;
+        let side = |map: &HashMap<String, StoreEntry>| match map.get(path) {
+            None => Ok(None),
+            Some((kind, id)) => match kind {
+                T::Blob => Ok(Some((Kind::File, *id))),
+                T::Executable => Ok(Some((Kind::Executable, *id))),
+                T::Symlink => Ok(Some((Kind::Symlink, *id))),
+                T::Gitlink | T::Tree => Err(TmRejectReason::NotSelectable),
+            },
+        };
+        Ok(Value::Entry {
+            file: side(&self.files)?,
+            index: side(&self.index)?,
+        })
+    }
+
+    /// The tip of the branch `name`; `None` when it does not exist.
+    fn branch(&self, name: &str) -> Result<Option<Oid>, TmRejectReason> {
+        match self.meta.branches.get(name) {
+            None => Ok(None),
+            Some(hex) => Oid::from_hex(hex)
+                .map(Some)
+                .ok_or(TmRejectReason::TargetUnavailable),
+        }
+    }
+
+    /// The `HEAD` of worktree `key`; `None` when the point does not say.
+    fn head(&self, key: &str) -> Option<HeadValue> {
+        let w = self.meta.worktrees.iter().find(|w| w.key == key)?;
+        if w.detached {
+            return Oid::from_hex(w.head_commit.as_deref()?).map(HeadValue::Detached);
+        }
+        let name = w.head_branch.as_deref()?;
+        gitraptor_git::RefName::new(&format!("refs/heads/{name}"))
+            .ok()
+            .map(HeadValue::Branch)
+    }
+}
+
 /// The change of a commit, merge or rebase event: the entries its tree difference touches, and
 /// its branch (or the worktree's detached `HEAD`).
 fn commit_change(
@@ -549,3 +768,7 @@ pub(super) fn is_excluded(exclusions: &[super::oplog::Exclusion], key: &str, pat
 #[cfg(test)]
 #[path = "undo_agent_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "undo_agent_more_tests.rs"]
+mod more_tests;

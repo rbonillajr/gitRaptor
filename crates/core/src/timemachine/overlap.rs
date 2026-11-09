@@ -427,6 +427,37 @@ pub(crate) fn last_clean_point(
         .map(|p| (p.id.to_owned(), p.mark))
 }
 
+/// The base B of an agent's operation `op` in the worktree `worktree` (the clean point that
+/// holds the state it left) and its engine mark, with the rule of the undo's overlap check.
+/// `target` is the state before it. `None` when it has none: an agent's change without a base
+/// cannot be told from what came after it.
+pub(crate) fn agent_base(
+    snaps: &[SnapshotView],
+    worktree: &PlanWorktree,
+    raw: &HashMap<PathBuf, RawSide>,
+    owner: &Requester,
+    target: &str,
+    op: &OpRef,
+    deadline: Instant,
+) -> Option<(String, i64)> {
+    let input = OverlapInput {
+        reference: std::slice::from_ref(owner),
+        undone: std::slice::from_ref(op),
+        target,
+        worktrees: std::slice::from_ref(worktree),
+        refs: &BTreeSet::new(),
+        ops: &[],
+        snaps,
+        raw,
+        deadline,
+    };
+    // An unattributed owner would fall back to the target as its base: never for an agent.
+    if matches!(owner, Requester::Unattributed) {
+        return None;
+    }
+    base_point_of(&input, op).map(|p| (p.id.to_owned(), p.mark))
+}
+
 /// Agents are the same actor by session; every unattributed change is one class (D4).
 fn same_actor(a: &Requester, b: &Requester) -> bool {
     match (a, b) {
