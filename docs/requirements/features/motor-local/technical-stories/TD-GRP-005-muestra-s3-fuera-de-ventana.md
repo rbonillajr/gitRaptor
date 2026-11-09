@@ -85,7 +85,7 @@ tags: [motor-local, deuda-tecnica, deteccion, atribucion, s3, carga, tests-inest
 
 ## Estado de la implementación (2026-11-09)
 
-Implementado en: PR #__PR__.
+Implementado en: PR #333.
 
 - **Arreglo (1), la causa de esta TD** (opción a, validada por el Arquitecto; ADR-GRP-012, Enmienda 2026-11-09):
   - `sample_loop` ya no descarta avisos en cola. Una sola lectura de procesos da un avistamiento por aviso, con su `t_recv` y su «empezó antes».
