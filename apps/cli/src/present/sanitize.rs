@@ -8,19 +8,13 @@
 
 use std::fmt;
 
+use gitraptor_api::display::visible;
 use gitraptor_api::untrusted::UntrustedText;
 
-/// Cap of names (branches, worktrees, agents, labels), in characters (L-03).
-pub const NAME_MAX_CHARS: usize = 100;
+pub use gitraptor_api::display::{NAME_MAX_CHARS, TEXT_MAX_CHARS};
 
-/// Cap of free text and paths, in characters.
-pub const TEXT_MAX_CHARS: usize = 1024;
-
-/// Combining marks kept after one base character; the rest are dropped so a
-/// "zalgo" name cannot paint over its neighbours.
-const MAX_COMBINING: usize = 2;
-
-/// Marks the cut of a capped text.
+/// Marks the cut of a capped text (kept for the tests of this file).
+#[cfg(test)]
 const ELLIPSIS: char = '…';
 
 /// Text that is safe to paint: no C0, C1, DEL, bidi, zero-width, line
@@ -32,12 +26,12 @@ pub struct SafeText(String);
 impl SafeText {
     /// Free text or a path, one line.
     pub fn text(raw: &str) -> Self {
-        Self(sanitize(raw, TEXT_MAX_CHARS))
+        Self(visible(raw, TEXT_MAX_CHARS))
     }
 
     /// A name, capped at [`NAME_MAX_CHARS`].
     pub fn name(raw: &str) -> Self {
-        Self(sanitize(raw, NAME_MAX_CHARS))
+        Self(visible(raw, NAME_MAX_CHARS))
     }
 
     /// Untrusted text of the contract (N6) as free text.
@@ -61,81 +55,10 @@ impl fmt::Display for SafeText {
     }
 }
 
-fn sanitize(raw: &str, max_chars: usize) -> String {
-    let mut out = String::with_capacity(raw.len().min(max_chars * 4));
-    let mut kept = 0;
-    let mut combining = 0;
-    for c in raw.chars() {
-        if is_combining(c) {
-            combining += 1;
-            if combining > MAX_COMBINING {
-                continue;
-            }
-        } else {
-            combining = 0;
-        }
-        if kept == max_chars {
-            out.push(ELLIPSIS);
-            break;
-        }
-        kept += 1;
-        if must_escape(c) {
-            push_escape(&mut out, c);
-        } else {
-            out.push(c);
-        }
-    }
-    out
-}
-
-/// Characters that act on a terminal or show text different from what it
-/// is (ADR-CKP-003 § 8, L-03).
-pub(crate) fn must_escape(c: char) -> bool {
-    c.is_control()
-        || matches!(
-            c,
-            // Bidi controls.
-            '\u{061c}'
-                | '\u{202a}'..='\u{202e}'
-                | '\u{2066}'..='\u{2069}'
-                // Zero-width and invisible.
-                | '\u{200b}'..='\u{200f}'
-                | '\u{2060}'..='\u{2064}'
-                | '\u{feff}'
-                // Line and paragraph separators in a one-line field.
-                | '\u{2028}'
-                | '\u{2029}'
-                // Tags.
-                | '\u{e0000}'..='\u{e007f}'
-        )
-}
-
-/// `\x1b` for the 7-bit controls and DEL, `\u{9b}` for the rest.
-fn push_escape(out: &mut String, c: char) {
-    use fmt::Write as _;
-    let code = u32::from(c);
-    let _ = if code < 0x80 {
-        write!(out, "\\x{code:02x}")
-    } else {
-        write!(out, "\\u{{{code:x}}}")
-    };
-}
-
-/// Combining marks of the main blocks.
-fn is_combining(c: char) -> bool {
-    matches!(
-        c,
-        '\u{0300}'..='\u{036f}'
-            | '\u{1ab0}'..='\u{1aff}'
-            | '\u{1dc0}'..='\u{1dff}'
-            | '\u{20d0}'..='\u{20ff}'
-            | '\u{fe20}'..='\u{fe2f}'
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gitraptor_api::display::must_escape;
 
     fn clean(text: &str) -> bool {
         !text.chars().any(must_escape)
