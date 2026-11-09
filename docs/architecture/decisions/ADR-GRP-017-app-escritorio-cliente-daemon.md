@@ -227,7 +227,7 @@ Aplicadas con la aceptación (2026-11-08). **Decisión del orquestador (2026-11-
 | ADR-MCP-001 § 2 (perfil) | Lectura completa para la app con identidad (firmada o por ruta) y ascendencia limpia (§ 3) | **Aplicada (2026-11-08)**: [Enmienda (2026-11-08, ADR-GRP-017)](./ADR-MCP-001-servidor-mcp-cliente-daemon.md#enmienda-2026-11-08-adr-grp-017-app-de-escritorio) |
 | **ADR-GRD-008 § 3 y § 5** (A-3) | Texto de abajo | **Aplicada (2026-11-08)**: [Enmienda (2026-11-08, ADR-GRP-017)](./ADR-GRD-008-factor-autenticacion-fuera-de-banda.md#enmienda-2026-11-08-adr-grp-017-app-de-escritorio) |
 | ADR-GRP-014 § 2 y § 3 | Añadir el `.dmg` de la app a las alphas, su firma en la release, el cask, la instalación con `--frozen-lockfile --ignore-scripts` y el updater solo a petición | **Aplicada (2026-11-08)**: [Enmienda 2026-11-08: app de escritorio](./ADR-GRP-014-pipeline-release-distribucion.md#enmienda-2026-11-08-app-de-escritorio) |
-| BR-CKP-CONS-002 (Cockpit) | "Nunca push ni fetch" vale para agentes y MCP; la app y la TUI permiten push, pull y fetch como acción explícita del humano (Q-DSK-14) | **Aplicada (2026-11-08)**: [business-rules.md del Cockpit](../../requirements/features/cockpit/business-rules.md) |
+| BR-CKP-CONS-002 (Cockpit) | "Nunca push ni fetch" vale para agentes y MCP; la app de escritorio permite push, pull y fetch como acción explícita del humano (Q-DSK-14) | **Aplicada (2026-11-08)**: [business-rules.md del Cockpit](../../requirements/features/cockpit/business-rules.md) |
 | AGENTS.md (Alcance) | La app de escritorio deja de ser Fase 3 (D7) | **Aplicada** antes de este ADR: AGENTS.md ya la incluye en el MVP desde D7 |
 
 **Texto aplicado a ADR-GRD-008** (enmienda "2026-11-08, app de escritorio", origen ADR-GRP-017 A-3):
