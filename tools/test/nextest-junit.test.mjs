@@ -172,7 +172,7 @@ test("the exit code of nextest is propagated and the adapted report is written",
     const out = readFileSync(join(root, "target/nextest/ci/junit-paths.xml"), "utf8");
     assert.ok(out.includes('<testsuite name="tests/us_x.rs"'));
   }
-  assert.equal(readFileSync(join(root, "args.txt"), "utf8"), "nextest run --profile ci --workspace");
+  assert.equal(readFileSync(join(root, "args.txt"), "utf8"), "nextest run --profile ci --workspace --exclude gitraptor-desktop");
 });
 
 test("arguments are forwarded and a missing report still returns nextest's code", { skip: !unix }, () => {
