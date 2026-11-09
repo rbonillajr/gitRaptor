@@ -5,12 +5,13 @@ type: adr
 status: accepted
 date: 2026-10-01
 created: 2026-10-01
-updated: 2026-11-08
+updated: 2026-11-09
 deciders: [Rene Bonilla]
 related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-004, ADR-GRP-017]
 changelog:
   - 2026-10-28: enmienda de alcance D7 (la UI web de la app de escritorio entra en el MVP); Storybook y el paquete del UI kit, con UI-2.
   - 2026-11-08: enmienda de la salida CSS de «grafito glass» (DSYS-GRP-002 § 9 y § 10, TS-DSK-001). Decisión del orquestador (2026-11-08), validada por Arquitecto.
+  - 2026-11-09: enmienda de las primitivas de UI-1 sin dependencias de UI (Radix, CVA, tailwind-merge, Lucide y Motion fuera hasta UI-2), tokens nuevos y tema acotado (TS-DSK-003). Decisión del orquestador (2026-11-09), validada por Arquitecto.
 tags: [design-system, ui-kit, react, radix, tailwind, cva, design-tokens, motion, animations, storybook, vscode-webview]
 ---
 
@@ -159,4 +160,21 @@ Cierra las decisiones que [DSYS-GRP-002](../../design-system/tokens-web-grafito-
 | **Fondo `surface.wall`**: lo pinta el webview como fondo CSS del `body`, con la ventana opaca. Sin `transparent` ni efectos de ventana (*vibrancy*) de macOS | La transparencia de ventana en macOS exige `macOSPrivateApi` (API privada: NFR-08 y rechazo en la notarización futura). El aspecto del mock se consigue igual con el gradiente |
 | **Tipografía**: la del sistema (`--gr-font-ui`, `--gr-font-mono`), sin archivos de fuente en el bundle | Cumple `font-src 'self'` sin embeber nada; Inter o Geist se reabren solo con una petición de diseño |
 | **Tailwind v4** lee las variables `--gr-*` desde `@theme inline` en `apps/desktop/src/styles/app.css`; ningún componente usa valores literales | Punto 1 de la Decisión |
+
+## Enmienda 2026-11-09 (primitivas de UI-1 sin dependencias de UI)
+
+Cierra lo que la [spec de primitivas](../../requirements/features/desktop/design/primitives-spec.md) § 3 dejaba a la historia de implementación. **Decisión del orquestador (2026-11-09), validada por Arquitecto.** La implementa [TS-DSK-003](../../requirements/features/desktop/technical-stories/TS-DSK-003-primitivas-design-system-escritorio.md); el detalle está en su [Dev Spec](../../requirements/features/desktop/dev-specs/TS-DSK-003-primitivas-design-system-escritorio.md) (D1 a D16).
+
+**Escenario que manda**: 14 primitivas, un solo consumidor (`apps/desktop`), una plataforma en UI-1 (WebKit de macOS) y la cuarentena de dependencias de ADR-GRP-017 R-2 con `pnpm audit --prod` bloqueante. Opciones: (a) Radix + CVA + `tailwind-merge` + Lucide + Motion, como dice este ADR; (b) primitivas propias sin dependencias nuevas; (c) otra librería *headless* (React Aria, Base UI). (a) ahorra el teclado y el foco de Menu, Popover, Dialog, Toast y Tooltip, pero añade ~12 paquetes con sus transitivas y fija la elección antes de que haya un segundo consumidor; (c) cambia la decisión de librería sin necesidad. Se elige (b): cuesta escribir y probar cinco hooks (foco, foco itinerante, cierre, posición y type-ahead), y se puede revertir en UI-2 sin tocar las pantallas, porque la API de las primitivas no expone nada de la librería.
+
+| Cambio | Sustituye |
+|---|---|
+| **UI-1 sin Radix, CVA, `tailwind-merge`, Lucide ni Motion.** Primitivas propias en `apps/desktop/src/ui` con hooks propios; variantes con mapas tipados y un `cx()` propio; `className` solo para layout externo; iconos SVG en línea propios. La elección de librería se reabre al extraer `packages/ui-kit` con Storybook (UI-2) | Decisión, punto 2 (Primitivas, Variantes tipadas, Iconografía); Enmienda 2026-10-28 («las piezas no cambian») |
+| **Movimiento en CSS**: un solo token `--gr-motion-fast` (150 ms, DSYS-GRP-002) y las utilidades `gr-motion*`; `prefers-reduced-motion: reduce` lo pone a `0s` en `app.css`. Sin `MotionConfig` | Sistema de movimiento (Motion, `AnimatePresence`, `MotionConfig`, duraciones 120/200/320) para UI-1 |
+| **API**: `ref` como prop de React 19, sin `forwardRef`; sin `asChild` (un `Button` con `href` pinta `<a>`); sin densidad `compact` en UI-1 | Definición de diseño, fila API y fila Densidad |
+| **Tokens nuevos** en `glass.json`: `surface.scrim`, `accent.hover`, `live.bg`, `size.ring`, `size.dialogWidth` y `z.*` (capas), con contraste comprobado por test | Enmienda 2026-11-08 (lista de tokens) |
+| **Tema acotado**: además de los selectores de la Enmienda 2026-11-08, `glass.css` emite `[data-theme="dark"]` y `[data-theme="light"]` con los tokens que cambian por tema, para pintar los dos temas a la vez (catálogo de desarrollo) sin iframes, que la CSP (`frame-src 'none'`) no permite | Enmienda 2026-11-08, fila Selectores (se amplía, no cambia) |
+| **Catálogo de UI-1**: vista de desarrollo (`?catalog`, solo con `import.meta.env.DEV`) que no existe en el build de release, comprobado por test. Sustituye a Storybook hasta UI-2 | Enmienda 2026-10-28, fila Storybook (complementa) |
+
+**Cómo se gobierna**: el lint de tokens de `src/ui`, el test de pares de contraste de `@gitraptor/tokens`, el test de movimiento reducido y el test de exclusión del catálogo (Dev Spec DS-TS-DSK-003 § 9.4); `pnpm-lock.yaml` sin cambios en el PR de TS-DSK-003.
 
