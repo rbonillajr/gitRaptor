@@ -267,6 +267,11 @@ pub trait ObserverHooks: Send + Sync {
     /// first write of a commit. `t_recv` is the monotonic mark of the
     /// event, comparable with the batch's [`Marks`].
     fn git_dir_touched(&self, repo_id: &str, t_recv: u64);
+    /// The repo task's read found a worktree's `HEAD` moved, written at `written_us` (wall
+    /// clock microseconds, the mtime of its `HEAD` reflog): the S3 notice of that write, whose
+    /// "started before" is the write itself (TD-GRP-005). `t_recv` is the first mark of the
+    /// window (or of the poll's) the read closes.
+    fn git_dir_written(&self, _repo_id: &str, _t_recv: u64, _written_us: u64) {}
     /// A worktree's window closed with files outside every ignored folder,
     /// or with a new state: after its batch is handed over, outside the
     /// budget (US-TMC-004, the Time Machine's continuous capture).
@@ -295,6 +300,12 @@ impl ObserverHooks for FanoutHooks {
     fn git_dir_touched(&self, repo_id: &str, t_recv: u64) {
         for h in &self.0 {
             h.git_dir_touched(repo_id, t_recv);
+        }
+    }
+
+    fn git_dir_written(&self, repo_id: &str, t_recv: u64, written_us: u64) {
+        for h in &self.0 {
+            h.git_dir_written(repo_id, t_recv, written_us);
         }
     }
 

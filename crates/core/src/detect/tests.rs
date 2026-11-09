@@ -7,6 +7,7 @@ use super::*;
 
 mod queued_notices;
 mod s3_scope;
+mod sample_barrier;
 
 const AGENT: &str = "fake-claude";
 const OLD: &str = "1111111111111111111111111111111111111111";

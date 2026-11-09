@@ -12,7 +12,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use gitraptor_api::UntrustedName;
 use gitraptor_api::clock;
@@ -726,7 +726,65 @@ pub(super) fn run(
     }
 }
 
+/// Oldest write that still gets an S3 notice from the read that found it: the sample is taken
+/// at that read, and the longer after the write, the longer a session's `git` alive across a
+/// foreign write has to be taken as its author (ADR-GRP-012, amendment 2026-11-09). It covers
+/// the file event latency measured under load (about 530 ms).
+const READ_WRITE_MAX_AGE: Duration = Duration::from_secs(1);
+
+/// When the `HEAD` reflog of a worktree's Git directory was last written, in wall clock
+/// microseconds, if that is at most [`READ_WRITE_MAX_AGE`] ago; `None` when it is older or
+/// cannot be read.
+fn head_log_written_us(git_dir: &Path) -> Option<u64> {
+    let modified = std::fs::metadata(git_dir.join("logs").join("HEAD"))
+        .and_then(|m| m.modified())
+        .ok()?;
+    let age = std::time::SystemTime::now()
+        .duration_since(modified)
+        .unwrap_or(Duration::ZERO);
+    if age > READ_WRITE_MAX_AGE {
+        return None;
+    }
+    let since = modified.duration_since(std::time::UNIX_EPOCH).ok()?;
+    u64::try_from(since.as_micros()).ok()
+}
+
 impl Task {
+    /// The S3 notice of the `HEAD`s that `new` moved, before the batch is handed over
+    /// (TD-GRP-005): under load the file events of a write, and so their notices, can reach
+    /// the router after the read that classifies it (the backup poll, or the Time Machine's
+    /// `poll_repo`), or never on their own. It is cut at the write (the newest moved `HEAD`
+    /// reflog), never at the read; `t_recv` is the batch's first mark.
+    fn notice_moved_heads(&self, new: &RefsView, t_recv: u64) {
+        let Some(hooks) = &self.shared.hooks else {
+            return;
+        };
+        let moved: Vec<&PathBuf> = new
+            .worktrees
+            .iter()
+            .filter(|(root, w)| {
+                self.view
+                    .worktrees
+                    .get(*root)
+                    .is_some_and(|old| old.fingerprint != w.fingerprint)
+            })
+            .map(|(root, _)| root)
+            .collect();
+        if moved.is_empty() {
+            return;
+        }
+        let written = self
+            .shared
+            .worktrees_of(&self.repo_id)
+            .iter()
+            .filter(|wt| moved.contains(&&wt.root))
+            .filter_map(|wt| head_log_written_us(&wt.git_dir))
+            .max();
+        if let Some(written_us) = written {
+            hooks.git_dir_written(&self.repo_id, t_recv, written_us);
+        }
+    }
+
     fn flush(&mut self, t_recv: u64, overflow: bool) {
         let t_flush = clock::monotonic_ns();
         let started = self.last_event_ms;
@@ -735,7 +793,9 @@ impl Task {
             t_flush,
             t_computed: 0,
         };
-        self.take_read(marks, overflow.then_some(started), |_, _| {});
+        self.take_read(marks, overflow.then_some(started), |task, new| {
+            task.notice_moved_heads(new, t_recv);
+        });
     }
 
     /// Backup poll: refs, `HEAD`s, indexes and markers, compared with what
@@ -760,6 +820,7 @@ impl Task {
                 })
                 .map(|(root, _)| root.clone())
                 .collect();
+            task.notice_moved_heads(new, t_flush);
             for wt in task.shared.worktrees_of(&task.repo_id) {
                 if moved.contains(&wt.root) {
                     let _ = wt.tx.send(WtMsg::Reconcile(t_flush));
@@ -1326,5 +1387,34 @@ mod tests {
                 inferred: false
             })
         );
+    }
+
+    /// The write mark of a read: the `HEAD` reflog's mtime when it is recent, nothing when it
+    /// is older than the bound or missing (TD-GRP-005).
+    #[test]
+    fn the_write_mark_is_a_recent_head_reflog() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(head_log_written_us(dir.path()), None, "no reflog");
+        let logs = dir.path().join("logs");
+        std::fs::create_dir(&logs).unwrap();
+        let head = logs.join("HEAD");
+        std::fs::write(&head, "x\n").unwrap();
+        let now_us = u64::try_from(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros(),
+        )
+        .unwrap();
+        let written = head_log_written_us(dir.path()).expect("a fresh reflog");
+        assert!(written <= now_us + 1_000_000 && written + 1_000_000 >= now_us);
+        let old = std::time::SystemTime::now() - Duration::from_secs(5);
+        std::fs::File::options()
+            .write(true)
+            .open(&head)
+            .unwrap()
+            .set_modified(old)
+            .unwrap();
+        assert_eq!(head_log_written_us(dir.path()), None, "too old");
     }
 }

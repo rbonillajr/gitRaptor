@@ -33,7 +33,7 @@ use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, channel};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
@@ -91,6 +91,10 @@ pub struct SessionConfig {
     /// Tolerance of "the `git` started before the write": process start
     /// times are exact on macOS, rounded to the boot second on Linux.
     pub start_tolerance: Duration,
+    /// Longest wait of [`Detector::evidence`] for the samples of the notices
+    /// already sent (TD-GRP-005), within the NFR-04 budget of the daemon loop.
+    /// On timeout it evaluates with what is stored, as before.
+    pub sample_barrier: Duration,
 }
 
 impl Default for SessionConfig {
@@ -105,6 +109,7 @@ impl Default for SessionConfig {
             } else {
                 Duration::ZERO
             },
+            sample_barrier: Duration::from_millis(200),
         }
     }
 }
@@ -507,6 +512,11 @@ struct Inner {
     own_pid: u32,
     state: Mutex<State>,
     notices: Mutex<Option<Sender<Notice>>>,
+    /// Notices queued to the sampler, and of them those whose sample is
+    /// stored (or failed): the barrier of [`Detector::evidence`].
+    sent: AtomicU64,
+    sampled: Mutex<u64>,
+    sampled_cv: Condvar,
     samples: AtomicU64,
     cwd_unreadable: AtomicU64,
     placed_by_ancestor: AtomicU64,
@@ -543,6 +553,9 @@ impl Detector {
             own_pid: std::process::id(),
             state: Mutex::new(State::default()),
             notices: Mutex::new(Some(notice_tx)),
+            sent: AtomicU64::new(0),
+            sampled: Mutex::new(0),
+            sampled_cv: Condvar::new(),
             samples: AtomicU64::new(0),
             cwd_unreadable: AtomicU64::new(0),
             placed_by_ancestor: AtomicU64::new(0),
@@ -785,6 +798,9 @@ impl Detector {
             outcome,
             counts: S3Counts::default(),
         };
+        // The notices of this event's writes were sent before it was
+        // classified: their samples count once they are stored.
+        self.inner.wait_sampled(self.inner.config.sample_barrier);
         let st = self.inner.lock();
         let present = |id: &str| {
             st.live
@@ -874,6 +890,24 @@ impl Drop for Detector {
 impl Inner {
     fn lock(&self) -> MutexGuard<'_, State> {
         self.state.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Waits, at most `limit`, until every notice sent so far has its sample
+    /// stored; never while no notice is pending.
+    fn wait_sampled(&self, limit: Duration) {
+        let target = self.sent.load(Ordering::SeqCst);
+        let sampled = self.sampled.lock().unwrap_or_else(|e| e.into_inner());
+        let _ = self
+            .sampled_cv
+            .wait_timeout_while(sampled, limit, |done| *done < target)
+            .unwrap_or_else(|e| e.into_inner());
+    }
+
+    /// `n` notices have their sample stored, or it could not be taken.
+    fn mark_sampled(&self, n: usize) {
+        let mut done = self.sampled.lock().unwrap_or_else(|e| e.into_inner());
+        *done = done.saturating_add(n as u64);
+        self.sampled_cv.notify_all();
     }
 
     fn is_claude(&self, entry: &ProcEntry) -> bool {
@@ -1312,9 +1346,12 @@ fn scan_loop(inner: &Inner, stop: &Receiver<()>) {
 fn sample_loop(inner: &Inner, rx: &Receiver<Notice>) {
     while let Ok(first) = rx.recv() {
         inner.sample_queued(vec![first]);
+        inner.mark_sampled(1);
         let pending: Vec<Notice> = rx.try_iter().collect();
         if !pending.is_empty() {
+            let n = pending.len();
             inner.sample_queued(pending);
+            inner.mark_sampled(n);
         }
     }
 }
@@ -1330,24 +1367,40 @@ impl ObserverHooks for Hooks {
     }
 
     fn git_dir_touched(&self, repo_id: &str, t_recv: u64) {
+        self.notice(repo_id, t_recv, wall_us());
+    }
+
+    fn git_dir_written(&self, repo_id: &str, t_recv: u64, written_us: u64) {
+        self.notice(repo_id, t_recv, written_us);
+    }
+}
+
+impl Hooks {
+    /// Queues an S3 notice of `repo_id`: "started before" is measured against `wall_us`.
+    fn notice(&self, repo_id: &str, t_recv: u64, wall_us: u64) {
         let Some(inner) = self.0.upgrade() else {
             return;
         };
         if !inner.has_sessions(repo_id) {
             return;
         }
-        let wall_us = wall_us();
         if let Some(tx) = inner
             .notices
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .as_ref()
         {
-            let _ = tx.send(Notice {
+            // Counted before it is sent, so the sampler can never mark it
+            // done first; a notice the channel refuses is taken back.
+            inner.sent.fetch_add(1, Ordering::SeqCst);
+            let sent = tx.send(Notice {
                 repo_id: repo_id.to_owned(),
                 t_recv,
                 wall_us,
             });
+            if sent.is_err() {
+                inner.sent.fetch_sub(1, Ordering::SeqCst);
+            }
         }
     }
 }
