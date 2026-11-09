@@ -1,9 +1,8 @@
-import { useQuery } from "@tanstack/react-query";
 import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { call } from "@/client/ipc";
-import { appInfoQuery } from "@/client/queries";
+import { RepoTreeContainer } from "@/fleet/RepoTreeContainer";
 import { EngineBand } from "@/engine/EngineBand";
 import { EngineCenter } from "@/engine/EngineCenter";
 import { useEngine } from "@/engine/useEngine";
@@ -35,7 +34,6 @@ export function AppShell() {
   const detail = useRef<HTMLElement>(null);
   const sidebarId = useId();
   const detailId = useId();
-  const info = useQuery(appInfoQuery);
   const engine = useEngine();
   // A retry stays pending until the next connection state arrives (a new `conn` object, NFR-13.7).
   const [retriedAt, setRetriedAt] = useState<unknown>(null);
@@ -110,10 +108,11 @@ export function AppShell() {
           as="nav"
           id={sidebarId}
           aria-label={t("shell.sidebar.label")}
-          heading={t("shell.sidebar.label")}
           hidden={!sidebarOpen}
-          className="w-(--gr-size-sidebar) shrink-0"
-        />
+          className="w-(--gr-size-sidebar) shrink-0 p-0!"
+        >
+          <RepoTreeContainer />
+        </Panel>
         <Panel as="main" className="min-w-0 flex-1 overflow-hidden p-0!">
           {engine.view.band ? <EngineBand band={engine.view.band} onRetry={onRetry} pending={retryPending} /> : null}
           <EngineCenter
@@ -123,14 +122,7 @@ export function AppShell() {
             candidates={engine.candidates}
             onRetry={onRetry}
             pending={retryPending}
-          >
-            <div className="flex flex-1 flex-col items-center justify-center gap-(--gr-space-2) text-center">
-              <p className="m-0 text-text-muted">{t("shell.center.empty")}</p>
-              {info.data ? (
-                <p className="m-0 text-text-faint [font:var(--gr-type-meta)]">{t("shell.center.version", { version: info.data.version })}</p>
-              ) : null}
-            </div>
-          </EngineCenter>
+          />
         </Panel>
         <Panel
           as="aside"

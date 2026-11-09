@@ -10,13 +10,13 @@ use gitraptor_api::discovery::CandidatesResult;
 use gitraptor_api::display::{NAME_MAX_CHARS, TEXT_MAX_CHARS, visible};
 use gitraptor_api::messages::{
     ConnectionProfile, HelloResult, McpSnapshot, ResyncNotification, ResyncReason as ApiResync,
-    Snapshot,
+    SessionsListParams, SessionsListResult, Snapshot, UnsubscribeParams,
 };
 use gitraptor_api::methods::{self, CAP_DISCOVERY_EVENTS, CAP_SCOPE_ACTIVITY};
 use gitraptor_api::rpc::Notification;
 use gitraptor_api::scope::{
     ConnectionRequester, Scope, ScopeEventNotification, ScopeResyncNotification, ScopeSnapshot,
-    ScopeSnapshotParams, ScopeSubscribeParams,
+    ScopeSnapshotParams, ScopeSubscribeParams, ScopeSubscribeResult,
 };
 use serde_json::{Value, json};
 
@@ -147,6 +147,16 @@ struct Ctx {
     resync: Option<ResyncReason>,
     /// The last incompatibility shown, to keep what an attempt that lost its details had.
     last_incompat: Option<Incompatibility>,
+    /// The repo the window follows (raw id): it survives reconnections until the engine drops it.
+    open: Option<String>,
+}
+
+/// The open repo's scope on one connection.
+#[derive(Default)]
+struct RepoScope {
+    track: SeqTrack,
+    /// The engine's subscription id, to cancel it when the window moves to another repo.
+    subscription: Option<u32>,
 }
 
 impl Ctx {
@@ -268,6 +278,7 @@ fn run(
         stale: None,
         resync: None,
         last_incompat: None,
+        open: None,
     };
     let mut attempt: u32 = 0;
     // The engine is started only when the app opens and when the user asks (D5).
@@ -357,7 +368,7 @@ fn wait(ctx: &mut Ctx, rx: &Receiver<HubCmd>, delay: Duration) -> Wake {
             Ok(HubCmd::Shutdown) | Err(RecvTimeoutError::Disconnected) => return Wake::Shutdown,
             Ok(HubCmd::Retry { start }) => return Wake::Retry(start),
             Ok(HubCmd::Watch(sink)) => ctx.on_watch(sink),
-            Ok(HubCmd::Open { .. }) => {}
+            Ok(HubCmd::Open { repo_id }) => ctx.open = Some(repo_id),
             Err(RecvTimeoutError::Timeout) => return Wake::Elapsed,
         }
     }
@@ -368,7 +379,8 @@ fn wait_for_shutdown(ctx: &mut Ctx, rx: &Receiver<HubCmd>) {
         match cmd {
             HubCmd::Shutdown => return,
             HubCmd::Watch(sink) => ctx.on_watch(sink),
-            HubCmd::Retry { .. } | HubCmd::Open { .. } => {}
+            HubCmd::Open { repo_id } => ctx.open = Some(repo_id),
+            HubCmd::Retry { .. } => {}
         }
     }
 }
@@ -468,6 +480,7 @@ fn session(link: &mut dyn Link, ctx: &mut Ctx, rx: &Receiver<HubCmd>) -> End {
     });
     ctx.show(ConnState::Syncing);
     let mut track = SeqTrack::default();
+    let mut repo = RepoScope::default();
     if restricted {
         if restricted_snapshot(link, ctx, hello.profile).is_err() {
             return End::Reconnect;
@@ -492,7 +505,10 @@ fn session(link: &mut dyn Link, ctx: &mut Ctx, rx: &Receiver<HubCmd>) -> End {
         }
     }
     ctx.go_live();
-    stream(link, ctx, rx, &mut track, restricted)
+    if !restricted && open_repo(link, ctx, &mut repo).is_err() {
+        return End::Reconnect;
+    }
+    stream(link, ctx, rx, &mut track, &mut repo, restricted)
 }
 
 /// The engine state alone, for a window that must not see repos.
@@ -552,6 +568,7 @@ fn stream(
     ctx: &mut Ctx,
     rx: &Receiver<HubCmd>,
     track: &mut SeqTrack,
+    repo: &mut RepoScope,
     restricted: bool,
 ) -> End {
     loop {
@@ -568,14 +585,21 @@ fn stream(
                         ctx.resend_discovered();
                     }
                 }
-                Ok(HubCmd::Open { .. }) => {}
+                Ok(HubCmd::Open { repo_id }) => {
+                    ctx.open = Some(repo_id);
+                    if !restricted && open_repo(link, ctx, repo).is_err() {
+                        return End::Reconnect;
+                    }
+                }
                 Err(TryRecvError::Empty) => break,
             }
         }
         match link.next(READ_SLICE) {
             Ok(None) => {}
-            Ok(Some((_recv_ns, notification))) => {
-                if !restricted && let Some(end) = apply(link, ctx, track, &notification) {
+            Ok(Some((recv_ns, notification))) => {
+                if !restricted
+                    && let Some(end) = apply(link, ctx, (track, repo), recv_ns, &notification)
+                {
                     return end;
                 }
             }
@@ -588,38 +612,41 @@ fn stream(
 fn apply(
     link: &mut dyn Link,
     ctx: &mut Ctx,
-    track: &mut SeqTrack,
+    (track, repo): (&mut SeqTrack, &mut RepoScope),
+    recv_ns: u64,
     notification: &Notification,
 ) -> Option<End> {
     match notification.method.as_str() {
         methods::NOTIFY_SCOPE_EVENT => {
-            let Ok(event) =
+            let event =
                 serde_json::from_value::<ScopeEventNotification>(notification.params.clone())
-            else {
-                return None;
-            };
-            if event.scope != Scope::Global {
-                return None;
-            }
-            match track.accept(event.scope_seq) {
-                Verdict::Apply => {
-                    for msg in ingest::global_event(&event.event) {
-                        ctx.send(msg);
-                    }
+                    .ok()?;
+            match &event.scope {
+                Scope::Global => apply_global_event(link, ctx, track, &event),
+                Scope::Repo { repo_id } if ctx.open.as_deref() == Some(repo_id) => {
+                    apply_repo_event(link, ctx, repo, recv_ns, &event)
                 }
-                Verdict::Duplicate | Verdict::Drop => {}
-                Verdict::Gap => return resync(link, ctx, track, false),
+                Scope::Repo { .. } => None,
             }
         }
         methods::NOTIFY_SCOPE_RESYNC => {
-            let Ok(resync_note) =
+            let note =
                 serde_json::from_value::<ScopeResyncNotification>(notification.params.clone())
-            else {
-                return None;
-            };
-            if resync_note.scope == Scope::Global {
-                ctx.resync = Some(resync_reason(resync_note.reason));
-                return resync(link, ctx, track, true);
+                    .ok()?;
+            match &note.scope {
+                Scope::Global => {
+                    ctx.resync = Some(resync_reason(note.reason));
+                    resync(link, ctx, track, true)
+                }
+                Scope::Repo { repo_id } if ctx.open.as_deref() == Some(repo_id) => {
+                    if note.reason == ApiResync::ScopeClosed {
+                        close_repo(ctx, repo);
+                        None
+                    } else {
+                        reopen(link, ctx, repo)
+                    }
+                }
+                Scope::Repo { .. } => None,
             }
         }
         methods::NOTIFY_RESYNC => {
@@ -629,11 +656,143 @@ fn apply(
                 ctx.resync = Some(resync_reason(note.reason));
             }
             // The engine is about to close this connection: the wait must keep growing.
-            return Some(End::Streak);
+            Some(End::Streak)
         }
-        _ => {}
+        _ => None,
     }
-    None
+}
+
+fn apply_global_event(
+    link: &mut dyn Link,
+    ctx: &mut Ctx,
+    track: &mut SeqTrack,
+    event: &ScopeEventNotification,
+) -> Option<End> {
+    match track.accept(event.scope_seq) {
+        Verdict::Apply => {
+            for msg in ingest::global_event(&event.event) {
+                ctx.send(msg);
+            }
+            None
+        }
+        Verdict::Duplicate | Verdict::Drop => None,
+        Verdict::Gap => resync(link, ctx, track, false),
+    }
+}
+
+/// An event of the open repo: the kinds the fleet shows go to the window, the rest only advance
+/// the sequence.
+fn apply_repo_event(
+    link: &mut dyn Link,
+    ctx: &mut Ctx,
+    repo: &mut RepoScope,
+    recv_ns: u64,
+    event: &ScopeEventNotification,
+) -> Option<End> {
+    match repo.track.accept(event.scope_seq) {
+        Verdict::Apply => {
+            if let Some(msg) = ingest::repo_event(&event.event, recv_ns) {
+                ctx.send(msg);
+            }
+            None
+        }
+        Verdict::Duplicate | Verdict::Drop => None,
+        Verdict::Gap => reopen(link, ctx, repo),
+    }
+}
+
+/// Takes the open repo again; `Some` when the link is lost.
+fn reopen(link: &mut dyn Link, ctx: &mut Ctx, repo: &mut RepoScope) -> Option<End> {
+    open_repo(link, ctx, repo).err().map(|_| End::Reconnect)
+}
+
+/// The window no longer follows the repo: tell it and forget it. The engine closed the scope
+/// itself, so there is nothing to cancel.
+fn close_repo(ctx: &mut Ctx, repo: &mut RepoScope) {
+    if let Some(repo_id) = ctx.open.take() {
+        ctx.send(EngineMessage::RepoClosed {
+            repo_id: visible(&repo_id, NAME_MAX_CHARS),
+        });
+    }
+    *repo = RepoScope::default();
+}
+
+/// Follows the open repo on this connection: leaves the previous subscription, takes a snapshot,
+/// subscribes from the next sequence and lists the sessions. A repo the engine refuses is
+/// closed; only a lost link is an error.
+fn open_repo(link: &mut dyn Link, ctx: &mut Ctx, repo: &mut RepoScope) -> Result<(), LinkError> {
+    let Some(repo_id) = ctx.open.clone() else {
+        return Ok(());
+    };
+    leave_repo(link, repo)?;
+    match take_repo(link, ctx, repo, &repo_id) {
+        Err(LinkError::Refused { .. }) => {
+            close_repo(ctx, repo);
+            Ok(())
+        }
+        other => other,
+    }
+}
+
+/// Cancels the subscription to the previous scope, if any (a refusal changes nothing).
+fn leave_repo(link: &mut dyn Link, repo: &mut RepoScope) -> Result<(), LinkError> {
+    repo.track = SeqTrack::Waiting;
+    let Some(subscription) = repo.subscription.take() else {
+        return Ok(());
+    };
+    let params = to_value(&UnsubscribeParams { subscription })?;
+    match link.call(methods::EVENTS_UNSUBSCRIBE, params) {
+        Ok(_) | Err(LinkError::Refused { .. }) => Ok(()),
+        Err(LinkError::Lost) => Err(LinkError::Lost),
+    }
+}
+
+fn take_repo(
+    link: &mut dyn Link,
+    ctx: &mut Ctx,
+    repo: &mut RepoScope,
+    repo_id: &str,
+) -> Result<(), LinkError> {
+    let scope = Scope::Repo {
+        repo_id: repo_id.to_owned(),
+    };
+    let params = to_value(&ScopeSnapshotParams {
+        scope: scope.clone(),
+    })?;
+    let value = link.call(methods::SCOPE_SNAPSHOT, params)?;
+    let Ok(ScopeSnapshot::Repo(snapshot)) = serde_json::from_value::<ScopeSnapshot>(value) else {
+        return Err(LinkError::Lost);
+    };
+    ctx.send(EngineMessage::Repo {
+        fleet: ingest::repo(&snapshot),
+    });
+    let params = to_value(&ScopeSubscribeParams {
+        scope,
+        from_seq: Some(snapshot.scope_seq + 1),
+        run_id: Some(snapshot.run_id.clone()),
+    })?;
+    let value = link.call(methods::SCOPE_SUBSCRIBE, params)?;
+    let subscribed =
+        serde_json::from_value::<ScopeSubscribeResult>(value).map_err(|_| LinkError::Lost)?;
+    repo.subscription = Some(subscribed.subscription);
+    repo.track.reset(&snapshot.run_id, snapshot.scope_seq);
+    list_sessions(link, ctx, repo_id)
+}
+
+fn list_sessions(link: &mut dyn Link, ctx: &mut Ctx, repo_id: &str) -> Result<(), LinkError> {
+    let params = to_value(&SessionsListParams {
+        repo_id: Some(repo_id.to_owned()),
+        include_ended: false,
+        limit: None,
+    })?;
+    let value = link.call(methods::SESSIONS_LIST, params)?;
+    let list = serde_json::from_value::<SessionsListResult>(value).map_err(|_| LinkError::Lost)?;
+    ctx.send(EngineMessage::Sessions {
+        repo_id: visible(repo_id, NAME_MAX_CHARS),
+        detection_available: list.detection_available,
+        sessions: list.sessions.iter().filter_map(ingest::session).collect(),
+    });
+    Ok(())
 }
 
 /// Takes the global scope again and goes back to `live`.

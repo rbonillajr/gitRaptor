@@ -1,6 +1,10 @@
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { CandidateDto, ConnState } from "@/client/engine-types";
+import { FleetView } from "@/fleet/FleetView";
+import { useFleet } from "@/fleet/useFleet";
+import { useNow } from "@/fleet/useNow";
+import { useEngineStore } from "@/state/engine-store";
 import { Button, CopyCommand, Skeleton, StatePanel } from "@/ui";
 import { cx } from "@/ui/cx";
 import { MIN_GIT, type EngineView } from "./engine-view";
@@ -15,7 +19,7 @@ export interface EngineCenterProps {
   onRetry: (start: boolean) => void;
   /** Buttons stay `aria-disabled` until the next connection state arrives. */
   pending?: boolean;
-  /** The content state (the fleet of US-DSK-004); until then `shell.center.empty`. */
+  /** Overrides the content state; by default it is the `FleetView` of the open repo. */
   children?: ReactNode;
 }
 
@@ -124,6 +128,14 @@ function NoRepos({ gitVersion, candidates }: { gitVersion: string | null; candid
   );
 }
 
+/** The only place that mounts `useFleet`: it opens the default repo and reads its entry. Only for the content state. */
+function FleetContent() {
+  const fleet = useFleet().data;
+  const nowMs = useNow();
+  const activity = useEngineStore((s) => s.session?.activity ?? false);
+  return <FleetView fleet={fleet} nowMs={nowMs} activity={activity} />;
+}
+
 function Body({ center, conn, gitVersion, candidates, onRetry, pending = false, children }: EngineCenterProps) {
   const { t } = useTranslation();
   switch (center.kind) {
@@ -156,7 +168,7 @@ function Body({ center, conn, gitVersion, candidates, onRetry, pending = false, 
     case "no-repos":
       return <NoRepos gitVersion={gitVersion} candidates={candidates} />;
     case "content":
-      return children ?? <p className="m-0 text-text-muted [font:var(--gr-type-body)]">{t("shell.center.empty")}</p>;
+      return children ?? <FleetContent />;
   }
 }
 

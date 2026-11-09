@@ -5,7 +5,7 @@ import type { EngineMessage } from "./engine-types";
  * The closed list of IPC commands of the backend and their types. Must equal
  * `src-tauri/commands.json` (D4); `commands.test.ts` checks it.
  */
-export const COMMANDS = ["app_info", "engine_watch", "engine_retry"] as const;
+export const COMMANDS = ["app_info", "engine_watch", "engine_retry", "fleet_open"] as const;
 
 export type CommandName = (typeof COMMANDS)[number];
 
@@ -22,4 +22,6 @@ export interface Commands {
   engine_watch: { params: { channel: Channel<EngineMessage> }; result: Record<string, never> };
   /** `start: true` asks the bundled launcher to start the engine; `false` only retries the connection now. */
   engine_retry: { params: { start: boolean }; result: Record<string, never> };
+  /** Opens the repo scope in the backend: its snapshot and events then arrive as `repo*` messages (one repo at a time). */
+  fleet_open: { params: { repoId: string }; result: Record<string, never> };
 }

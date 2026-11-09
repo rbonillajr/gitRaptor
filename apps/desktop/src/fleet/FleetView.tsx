@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { RepoFleet, SessionDto } from "@/client/engine-types";
+import { useEngineStore } from "@/state/engine-store";
 import { CardSkeleton, Panel, WorktreeCard } from "@/ui";
 import { assignSlots } from "./agent-colors";
 import { fleetCards, formatAge } from "./fleet-model";
@@ -18,12 +19,32 @@ const sameSlots = (a: ReadonlyMap<string, number>, b: ReadonlyMap<string, number
   a.size === b.size && [...a].every(([k, v]) => b.get(k) === v);
 
 /**
+ * After the React commit that applied a batch with repo messages, in the first animation frame: one
+ * `gr:fleet-delta` measure from the batch's `receivedAt` and one `gr:fleet-delta-painted` mark (NFR-13.1).
+ * A batch already in the store when the view mounts was applied before it and is not measured.
+ */
+function useFleetDeltaMarks(): void {
+  const batch = useEngineStore((s) => s.lastRepoBatch);
+  const measured = useRef(useEngineStore.getState().lastRepoBatch);
+  useEffect(() => {
+    if (batch === null || batch === measured.current) return;
+    const frame = requestAnimationFrame(() => {
+      measured.current = batch;
+      performance.measure("gr:fleet-delta", { start: batch.receivedAt });
+      performance.mark("gr:fleet-delta-painted");
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [batch]);
+}
+
+/**
  * The fleet of the open repo: one card per worktree in the attention order. Presentational: the data and the
  * clock come in as props. The slot registry and the announcement baseline live in the keyed body, so they
  * reset when the repo changes.
  */
 export function FleetView({ fleet, nowMs, activity }: FleetViewProps) {
   const { t } = useTranslation();
+  useFleetDeltaMarks();
   if (fleet === undefined) {
     return (
       <Panel as="section" aria-busy="true" data-fleet="loading" className="gap-(--gr-space-2)">

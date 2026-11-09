@@ -36,7 +36,7 @@ export const useUiStore = create<UiState & UiActions & FleetSelection>()(
       sidebarOpen: true,
       detailOpen: true,
       selectedRepoId: null,
-      selectRepo: () => undefined,
+      selectRepo: (id) => set({ selectedRepoId: id }),
       toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
       toggleDetail: () => set((s) => ({ detailOpen: !s.detailOpen })),
       cycleTheme: () => set((s) => ({ theme: NEXT_THEME[s.theme] })),
