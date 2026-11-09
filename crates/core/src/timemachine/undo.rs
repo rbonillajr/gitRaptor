@@ -1140,6 +1140,7 @@ impl UndoStep<'_> {
                         &snaps,
                         deps.engine.generation_floor(&tail.repo_id),
                         &tail.worktree.to_string_lossy(),
+                        &sel.worktree_key,
                         &tail.undone,
                         &sel.own_sessions,
                     ))
