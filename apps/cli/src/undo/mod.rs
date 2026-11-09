@@ -20,7 +20,7 @@ use serde_json::json;
 pub(crate) mod confirm;
 pub(crate) mod notices;
 mod overlap;
-mod redo;
+pub(crate) mod redo;
 
 #[cfg(test)]
 #[path = "since_tests.rs"]

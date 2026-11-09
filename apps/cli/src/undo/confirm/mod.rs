@@ -104,6 +104,7 @@ fn without_token(err: ClientError) -> ClientError {
 fn prefix(method: &str) -> &'static str {
     match method {
         methods::TM_UNDO => "raptor undo",
+        methods::TM_REDO => "raptor redo",
         methods::TM_RESTORE => "raptor restore",
         _ => "raptor",
     }

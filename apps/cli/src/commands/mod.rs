@@ -42,6 +42,7 @@ commands! {
     Sessions(sessions),
     Agent(agent),
     Undo(undo),
+    Redo(redo),
     Restore(restore),
     Timeline(timeline),
     Mcp(mcp),
