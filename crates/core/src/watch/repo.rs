@@ -12,7 +12,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use gitraptor_api::UntrustedName;
 use gitraptor_api::clock;
@@ -726,25 +726,13 @@ pub(super) fn run(
     }
 }
 
-/// Oldest write that still gets an S3 notice from the read that found it: the sample is taken
-/// at that read, and the longer after the write, the longer a session's `git` alive across a
-/// foreign write has to be taken as its author (ADR-GRP-012, amendment 2026-11-09). It covers
-/// the file event latency measured under load (about 530 ms).
-const READ_WRITE_MAX_AGE: Duration = Duration::from_secs(1);
-
 /// When the `HEAD` reflog of a worktree's Git directory was last written, in wall clock
-/// microseconds, if that is at most [`READ_WRITE_MAX_AGE`] ago; `None` when it is older or
-/// cannot be read.
+/// microseconds; `None` when it cannot be read. How old a write still counts is the
+/// detector's to decide (`detect::READ_WRITE_MAX_AGE`).
 fn head_log_written_us(git_dir: &Path) -> Option<u64> {
     let modified = std::fs::metadata(git_dir.join("logs").join("HEAD"))
         .and_then(|m| m.modified())
         .ok()?;
-    let age = std::time::SystemTime::now()
-        .duration_since(modified)
-        .unwrap_or(Duration::ZERO);
-    if age > READ_WRITE_MAX_AGE {
-        return None;
-    }
     let since = modified.duration_since(std::time::UNIX_EPOCH).ok()?;
     u64::try_from(since.as_micros()).ok()
 }
@@ -1389,10 +1377,10 @@ mod tests {
         );
     }
 
-    /// The write mark of a read: the `HEAD` reflog's mtime when it is recent, nothing when it
-    /// is older than the bound or missing (TD-GRP-005).
+    /// The write mark of a read: the `HEAD` reflog's mtime, nothing when it is missing
+    /// (TD-GRP-005).
     #[test]
-    fn the_write_mark_is_a_recent_head_reflog() {
+    fn the_write_mark_is_the_head_reflogs_mtime() {
         let dir = tempfile::tempdir().unwrap();
         assert_eq!(head_log_written_us(dir.path()), None, "no reflog");
         let logs = dir.path().join("logs");
@@ -1408,13 +1396,14 @@ mod tests {
         .unwrap();
         let written = head_log_written_us(dir.path()).expect("a fresh reflog");
         assert!(written <= now_us + 1_000_000 && written + 1_000_000 >= now_us);
-        let old = std::time::SystemTime::now() - Duration::from_secs(5);
+        let old = std::time::SystemTime::now() - std::time::Duration::from_secs(5);
         std::fs::File::options()
             .write(true)
             .open(&head)
             .unwrap()
             .set_modified(old)
             .unwrap();
-        assert_eq!(head_log_written_us(dir.path()), None, "too old");
+        let written = head_log_written_us(dir.path()).expect("an old reflog");
+        assert!(written + 4_000_000 <= now_us, "its own mtime, however old");
     }
 }
