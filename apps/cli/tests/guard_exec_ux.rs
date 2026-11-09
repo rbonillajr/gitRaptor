@@ -187,10 +187,12 @@ fn answer_no_cancels_and_logs() {
         let out = answer(&m, input);
         assert_cancelled(&m, &out, &before, "UX2");
         let lower = text(&out).to_lowercase();
+        // Only what is printed after the last question counts: the question itself already
+        // says that no answer cancels.
+        let tail = &lower[lower.rfind("/n]").expect("the prompt was shown")..];
         assert!(
-            lower.contains("cancel")
-                && (lower.contains("did not run") || lower.contains("nothing")),
-            "UX2: answering {what} should say it was cancelled and nothing ran: {lower}"
+            tail.contains("nothing ran"),
+            "UX2: after answering {what} it should say nothing ran: {tail}"
         );
     }
 }
@@ -205,9 +207,10 @@ fn no_answer_at_window_close_cancels_and_logs() {
     let out = finish_bounded(&m, running, 45);
     assert_cancelled(&m, &out, &before, "UX3");
     let lower = text(&out).to_lowercase();
+    let tail = &lower[lower.rfind("/n]").expect("the prompt was shown")..];
     assert!(
-        lower.contains("no answer") && lower.contains("cancel"),
-        "UX3: exec should say it cancelled because there was no answer in time: {lower}"
+        tail.contains("window closed") && tail.contains("cancel"),
+        "UX3: exec should say, after the question, it cancelled because the window closed: {tail}"
     );
 }
 
@@ -259,5 +262,23 @@ fn prompt_states_time_and_default_in_en_and_es() {
     assert!(
         shown.to_lowercase().contains("2 s"),
         "UX5: --yes should say when it runs: {shown}"
+    );
+}
+
+#[test]
+fn answer_yes_in_time_still_runs_git_once() {
+    // The success path of the question: `y` before the window closes runs the exception.
+    let m = machine(8_000);
+    let local = m.git_ok(&m.f.repo, &["rev-parse", "feat-x"]);
+    let before = feat_x_remote(&m);
+    assert_ne!(local, before);
+    let out = answer(&m, "y\n");
+    assert!(out.status.success(), "exec should succeed: {}", text(&out));
+    assert_eq!(feat_x_remote(&m), local, "the remote has the new commit");
+    let entries = log_entries(&m);
+    assert_eq!(of_kind(&entries, "exception").len(), 1, "{entries:#?}");
+    assert!(
+        of_kind(&entries, "exception-cancelled").is_empty(),
+        "{entries:#?}"
     );
 }
