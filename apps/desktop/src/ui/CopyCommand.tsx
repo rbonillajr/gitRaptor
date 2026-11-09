@@ -8,6 +8,8 @@ export interface CopyCommandProps {
   /** Shown as `<code>` text and copied as is. The caller guarantees it is safe to paste into a shell. */
   command: string;
   className?: string;
+  /** Called with the command only after a successful `writeText` (DS-US-DSK-008 D22). */
+  onCopied?: (command: string) => void;
 }
 
 /** A command in a `<code>` box with a Copy button (`navigator.clipboard.writeText`, no plugin). */
