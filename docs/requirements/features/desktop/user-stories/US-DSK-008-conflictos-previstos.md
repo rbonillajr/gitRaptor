@@ -2,12 +2,13 @@
 id: US-DSK-008
 title: "El usuario ve qué agentes van a chocar antes de que choquen y en qué archivos"
 type: us
-status: draft
+status: ready
 priority: high
 created: 2026-10-28
-updated: 2026-10-28
+updated: 2026-11-08
 feature: desktop
 source: inline
+decision: "Decisión de Rene del 2026-11-08 (aceptación de las recomendaciones, Q-DSK-7 a Q-DSK-20), ver CTX-DSK-001 § 11"
 related:
   context:
     - CTX-DSK-001
@@ -35,7 +36,7 @@ tags:
 
 **Como** usuario con varios agentes en paralelo, **quiero** que la app me avise cuando dos agentes, o un agente y la base, van a chocar, y en qué archivos, **para** reorganizar el trabajo antes del merge en vez de descubrir el conflicto al final.
 
-**Valor**: BR-27 (UI-1, Must); BR-06. Nivel **UI-1**. Es el primer diferencial del [benchmark](../research/benchmark-2026-10.md) § 4.
+**Valor**: BR-27 (UI-1, Must); BR-06. Nivel **UI-1**. Es el primer diferencial del [benchmark](../research/benchmark-2026-10.md) § 4. Plataforma: macOS (Q-DSK-12, decisión de Rene del 2026-11-08; Windows en M3).
 
 ## Reglas
 

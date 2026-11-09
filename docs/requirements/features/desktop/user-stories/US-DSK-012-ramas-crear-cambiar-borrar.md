@@ -2,12 +2,13 @@
 id: US-DSK-012
 title: "El usuario crea, cambia y borra ramas desde la app sin perder trabajo"
 type: us
-status: draft
+status: ready
 priority: high
 created: 2026-10-28
-updated: 2026-10-28
+updated: 2026-11-08
 feature: desktop
 source: inline
+decision: "Decisión de Rene del 2026-11-08 (aceptación de las recomendaciones, Q-DSK-7 a Q-DSK-20), ver CTX-DSK-001 § 11"
 related:
   context:
     - CTX-DSK-001
@@ -32,7 +33,7 @@ tags:
 
 **Como** desarrollador novato, **quiero** ver todas las ramas del repo y crear, cambiar o borrar una con un clic, **para** organizar mi trabajo sin miedo a perder lo que no he commiteado.
 
-**Valor**: BR-27 (UI-2, Must). Nivel **UI-2**. Imprescindible.
+**Valor**: BR-27 (UI-2, Must). Nivel **UI-2**. Imprescindible. Entra antes de v0.1.0 (Q-DSK-10, decisión de Rene del 2026-11-08).
 
 ## Reglas
 

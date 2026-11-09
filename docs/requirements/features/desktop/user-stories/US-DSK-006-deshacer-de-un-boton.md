@@ -2,12 +2,13 @@
 id: US-DSK-006
 title: "El usuario deshace con un botón lo que hizo un agente o él mismo, y puede rehacerlo"
 type: us
-status: draft
+status: ready
 priority: high
 created: 2026-10-28
-updated: 2026-10-28
+updated: 2026-11-08
 feature: desktop
 source: inline
+decision: "Decisión de Rene del 2026-11-08 (aceptación de las recomendaciones, Q-DSK-7 a Q-DSK-20), ver CTX-DSK-001 § 11"
 related:
   context:
     - CTX-DSK-001
@@ -34,7 +35,7 @@ tags:
 
 **Como** desarrollador novato, **quiero** ver en un historial qué cambió en mi repo, cuándo y quién lo hizo, y deshacer cualquier operación con un botón, **para** recuperar mi trabajo, también el que no había commiteado, sin saber Git ni usar el reflog.
 
-**Valor**: BR-27 (UI-1, Must); BR-08, BR-09 y BR-10. Nivel **UI-1**. Patrones P1 y P2 del [benchmark](../research/benchmark-2026-10.md).
+**Valor**: BR-27 (UI-1, Must); BR-08, BR-09 y BR-10. Nivel **UI-1**. Patrones P1 y P2 del [benchmark](../research/benchmark-2026-10.md). Plataforma: macOS (Q-DSK-12, decisión de Rene del 2026-11-08; Windows en M3).
 
 ## Reglas
 

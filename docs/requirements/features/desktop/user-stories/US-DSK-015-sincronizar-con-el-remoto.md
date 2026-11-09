@@ -2,12 +2,13 @@
 id: US-DSK-015
 title: "El usuario sube y trae los cambios del remoto desde la app con la protección del repo"
 type: us
-status: draft
+status: ready
 priority: high
 created: 2026-10-28
-updated: 2026-10-28
+updated: 2026-11-08
 feature: desktop
 source: inline
+decision: "Decisión de Rene del 2026-11-08 (aceptación de las recomendaciones, Q-DSK-7 a Q-DSK-20), ver CTX-DSK-001 § 11"
 related:
   context:
     - CTX-DSK-001
@@ -32,11 +33,11 @@ tags:
 
 **Como** desarrollador novato, **quiero** traer los cambios del remoto y subir los míos desde la app, sabiendo antes cuántos commits van y vienen, **para** usar la app como mi cliente Git diario sin volver a otra herramienta.
 
-**Valor**: BR-27 (UI-2, Must). Nivel **UI-2**. Imprescindible. **Condicionada a Q-DSK-14 (pendiente de Rene)**: hoy BR-CKP-CONS-002 dice "nunca push ni fetch" y no puede pasar a Dev Spec hasta que Rene decida.
+**Valor**: BR-27 (UI-2, Must). Nivel **UI-2**. Imprescindible. Decisión de Rene (2026-11-08, Q-DSK-14): la app puede hacer push, pull y fetch como acción explícita del humano. BR-CKP-CONS-002 ("nunca push ni fetch") se enmienda para la app; lo escribe el Arquitecto y la historia no pasa a Dev Spec antes. Entra antes de v0.1.0 (Q-DSK-10, decisión de Rene del 2026-11-08).
 
 ## Reglas
 
-- Solo el humano, como acción explícita en la app; nunca un agente ni el MCP (propuesta de Q-DSK-14, opción b).
+- Solo el humano, como acción explícita en la app; nunca un agente ni el MCP (decisión de Rene del 2026-11-08, Q-DSK-14 opción b).
 - Un push pasa por Guardrails como cualquier otro: un force-push a una rama protegida se deniega (US-GRD-001, US-GRD-008).
 - Traer cambios que modifican la copia de trabajo tiene punto de recuperación previo (NFR-01).
 - Las credenciales son las del usuario, en su configuración de Git (NFR-07); la app no las guarda.
@@ -76,4 +77,4 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 ## Diseño y Dev Spec
 
 - **Diseño:** pendiente (UI-2 no está en DSF-DSK-001).
-- **Dev Spec:** pendiente; bloqueada por Q-DSK-14.
+- **Dev Spec:** pendiente; espera la enmienda de BR-CKP-CONS-002 que escribe el Arquitecto.

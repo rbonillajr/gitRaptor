@@ -2,12 +2,13 @@
 id: US-DSK-016
 title: "El usuario prepara una copia de trabajo para un agente nuevo y descarta la de uno que terminó"
 type: us
-status: draft
+status: ready
 priority: medium
 created: 2026-10-28
-updated: 2026-10-28
+updated: 2026-11-08
 feature: desktop
 source: inline
+decision: "Decisión de Rene del 2026-11-08 (aceptación de las recomendaciones, Q-DSK-7 a Q-DSK-20), ver CTX-DSK-001 § 11"
 related:
   context:
     - CTX-DSK-001

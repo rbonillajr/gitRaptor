@@ -2,12 +2,13 @@
 id: US-DSK-003
 title: "El usuario sabe si GitRaptor está funcionando y qué hacer cuando no"
 type: us
-status: draft
+status: ready
 priority: high
 created: 2026-10-28
-updated: 2026-10-28
+updated: 2026-11-08
 feature: desktop
 source: inline
+decision: "Decisión de Rene del 2026-11-08 (aceptación de las recomendaciones, Q-DSK-7 a Q-DSK-20), ver CTX-DSK-001 § 11"
 related:
   context:
     - CTX-DSK-001
@@ -30,7 +31,7 @@ tags:
 
 **Como** usuario de la app, **quiero** saber en todo momento si el motor de GitRaptor está en marcha, conectado y al día, y qué hacer cuando no lo está, **para** no creer que mi repo está protegido y con historial cuando no lo está.
 
-**Valor**: BR-27 (UI-1, Must); BR-01. Nivel **UI-1**. Incluye los estados vacíos: sin repos observados y repo sin copias de trabajo de agentes.
+**Valor**: BR-27 (UI-1, Must); BR-01. Nivel **UI-1**. Incluye los estados vacíos: sin repos observados y repo sin copias de trabajo de agentes. Plataforma: macOS (Q-DSK-12, decisión de Rene del 2026-11-08; Windows en M3).
 
 ## Reglas
 

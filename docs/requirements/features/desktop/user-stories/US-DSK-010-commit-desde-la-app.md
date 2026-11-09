@@ -2,12 +2,13 @@
 id: US-DSK-010
 title: "El usuario guarda sus cambios en un commit desde la app y puede deshacerlo"
 type: us
-status: draft
+status: ready
 priority: high
 created: 2026-10-28
-updated: 2026-10-28
+updated: 2026-11-08
 feature: desktop
 source: inline
+decision: "Decisión de Rene del 2026-11-08 (aceptación de las recomendaciones, Q-DSK-7 a Q-DSK-20), ver CTX-DSK-001 § 11"
 related:
   context:
     - CTX-DSK-001
@@ -33,7 +34,7 @@ tags:
 
 **Como** desarrollador novato, **quiero** elegir qué archivos entran, escribir el mensaje y crear el commit desde la app, **para** guardar mi trabajo sin la terminal y con la tranquilidad de poder deshacerlo.
 
-**Valor**: BR-27 (UI-2, Must). Nivel **UI-2**. Imprescindible.
+**Valor**: BR-27 (UI-2, Must). Nivel **UI-2**. Imprescindible. Entra antes de v0.1.0 (Q-DSK-10, decisión de Rene del 2026-11-08).
 
 ## Reglas
 
