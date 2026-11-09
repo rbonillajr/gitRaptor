@@ -8,10 +8,10 @@ domain: GRP
 priority: critical
 complexity: medium
 created: 2026-10-04
-updated: 2026-10-09
+updated: 2026-11-08
 related:
-  adrs: [ADR-GRD-008, ADR-GRD-007, ADR-GRD-004, ADR-GRP-005, ADR-GRP-002, ADR-GRD-003]
-  stories: [US-GRD-013, US-GRD-015, TS-GRP-007]
+  adrs: [ADR-GRD-008, ADR-GRP-017, ADR-GRD-007, ADR-GRD-004, ADR-GRP-005, ADR-GRP-002, ADR-GRD-003]
+  stories: [US-GRD-013, US-GRD-015, TS-GRP-007, SPIKE-DSK-001, SPIKE-DSK-002, US-DSK-001, US-DSK-002, US-DSK-015]
   specs: []
 ado:
   id: null
@@ -21,6 +21,8 @@ tags: [guardrails, spike, factor-fuera-de-banda, presencia-humana, localauthenti
 
 ## SPIKE-GRD-002: Factor de autenticación del SO invocado desde el daemon en los tres SO
 
+> **Ampliación (2026-11-08)**: dos experimentos más para la app de escritorio (E14 eventos sintéticos sobre el diálogo, E15 factor desde un binario sin interfaz dentro del bundle); ver la sección "Ampliación (2026-11-08)" al final. Se ejecuta ya, dentro de UI-1 (Q-DSK-17).
+>
 > **Estado (2026-10-09)**: **plan de la parte macOS listo y validado por el Arquitecto** (sección "Plan del spike: parte macOS", al final). Falta ejecutar el prototipo y la matriz en el Mac de Rene; no hay resultados todavía. Estado anterior (2026-10-04): sin empezar. **Alcance inmediato: macOS.** Linux y Windows: **Pendiente: etapa de validación multiplataforma** (en Windows, además, el daemon todavía no tiene canal: ADR-GRP-005, Enmienda TS-GRP-004, punto 8). Mientras una plataforma no tenga su parte cerrada, US-GRD-013 y US-GRD-015 quedan en fail-closed en ella (ADR-GRD-008 § 7, OQ-GRD-008-9).
 
 **Valor**: confirmar con pruebas reales que el daemon puede obtener una prueba de presencia del SO que un proceso del mismo usuario no fabrica, antes de que ADR-GRD-008 se convierta en el contrato de las Dev Specs de US-GRD-013 y US-GRD-015.
@@ -240,3 +242,36 @@ El spike se cierra cuando **todos** se cumplen. Cada uno sale de la matriz, no d
 Opcionales incorporados: los diálogos idénticos del agente (R1), el motivo largo truncado (E9), matar el daemon con el diálogo abierto (E7), `raptor-mcp` hijo de Claude Code (E3), la enmienda de ADR-GRP-014 por el `Info.plist` (criterio 8) y la Pregunta corregida ("fuera de las excepciones de ADR-GRP-002"). No incorporado: quitar la variante `LimitLoadToSessionType=Aqua` de E2. El Arquitecto la considera de poco valor, pero cuesta minutos y confirma un supuesto.
 
 **Sin ADR nuevo**: solo hace falta si se activa el plan B (enmienda de ADR-GRD-008). Lo demás es un Registro en ADR-GRP-002 y una enmienda de ADR-GRP-014, que propondrán la Dev Spec y el informe del spike.
+
+## Ampliación (2026-11-08): app de escritorio (ADR-GRP-017)
+
+**Decisión del orquestador (2026-11-08), validada por Arquitecto.** Origen: tabla "Dependencias de spike" de [ADR-GRP-017](../../../../architecture/decisions/ADR-GRP-017-app-escritorio-cliente-daemon.md), preguntas 3 y 4. Rene decidió ejecutar este spike ya, dentro de UI-1 (Q-DSK-17). La ampliación añade dos experimentos a la matriz de macOS; el plan de 2026-10-09, sus hipótesis y sus criterios siguen igual. Las preguntas 1 y 2 de esa tabla son spikes aparte: [SPIKE-DSK-001](../../desktop/technical-stories/SPIKE-DSK-001-identidad-firmada-app.md) (firma de la app) y [SPIKE-DSK-002](../../desktop/technical-stories/SPIKE-DSK-002-lanzamiento-por-agente.md) (`open -a`).
+
+**Por qué**: con la app, el diálogo del SO es la **única** confirmación (ADR-GRP-017 § 4: el botón del webview solo pide la acción). Un agente con permiso de Accesibilidad tiene ahora una ventana propia de GitRaptor junto al diálogo, y el daemon ya no corre solo desde la terminal: puede correr como binario sin interfaz dentro del bundle de la app (`bundle.externalBin`, ADR-GRP-017 § 6).
+
+### Preguntas añadidas
+
+- **P-A (eventos sintéticos)**: ¿un `AXPress` sobre los botones del diálogo de LocalAuthentication, o un `CGEvent` sintético de ratón o teclado, lo completa o lo cancela? ¿Marca el SO el origen sintético con `kCGEventSourceUnixProcessID` (o el estado de la fuente del evento) de forma que el diálogo lo rechace, y puede el daemon leerlo?
+- **P-B (proceso sin interfaz en el bundle)**: ¿puede el daemon invocar LocalAuthentication cuando es el binario `raptor` dentro de `GitRaptor.app/Contents/MacOS/` (o `Resources/`), lanzado por la app con el arranque bajo demanda o como LaunchAgent desde la ruta del bundle? ¿A nombre de quién aparece el diálogo: `raptor`, "GitRaptor" (el bundle que lo contiene) o el proceso responsable?
+
+### Hipótesis añadidas
+
+- **H12**: el diálogo de LocalAuthentication lo dibuja un proceso del sistema (`coreauthd` y su agente de interfaz), fuera del árbol de accesibilidad de la app; `AXPress` no lo alcanza y los `CGEvent` sintéticos no completan Touch ID. Con la contraseña conocida, los `CGEvent` de teclado sí podrían escribirla (es la H10 ya medida en E11) salvo que el campo use entrada segura.
+- **H13**: `kCGEventSourceUnixProcessID` identifica el proceso que generó un evento sintético, pero el diálogo no lo usa para rechazarlo y el daemon no ve esos eventos; no sirve como control, solo como evidencia en la auditoría si la app lo registra.
+- **H14**: un binario sin interfaz dentro del bundle invoca LocalAuthentication igual que desde la terminal si tiene sesión gráfica (H1 y H2), y el diálogo muestra el nombre del **proceso responsable** que fija el SO: el bundle de la app cuando la app lo lanza, y `raptor` cuando lo lanza `launchd` desde el LaunchAgent.
+
+### Experimentos añadidos
+
+| ID | Experimento | Hipótesis |
+|---|---|---|
+| E14 | Con el diálogo abierto, un proceso hijo de Claude Code con Accesibilidad concedida a la terminal: `AXPress` sobre cada botón localizable del diálogo (listar primero el árbol de accesibilidad visible), clics `CGEvent` en sus coordenadas, Enter y Escape sintéticos; repetir con la fuente del evento en estado privado y con `kCGEventSourceUnixProcessID` leído en un monitor de eventos. Anotar qué completa, qué cancela y qué no tiene efecto | H12, H13 |
+| E15 | El binario del prototipo copiado dentro de un `.app` de prueba (`Contents/MacOS/` como `externalBin`) y lanzado (a) por el ejecutable principal del bundle con argv y entorno fijos, (b) como LaunchAgent con la ruta dentro del bundle, (c) por `open` sobre el bundle. En cada caso: disponibilidad, resultado, nombre e icono del diálogo y proceso responsable. Con firma ad hoc y con la firma de desarrollo local; con Developer ID cuando exista la cuenta (Q-DSK-16) | H14, R5 |
+
+### Criterios de éxito añadidos
+
+9. **P-A decidida con evidencia**: E14 completo, con capturas. Si algún `AXPress` o `CGEvent` sin el secreto **completa** el diálogo, se activa la vía de fracaso del criterio 2 (macOS en fail-closed para la app y se reabre ADR-GRD-008 § 2). Si solo lo **cancela**, queda como riesgo residual de denegación de servicio, escrito en el informe. Si `kCGEventSourceUnixProcessID` sirve como evidencia, el informe dice dónde se registraría.
+10. **P-B decidida con evidencia**: E15 dice desde qué formas de arranque dentro del bundle funciona el factor y qué nombre ve el humano en cada una. Si el nombre no es "GitRaptor" o `raptor` de forma estable, el informe propone el texto de `localizedReason` que lo compensa (verbo, repo, código de correlación de ADR-GRP-017 § 4) y, si hace falta, la enmienda de ADR-GRP-017 § 6.
+
+### Time-box
+
+Un día más sobre los 4 del plan de macOS: E14 entra el día 3 con E10, E11 y E13 (mismo montaje de entrada sintética) y E15 el día 4 con E9 (mismo montaje de empaquetado). El informe sigue siendo `research/SPIKE-GRD-002-resultados.md`, con una sección para la app de escritorio.
