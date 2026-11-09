@@ -20,15 +20,15 @@ pub const CAP_TM_KEPT_TEMPS: Capability = Capability::new("timemachine.kept-temp
 /// A connection without it never receives either (they are filtered out).
 pub const CAP_TM_TIMELINE_MANUAL: Capability = Capability::new("timemachine.timeline-manual");
 
-/// `timemachine.undo` and `timemachine.restore` accept `confirmation` and answer a
+/// `timemachine.undo`, `timemachine.redo` and `timemachine.restore` accept `confirmation` and answer a
 /// `confirmation-required` rejection with `TmConfirmData`: the one-use challenge or why one
 /// cannot be given, and whose work it is; a bad token is `challenge-invalid`. Never over MCP.
 pub const CAP_TM_CONFIRMATION: Capability = Capability::new("timemachine.confirmation");
 /// `timemachine.timeline` serves `inferred` on the entries of Git events
 /// without an agent. A connection without it never receives the field.
 pub const CAP_TM_TIMELINE_INFERRED: Capability = Capability::new("timemachine.timeline-inferred");
-/// `timemachine.undo` answers an `overlap` rejection with `TmConfirmData::overlap` and lists
-/// `UndoResult::kept`. A connection without it gets only the code. Never over MCP.
+/// `timemachine.undo` and `timemachine.redo` answer an `overlap` rejection with
+/// `TmConfirmData::overlap` and list `UndoResult::kept` / `RedoResult::kept`. A connection without it gets only the code. Never over MCP.
 pub const CAP_TM_OVERLAP: Capability = Capability::new("timemachine.overlap");
 
 /// A Time Machine command: not reserved (an agent may undo its own work,
