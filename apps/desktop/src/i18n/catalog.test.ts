@@ -26,9 +26,9 @@ describe("FE3 catalogs", () => {
     }
   });
 
-  it("FE3: keys are lowerCamel per segment", () => {
+  it("FE3: keys are lowerCamel per segment (plural suffixes _one/_other allowed)", () => {
     for (const [key] of enEntries) {
-      for (const segment of key.split(".")) expect(segment, `key ${key}`).toMatch(/^[a-z][a-zA-Z0-9]*$/);
+      for (const segment of key.split(".")) expect(segment, `key ${key}`).toMatch(/^[a-z][a-zA-Z0-9]*(_one|_other)?$/);
     }
   });
 });
