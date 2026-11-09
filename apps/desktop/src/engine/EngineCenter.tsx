@@ -1,10 +1,14 @@
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { CandidateDto, ConnState } from "@/client/engine-types";
+import { ConflictDetailView } from "@/conflicts/ConflictDetailView";
+import { ConflictPanel } from "@/conflicts/ConflictPanel";
+import { fleetCards } from "@/fleet/fleet-model";
 import { FleetView } from "@/fleet/FleetView";
 import { useFleet } from "@/fleet/useFleet";
 import { useNow } from "@/fleet/useNow";
 import { useEngineStore } from "@/state/engine-store";
+import { useUiStore } from "@/state/ui-store";
 import { Button, CopyCommand, Skeleton, StatePanel } from "@/ui";
 import { cx } from "@/ui/cx";
 import { MIN_GIT, type EngineView } from "./engine-view";
@@ -128,12 +132,28 @@ function NoRepos({ gitVersion, candidates }: { gitVersion: string | null; candid
   );
 }
 
-/** The only place that mounts `useFleet`: it opens the default repo and reads its entry. Only for the content state. */
+/**
+ * The only place that mounts `useFleet`: it opens the default repo and reads its entry. Only for the content state.
+ * The conflict panel sits above the main view (D5); a `pair` destination of the open repo replaces the main view (D7).
+ */
 function FleetContent() {
+  const { t } = useTranslation();
   const fleet = useFleet().data;
   const nowMs = useNow();
   const activity = useEngineStore((s) => s.session?.activity ?? false);
-  return <FleetView fleet={fleet} nowMs={nowMs} activity={activity} />;
+  const center = useUiStore((s) => s.center);
+  const cards = useMemo(() => (fleet === undefined ? [] : fleetCards(fleet, nowMs, activity, t)), [fleet, nowMs, activity, t]);
+  const pairOpen = fleet !== undefined && center.view === "pair" && center.repoId === fleet.repo.repoId ? center : null;
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-(--gr-space-3)">
+      {fleet !== undefined ? <ConflictPanel fleet={fleet} cards={cards} nowMs={nowMs} /> : null}
+      {fleet !== undefined && pairOpen !== null ? (
+        <ConflictDetailView key={pairOpen.pairId} fleet={fleet} cards={cards} pairId={pairOpen.pairId} nowMs={nowMs} />
+      ) : (
+        <FleetView fleet={fleet} nowMs={nowMs} activity={activity} />
+      )}
+    </div>
+  );
 }
 
 function Body({ center, conn, gitVersion, candidates, onRetry, pending = false, children }: EngineCenterProps) {

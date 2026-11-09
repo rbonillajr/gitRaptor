@@ -338,6 +338,7 @@
     "toast": {
       "withFile_one": "⚡ Predicted conflict: {{a}} ↔ {{b}} in {{file}}",
       "withFile_other": "⚡ Predicted conflict: {{a}} ↔ {{b}} in {{file}} and {{count}} more",
+      "withFileMore": "⚡ Predicted conflict: {{a}} ↔ {{b}} in {{file}} and {{extra}} more",
       "noFile": "⚡ Predicted conflict: {{a}} ↔ {{b}}",
       "otherRepo": "⚡ New predicted conflict in {{repo}}",
       "many": "⚡ {{count}} new predicted conflicts",

@@ -138,7 +138,7 @@ describe("ConflictDetailView", () => {
   it.each(["en", "es"] as const)("has no axe violations in %s", async (lang) => {
     await setLang(lang);
     const { container } = show(fleetWith([CONFLICT], [detailOf(CONFLICT)]));
-    expect(screen.getByRole("heading", { level: 2, name: /collide/ }), "painted before axe").toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: /collide|chocar/ }), "painted before axe").toBeInTheDocument();
     const results = await axe.run(container, { rules: { "color-contrast": { enabled: false } } });
     expect(results.violations.map((v) => `${v.id}: ${v.help}`)).toEqual([]);
   });
