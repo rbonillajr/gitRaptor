@@ -7,7 +7,7 @@ related: TS-DSK-003
 
 # Primitivas del design system B1
 
-Especificación de las 14 primitivas de `apps/desktop/src/ui` para el tema «grafito glass» (claro y oscuro). Una primitiva se implementa leyendo su sección y §1; ninguna decisión visual queda abierta. Lo que falta en los tokens está en §3 y bloquea solo lo que allí se indica.
+Especificación de las 14 primitivas de `apps/desktop/src/ui` para el tema «grafito glass» (claro y oscuro), más `CopyCommand` (§ 2.16), que ya existía en el código y se especifica aquí desde la enmienda del 2026-11-09. Una primitiva se implementa leyendo su sección y §1; ninguna decisión visual queda abierta. Lo que falta en los tokens está en §3 y bloquea solo lo que allí se indica.
 
 **Fuentes.** Tokens: `packages/design-tokens/css/glass.css` (único origen de valores; utilidades Tailwind de `apps/desktop/src/styles/app.css` donde existen, `bg-(--gr-x)` donde no). Contexto: [design-flow.md](design-flow.md) § 2.2, 4.b, 5, 7, 8; [DSYS-GRP-002](../../../../design-system/tokens-web-grafito-glass.md); ADR-GRP-003 (Radix + Tailwind v4 + CVA, «Definición de diseño de componentes») y ADR-GRP-004 (§ 3 UX). Estilo existente: `Panel.tsx` y `TitleBar.tsx` (`BUTTON`). Mock B1: la herramienta `Artifact read` lo devolvió truncado (se cortó dentro del CSS); leí el HTML guardado y de ahí salen **solo** el contenido del menú Fetch y de Column settings y los anchos de columna de § 2.14. Sus colores son los de la paleta previa; mandan los de `glass.css`.
 
@@ -88,6 +88,10 @@ Overlays de Radix en portal sobre `body`. Sin token hoy (§3, `--gr-z-*`); estos
 | Pill, StatusDot, RepoBadge, Tooltip, Chip estático | No interactivos: sin mínimo |
 
 El enlace dentro de un párrafo queda exento; un `Button variant="link"` aislado mide al menos min de alto.
+
+### 1.7 `Esc` consumido
+
+**Enmienda aditiva (2026-11-09), Decisión del orquestador (2026-11-09), validada por Arquitecto** (DS-US-DSK-008 D18, T006; DSF-DSK-001 D-16). Un `Esc` cierra una sola capa. La primitiva o vista que lo consume llama `event.preventDefault()` en ese `keydown`: `Dialog` (lo escucha en `document`), `Popover` (en su superficie), `Toast` (en su elemento) y las vistas del centro (en su `onKeyDown`). Los atajos de ventana (`useShortcuts`) no actúan sobre un `Esc` con `defaultPrevented`. Orden de capas: diálogo, popover, toast con foco, cajón del detalle, vista del centro.
 
 ## 2. Primitivas
 
@@ -275,6 +279,8 @@ Aviso temporal, no modal (Radix `Toast`). Contenedor `surface-raised`, `radius-m
 | warning | `warning-text` | `role="status"`, polite | 5 s |
 | error | `danger-text` | `role="alert"`, assertive | no; queda hasta cerrarlo (queda además en el centro de avisos) |
 
+**Prefijo oculto** (**Enmienda aditiva (2026-11-09), Decisión del orquestador (2026-11-09), validada por Arquitecto**, DS-US-DSK-007 D15): delante del mensaje, un texto `sr-only` dice el tipo (`ui.toast.kind.<kind>`; `info` no lleva). Prop opcional `srLabel` lo sustituye por un texto de la pantalla (p. ej. «Bloqueo» en el toast de un bloqueo de Guardrails); sin ella, el de siempre.
+
 Un toast con acción («Rehacer», «Deshacer», «Ver») sigue los 5 s del design-flow. El temporizador se pausa con hover, con foco dentro y con la ventana sin foco (WCAG 2.2.1). Escape cierra el toast enfocado. Máximo 3 visibles; el resto en cola. El viewport es una región con `aria-label` = `ui.toast.region` y atajo F8 para llevar el foco (Radix).
 Posición: abajo al centro, margen `--gr-window-margin`. Un toast **nunca recibe foco automático** ni tapa el elemento enfocado (design-flow § 7): si en `focusin` el rectángulo del elemento enfocado cruza el del viewport, el viewport pasa a arriba al centro, bajo `size-titlebar` + `size-toolbar`, mientras dure ese foco. Motion: opacidad `--gr-motion-fast`; con reduced motion, aparece y desaparece sin transición.
 
@@ -320,7 +326,7 @@ Grilla del grafo con columnas configurables. Contenedor `role="grid"` con `aria-
 | Date / Time | 120 px | sí |
 | Sha | 84 px | sí |
 
-Por debajo de 1000 px de ventana se pliegan primero las columnas (design-flow § 2.4), en este orden: Sha, Date / Time, Author, Branch / Tag; Graph y Commit message se quedan. ⚠️ **ASSUMPTION**: el orden de plegado lo fija esta spec; el design-flow solo dice «se pliegan las columnas».
+**Plegado** (**Enmienda aditiva (2026-11-09), Decisión del orquestador (2026-11-09), validada por Arquitecto**; sustituye a la regla anterior, que plegaba por debajo de 1000 px de ventana en el orden Sha, Date / Time, Author, Branch / Tag; design-flow D-18 y H-17; DS-US-DSK-005 D11 y T004). Se mide el ancho del contenedor de la grilla, no el de la ventana: debe alojar las columnas visibles fijas más 220 px de Commit message. Si no caben, se ocultan, en este orden y sin tocar la preferencia guardada: **Sha, Author, Date / Time, Branch / Tag**; Graph y Commit message nunca se pliegan. Mientras Author diga «Tú u otro (sin atribuir)» en cada fila repite el mismo texto, y Date es el dato útil. Referencias: centro de 788 px (1440 con detalle) → Branch, Graph, Message y Date; 708 px (1360 con detalle) → Branch, Graph y Message; 1152 px (1440 sin detalle) → las seis. La grilla solo se desplaza en horizontal si no cabe Graph más 220 px. Column settings marca cada columna plegada con «No cabe con este ancho» y conserva su interruptor.
 
 | Parte | Especificación |
 |---|---|
@@ -339,6 +345,18 @@ Por debajo de 1000 px de ventana se pliegan primero las columnas (design-flow §
 | fila WIP | `accent-glow`, borde del mensaje discontinuo | |
 
 Teclado (APG data grid con foco por fila): una sola parada de Tab; Arriba/Abajo mueven de fila; Inicio/Fin y Ctrl+Inicio/Ctrl+Fin primera y última; RePág/AvPág salto de página; Enter selecciona y abre el detalle; Derecha entra en el primer elemento enfocable de la fila (p. ej. la insignia ⚡) y entre celdas; Izquierda o Escape vuelven a la fila; Enter sobre ⚡ abre el conflicto (design-flow § 5). Vista alternativa en tabla (`Cmd+Opción+T`) es otra pantalla, no esta primitiva. Motion: fondo con `--gr-motion-fast`.
+
+### 2.16 CopyCommand
+
+**Enmienda aditiva (2026-11-09), Decisión del orquestador (2026-11-09), validada por Arquitecto** (DS-US-DSK-008 D22, T005; design-flow H-16). Un comando en una caja `<code>` (`surface-control`, `radius-md`, `type-mono`, `text-main`, `break-all`) con un `Button variant="secondary" size="sm"` «Copiar» (`engine.action.copy`) que escribe con `navigator.clipboard.writeText` desde el clic, sin plugin ni permiso de Tauri. El llamador garantiza que el texto es seguro para pegar en una shell (lo construye el backend). Nunca lee el portapapeles.
+
+| Estado | Botón | Anuncio |
+|---|---|---|
+| reposo | «Copiar» | — |
+| copiado | «Copiado» (`ui.common.copied`) con ✔ durante 2 s; luego vuelve a «Copiar» | una vez, en una región `role="status"` `sr-only` presente desde el montaje (WCAG 4.1.3) |
+| fallo | «Copiar» | `ui.common.copyFailed` en la misma región |
+
+Prop opcional `onCopied?: (command: string) => void`, llamada solo tras un `writeText` correcto (la usa Guardrails para recordar qué excepción se copió, DS-US-DSK-007 D12). El temporizador se limpia al desmontar. Con reduced motion, sin transición en el ✔.
 
 ## 3. Tokens ausentes
 
@@ -364,6 +382,8 @@ Huecos de catálogo (no son tokens): la **toolbar** del mock usa botones vertica
 | `ui.common.close` | Cerrar | Close | IconButton de cierre (Dialog, Toast) |
 | `ui.common.cancel` | Cancelar | Cancel | Pie del Dialog `confirm` |
 | `ui.common.loading` | Cargando… | Loading… | Texto sr-only de cargas |
+| `ui.common.copied` | Copiado | Copied | CopyCommand: botón 2 s y región `role="status"` (§ 2.16) |
+| `ui.common.copyFailed` | No se pudo copiar. Selecciona el comando y cópialo a mano. | Couldn't copy. Select the command and copy it by hand. | CopyCommand: región `role="status"` (§ 2.16) |
 | `ui.button.busy` | En curso | In progress | Button `pending` (sr-only) |
 | `ui.chip.remove` | Quitar {{label}} | Remove {{label}} | Cierre del Chip |
 | `ui.pill.reversible` | Recuperable | Recoverable | Pill |
@@ -409,4 +429,5 @@ Página `/dev/ui`, solo con `import.meta.env.DEV`, sin Storybook (ADR-GRP-003, e
 | Toast de 5 s con «Rehacer» (c4), conflicto nuevo (b) | Toast |
 | Glosario de tooltips (§ 12), motivo de un botón desactivado | Tooltip |
 | Cabecera y filas del grafo (§ 4.b, § 2.4) | TableHeader, TableRow |
+| Comando para copiar en la terminal (d4, base pendiente) | CopyCommand |
 | Selector de tema | SegmentedControl (3 opciones: auto, claro, oscuro; hoy `TitleBar` usa un IconButton cíclico) |
