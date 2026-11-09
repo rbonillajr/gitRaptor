@@ -13,25 +13,25 @@
 | Implementado (`implemented`) | 62 |
 | Hecho (`done`) | 3 |
 | Implementado en parte (`partially-implemented`) | 27 |
-| Listo (`ready`) | 27 |
+| Listo (`ready`) | 29 |
 | Borrador (`draft`) | 58 |
 | Bloqueado (`blocked`) | 1 |
-| **Total** | **178** |
+| **Total** | **180** |
 
 ## Por feature
 
 | Feature | Implementado | Hecho | Implementado en parte | Listo | Borrador | Bloqueado | Total |
 |---|---|---|---|---|---|---|---|
-| [cockpit](#cockpit) | 9 | 0 | 6 | 1 | 21 | 1 | 38 |
+| [cockpit](#cockpit) | 9 | 0 | 6 | 2 | 21 | 1 | 39 |
 | [desktop](#desktop) | 0 | 0 | 0 | 22 | 0 | 0 | 22 |
 | [guardrails](#guardrails) | 14 | 0 | 7 | 1 | 3 | 0 | 25 |
 | [mcp](#mcp) | 7 | 0 | 4 | 0 | 9 | 0 | 20 |
 | [motor-local](#motor-local) | 17 | 2 | 9 | 3 | 11 | 0 | 42 |
-| [time-machine](#time-machine) | 15 | 1 | 1 | 0 | 14 | 0 | 31 |
+| [time-machine](#time-machine) | 15 | 1 | 1 | 1 | 14 | 0 | 32 |
 
 ### cockpit
 
-38 fichas: 9 implementado, 6 implementado en parte, 1 listo, 21 borrador, 1 bloqueado.
+39 fichas: 9 implementado, 6 implementado en parte, 2 listo, 21 borrador, 1 bloqueado.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -51,6 +51,7 @@
 | [US-CKP-020](features/cockpit/user-stories/US-CKP-020-trabajo-de-otro-actor.md) | Tocar el trabajo de otro actor exige confirmar el plan concreto | Implementado en parte (`partially-implemented`) | #220 | 3 |
 | [US-CKP-025](features/cockpit/user-stories/US-CKP-025-tui-repo-no-observado.md) | La TUI ofrece observar el repo en el que se abre y, fuera de un repo, lleva a los ya observados | Implementado en parte (`partially-implemented`) | #165, #170 | 2 |
 | [TS-CKP-010](features/cockpit/technical-stories/TS-CKP-010-agentes-en-vivo-por-repo.md) | Recuento de agentes en vivo por repo en el ámbito global | Listo (`ready`) | — | — |
+| [TS-CKP-011](features/cockpit/technical-stories/TS-CKP-011-base-confirmada-replanifica.md) | Confirmar la base en runtime refresca la base publicada y replanifica los pares contra la base | Listo (`ready`) | — | — |
 | [TS-CKP-006](features/cockpit/technical-stories/TS-CKP-006-diff-de-commit.md) | Consultas del diff de un commit, entre dos commits y del índice de un worktree en el canal | Borrador (`draft`) | — | — |
 | [TS-CKP-007](features/cockpit/technical-stories/TS-CKP-007-ramas-y-commits-paginados.md) | Consulta de todas las ramas del repo y de los commits de cualquier rama, paginada y filtrable | Borrador (`draft`) | — | — |
 | [TS-CKP-008](features/cockpit/technical-stories/TS-CKP-008-preparar-y-quitar-del-indice.md) | Operaciones del catálogo para preparar y quitar del índice por archivo, fragmento y línea | Borrador (`draft`) | — | — |
@@ -213,7 +214,7 @@
 
 ### time-machine
 
-31 fichas: 15 implementado, 1 hecho, 1 implementado en parte, 14 borrador.
+32 fichas: 15 implementado, 1 hecho, 1 implementado en parte, 1 listo, 14 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -234,6 +235,7 @@
 | [US-TMC-023](features/time-machine/user-stories/US-TMC-023-timeline-legible-restaurar-id-corto.md) | El desarrollador lee el timeline de un vistazo y restaura un punto con el id corto que ve en la misma línea | Implementado (`implemented`) | — | — |
 | [SPIKE-TMC-001](features/time-machine/technical-stories/SPIKE-TMC-001-repo-mediano-overhead.md) | Repo mediano de referencia y viabilidad del snapshot en menos de 200 ms | Hecho (`done`) | — | — |
 | [INF-TMC-001](features/time-machine/technical-stories/INF-TMC-001-arnes-caos-recuperable.md) | Arnés de caos y de garantías de los snapshots en los tres SO | Implementado en parte (`partially-implemented`) | — | — |
+| [TS-TMC-005](features/time-machine/technical-stories/TS-TMC-005-undo-espera-punto-base.md) | El undo espera, con plazo propio, la captura que da su punto base B en vez de responder `overlap-unverified` de inmediato | Listo (`ready`) | — | — |
 | [TD-TMC-001](features/time-machine/technical-stories/TD-TMC-001-previo-hook-plazo-y-cupo-sin-atribuir.md) | Previo de hook: plazo real, cupo barato y cubo «sin atribuir» acotado, antes de que un fallo deniegue (US-GRD-017) | Borrador (`draft`) | — | — |
 | [US-TMC-003](features/time-machine/user-stories/US-TMC-003-redo.md) | El desarrollador rehace lo que deshizo por error | Borrador (`draft`) | — | — |
 | [US-TMC-007](features/time-machine/user-stories/US-TMC-007-timeline-filtros-huecos.md) | El desarrollador filtra el timeline por worktree, agente o periodo y ve lo que no se observó | Borrador (`draft`) | — | — |
@@ -281,7 +283,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### M2
 
-102 fichas: 39 implementado, 3 hecho, 21 implementado en parte, 3 listo, 36 borrador.
+104 fichas: 39 implementado, 3 hecho, 21 implementado en parte, 5 listo, 36 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -351,6 +353,8 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [SPIKE-GRD-002](features/guardrails/technical-stories/SPIKE-GRD-002-factor-so-daemon.md) | Factor de autenticación del SO invocado desde el daemon en los tres SO | Listo (`ready`) | — | — |
 | [TD-GRP-002](features/motor-local/technical-stories/TD-GRP-002-motor-bajo-rafaga.md) | Frescura y memoria del motor bajo una ráfaga de archivos | Listo (`ready`) | — | — |
 | [TD-GRP-003](features/motor-local/technical-stories/TD-GRP-003-nfr04-maquina-referencia.md) | Presupuesto de NFR-04 sin gate automático: medirlo en una máquina de referencia | Listo (`ready`) | — | — |
+| [TS-CKP-011](features/cockpit/technical-stories/TS-CKP-011-base-confirmada-replanifica.md) | Confirmar la base en runtime refresca la base publicada y replanifica los pares contra la base | Listo (`ready`) | — | — |
+| [TS-TMC-005](features/time-machine/technical-stories/TS-TMC-005-undo-espera-punto-base.md) | El undo espera, con plazo propio, la captura que da su punto base B en vez de responder `overlap-unverified` de inmediato | Listo (`ready`) | — | — |
 | [TD-TMC-001](features/time-machine/technical-stories/TD-TMC-001-previo-hook-plazo-y-cupo-sin-atribuir.md) | Previo de hook: plazo real, cupo barato y cubo «sin atribuir» acotado, antes de que un fallo deniegue (US-GRD-017) | Borrador (`draft`) | — | — |
 | [US-CKP-004](features/cockpit/user-stories/US-CKP-004-selector-repo-preferencias.md) | El desarrollador cambia de repo y la TUI recuerda cómo la dejó | Borrador (`draft`) | — | — |
 | [US-CKP-007](features/cockpit/user-stories/US-CKP-007-frescura-prediccion.md) | Una predicción vieja nunca se presenta como actual | Borrador (`draft`) | — | — |
