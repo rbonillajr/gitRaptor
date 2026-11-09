@@ -353,6 +353,8 @@ pub struct Daemon {
     guard: Arc<GuardRegistry>,
     /// Engine marks and calm per repo, for the Time Machine (US-TMC-004).
     marks: Arc<crate::timemachine::engine::RepoMarks>,
+    /// Shared by the continuous capture and every undo: what an undo waits on for its base point.
+    seals: Arc<crate::timemachine::base_wait::CaptureSeals>,
     /// The MCP allowlist, shared with the channel (US-MCP-002).
     mcp_repos: Arc<crate::timemachine::protected::McpRepos>,
     /// What the conflict predictor published, written by its module and read by the channel.
@@ -705,6 +707,7 @@ impl Daemon {
             tm,
             guard,
             marks: Arc::default(),
+            seals: Arc::default(),
             mcp_repos,
             prediction,
             hook_claims: Arc::default(),
@@ -816,7 +819,7 @@ impl Daemon {
             free_space_floor: (!(tm.no_free_space_floor && cfg!(debug_assertions)))
                 .then(crate::timemachine::continuous::FreeSpaceFloor::default),
             after_mark: None,
-            seals: Default::default(),
+            seals: Arc::clone(&self.seals),
         }
     }
 

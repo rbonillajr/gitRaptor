@@ -85,6 +85,7 @@ enum Signal {
 pub struct ContinuousCapture {
     tx: Sender<Signal>,
     thread: Option<JoinHandle<()>>,
+    seals: Arc<super::base_wait::CaptureSeals>,
 }
 
 /// What one capture needs from the daemon.
@@ -102,7 +103,7 @@ pub struct CaptureDeps {
     /// worktrees, to inject a `git` there. Honored only in debug builds.
     #[doc(hidden)]
     pub after_mark: Option<Arc<dyn Fn() + Send + Sync>>,
-    /// Captures sealed or given up, per repo: what an undo waits on for its base (TS-TMC-005).
+    /// The Git events still to capture, per repo: what an undo waits on for its base point.
     pub seals: Arc<super::base_wait::CaptureSeals>,
 }
 
@@ -147,17 +148,31 @@ fn below_floor(profile: &ProfileDirs, floor: FreeSpaceFloor) -> bool {
 impl ContinuousCapture {
     pub fn start(config: CaptureConfig, deps: CaptureDeps) -> std::io::Result<Self> {
         let (tx, rx) = channel();
+        let seals = Arc::clone(&deps.seals);
+        seals.started(config.enabled);
+        let done = Arc::clone(&seals);
         // Default, not lower: the capture holds the store writer while it hashes in line, and a
         // prior must never wait on a lowered holder (D11, D18).
         let thread = crate::work_class::spawn(
             crate::work_class::Pool::Capture,
             crate::work_class::WorkClass::Default,
             "raptor-tm-capture",
-            move || run(config, deps, rx),
-        )?;
+            move || {
+                run(config, deps, rx);
+                done.stopped();
+            },
+        );
+        let thread = match thread {
+            Ok(t) => t,
+            Err(e) => {
+                seals.stopped();
+                return Err(e);
+            }
+        };
         Ok(Self {
             tx,
             thread: Some(thread),
+            seals,
         })
     }
 
@@ -171,6 +186,9 @@ impl ContinuousCapture {
 
     /// The engine persisted a Git event of a worktree (never blocks).
     pub fn git_event(&self, repo_id: &str, worktree: &Path, seq: i64) {
+        // Published before the thread takes it, so an undo that already sees the event knows its
+        // capture is on its way.
+        self.seals.signal(repo_id, worktree, seq);
         let _ = self.tx.send(Signal::GitEvent {
             repo_id: repo_id.to_owned(),
             worktree: worktree.to_path_buf(),
@@ -383,6 +401,7 @@ fn run(config: CaptureConfig, deps: CaptureDeps, rx: Receiver<Signal>) {
                 Signal::Forget { repo_id } => {
                     pending.retain(|(r, _), _| *r != repo_id);
                     seeds.remove(&repo_id);
+                    deps.seals.forget(&repo_id);
                 }
                 Signal::Activity { repo_id, worktree } => {
                     if !config.enabled {
@@ -447,6 +466,9 @@ fn run(config: CaptureConfig, deps: CaptureDeps, rx: Receiver<Signal>) {
                 } else if p.retries > MAX_RETRIES {
                     deps.logger
                         .warn("tm_capture_gave_up", &[("repo", Field::id(&key.0))]);
+                }
+                if let Some(event) = p.event {
+                    deps.seals.settle(&key.0, &key.1, event);
                 }
                 pending.remove(&key);
             }

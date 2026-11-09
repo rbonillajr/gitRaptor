@@ -402,6 +402,8 @@ impl Rig {
             selector,
             since_ms: 0,
             deadline: std::time::Instant::now() + Duration::from_secs(10),
+            engine: None,
+            repo_id: REPO,
         };
         match super::plan(&input) {
             Ok(_) => panic!("without a store the plan cannot finish"),
