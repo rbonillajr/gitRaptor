@@ -567,8 +567,61 @@ fn plain_undo_below_a_selective_undo_is_rejected() {
     assert_intact(&w, &before);
 }
 
-/// Escenario 6: the redo returns the set and lifts the barrier. Only what exists is tested: the
-/// barrier stays up and the set the undo took stays in the oplog.
+/// The redo by the test's own (unattributed) client, confirmed when the daemon asks for it, as
+/// the interactive seam does: the challenge first, then its token. Returns the `RedoResult` as
+/// read from the wire.
+fn confirmed_redo(w: &World) -> Value {
+    let mut c = w.client();
+    let first = w.redo_call(&mut c, None);
+    let token = match first {
+        Ok(done) => return done,
+        Err(e) => {
+            let (error, data) = rejected(Err::<Value, _>(e));
+            assert_eq!(
+                error,
+                code::OPERATION_REJECTED,
+                "the redo was rejected: {data:?}"
+            );
+            let data = data.unwrap_or(Value::Null);
+            assert_eq!(
+                data["reason"], "confirmation-required",
+                "TMC003-SELECTIVE: the redo of an agent's undo asks to confirm, nothing else: {data}"
+            );
+            data["challenge"]["token"]
+                .as_str()
+                .expect("a challenge to confirm with")
+                .to_owned()
+        }
+    };
+    w.redo_call(&mut c, Some(&token))
+        .unwrap_or_else(|e| panic!("TMC003-SELECTIVE: the confirmed redo failed: {e:?}"))
+}
+
+/// A plain undo of the test's client, confirmed when the daemon asks for it.
+fn confirmed_plain_undo(w: &World) -> Value {
+    let mut c = w.client();
+    let token = match w.plain_undo_call(&mut c, None) {
+        Ok(done) => return done,
+        Err(e) => {
+            let (_, data) = rejected(Err::<Value, _>(e));
+            let data = data.unwrap_or(Value::Null);
+            assert_eq!(
+                data["reason"], "confirmation-required",
+                "TMC003-SELECTIVE: after the redo the plain undo is not held by the barrier: {data}"
+            );
+            data["challenge"]["token"]
+                .as_str()
+                .expect("a challenge")
+                .to_owned()
+        }
+    };
+    w.plain_undo_call(&mut c, Some(&token))
+        .unwrap_or_else(|e| panic!("TMC003-SELECTIVE: the confirmed plain undo failed: {e:?}"))
+}
+
+/// Escenario 6: the redo returns the set and lifts the barrier: the paths go back to the state after
+/// the agent's work, the redo is recorded as `Target::Redo(U)`, U keeps its set and the next plain
+/// undo is no longer held by the barrier.
 #[test]
 fn redo_restores_the_set_and_lifts_the_barrier() {
     let w = world();
@@ -577,42 +630,90 @@ fn redo_restores_the_set_and_lifts_the_barrier() {
     w.unattributed_commit(&[("mine.txt", "mine")], "unattributed work");
     w.agent_commit(&mut claude1, &[("one.txt", "1")], "claude-1 one");
     w.agent_commit(&mut claude1, &[("two.txt", "2")], "claude-1 two");
+    let head_with_work = w.head();
+    let log_with_work = w.log();
     let result = undone(&w, &claude1.session);
     let recorded = format!("{:?}", last_undo_target(&w));
-    let after_undo = intact(&w);
-    let mut c = w.client();
-
-    // redo: pending US-TMC-003
-
-    let (error, data) = rejected(w.plain_undo_call(&mut c, None));
-    assert_eq!(error, code::OPERATION_REJECTED, "TMC011-S6-BARRIER");
-    assert_eq!(
-        data.expect("data")["reason"],
-        "selective-undo-below",
-        "TMC011-S6-BARRIER: the barrier stays up until the redo lifts it"
+    assert_ne!(
+        w.head(),
+        head_with_work,
+        "the undo took the agent's commits away"
     );
-    assert_intact(&w, &after_undo);
+
+    let redone = confirmed_redo(&w);
+
+    assert_eq!(
+        redone["redone_undo_id"], result.operation_id,
+        "TMC003-SELECTIVE: the redo redoes the agent undo: {redone}"
+    );
+    assert_eq!(
+        w.head(),
+        head_with_work,
+        "TMC003-SELECTIVE: the branch is back after the agent's work"
+    );
+    assert_eq!(
+        w.log(),
+        log_with_work,
+        "TMC003-SELECTIVE: the agent's commits are back"
+    );
+    assert_eq!(
+        w.read("one.txt"),
+        "1\n",
+        "TMC003-SELECTIVE: one.txt is back"
+    );
+    assert_eq!(
+        w.read("two.txt"),
+        "2\n",
+        "TMC003-SELECTIVE: two.txt is back"
+    );
+    assert_eq!(
+        w.read("mine.txt"),
+        "mine",
+        "TMC003-SELECTIVE: the unattributed work is untouched"
+    );
+    let redos = w.requests(OperationKind::Redo);
+    let redo = redos
+        .last()
+        .expect("TMC003-SELECTIVE: the redo is in the oplog");
+    assert_eq!(redo.view.state, OperationState::Finished);
+    assert!(
+        matches!(&redo.view.record.target, Target::Redo(u) if *u == result.operation_id),
+        "TMC003-SELECTIVE: the redo records Target::Redo(U): {:?}",
+        redo.view.record.target
+    );
+    // U keeps the set it took: the redo does not rewrite it.
     let stored = w
         .requests(OperationKind::Undo)
         .into_iter()
-        .find(|r| matches!(&r.view.record.target, Target::Undo(ids) if !ids.is_empty()))
+        .find(|r| r.view.record.operation_id == result.operation_id)
         .expect("the agent undo with its set")
         .view
         .record
         .target;
     assert!(
         matches!(&stored, Target::Undo(ids) if ids.len() == result.undone_operation_ids.len()),
-        "TMC011-S6-BARRIER: the set the undo took stays in the oplog: {stored:?}"
+        "TMC003-SELECTIVE: the set the undo took stays in the oplog: {stored:?}"
     );
     assert_eq!(
         format!("{stored:?}"),
         recorded,
-        "TMC011-S6-BARRIER: the barrier does not touch the stored set"
+        "TMC003-SELECTIVE: the redo does not touch the stored set"
     );
+
+    // The barrier is lifted: a plain undo is not `selective-undo-below` any more.
+    let mut c = w.client();
+    if let Err(e) = w.plain_undo_call(&mut c, None) {
+        let (_, data) = rejected(Err::<Value, _>(e));
+        assert_ne!(
+            data.expect("data")["reason"],
+            "selective-undo-below",
+            "TMC003-SELECTIVE: the redo lifts the barrier"
+        );
+    }
 }
 
-/// Escenario 6: after the redo, the next plain undo takes the latest operation. Without the redo
-/// (pending US-TMC-003) what exists is that the plain undo is held by the barrier, repeatedly.
+/// Escenario 6: after the redo, the next plain undo takes the latest operation (`two.txt` of
+/// claude-1), not one under the redone set.
 #[test]
 fn plain_undo_after_redo_takes_the_latest_operation() {
     let w = world();
@@ -622,21 +723,31 @@ fn plain_undo_after_redo_takes_the_latest_operation() {
     w.agent_commit(&mut claude1, &[("one.txt", "1")], "claude-1 one");
     w.agent_commit(&mut claude1, &[("two.txt", "2")], "claude-1 two");
     undone(&w, &claude1.session);
-    let after_undo = intact(&w);
-    let mut c = w.client();
+    confirmed_redo(&w);
+    assert_eq!(
+        w.log()[0],
+        "claude-1 two",
+        "TMC003-SELECTIVE: the redo brought the commits back"
+    );
 
-    // redo: pending US-TMC-003
+    confirmed_plain_undo(&w);
 
-    for _ in 0..2 {
-        let (error, data) = rejected(w.plain_undo_call(&mut c, None));
-        assert_eq!(error, code::OPERATION_REJECTED, "TMC011-S6-BARRIER");
-        assert_eq!(
-            data.expect("data")["reason"],
-            "selective-undo-below",
-            "TMC011-S6-BARRIER: without the redo the plain undo stays below the barrier"
-        );
-    }
-    assert_intact(&w, &after_undo);
+    assert_eq!(
+        w.log()[0],
+        "claude-1 one",
+        "TMC003-SELECTIVE: the plain undo took only the latest commit: {:?}",
+        w.log()
+    );
+    assert!(
+        !w.worktree.join("two.txt").exists(),
+        "TMC003-SELECTIVE: two.txt, the latest operation, is the one taken back"
+    );
+    assert_eq!(w.read("one.txt"), "1\n", "TMC003-SELECTIVE: one.txt stays");
+    assert_eq!(
+        w.read("mine.txt"),
+        "mine",
+        "TMC003-SELECTIVE: nothing under the set is touched"
+    );
 }
 
 /// D7: the agent edited a credential file and then took it out of the index (it stays in the
@@ -677,13 +788,14 @@ fn an_excluded_path_in_the_target_is_not_selectable() {
 }
 
 /// D1: the attribution is the one in force when the undo is planned; a later correction changes
-/// neither the recorded set nor what the redo gives back (the redo: pending US-TMC-003).
+/// neither the recorded set nor what the redo gives back.
 #[test]
 fn a_correction_after_the_undo_does_not_change_what_it_undid() {
     let w = world();
     let mut claude1 = w.spawn_agent();
     assert_is_claude_code(&w, &claude1.session);
     w.agent_commit(&mut claude1, &[("one.txt", "1")], "claude-1 one");
+    let head_with_work = w.head();
     let result = undone(&w, "claude-code");
     let recorded = last_undo_target(&w);
     assert!(
@@ -702,7 +814,26 @@ fn a_correction_after_the_undo_does_not_change_what_it_undid() {
         format!("{recorded:?}"),
         "TMC011-ATTR-AT-PLAN: the later correction does not change what the undo took"
     );
-    // redo: pending US-TMC-003
+    let redone = confirmed_redo(&w);
+    assert_eq!(
+        redone["redone_undo_id"], result.operation_id,
+        "TMC003-SELECTIVE: the redo redoes that undo: {redone}"
+    );
+    assert_eq!(
+        w.head(),
+        head_with_work,
+        "TMC003-SELECTIVE: the redo gives back exactly what the undo took, whoever owns it now"
+    );
+    assert_eq!(
+        w.read("one.txt"),
+        "1\n",
+        "TMC003-SELECTIVE: the same file is back"
+    );
+    assert_eq!(
+        format!("{:?}", last_undo_target(&w)),
+        format!("{recorded:?}"),
+        "TMC003-SELECTIVE: the redo leaves the recorded set as it was"
+    );
 }
 
 /// D5: without the engine's attribution nothing is chosen (fail closed).

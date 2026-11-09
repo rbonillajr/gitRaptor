@@ -45,6 +45,8 @@ Ninguna cambia el diseño ni el producto. Por la regla de validación proporcion
 
 - **P1 — dónde se prueban los escenarios 5 y 6.** Van en `crates/core/tests/us_tmc_003_agents.rs`, con el arnés de 011. La spec los ponía en el e2e porque no había agentes en integración (§ 9.3). El e2e `redo_process.rs` prueba la CLI: textos en/es, `--json`, rechazo con código 1. Mismos nombres de test que la spec.
 - **P2 — tests que ya pasan hoy, fuera de los criterios.** `redo_is_not_offered_over_mcp` (ya lo cubre `channel_protected.rs::mcp_scope_comes_from_the_caller`) y `an_interrupted_redo_is_undone_back_to_its_prior` (la pila ya cuenta un redo interrumpido como `Do`, `stack.rs:181`) pasarían en verde antes del código, así que no son criterios. El primero queda como regresión. El segundo pasa a un unitario de la pila en `stack_redo_tests.rs`, que sí exige el campo nuevo (`redo_invalidated` es `None` tras un redo interrumpido). `a_redo_by_id_is_not_implemented` se fusiona con "sin id se sirve" (`redo_without_id_is_served_and_by_id_is_not`), que hoy está en rojo.
+  Por tanto, la Aceptación de T007 de la spec ("los tests de § 9.4") queda sustituida por los criterios de T007 en § Topología.
+- **P4 — `kept` en el redo (crítico, ronda 1).** El redo vuelve entero al previo del undo. Lo que otro actor cambió después en rutas que el undo no tocó lo protege solo el `keep` del solape. `TMC003-KEPT` lo exige para un undo simple y para un undo por agente. `TMC003-S5` exige que la operación toque `b.rs` y otra ruta, y que el rechazo deje intacta la huella completa (se rechaza entero). Con el arnés de 011, un commit crudo sin atribuir no deja un punto que deshacer con el undo simple (`target-unavailable`), así que los dos casos de `KEPT` parten del undo de claude-1 sobre su propio trabajo: sin `since` (el último cambio) y con `since` (undo por agente de un periodo, varias operaciones). El otro actor es el desarrollador, que edita una ruta que el undo no tocó.
 - **P3 — la demo M2 es `should`.** La demo no es fiable en macOS con la máquina cargada por TD-GRP-005 (atribución S3 fuera de ventana; ver ficha de US-TMC-011). El criterio que la cubre es `should`. El redo de un undo por agente ya lo exigen los criterios `must` de 011.
 
 ## Gaps y supuestos
@@ -86,6 +88,7 @@ Tramos disjuntos. La spec ya los dibuja (§ Estructura de ficheros):
 | 3 · redo | T004 | `timemachine/redo.rs` (nuevo), `timemachine/mod.rs`, `timemachine/undo.rs` | TMC003-OWNERS (⛔4.1), TMC003-S1…S4, WALK, GUARD-4.2 (⛔4.2) |
 | 4 · canal | T005 | `channel/conn.rs` | TMC003-SERVED, S5, S6, CONFIRM-AGENT, TOKEN, SELECTIVE |
 | 5 · CLI | T006 | `apps/cli/src/commands/{redo,mod}.rs`, `apps/cli/src/undo/{redo,mod}.rs`, `apps/cli/src/commands/restore.rs` (un brazo), `apps/cli/i18n/{en,es}/timemachine.txt` | TMC003-CLI-TEXT, TMC003-E2E, TMC003-M2-DEMO |
+| — · pruebas de punta a punta | T007 | — (solo tests) | TMC003-S1…S6, KEPT, WALK, GUARD-4.2, SERVED, CONFIRM-AGENT, SELECTIVE, E2E, M2-DEMO |
 | 6 · docs | T008 | `docs/architecture/design/api-contract-ipc.md`, `docs/architecture/xplat-pendientes.md` (XP-70), fichas y Dev Specs de US-TMC-003 y US-TMC-011, `backlog.md`, `release-status.md` | revisión |
 
 Primer tramo trazador: 1 → 2 → 3 con `TMC003-S1` (el escenario 1 de punta a punta en integración, sin CLI).
