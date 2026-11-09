@@ -67,7 +67,13 @@ Entonces sabe que no hay resultados y en qué se buscó
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección)._
+Completado por el Arquitecto (2026-11-08). **Decisión del orquestador (2026-11-08), validada por Arquitecto**: la búsqueda de commits es el filtro de `log.page` y la de ramas el de `refs.list` (TS-CKP-007); el diff de un resultado es `diff.commit` (TS-CKP-006). La búsqueda de **rutas** solo la usa esta historia, así que va aquí. **Bloqueada por**: TS-CKP-006 y TS-CKP-007.
+
+- Lectura `paths.search` en su módulo del canal (ADR-GRP-016): rutas del árbol de HEAD (o de un commit alcanzable) que contienen el texto, tratado como literal y sin distinguir mayúsculas, con tope de resultados y de tiempo; la respuesta dice si se cortó. Nunca lee el contenido de los archivos.
+- Frontera de ADR-GRP-009 § 1: lectura sin filtros y sin proceso hijo, en el pool de consultas de US-CKP-012, con `query.cancel`. Perfil completo; nunca `raptor-mcp`.
+- La búsqueda nunca escribe: sin operación del catálogo ni punto previo.
+- Un resultado de autor o agente lleva al historial filtrado de la Time Machine (US-TMC-007), sin duplicarlo.
+- Pruebas: los tres escenarios en repo temporal; en el repo de 100K commits de INF-GRP-002, la búsqueda de rutas y la de commits dentro de NFR-05 o cortadas por tope con su aviso.
 
 ## Diseño y Dev Spec
 

@@ -72,7 +72,17 @@ Entonces nada cambia en el remoto ni en local
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección)._
+Completado por el Arquitecto (2026-11-08). **Decisión del orquestador (2026-11-08), validada por Arquitecto**: las operaciones de red tienen una sola historia dueña, esta, así que van aquí y no en una TS; ADR-CKP-002 (Enmienda 2026-11-08) ya asigna su entorno de red a esta historia. BR-CKP-CONS-002 ya está enmendada. **Bloqueada por**: TS-CKP-007 (rama de seguimiento y ahead/behind), TS-CKP-003, SPIKE-GRD-002 y el módulo del factor del SO de ADR-GRD-008 § 6 (sin factor no hay red desde la app), y la revisión del security-expert del entorno de red.
+
+- Tres operaciones de red del catálogo, separadas de las locales (ADR-CKP-002, Enmienda 2026-11-08; versión menor): `fetch`, `pull` y `push`, servidas por `operation.prepare` y `operation.run`. Marcas: Cockpit sí, MCP **no**; sin herramienta MCP.
+- Quién: solo el humano desde la app (clase de cliente `desktop`). La TUI o la CLI con capa `cockpit` reciben `not-available-for-layer`; un agente solicitante, `raptor-mcp` o un descendiente del ejecutor, rechazo (Q-DSK-14).
+- Factor: **siempre factor por acción** de ADR-GRD-008, uno por plan y ligado a su huella; la presencia de sesión no lo cubre (ADR-GRP-017 § 4). Sin factor disponible, la app muestra el comando de terminal equivalente (ADR-GRP-017 § 5).
+- Parámetros: nombre de un remoto ya configurado (nunca una URL) y ramas con las reglas L-02. Sin `--force`, `--force-with-lease`, `--mirror`, `--tags` ni borrar ramas remotas.
+- `pull`: `fetch` de la rama de seguimiento más poner la rama local al día sobre ella; avance rápido si se puede y, si divergen, rebase en modo `stop` (ADR-CKP-002 § 9) para que el historial quede lineal (escenario 1). Gobernado como Rebase cuando hay commits locales. Punto previo: snapshot `previo_garantizado` antes de tocar refs o el worktree; "Deshacer" lo devuelve al previo.
+- `fetch`: punto previo cuando mueve refs de seguimiento que la Time Machine guarda. No toca el worktree.
+- `push`: gobernado como "push" con la decisión de Guardrails registrada una vez (US-GRD-001, US-GRD-008); un intento de reescribir una rama protegida se deniega con la regla (escenario 2). No tiene vuelta atrás en el remoto: el plan lo dice; el registro local guarda lo enviado (US-TMC-014).
+- Entorno de red (lo cierra el plan de esta historia con el security-expert): credenciales del usuario por su `credential.helper`, `GIT_TERMINAL_PROMPT=0`, sin `GIT_ASKPASS` ni `SSH_ASKPASS`, protocolos limitados a los de la URL del remoto, `submodule.recurse=false` y hooks del usuario respetados (`pre-push`). Un fallo de credenciales deja todo igual y lo dice (escenario 3).
+- Pruebas: contra un remoto local (`file://` o loopback), sin red real en CI (Validación 16 enmendada); captura de red de las operaciones locales: 0 conexiones; matriz V4 de ADR-GRP-017 con "push con sesión vigente pide el factor".
 
 ## Diseño y Dev Spec
 
