@@ -33,6 +33,7 @@ export function applyEngineBatch(client: QueryClient, batch: readonly EngineMess
   for (const message of batch) {
     switch (message.type) {
       case "global":
+        useEngineStore.getState().clearClosedRepos();
         client.setQueryData<GlobalEntry>(engineKeys.global, {
           engine: message.engine,
           daemon: message.daemon,
@@ -44,6 +45,9 @@ export function applyEngineBatch(client: QueryClient, batch: readonly EngineMess
         patchGlobal((g) => ({ ...g, engine: message.engine }));
         break;
       case "repoObserved":
+        if (!client.getQueryData<GlobalEntry>(engineKeys.global)?.repos.some((r) => r.repoId === message.repo.repoId)) {
+          useEngineStore.getState().clearClosedRepos();
+        }
         patchGlobal((g) => ({
           ...g,
           repos: g.repos.some((r) => r.repoId === message.repo.repoId)
@@ -52,6 +56,7 @@ export function applyEngineBatch(client: QueryClient, batch: readonly EngineMess
         }));
         break;
       case "repoRetired":
+        useEngineStore.getState().clearClosedRepos();
         patchGlobal((g) => ({ ...g, repos: g.repos.filter((r) => r.repoId !== message.repoId) }));
         break;
       case "repoTier":
@@ -112,6 +117,7 @@ export function applyEngineBatch(client: QueryClient, batch: readonly EngineMess
         });
         break;
       case "repoClosed":
+        useEngineStore.getState().markRepoClosed(message.repoId);
         client.removeQueries({ queryKey: engineKeys.repo(message.repoId), exact: true });
         if (useUiStore.getState().selectedRepoId === message.repoId) useUiStore.getState().selectRepo(null);
         break;

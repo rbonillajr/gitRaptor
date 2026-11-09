@@ -8,6 +8,8 @@ export interface EngineState {
   resync: ResyncReason | null;
   session: SessionInfo | null;
   lastRepoBatch: RepoBatchMark | null;
+  /** Repos the backend closed (`repoClosed`); skipped by the default choice until the repo list changes. */
+  closedRepoIds: ReadonlySet<string>;
 }
 
 /** The last batch that carried repo messages: `FleetView` measures `gr:fleet-delta` from `receivedAt` (T006). */
@@ -18,6 +20,8 @@ export interface RepoBatchMark {
 
 export interface EngineActions {
   noteRepoBatch: (mark: RepoBatchMark) => void;
+  markRepoClosed: (repoId: string) => void;
+  clearClosedRepos: () => void;
   /** Folds a batch of channel messages into one state update (one render per frame). */
   apply: (batch: readonly EngineMessage[]) => void;
 }
@@ -28,6 +32,9 @@ export const useEngineStore = create<EngineState & EngineActions>()((set) => ({
   resync: null,
   session: null,
   lastRepoBatch: null,
+  closedRepoIds: new Set<string>(),
+  markRepoClosed: (repoId) => set((s) => ({ closedRepoIds: new Set(s.closedRepoIds).add(repoId) })),
+  clearClosedRepos: () => set((s) => (s.closedRepoIds.size === 0 ? s : { closedRepoIds: new Set<string>() })),
   noteRepoBatch: (mark) => set({ lastRepoBatch: mark }),
   apply: (batch) =>
     set((state) => {

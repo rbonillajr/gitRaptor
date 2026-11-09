@@ -21,7 +21,7 @@ function isFinal(): boolean {
   const { center } = engineView({ conn, staleSinceMs, resync, session, global, openRepoTier: null });
   if (center.kind === "skeleton") return false;
   // With a repo chosen, the useful paint is the fleet, not its skeleton.
-  const target = useUiStore.getState().selectedRepoId ?? defaultRepoId(global?.repos ?? []);
+  const target = useUiStore.getState().selectedRepoId ?? defaultRepoId(global?.repos ?? [], useEngineStore.getState().closedRepoIds);
   if (center.kind === "content" && target !== null && queryClient.getQueryData(engineKeys.repo(target)) === undefined) return false;
   return center.kind !== "content" || conn.kind === "live";
 }

@@ -15,6 +15,8 @@ export interface UiState {
 /** The open repo of the fleet; never persisted (DS-US-DSK-004 T003). */
 export interface FleetSelection {
   selectedRepoId: string | null;
+  /** The repo open before the current one: the fallback when the open one is closed. Not persisted. */
+  previousRepoId: string | null;
 }
 
 export interface UiActions {
@@ -36,7 +38,13 @@ export const useUiStore = create<UiState & UiActions & FleetSelection>()(
       sidebarOpen: true,
       detailOpen: true,
       selectedRepoId: null,
-      selectRepo: (id) => set({ selectedRepoId: id }),
+      previousRepoId: null,
+      selectRepo: (id) =>
+        set((s) =>
+          id === null || s.selectedRepoId === null || s.selectedRepoId === id
+            ? { selectedRepoId: id }
+            : { selectedRepoId: id, previousRepoId: s.selectedRepoId },
+        ),
       toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
       toggleDetail: () => set((s) => ({ detailOpen: !s.detailOpen })),
       cycleTheme: () => set((s) => ({ theme: NEXT_THEME[s.theme] })),

@@ -4,11 +4,14 @@ import type { RepoFleet, RepoSummaryDto } from "@/client/engine-types";
 import { call } from "@/client/ipc";
 import { engineKeys } from "@/client/queries";
 import type { GlobalEntry } from "@/state/engine-cache";
+import { useEngineStore } from "@/state/engine-store";
 import { useUiStore } from "@/state/ui-store";
 
-/** The default open repo (D2): the first by name, then by `repoId`; `null` without repos. */
-export function defaultRepoId(repos: readonly RepoSummaryDto[]): string | null {
-  const first = [...repos].sort((a, b) => a.name.localeCompare(b.name) || a.repoId.localeCompare(b.repoId))[0];
+/** The default open repo (D2): the first openable one (not unavailable, not excluded) by name, then `repoId`. */
+export function defaultRepoId(repos: readonly RepoSummaryDto[], excluded: ReadonlySet<string> = new Set()): string | null {
+  const first = [...repos]
+    .filter((r) => r.state !== "unavailable" && !excluded.has(r.repoId))
+    .sort((a, b) => a.name.localeCompare(b.name) || a.repoId.localeCompare(b.repoId))[0];
   return first?.repoId ?? null;
 }
 
@@ -23,13 +26,17 @@ export function useFleet(): UseQueryResult<RepoFleet> {
   const selectRepo = useUiStore((s) => s.selectRepo);
   const global = useQuery<GlobalEntry>({ queryKey: engineKeys.global, queryFn: skipToken }).data;
   const repos = global?.repos;
+  const closed = useEngineStore((s) => s.closedRepoIds);
 
   useEffect(() => {
     if (repos === undefined) return;
     if (selected !== null && repos.some((r) => r.repoId === selected)) return;
-    const next = defaultRepoId(repos);
+    // The open repo was closed or disappeared: back to the previous one if it is still openable, else the default.
+    const previousId = useUiStore.getState().previousRepoId;
+    const previous = repos.find((r) => r.repoId === previousId && r.state !== "unavailable" && !closed.has(r.repoId));
+    const next = previous?.repoId ?? defaultRepoId(repos, closed);
     if (next !== selected) selectRepo(next);
-  }, [repos, selected, selectRepo]);
+  }, [repos, selected, selectRepo, closed]);
 
   useEffect(() => {
     if (selected === null) return;

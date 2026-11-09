@@ -706,8 +706,9 @@ fn reopen(link: &mut dyn Link, ctx: &mut Ctx, repo: &mut RepoScope) -> Option<En
     open_repo(link, ctx, repo).err().map(|_| End::Reconnect)
 }
 
-/// The window no longer follows the repo: tell it and forget it. The engine closed the scope
-/// itself, so there is nothing to cancel.
+/// The window no longer follows the repo: tell it and forget it. It cancels nothing: after a
+/// `scope-closed` the engine closed the scope itself, and after a refusal the caller already
+/// left the subscription.
 fn close_repo(ctx: &mut Ctx, repo: &mut RepoScope) {
     if let Some(repo_id) = ctx.open.take() {
         ctx.send(EngineMessage::RepoClosed {
@@ -726,7 +727,9 @@ fn open_repo(link: &mut dyn Link, ctx: &mut Ctx, repo: &mut RepoScope) -> Result
     };
     leave_repo(link, repo)?;
     match take_repo(link, ctx, repo, &repo_id) {
+        // The engine may have kept a subscription taken before the refusal: cancel it.
         Err(LinkError::Refused { .. }) => {
+            leave_repo(link, repo)?;
             close_repo(ctx, repo);
             Ok(())
         }
