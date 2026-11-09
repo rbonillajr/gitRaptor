@@ -13,8 +13,8 @@ Todo lo que viene del plan, del contrato o del crítico va dentro de bloques de 
 
 - Tipo: `plan`
 - Excepción del crítico: no
-- Generada: `2026-11-09T13:36:20.744Z`
-- Sha de aprobación: `27413835a6b9c1b805fba204c99e8257f593434bfe1345cb10def0195cc3ce2e:2563cd1f11e090362c25a55c02b8321beeb473f7d2d815bea826ad930197d9f8:902e5ffdbfa54418e04ab483501f2870b06deac8d97ec1db6d23f8fa7744cba4`
+- Generada: `2026-11-09T13:38:10.433Z`
+- Sha de aprobación: `ee7f15f0b099b14b4976f2706fbb8d0e10e92b3632a52e64074964768755a670:32de944b7151ec31d51922d5e1491c5649e1863e5e6ef8ed493ed899d693fb5f:e897d053b54a242d1dec9103237826c249906f0249cf0337efe6ccd0b870d3ad`
 
 ## Meta (se firma con el contrato)
 
@@ -37,7 +37,7 @@ nonGoals:
 
 Criterios (id, statement, verify, tests):
 
-<<<DATOS-NO-CONFIABLES 8b7c71c09894>>>
+<<<DATOS-NO-CONFIABLES 97f8120168e3>>>
 ```text
 [1] id: D4-OPEN
 statement: HubCmd::Open abre un repo: events.unsubscribe del anterior, scope.snapshot de repo, scope.subscribe N+1 y sessions.list, y entrega repo, worktrees y sessions con claves iguales entre worktree y sesión; un cambio de worktree.state llega en orden como worktrees
@@ -71,8 +71,8 @@ tests:
   - apps/desktop/src-tauri/tests/fleet_ingest.rs
 
 [6] id: D4-CMD
-statement: fleet_open está en commands.json y en la capability; acepta {params:{repoId}} y rechaza campos desconocidos, id vacío, de más de 128 bytes o con control (invalid-params); sin supervisor da not-watching; V2 sigue cerrada
-verify: pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test commands -- --list 2>/dev/null | grep -q '^fleet_open_is_in_the_closed_list_and_the_capability: test' && cargo test -p gitraptor-desktop --test commands -- --list 2>/dev/null | grep -q '^fleet_open_accepts_params_and_rejects_bad_ids: test' && cargo test -p gitraptor-desktop --test commands -- --list 2>/dev/null | grep -q '^fleet_open_without_a_supervisor_is_not_watching: test' && cargo test -p gitraptor-desktop --test commands fleet_open_is_in_the_closed_list_and_the_capability -- --exact && cargo test -p gitraptor-desktop --test commands fleet_open_accepts_params_and_rejects_bad_ids -- --exact && cargo test -p gitraptor-desktop --test commands fleet_open_without_a_supervisor_is_not_watching -- --exact && cargo test -p gitraptor-desktop --test tauri_surface
+statement: commands.json se compara EXACTO con app_info, engine_retry, engine_watch y fleet_open (la lista cerrada de ADR-GRP-017 no se relaja); fleet_open está en la capability; acepta {params:{repoId}} y rechaza campos desconocidos, id vacío, de más de 128 bytes o con control (invalid-params); sin supervisor da not-watching; V2 sigue cerrada
+verify: pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test commands -- --list 2>/dev/null | grep -q '^d3_cmds_engine_commands_are_listed_and_allowed: test' && cargo test -p gitraptor-desktop --test commands -- --list 2>/dev/null | grep -q '^fleet_open_is_in_the_closed_list_and_the_capability: test' && cargo test -p gitraptor-desktop --test commands -- --list 2>/dev/null | grep -q '^fleet_open_accepts_params_and_rejects_bad_ids: test' && cargo test -p gitraptor-desktop --test commands -- --list 2>/dev/null | grep -q '^fleet_open_without_a_supervisor_is_not_watching: test' && cargo test -p gitraptor-desktop --test commands d3_cmds_engine_commands_are_listed_and_allowed -- --exact && cargo test -p gitraptor-desktop --test commands fleet_open_is_in_the_closed_list_and_the_capability -- --exact && cargo test -p gitraptor-desktop --test commands fleet_open_accepts_params_and_rejects_bad_ids -- --exact && cargo test -p gitraptor-desktop --test commands fleet_open_without_a_supervisor_is_not_watching -- --exact && cargo test -p gitraptor-desktop --test tauri_surface
 tests:
   - apps/desktop/src-tauri/tests/commands.rs
   - apps/desktop/src-tauri/tests/tauri_surface.rs
@@ -128,7 +128,7 @@ tests:
   - apps/desktop/src/client/engine-stream.test.ts
   - apps/desktop/src-tauri/tests/fleet_supervisor.rs
 ```
-<<<FIN-DATOS-NO-CONFIABLES 8b7c71c09894>>>
+<<<FIN-DATOS-NO-CONFIABLES 97f8120168e3>>>
 
 ## Gaps y supuestos (no se firman solos)
 
@@ -150,7 +150,7 @@ docs/requirements/features/desktop/dev-specs/US-DSK-004-flota-en-vivo.md
 ```
 <<<FIN-DATOS-NO-CONFIABLES 80c5553574c9>>>
 
-planSha: `27413835a6b9c1b805fba204c99e8257f593434bfe1345cb10def0195cc3ce2e` (base de la cadena de re-planes)
+planSha: `ee7f15f0b099b14b4976f2706fbb8d0e10e92b3632a52e64074964768755a670` (base de la cadena de re-planes)
 
 Léelo en `US-DSK-004-flota-en-vivo.md`, junto a esta solicitud.
 
@@ -164,18 +164,18 @@ docs/dev-briefs/us-dsk-004-live-fleet.contract.json
 ```
 <<<FIN-DATOS-NO-CONFIABLES 8feb470c4f9d>>>
 
-contractSha: `2563cd1f11e090362c25a55c02b8321beeb473f7d2d815bea826ad930197d9f8`
+contractSha: `32de944b7151ec31d51922d5e1491c5649e1863e5e6ef8ed493ed899d693fb5f`
 
 ## Tests de criterio
 
-testsSha: `902e5ffdbfa54418e04ab483501f2870b06deac8d97ec1db6d23f8fa7744cba4`
+testsSha: `e897d053b54a242d1dec9103237826c249906f0249cf0337efe6ccd0b870d3ad`
 
 Cada prueba declarada con el sha256 de su contenido (`ausente` si el fichero no existe):
 
-<<<DATOS-NO-CONFIABLES 01380c7de44c>>>
+<<<DATOS-NO-CONFIABLES a5716f9b6df7>>>
 ```text
 325351007d3cc5b64d345089f897ddba90f5c7660d48c040539c055055e89cef  apps/desktop/src-tauri/tests/boundaries.rs
-0f3de3eca4f2092cc3569116f93fe108823f625fbf1aad7c24edee87dfb590c0  apps/desktop/src-tauri/tests/commands.rs
+56b565f2de9ca0ae6613b4cb35fd9447241bf73d402f256852cf744c565f68d0  apps/desktop/src-tauri/tests/commands.rs
 8d0506a2cb90d7c31e1ac1df94eb10892be7c0c04025ff0b90280efd57c6829a  apps/desktop/src-tauri/tests/engine_wire.rs
 8046e35a65526a9f73ce47139e019dcf7d780d2788e905e71fd3beadd31e1b39  apps/desktop/src-tauri/tests/environment.rs
 b4dd3952618ad36a63a80f8fb31848df4f687be57f8aa87b643bfc35950a2841  apps/desktop/src-tauri/tests/fleet_ingest.rs
@@ -193,14 +193,15 @@ ba644db53f65c03656dc747ad27f12d71af2ce18255348982daa88ccbabeb650  apps/desktop/s
 d9c0f74655f9d95c9623f28aed0bd26fcd436c3e0d94248ef180076d70a2ed92  apps/desktop/tests/eslint-v5.test.ts
 2d3f1227251f7c3472221b5aec6bf0d8d1c1232408d25fb274ca61b18f681687  apps/desktop/tests/fixtures/engine-messages.json
 ```
-<<<FIN-DATOS-NO-CONFIABLES 01380c7de44c>>>
+<<<FIN-DATOS-NO-CONFIABLES a5716f9b6df7>>>
 
 ## Crítico
 
-- Rondas (plan): 3
+- Rondas (plan): 4
   - ronda 1: BLOQUEO · 6 bloqueante(s) · siguiente: excepcion
   - ronda 2: APROBABLE · 0 bloqueante(s) · siguiente: aprobar
   - ronda 3: APROBABLE · 0 bloqueante(s) · siguiente: aprobar
+  - ronda 4: APROBABLE · 0 bloqueante(s) · siguiente: aprobar
 - Último veredicto: APROBABLE
 - Excepción: no
 
@@ -210,9 +211,9 @@ Ninguno: el crítico dio el plan por aprobable.
 
 ## Firmas
 
-- planSha (contexto, no firmado): `27413835a6b9c1b805fba204c99e8257f593434bfe1345cb10def0195cc3ce2e`
-- contractSha: `2563cd1f11e090362c25a55c02b8321beeb473f7d2d815bea826ad930197d9f8`
-- testsSha: `902e5ffdbfa54418e04ab483501f2870b06deac8d97ec1db6d23f8fa7744cba4`
-- approvalSha: `27413835a6b9c1b805fba204c99e8257f593434bfe1345cb10def0195cc3ce2e:2563cd1f11e090362c25a55c02b8321beeb473f7d2d815bea826ad930197d9f8:902e5ffdbfa54418e04ab483501f2870b06deac8d97ec1db6d23f8fa7744cba4`
+- planSha (contexto, no firmado): `ee7f15f0b099b14b4976f2706fbb8d0e10e92b3632a52e64074964768755a670`
+- contractSha: `32de944b7151ec31d51922d5e1491c5649e1863e5e6ef8ed493ed899d693fb5f`
+- testsSha: `e897d053b54a242d1dec9103237826c249906f0249cf0337efe6ccd0b870d3ad`
+- approvalSha: `ee7f15f0b099b14b4976f2706fbb8d0e10e92b3632a52e64074964768755a670:32de944b7151ec31d51922d5e1491c5649e1863e5e6ef8ed493ed899d693fb5f:e897d053b54a242d1dec9103237826c249906f0249cf0337efe6ccd0b870d3ad`
 
 Para aprobar en la fábrica: `factory-control approve --run <id> --package <pkg> --sha <approvalSha>`; para devolverlo, `adjust` con `--notes`. Atendido, lo aprueba la persona con sus palabras.
