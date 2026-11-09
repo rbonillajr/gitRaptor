@@ -2,7 +2,7 @@
 title: Pendientes de la etapa de validación multiplataforma
 status: expanded
 generated: 2026-10-05
-updated: 2026-11-04
+updated: 2026-11-09
 generator: orquestador
 domain: GRP
 tags: [xplat, validacion-multiplataforma, linux, windows, contenedor, vm, lima, utm, ssh, repo-intact, strace]
@@ -97,6 +97,7 @@ Las rutas cortas de la columna Origen van bajo `docs/requirements/features/`. La
 | XP-68 | Linux y Windows | US-GRP-008, DS-US-GRP-008 § 9.5 | El actor de los cambios sin commitear y los tres escenarios del editor del desarrollador, validados solo en macOS. Falta: (a) Linux: `editor_unattributed.rs` usa `script` y el canal Unix como `claude_sessions.rs`, falta su primera ejecución verde en CI ubuntu, y la lectura de `/proc` de T003 (`git_facts`); (b) Windows real: `editor_unattributed_windows.rs` (escenarios 1 y 2, con `claude.exe`, `cursor.exe`, `code.exe` y `codex.exe` simulados) sin ejecutar nunca, y el e2e del escenario 3, que se cumple por construcción (sin argv, `writes` es `None`: S3 nunca atribuye) y solo lo prueba `an_unreadable_session_git_is_no_evidence` en `crates/core`. | Máquina Windows y contenedor Linux | pendiente |
 | XP-69 | Linux y Windows | US-TMC-011, DS-US-TMC-011 § 9.5 | `raptor undo --agent <id> [--since]` (undo selectivo por agente), validado solo en macOS. Falta: (a) Linux: `us_tmc_011.rs` corre bajo `cfg(any(macos, linux))` (su arnés usa `chmod 000` y procesos `raptor-fake-agent`), falta su primera ejecución verde en CI ubuntu; los e2e `us_tmc_011_process.rs` y `m2_demo_undo_agent.rs` son solo macOS y hay que portarlos; (b) Windows: compila, pero el aplicador devuelve `Unsupported` y no hay confirmación de trabajo ajeno (TQ-14), así que un "sin atribuir" que pide `--agent` de un agente recibe el rechazo; el test del modo ejecutable de `changed_paths_tree_diff_tests.rs` toma en Windows la rama `cfg(not(unix))` sin ejecutar. Pendiente: etapa de validación multiplataforma | CI de ubuntu; máquina Windows | pendiente |
 | XP-70 | Windows | fix/guard-exec-ux, ADR-GRD-007 § 3 (Enmienda 2026-11-08) | El aviso interactivo de `raptor guard exec` (sin `--yes`), validado solo en macOS con pty. Falta, en una consola real de Windows (`stdin.is_terminal()`, texto sin ANSI): (a) una respuesta inválida explica las válidas y repregunta, y la tercera cancela; (b) `n` y Enter solo cancelan; (c) la ventana cerrada sin respuesta cancela por sí sola, con `exception-cancelled` en `raptor guard log`; (d) Ctrl-C cancela. En los cuatro casos git no se lanza. Pendiente: etapa de validación multiplataforma | Máquina Windows | pendiente |
+| XP-71 | Linux y Windows | US-TMC-003, DS-US-TMC-003 § 9.5 | `raptor redo` (rehacer el último undo del worktree), validado solo en macOS. Falta: (a) Linux: `us_tmc_003.rs` y `us_tmc_003_agents.rs` corren bajo `cfg(any(macos, linux))`, falta su primera ejecución verde en CI ubuntu; el e2e `redo_process.rs` y el paso de redo de `m2_demo_undo_agent.rs` son solo macOS y hay que portarlos; (b) Windows: compila y corren los unitarios de la pila, la confirmación y los dueños, pero el aplicador devuelve `Unsupported` y no hay confirmación de trabajo ajeno (`confirmation-unavailable`, TQ-14). Pendiente: etapa de validación multiplataforma | CI de ubuntu; máquina Windows | pendiente |
 
 ## Contenedor Linux: resultados del 2026-10-05
 
