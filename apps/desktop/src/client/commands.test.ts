@@ -44,7 +44,7 @@ describe("D3-CMDS-TS engine commands", () => {
       seen.push({ cmd, args });
       return {};
     });
-    await call("engine_retry", { start: true });
+    await (call as (c: string, p: unknown) => Promise<unknown>)("engine_retry", { start: true });
     expect(seen).toEqual([{ cmd: "engine_retry", args: { params: { start: true } } }]);
   });
 
@@ -56,7 +56,7 @@ describe("D3-CMDS-TS engine commands", () => {
       return {};
     });
     const channel = new Channel<EngineMessage>();
-    await call("engine_watch", { channel });
+    await (call as (c: string, p: unknown) => Promise<unknown>)("engine_watch", { channel });
     expect(seen).toEqual([{ cmd: "engine_watch", args: { params: { channel } } }]);
   });
 });
