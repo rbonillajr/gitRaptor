@@ -8,7 +8,9 @@ use std::time::Duration;
 use gitraptor_api::PROTOCOL_VERSION;
 use gitraptor_api::client::{Client, ClientError, Incoming};
 use gitraptor_api::messages::{ClientKind, HelloResult};
-use gitraptor_api::methods::{CAP_OBSERVATION_TIERS, CAP_PREDICTION_PAIRS, CAP_SCOPE_ACTIVITY};
+use gitraptor_api::methods::{
+    CAP_OBSERVATION_TIERS, CAP_PREDICTION_PAIRS, CAP_REQUESTER, CAP_SCOPE_ACTIVITY,
+};
 use gitraptor_api::rpc::{Notification, ServerMessage};
 use serde_json::Value;
 
@@ -17,6 +19,7 @@ pub const REQUIRED_CAPABILITIES: &[&str] = &[
     CAP_SCOPE_ACTIVITY.name,
     CAP_OBSERVATION_TIERS.name,
     CAP_PREDICTION_PAIRS.name,
+    CAP_REQUESTER.name,
 ];
 
 /// A greeted connection to the daemon.
