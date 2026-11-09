@@ -1,0 +1,24 @@
+{
+  "shell": {
+    "sidebar": {
+      "label": "Repositorios",
+      "toggle": "Panel izquierdo"
+    },
+    "detail": {
+      "label": "Detalles",
+      "toggle": "Panel derecho"
+    },
+    "theme": {
+      "toggle": {
+        "auto": "Tema: el del sistema. Cambiar a claro",
+        "light": "Tema: claro. Cambiar a oscuro",
+        "dark": "Tema: oscuro. Cambiar al del sistema"
+      }
+    },
+    "center": {
+      "title": "Grafo",
+      "empty": "Todavía no hay nada que mostrar.",
+      "version": "GitRaptor {{version}}"
+    }
+  }
+}
