@@ -1,0 +1,28 @@
+---
+source: apps/cli/src/tui/freshness_view_tests.rs
+expression: text
+---
+ shop · ✔ live · engine – · –                                        ⚡ –  ⛔ –
+┏━ › Fleet · ↑↓ vs main (local copy, fetch age not available) ━━━━━━━━━━━━━━━━━┓
+┃     Agent                Branch        Files ↑↓          Activity            ┃
+┃  ⚠  agent not available  unavailable: folder missing                         ┃
+┃  ⚠  agent not available  unavailable: folder missing                   ⚡    ┃
+┃  ⚠  agent not available  unavailable: folder missing                   ⚡    ┃
+┃  ⚠  agent not available  unavailable: folder missing                         ┃
+┃  ⚠  agent not available  unavailable: folder missing                         ┃
+┃  ⚠  agent not available  unavailable: folder missing                         ┃
+┃  ⚠  agent not available  unavailable: folder missing                         ┃
+┃  ⚠  agent not available  unavailable: folder missing                         ┃
+┃  ⚠  agent not available  unavailable: folder missing                         ┃
+┃  ⚠  agent not available  unavailable: folder missing                         ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+┌─ ⚡ Predicted conflicts ─────────────────────────────────────────────────────┐
+│ ⚡ claude-1 ↔ claude-2  3 min ago                                            │
+│  • 1 file                                                                    │
+│ ⚠ uncommitted · ⚡ commits only · no merge drivers or .gitattributes         │
+└──────────────────────────────────────────────────────────────────────────────┘
+ q quit  r retry   ⚠  warning: the text beside it says why               ? help

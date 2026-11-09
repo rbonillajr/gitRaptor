@@ -1,0 +1,28 @@
+---
+source: apps/cli/src/tui/freshness_view_tests.rs
+expression: text
+---
+ shop | [ok] live | engine - | -                             [c] -  [blocked] -
+#= > Fleet | +- vs main (local copy, fetch age not available) =================#
+#      Agent            Branch      Files +-          Activity                 #
+#  [!] agent not av...  unavailable: folder missing                            #
+#  [!] agent not av...  unavailable: folder missing              [c]           #
+#  [!] agent not av...  unavailable: folder missing              [c]           #
+#  [!] agent not av...  unavailable: folder missing                            #
+#  [!] agent not av...  unavailable: folder missing                            #
+#  [!] agent not av...  unavailable: folder missing                            #
+#  [!] agent not av...  unavailable: folder missing                            #
+#  [!] agent not av...  unavailable: folder missing                            #
+#  [!] agent not av...  unavailable: folder missing                            #
+#  [!] agent not av...  unavailable: folder missing                            #
+#                                                                              #
+#                                                                              #
+#==============================================================================#
++- [c] Predicted conflicts ----------------------------------------------------+
+| [c] claude-1 <-> claude-2  40 s ago                                          |
+|  - 1 file                                                                    |
+| claude-5 <-> claude-6  outdated | 40 s ago | recalculating                   |
+| [i] Calculating 1 of 3 pairs                                                 |
+| [!] uncommitted | [c] commits only | no merge drivers or .gitattributes      |
++------------------------------------------------------------------------------+
+ q quit  r retry   [!] warning: the text beside it says why              ? help

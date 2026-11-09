@@ -3,6 +3,7 @@
 pub mod app;
 pub mod engine_state;
 pub mod fleet_order;
+pub mod freshness;
 pub mod gallery;
 pub mod help;
 pub mod input;
@@ -17,6 +18,8 @@ pub mod widgets;
 
 pub use term::run;
 
+#[cfg(test)]
+mod freshness_view_tests;
 #[cfg(test)]
 mod prediction_stale_tests;
 #[cfg(test)]

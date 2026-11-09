@@ -2,14 +2,17 @@
 //! returned (DS-US-CKP-006, AD5 to AD7). Nothing is computed here: a pair that is not in the
 //! publication is not drawn (P7), and a detail of another `rev` was already dropped by the model.
 
-use gitraptor_api::prediction::{ConflictKindView, LineRange, PairLevel, PairStateView};
+use gitraptor_api::prediction::{ConflictKindView, LineRange, PairLevel};
 
 use super::{Say, repo, row_name};
 use crate::model::{Model, SafeText};
+use crate::present::freshness_text::FreshnessText;
 use crate::present::prediction_text::PredictionText as T;
-use crate::tui::fleet_order;
 use crate::tui::prediction::{PairRow, PredictionModel, Side};
-use crate::tui::widgets::conflict_alert::{AgentRef, AlertFile, ConflictEntry, ConflictPanelModel};
+use crate::tui::widgets::conflict_alert::{
+    AgentRef, AlertFile, ConflictEntry, ConflictPanelModel, PanelLine, Prediction,
+};
+use crate::tui::{fleet_order, freshness};
 
 /// Line ranges shown per side of a file; the rest is "+N".
 const RANGES_SHOWN: usize = 3;
@@ -18,31 +21,66 @@ const RANGES_SHOWN: usize = 3;
 pub(super) fn build(model: &Model, say: Say, max_height: u16) -> Option<ConflictPanelModel> {
     let repo = repo(model)?;
     let prediction = repo.prediction.as_ref()?;
-    let listed = |p: &&PairRow| {
-        matches!(p.level, Some(PairLevel::Conflict | PairLevel::Overlap))
-            && matches!(
-                p.state,
-                PairStateView::Current | PairStateView::Recalculating
-            )
-    };
-    let mut pairs: Vec<&PairRow> = prediction.pairs.iter().filter(listed).collect();
-    // ⚡ first, then ⚠; the engine's order within each (stable).
-    pairs.sort_by_key(|p| p.level != Some(PairLevel::Conflict));
+    let mut pairs: Vec<&PairRow> = prediction
+        .pairs
+        .iter()
+        .filter(|p| freshness::listed(p))
+        .collect();
+    // ⚡ first, then ⚠, then the pairs recalculating without either; the engine's order within
+    // each (stable).
+    pairs.sort_by_key(|p| freshness::row_rank(p));
+    let rows = usize::from(max_height.saturating_sub(3));
+    let summary = summary_lines(prediction, model.now_ms, say, rows);
     let entries: Vec<ConflictEntry> = pairs
         .iter()
         .map(|p| entry(model, repo, prediction, p, say))
         .collect();
-    let (entries, hidden) = fit(entries, usize::from(max_height.saturating_sub(3)), say);
+    let (entries, hidden) = fit(entries, rows - summary.len(), say);
     Some(ConflictPanelModel {
         title: say.prediction(T::PanelTitle),
         entries,
         hidden,
+        summary,
         limits: [
             say.prediction(T::LineUncommitted),
             say.prediction(T::LineCommitted),
             say.prediction(T::LineDrivers),
         ],
     })
+}
+
+/// A freshness text as the view draws it: folded to ASCII when the symbol set asks for it.
+fn say_fresh(say: Say, text: FreshnessText) -> SafeText {
+    SafeText::text(&say.glyphs.fold(&text.render(say.lang)))
+}
+
+/// The aggregate lines in at most `rows` rows. When they do not fit the last one becomes "+N
+/// more", and the "calculating" line, always first, is never the one dropped.
+fn summary_lines(
+    prediction: &PredictionModel,
+    now_ms: i64,
+    say: Say,
+    rows: usize,
+) -> Vec<PanelLine> {
+    let all = freshness::summary(&prediction.pairs, now_ms);
+    let line = |(prediction, text): (_, FreshnessText)| PanelLine {
+        prediction,
+        text: say_fresh(say, text),
+    };
+    if all.len() <= rows {
+        return all.into_iter().map(line).collect();
+    }
+    if rows <= 1 {
+        return all.into_iter().take(rows).map(line).collect();
+    }
+    let keep = rows - 1;
+    let more = all.len() - keep;
+    let mut lines: Vec<PanelLine> = all.into_iter().take(keep).map(line).collect();
+    lines.push(PanelLine {
+        prediction: Prediction::Current,
+        text: say_fresh(say, FreshnessText::MoreLines(more)),
+    });
+    lines
 }
 
 /// The pairs that fit `rows` content rows, each with as many files as there is room for, and
@@ -71,13 +109,20 @@ fn entry(
     say: Say,
 ) -> ConflictEntry {
     let conflict = pair.level == Some(PairLevel::Conflict);
+    let marked = matches!(pair.level, Some(PairLevel::Conflict | PairLevel::Overlap));
     ConflictEntry {
         conflict,
         left: side(model, repo, &pair.a, say),
         right: side(model, repo, &pair.b, say),
-        status: (pair.state == PairStateView::Recalculating)
-            .then(|| say.prediction(T::Recalculating)),
-        files: files(prediction, pair, conflict, say),
+        status: freshness::row_text(pair, model.now_ms).map(|t| say_fresh(say, t)),
+        // A pair recalculating with no ⚡ or ⚠ has nothing to list.
+        files: if marked {
+            files(prediction, pair, conflict, say)
+        } else {
+            Vec::new()
+        },
+        stale: freshness::prediction_of(pair) == Prediction::Stale,
+        marked,
     }
 }
 

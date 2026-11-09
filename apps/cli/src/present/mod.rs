@@ -1,6 +1,7 @@
 //! Presentation (ADR-CKP-003 § 8 and § 10): the ingest, the only place
 //! where contract text becomes [`SafeText`], and the typed i18n catalog.
 
+pub mod freshness_text;
 pub mod i18n;
 pub mod ingest;
 pub mod prediction;

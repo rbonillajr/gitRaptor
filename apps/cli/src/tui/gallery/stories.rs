@@ -567,6 +567,10 @@ fn alert_pending(area: Rect, buf: &mut Buffer, s: &Styles) {
     .render(area, buf, s);
 }
 
+fn alert_pending_other(area: Rect, buf: &mut Buffer, s: &Styles) {
+    alert(Prediction::Pending, "pending: an operation is in progress").render(area, buf, s);
+}
+
 fn alert_not_computable(area: Rect, buf: &mut Buffer, s: &Styles) {
     alert(
         Prediction::NotComputable,
@@ -1005,6 +1009,7 @@ pub fn stories() -> Vec<Story> {
         story!("ConflictAlert", "stale", 60, 6, alert_stale),
         story!("ConflictAlert", "calculating", 60, 6, alert_calculating),
         story!("ConflictAlert", "pending base", 60, 6, alert_pending),
+        story!("ConflictAlert", "pending", 60, 6, alert_pending_other),
         story!(
             "ConflictAlert",
             "not computable",

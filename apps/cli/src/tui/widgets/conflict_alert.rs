@@ -25,7 +25,23 @@ pub enum Prediction {
     Calculating,
     /// The base is not confirmed yet.
     PendingBase,
+    /// Waiting for something other than the base (an operation, power saving…).
+    Pending,
     NotComputable,
+}
+
+impl Prediction {
+    /// The symbol (if any) and color a freshness line is drawn with.
+    fn look(self) -> (Option<SymbolToken>, ColorToken) {
+        match self {
+            Self::Current => (None, ColorToken::TextMuted),
+            Self::Stale => (Some(SymbolToken::Warning), ColorToken::StatusWarning),
+            Self::Calculating | Self::PendingBase | Self::Pending => {
+                (Some(SymbolToken::Info), ColorToken::StatusInfo)
+            }
+            Self::NotComputable => (Some(SymbolToken::Error), ColorToken::StatusDanger),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -85,14 +101,7 @@ impl Component for ConflictAlertModel {
         if inner.height < 2 {
             return;
         }
-        let (sym, token) = match self.prediction {
-            Prediction::Current => (None, ColorToken::TextMuted),
-            Prediction::Stale => (Some(SymbolToken::Warning), ColorToken::StatusWarning),
-            Prediction::Calculating | Prediction::PendingBase => {
-                (Some(SymbolToken::Info), ColorToken::StatusInfo)
-            }
-            Prediction::NotComputable => (Some(SymbolToken::Error), ColorToken::StatusDanger),
-        };
+        let (sym, token) = self.prediction.look();
         let mut pen = Pen::new(buf, inner, inner.y + 1, styles);
         if let Some(sym) = sym {
             pen.symbol(styles.symbol(sym), styles.fg(token)).gap(1);
@@ -140,9 +149,20 @@ pub struct ConflictEntry {
     pub conflict: bool,
     pub left: AgentRef,
     pub right: AgentRef,
-    /// "recalculating" while the pair's last result is being replaced.
+    /// The age of the result, or "outdated … recalculating" while it is being replaced.
     pub status: Option<SafeText>,
     pub files: Vec<AlertFile>,
+    /// The result is being replaced: the status is painted as a warning.
+    pub stale: bool,
+    /// Draw the ⚡ or ⚠. A pair recalculating without either has none, and no files.
+    pub marked: bool,
+}
+
+/// An aggregate line of the panel: pairs calculating, pending, not computable or all clear.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PanelLine {
+    pub prediction: Prediction,
+    pub text: SafeText,
 }
 
 /// A file of a pair: its path, how it clashes (line ranges per side, or the kind) and, when a
@@ -167,6 +187,8 @@ pub struct ConflictPanelModel {
     pub entries: Vec<ConflictEntry>,
     /// "+N pairs more": empty when every pair fits.
     pub hidden: SafeText,
+    /// The aggregate lines, above the limits line.
+    pub summary: Vec<PanelLine>,
     /// The three pieces of the limits line: with uncommitted work, commits only, no merge rules.
     pub limits: [SafeText; 3],
 }
@@ -202,7 +224,10 @@ impl Component for ConflictPanelModel {
                 styles.agent(a.color_index).add_modifier(Modifier::BOLD)
             }
         };
-        let last = inner.bottom() - 1;
+        let limits_row = inner.bottom() - 1;
+        let summary_rows = u16::try_from(self.summary.len()).unwrap_or(u16::MAX);
+        // The aggregate lines sit just above the limits line; the pairs get what is above them.
+        let last = limits_row.saturating_sub(summary_rows).max(inner.y);
         let mut y = inner.y;
         for entry in &self.entries {
             if y >= last {
@@ -214,15 +239,21 @@ impl Component for ConflictPanelModel {
                 (SymbolToken::Warning, ColorToken::StatusWarning)
             };
             let mut pen = Pen::new(buf, inner, y, styles);
-            pen.symbol(styles.symbol(symbol), styles.fg(token))
-                .gap(1)
-                .safe(&entry.left.name, agent(&entry.left))
+            if entry.marked {
+                pen.symbol(styles.symbol(symbol), styles.fg(token)).gap(1);
+            }
+            pen.safe(&entry.left.name, agent(&entry.left))
                 .gap(1)
                 .text(g.versus, muted)
                 .gap(1)
                 .safe(&entry.right.name, agent(&entry.right));
             if let Some(status) = &entry.status {
-                pen.gap(2).safe(status, muted.add_modifier(Modifier::DIM));
+                let style = if entry.stale {
+                    styles.fg(Prediction::Stale.look().1)
+                } else {
+                    muted.add_modifier(Modifier::DIM)
+                };
+                pen.gap(2).safe(status, style);
             }
             y += 1;
             for f in &entry.files {
@@ -243,7 +274,19 @@ impl Component for ConflictPanelModel {
         if y < last && !self.hidden.as_str().is_empty() {
             Pen::new(buf, inner, y, styles).safe(&self.hidden, muted);
         }
-        let mut pen = Pen::new(buf, inner, last, styles);
+        for (i, line) in self.summary.iter().enumerate() {
+            let row = last + u16::try_from(i).unwrap_or(0);
+            if row >= limits_row {
+                break;
+            }
+            let (symbol, token) = line.prediction.look();
+            let mut pen = Pen::new(buf, inner, row, styles);
+            if let Some(symbol) = symbol {
+                pen.symbol(styles.symbol(symbol), styles.fg(token)).gap(1);
+            }
+            pen.safe(&line.text, styles.fg(token));
+        }
+        let mut pen = Pen::new(buf, inner, limits_row, styles);
         // Unpadded: the line reads as the catalog's text, one space after each symbol.
         pen.text(styles.symbol(SymbolToken::Warning).text, warn)
             .gap(1)
@@ -257,9 +300,10 @@ impl Component for ConflictPanelModel {
     }
 
     fn height(&self, _width: u16) -> u16 {
-        // Border, the pairs with their files, the "more pairs" row and the limits line.
+        // Border, the pairs with their files, the "more pairs" row, the aggregate lines and the
+        // limits line.
         let lines: usize = self.entries.iter().map(|e| 1 + e.files.len()).sum();
         let hidden = usize::from(!self.hidden.as_str().is_empty());
-        u16::try_from(3 + lines + hidden).unwrap_or(u16::MAX)
+        u16::try_from(3 + lines + hidden + self.summary.len()).unwrap_or(u16::MAX)
     }
 }
