@@ -13,25 +13,25 @@
 | Implementado (`implemented`) | 62 |
 | Hecho (`done`) | 3 |
 | Implementado en parte (`partially-implemented`) | 26 |
-| Listo (`ready`) | 21 |
-| Borrador (`draft`) | 55 |
+| Listo (`ready`) | 27 |
+| Borrador (`draft`) | 59 |
 | Bloqueado (`blocked`) | 1 |
-| **Total** | **168** |
+| **Total** | **178** |
 
 ## Por feature
 
 | Feature | Implementado | Hecho | Implementado en parte | Listo | Borrador | Bloqueado | Total |
 |---|---|---|---|---|---|---|---|
-| [cockpit](#cockpit) | 9 | 0 | 5 | 0 | 18 | 1 | 33 |
-| [desktop](#desktop) | 0 | 0 | 0 | 18 | 0 | 0 | 18 |
+| [cockpit](#cockpit) | 9 | 0 | 5 | 1 | 22 | 1 | 38 |
+| [desktop](#desktop) | 0 | 0 | 0 | 22 | 0 | 0 | 22 |
 | [guardrails](#guardrails) | 14 | 0 | 7 | 1 | 3 | 0 | 25 |
 | [mcp](#mcp) | 7 | 0 | 4 | 0 | 9 | 0 | 20 |
-| [motor-local](#motor-local) | 17 | 2 | 9 | 2 | 11 | 0 | 41 |
+| [motor-local](#motor-local) | 17 | 2 | 9 | 3 | 11 | 0 | 42 |
 | [time-machine](#time-machine) | 15 | 1 | 1 | 0 | 14 | 0 | 31 |
 
 ### cockpit
 
-33 fichas: 9 implementado, 5 implementado en parte, 18 borrador, 1 bloqueado.
+38 fichas: 9 implementado, 5 implementado en parte, 1 listo, 22 borrador, 1 bloqueado.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -49,6 +49,11 @@
 | [US-CKP-005](features/cockpit/user-stories/US-CKP-005-terminal-pequena-sin-color.md) | La TUI se puede usar en una terminal pequeña, sin color o en ASCII | Implementado en parte (`partially-implemented`) | #273 | 2 |
 | [US-CKP-020](features/cockpit/user-stories/US-CKP-020-trabajo-de-otro-actor.md) | Tocar el trabajo de otro actor exige confirmar el plan concreto | Implementado en parte (`partially-implemented`) | #220 | 3 |
 | [US-CKP-025](features/cockpit/user-stories/US-CKP-025-tui-repo-no-observado.md) | La TUI ofrece observar el repo en el que se abre y, fuera de un repo, lleva a los ya observados | Implementado en parte (`partially-implemented`) | #165, #170 | 2 |
+| [TS-CKP-010](features/cockpit/technical-stories/TS-CKP-010-agentes-en-vivo-por-repo.md) | Recuento de agentes en vivo por repo en el ámbito global | Listo (`ready`) | — | — |
+| [TS-CKP-006](features/cockpit/technical-stories/TS-CKP-006-diff-de-commit.md) | Consultas del diff de un commit, entre dos commits y del índice de un worktree en el canal | Borrador (`draft`) | — | — |
+| [TS-CKP-007](features/cockpit/technical-stories/TS-CKP-007-ramas-y-commits-paginados.md) | Consulta de todas las ramas del repo y de los commits de cualquier rama, paginada y filtrable | Borrador (`draft`) | — | — |
+| [TS-CKP-008](features/cockpit/technical-stories/TS-CKP-008-preparar-y-quitar-del-indice.md) | Operaciones del catálogo para preparar y quitar del índice por archivo, fragmento y línea | Borrador (`draft`) | — | — |
+| [TS-CKP-009](features/cockpit/technical-stories/TS-CKP-009-commit-capa-cockpit.md) | Operación commit del catálogo abierta a la capa cockpit | Borrador (`draft`) | — | — |
 | [US-CKP-004](features/cockpit/user-stories/US-CKP-004-selector-repo-preferencias.md) | El desarrollador cambia de repo y la TUI recuerda cómo la dejó | Borrador (`draft`) | — | — |
 | [US-CKP-006](features/cockpit/user-stories/US-CKP-006-conflictos-previstos.md) | El desarrollador ve qué agentes van a chocar antes de hacer merge | Borrador (`draft`) | — | — |
 | [US-CKP-007](features/cockpit/user-stories/US-CKP-007-frescura-prediccion.md) | Una predicción vieja nunca se presenta como actual | Borrador (`draft`) | — | — |
@@ -71,10 +76,14 @@
 
 ### desktop
 
-18 fichas: 18 listo.
+22 fichas: 22 listo.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
+| [SPIKE-DSK-001](features/desktop/technical-stories/SPIKE-DSK-001-identidad-firmada-app.md) | Verificar en el daemon la firma de la app de escritorio desde su audit token sin romper unsafe_code = forbid | Listo (`ready`) | — | — |
+| [SPIKE-DSK-002](features/desktop/technical-stories/SPIKE-DSK-002-lanzamiento-por-agente.md) | Detectar que un agente lanzó la app de escritorio con open -a (evento oapp y keySenderPIDAttr) | Listo (`ready`) | — | — |
+| [TS-DSK-001](features/desktop/technical-stories/TS-DSK-001-andamiaje-app-escritorio.md) | Andamiaje de apps/desktop: proyecto Tauri del monorepo, frontera de seguridad y ventana B1 vacía | Listo (`ready`) | — | — |
+| [TS-DSK-002](features/desktop/technical-stories/TS-DSK-002-arranque-motor-binarios-bundle.md) | Arranque del motor desde la app y binarios del motor dentro del bundle | Listo (`ready`) | — | — |
 | [US-DSK-001](features/desktop/user-stories/US-DSK-001-anadir-repo-sin-terminal.md) | El novato añade su repo a GitRaptor desde la app sin abrir una terminal | Listo (`ready`) | — | — |
 | [US-DSK-002](features/desktop/user-stories/US-DSK-002-proteger-repo-con-un-clic.md) | El novato protege su repo con un clic, sabe qué se instaló y puede quitarlo | Listo (`ready`) | — | — |
 | [US-DSK-003](features/desktop/user-stories/US-DSK-003-estado-del-motor.md) | El usuario sabe si GitRaptor está funcionando y qué hacer cuando no | Listo (`ready`) | — | — |
@@ -155,7 +164,7 @@
 
 ### motor-local
 
-41 fichas: 17 implementado, 2 hecho, 9 implementado en parte, 2 listo, 11 borrador.
+42 fichas: 17 implementado, 2 hecho, 9 implementado en parte, 3 listo, 11 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -189,6 +198,7 @@
 | [TS-GRP-005](features/motor-local/technical-stories/TS-GRP-005-clases-trabajo-ahorro-energia.md) | Clases de trabajo del daemon y mecanismo de ahorro de energía | Implementado en parte (`partially-implemented`) | #298 | — |
 | [TD-GRP-002](features/motor-local/technical-stories/TD-GRP-002-motor-bajo-rafaga.md) | Frescura y memoria del motor bajo una ráfaga de archivos | Listo (`ready`) | — | — |
 | [TD-GRP-003](features/motor-local/technical-stories/TD-GRP-003-nfr04-maquina-referencia.md) | Presupuesto de NFR-04 sin gate automático: medirlo en una máquina de referencia | Listo (`ready`) | — | — |
+| [TS-GRP-009](features/motor-local/technical-stories/TS-GRP-009-clase-desktop-perfil-lectura.md) | Clase de cliente de la app de escritorio y perfil de lectura mcp con un agente en su ascendencia | Listo (`ready`) | — | — |
 | [TD-GRP-004](features/motor-local/technical-stories/TD-GRP-004-corroborar-ambito-worktree-s3.md) | Corroborar con el reflog de HEAD el ámbito worktree de S3 y blindar la lectura de la redirección | Borrador (`draft`) | — | — |
 | [TS-GRP-007](features/motor-local/technical-stories/TS-GRP-007-factor-so-reservados-windows.md) | Factor del SO (Windows Hello) para los comandos reservados de alto riesgo en Windows | Borrador (`draft`) | — | — |
 | [US-GRP-006](features/motor-local/user-stories/US-GRP-006-retirar-y-volver-a-anadir.md) | El desarrollador recupera el historial de un repo que retiró y volvió a añadir | Borrador (`draft`) | — | — |
@@ -377,6 +387,23 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-TMC-018](features/time-machine/user-stories/US-TMC-018-garantias-snapshots.md) | Los snapshots no se publican, no se pierden con el mantenimiento de Git y ningún agente los altera | Borrador (`draft`) | — | — |
 | [US-TMC-020](features/time-machine/user-stories/US-TMC-020-overhead-snapshot.md) | El desarrollador y sus agentes no notan el coste de los snapshots | Borrador (`draft`) | — | — |
 | [US-TMC-024](features/time-machine/user-stories/US-TMC-024-solape-restauracion.md) | Una restauración nunca retira trabajo de otro actor sin que el desarrollador lo vea y lo confirme | Borrador (`draft`) | — | — |
+
+### M2-UI
+
+10 fichas: 10 listo.
+
+| Id | Título | Estado | Implementado en | Pendientes |
+|---|---|---|---|---|
+| [TS-DSK-001](features/desktop/technical-stories/TS-DSK-001-andamiaje-app-escritorio.md) | Andamiaje de apps/desktop: proyecto Tauri del monorepo, frontera de seguridad y ventana B1 vacía | Listo (`ready`) | — | — |
+| [TS-DSK-002](features/desktop/technical-stories/TS-DSK-002-arranque-motor-binarios-bundle.md) | Arranque del motor desde la app y binarios del motor dentro del bundle | Listo (`ready`) | — | — |
+| [US-DSK-001](features/desktop/user-stories/US-DSK-001-anadir-repo-sin-terminal.md) | El novato añade su repo a GitRaptor desde la app sin abrir una terminal | Listo (`ready`) | — | — |
+| [US-DSK-002](features/desktop/user-stories/US-DSK-002-proteger-repo-con-un-clic.md) | El novato protege su repo con un clic, sabe qué se instaló y puede quitarlo | Listo (`ready`) | — | — |
+| [US-DSK-003](features/desktop/user-stories/US-DSK-003-estado-del-motor.md) | El usuario sabe si GitRaptor está funcionando y qué hacer cuando no | Listo (`ready`) | — | — |
+| [US-DSK-004](features/desktop/user-stories/US-DSK-004-flota-en-vivo.md) | El usuario ve en vivo qué agente trabaja en cada copia de su repo y cuál pide atención | Listo (`ready`) | — | — |
+| [US-DSK-005](features/desktop/user-stories/US-DSK-005-grafo-de-carriles.md) | El usuario ve crecer la rama de cada agente como un carril sobre la rama base | Listo (`ready`) | — | — |
+| [US-DSK-006](features/desktop/user-stories/US-DSK-006-deshacer-de-un-boton.md) | El usuario deshace con un botón lo que hizo un agente o él mismo, y puede rehacerlo | Listo (`ready`) | — | — |
+| [US-DSK-007](features/desktop/user-stories/US-DSK-007-bloqueo-explicado.md) | El usuario entiende por qué GitRaptor frenó una operación y cómo hacerla a conciencia | Listo (`ready`) | — | — |
+| [US-DSK-008](features/desktop/user-stories/US-DSK-008-conflictos-previstos.md) | El usuario ve qué agentes van a chocar antes de que choquen y en qué archivos | Listo (`ready`) | — | — |
 
 ### M3
 
