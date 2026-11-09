@@ -451,8 +451,8 @@ fn a_developers_edit_in_another_file_is_kept() {
 
     assert!(ok, "{said}");
     assert!(
-        said.contains("se dejaron como estaban"),
-        "the kept paths are announced in Spanish: {said}"
+        said.contains("se dejó como estaba 1 ruta"),
+        "the kept path is announced in Spanish, in the singular: {said}"
     );
     assert!(said.contains("other.rs"), "and listed: {said}");
     assert_eq!(std::fs::read(m.worktree.join("api.rs")).unwrap(), WORK);
