@@ -84,7 +84,8 @@ pub enum RedoError {
 
 /// Whose work a redo takes back: the requester of the undo `undo` and the owner of everything that
 /// undo took back (the frozen requester of an operation, the engine's actor of a raw Git event).
-/// An operation or event that can no longer be read counts as unattributed: never as nobody's.
+/// An operation or event that can no longer be read, or a tampered operation, counts as
+/// unattributed: never as nobody's, never as whoever edited the row.
 pub(crate) fn redo_owners(undo: &OperationView, raw: &RawSide, oplog: &Oplog) -> Vec<Requester> {
     let mut owners = vec![undo.record.requester.clone()];
     let taken_back: &[OpRef] = match &undo.record.target {
@@ -97,6 +98,9 @@ pub(crate) fn redo_owners(undo: &OperationView, raw: &RawSide, oplog: &Oplog) ->
                 .operation(id)
                 .ok()
                 .flatten()
+                // A row in a declared break of the chain is untrusted (SEC-TMC-09): its requester
+                // could be anyone's, so it counts as unattributed, as an unreadable one does.
+                .filter(|view| !view.tampered)
                 .map(|view| view.record.requester),
             OpRef::GitEvent(seq) => raw
                 .events
@@ -671,3 +675,7 @@ pub fn redo_last(
 #[cfg(test)]
 #[path = "redo_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "redo_tamper_tests.rs"]
+mod tamper_tests;
