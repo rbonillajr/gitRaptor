@@ -152,7 +152,10 @@ pub(super) fn plan(input: &AgentPlanInput<'_, '_>) -> Result<Planned, PlanRefusa
         }
     }
 
-    let registered = registered_worktrees(input.common_dir).unwrap_or_default();
+    // Without the registered worktrees, a branch checked out elsewhere cannot be told apart
+    // (fail closed).
+    let registered = registered_worktrees(input.common_dir)
+        .map_err(|_| reject(TmRejectReason::WorktreeUnavailable, &own_scope, &[]))?;
     let wt_key = worktree_key(&registered, input.worktree, 0);
     let log = lock(input.oplog);
     let external = external_events(&log, input.raw, &key, &wt_key);
@@ -168,8 +171,9 @@ pub(super) fn plan(input: &AgentPlanInput<'_, '_>) -> Result<Planned, PlanRefusa
     let latest = now_ms().saturating_add(FUTURE_MARGIN_MS);
     let in_period = |at: i64| input.since_ms <= at && at <= latest;
     let mut undone: Vec<Undone> = Vec::new();
-    // Per oplog operation of the set: whether it spans other worktrees, and its prior.
-    let mut oplog_facts: HashMap<String, (bool, Option<String>)> = HashMap::new();
+    // Per oplog operation of the set: whether it spans other worktrees, its prior and the
+    // branches it names.
+    let mut oplog_facts: HashMap<String, (bool, Option<String>, BTreeSet<String>)> = HashMap::new();
     for op in stack.done() {
         match op {
             OpRef::GitEvent(seq) => {
@@ -191,8 +195,10 @@ pub(super) fn plan(input: &AgentPlanInput<'_, '_>) -> Result<Planned, PlanRefusa
                 }
             }
             OpRef::Oplog(id) => {
+                // An operation still done that cannot be read could be the agent's: the whole
+                // request is refused rather than undoing less than it asked without saying so.
                 let Some(view) = log.operation(id).ok().flatten() else {
-                    continue;
+                    return Err(reject(TmRejectReason::TargetUnavailable, &own_scope, &[]));
                 };
                 if !in_period(view.record.recorded_ms) {
                     continue;
@@ -200,7 +206,11 @@ pub(super) fn plan(input: &AgentPlanInput<'_, '_>) -> Result<Planned, PlanRefusa
                 let owner = operation_owner(view.record.kind, &view.record.requester, sessions);
                 if selector.selects(&owner) {
                     let spans_others = view.record.scope.worktrees.iter().any(|w| *w != key);
-                    oplog_facts.insert(id.clone(), (spans_others, view.prior_snapshot.clone()));
+                    let named = branch_names(&view.record.scope.refs);
+                    oplog_facts.insert(
+                        id.clone(),
+                        (spans_others, view.prior_snapshot.clone(), named),
+                    );
                     undone.push(Undone {
                         op: op.clone(),
                         id: view.record.operation_id.clone(),
@@ -270,15 +280,16 @@ pub(super) fn plan(input: &AgentPlanInput<'_, '_>) -> Result<Planned, PlanRefusa
                             .ok_or_else(|| {
                                 reject(TmRejectReason::TargetUnavailable, &own_scope, &set)
                             })?;
+                        let named: BTreeSet<String> = event.branch.iter().cloned().collect();
                         let (change, _) = between
-                            .change(&u.op, &u.requester, &before)
+                            .change(&u.op, &u.requester, &before, &named)
                             .map_err(|reason| reject(reason, &own_scope, &set))?;
                         (change, *seq, *seq - 1)
                     }
                 }
             }
             OpRef::Oplog(id) => {
-                let Some((spans_others, prior)) = oplog_facts.get(id) else {
+                let Some((spans_others, prior, named)) = oplog_facts.get(id) else {
                     return Err(reject(TmRejectReason::TargetUnavailable, &own_scope, &set));
                 };
                 // An operation over other worktrees (a restore) cannot be undone in this one.
@@ -289,7 +300,7 @@ pub(super) fn plan(input: &AgentPlanInput<'_, '_>) -> Result<Planned, PlanRefusa
                     .as_deref()
                     .ok_or_else(|| reject(TmRejectReason::TargetUnavailable, &own_scope, &set))?;
                 let (change, base_mark) = between
-                    .change(&u.op, &u.requester, before)
+                    .change(&u.op, &u.requester, before, named)
                     .map_err(|reason| reject(reason, &own_scope, &set))?;
                 // Its own echo runs up to the state it left: the branch rule starts there.
                 (change, base_mark, base_mark)
@@ -480,14 +491,21 @@ impl Between<'_> {
     }
 
     /// The change of `op` (owned by `owner`) from the point `before` (T) to its base B, and B's
-    /// engine mark: every path of the worktree and every branch that differs between them, and
-    /// its `HEAD` when it changed. Without a base, `overlap-unverified`: the change cannot be
-    /// told from what came after it.
+    /// engine mark: every path of the worktree that differs between them, its `HEAD` when it
+    /// changed, and the branches among `named` (short names) or checked out in the worktree at
+    /// T or B that differ. Without a base, `overlap-unverified`: the change cannot be told from
+    /// what came after it.
+    ///
+    /// The points hold every branch of the repo, so another branch can differ between T and B
+    /// because another actor moved or created it from another worktree in that window. Such a
+    /// branch is left out, never written: the operation did not name it, and undoing less is
+    /// the side NFR-01 allows.
     fn change(
         &self,
         op: &OpRef,
         owner: &Requester,
         before: &str,
+        named: &BTreeSet<String>,
     ) -> Result<(OpChange, i64), TmRejectReason> {
         let (Some(store), Some(snaps)) = (self.store, self.snaps) else {
             return Err(TmRejectReason::TargetUnavailable);
@@ -525,7 +543,18 @@ impl Between<'_> {
             out.before.insert(subject.clone(), t);
             out.after.insert(subject, b);
         }
-        for name in changed.refs {
+        let own = |side: &PointSide| {
+            side.meta
+                .worktrees
+                .iter()
+                .find(|w| w.key == key)
+                .and_then(|w| w.head_branch.clone())
+        };
+        let (head_t, head_b) = (own(&at_t), own(&at_b));
+        let is_own = |name: &String| {
+            named.contains(name) || head_t.as_ref() == Some(name) || head_b.as_ref() == Some(name)
+        };
+        for name in changed.refs.into_iter().filter(is_own) {
             let (t, b) = (at_t.branch(&name)?, at_b.branch(&name)?);
             let subject = Subject::Ref(format!("refs/heads/{name}"));
             out.before.insert(subject.clone(), Value::Ref(t));
@@ -545,6 +574,14 @@ impl Between<'_> {
         }
         Ok((out, base_mark))
     }
+}
+
+/// The short names of the `refs/heads/*` among `refs`.
+fn branch_names(refs: &[String]) -> BTreeSet<String> {
+    refs.iter()
+        .filter_map(|r| r.strip_prefix("refs/heads/"))
+        .map(str::to_owned)
+        .collect()
 }
 
 type StoreEntry = (gitraptor_git::tm_write::store::TreeEntryKind, Oid);
