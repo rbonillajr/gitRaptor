@@ -1,10 +1,15 @@
 // DS-US-DSK-004 T005 (§ 9.4, TS column that needs no IPC): the fleet in the centre, in en and es, with axe at 1440 and 1200 px.
-import { act, cleanup, render, screen, within } from "@testing-library/react";
+import { clearMocks, mockIPC } from "@tauri-apps/api/mocks";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import axe from "axe-core";
 import i18n from "i18next";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import "@/i18n";
-import type { RepoFleet } from "@/client/engine-types";
+import type { EngineMessage, RepoFleet } from "@/client/engine-types";
+import { App } from "@/app/App";
+import { useEngineStore } from "@/state/engine-store";
+import { queryClient } from "@/state/query-client";
+import { useUiStore } from "@/state/ui-store";
 import { setViewportWidth } from "../../tests/setup";
 import { FleetView } from "./FleetView";
 import { HOUR, MIN, NOW, counted, pair, ready, session, tienda, worktree } from "./fixtures";
@@ -265,5 +270,103 @@ describe("FleetView accessibility", () => {
       expect(c.textContent?.trim()).not.toBe("");
     }
     expect(card(/feat-login/)).toHaveTextContent(/●.*active/);
+  });
+});
+
+// D4-FRESH (DS-US-DSK-004 T006): after the React commit that applied a batch with repo messages, in the first
+// requestAnimationFrame the window measures `gr:fleet-delta` from the batch's `receivedAt` and marks
+// `gr:fleet-delta-painted`: once per batch, never per message, never on a re-render. Driven through `App` with a
+// fake `Channel`, because the plan does not say how the batch reaches `FleetView`.
+describe("D4-FRESH fleet delta marks", () => {
+  type WatchedChannel = { onmessage: (message: EngineMessage) => void };
+  let channel: WatchedChannel | undefined;
+  let measure: MockInstance<typeof performance.measure>;
+  let mark: MockInstance<typeof performance.mark>;
+  const deltas = () => measure.mock.calls.filter(([name]) => name === "gr:fleet-delta");
+  const painted = () => mark.mock.calls.filter(([name]) => name === "gr:fleet-delta-painted");
+  const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  const frames = async () => {
+    for (let i = 0; i < 3; i += 1) await frame();
+  };
+  const send = (...batch: EngineMessage[]) =>
+    act(() => {
+      for (const message of batch) channel?.onmessage(message);
+    });
+  const perf = { backendNs: 1_000_000 };
+  const row = {
+    repoId: "tienda",
+    name: "tienda",
+    path: "/w/tienda/.git",
+    state: "observed" as const,
+    tier: "active" as const,
+    attention: { conflicts: { state: "counted" as const, count: 0 }, denials: { state: "counted" as const, count: 0 } },
+  };
+
+  beforeEach(() => {
+    channel = undefined;
+    queryClient.clear();
+    useEngineStore.setState({ conn: { kind: "connecting" }, staleSinceMs: null, resync: null, session: null });
+    useUiStore.setState({ selectedRepoId: null });
+    measure = vi.spyOn(performance, "measure");
+    mark = vi.spyOn(performance, "mark");
+    mockIPC((cmd, args) => {
+      if (cmd === "engine_watch") channel = (args as { params: { channel: WatchedChannel } }).params.channel;
+      if (cmd === "app_info") return { version: "0.0.0", protocol: 9 };
+      return {};
+    });
+  });
+  afterEach(() => {
+    cleanup();
+    clearMocks();
+    vi.restoreAllMocks();
+  });
+
+  it("measures each fleet delta once", async () => {
+    render(<App />);
+    await waitFor(() => expect(channel, "App must call engine_watch with a Channel").toBeDefined());
+    await send(
+      { type: "session", daemonVersion: "0.1.0", protocol: 9, restricted: false, activity: true, discovery: true },
+      { type: "global", engine: { state: "observing", gitVersion: "2.45.1" }, daemon: { version: "0.1.0", protocol: 9 }, autostart: "unknown", repos: [row] },
+      { type: "conn", state: { kind: "live" }, staleSinceMs: null, resync: null },
+    );
+    await waitFor(() => expect(useUiStore.getState().selectedRepoId, "the repo is opened by default").toBe("tienda"));
+    await send({ type: "repo", fleet: tienda().repo });
+    await screen.findByRole("list", { name: "Worktrees of tienda" });
+    await frames();
+    const baseDeltas = deltas().length;
+    const basePainted = painted().length;
+
+    // One batch of three repo messages: one measure, one painted mark.
+    const base = tienda().repo;
+    await send(
+      { type: "worktrees", repoId: "tienda", worktrees: base.worktrees, fetchedUtcMs: 1, perf },
+      { type: "repoSession", repoId: "tienda", session: session("claude-1", "feat-pagos"), perf },
+      { type: "prediction", repoId: "tienda", pairs: [], removed: [], perf },
+    );
+    await waitFor(() => expect(deltas(), "one gr:fleet-delta measure for the batch").toHaveLength(baseDeltas + 1));
+    await waitFor(() => expect(painted(), "and its gr:fleet-delta-painted mark").toHaveLength(basePainted + 1));
+    const last = deltas().at(-1);
+    expect(last?.[1], "the measure starts at the receivedAt of the batch").toEqual({ start: expect.any(Number) });
+    expect((last?.[1] as { start: number }).start, "a time of this page, in the past").toBeLessThanOrEqual(performance.now());
+    await frames();
+    expect(deltas(), "three messages, still one measure").toHaveLength(baseDeltas + 1);
+
+    // A re-render with no new batch (the clock ticking) measures nothing.
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await frames();
+    expect(deltas(), "a re-render is not a delta").toHaveLength(baseDeltas + 1);
+    expect(painted(), "nor a painted mark").toHaveLength(basePainted + 1);
+
+    // The next batch is a new delta.
+    await send({ type: "worktrees", repoId: "tienda", worktrees: base.worktrees, fetchedUtcMs: 2, perf });
+    await waitFor(() => expect(deltas(), "the next batch measures once more").toHaveLength(baseDeltas + 2));
+    await waitFor(() => expect(painted()).toHaveLength(basePainted + 2));
+
+    // A batch without repo messages is not a fleet delta.
+    await send({ type: "repoTier", repoId: "tienda", tier: "dormant" });
+    await frames();
+    expect(deltas(), "a global message measures nothing").toHaveLength(baseDeltas + 2);
   });
 });

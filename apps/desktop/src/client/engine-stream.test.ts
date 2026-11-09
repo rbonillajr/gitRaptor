@@ -54,3 +54,38 @@ describe("D3-STREAM watchEngine", () => {
     expect(batches[0], "the batch keeps the order of arrival").toEqual(sent);
   });
 });
+
+// D4-FRESH (DS-US-DSK-004 T006): each batch carries `receivedAt`, the `performance.now()` of its first message.
+// Assumed shape (the plan says "cada lote lleva receivedAt" and no more): the batch array itself or a second argument
+// of `onBatch` has a `receivedAt` number; both are read.
+describe("D4-FRESH watchEngine receivedAt", () => {
+  it("receivedAt: each batch carries the performance.now of its first message, not of the last", async () => {
+    let now = 0;
+    vi.spyOn(performance, "now").mockImplementation(() => now);
+    let channel: Channel<EngineMessage> | undefined;
+    mockIPC((cmd, args) => {
+      if (cmd === "engine_watch") channel = (args as { params: { channel: Channel<EngineMessage> } }).params.channel;
+      return {};
+    });
+    const delivered: unknown[][] = [];
+    await (watchEngine as (onBatch: (...args: unknown[]) => void) => Promise<void>)((...args) => delivered.push(args));
+    const receivedAt = (args: unknown[] | undefined): unknown =>
+      (args?.[1] as { receivedAt?: unknown } | undefined)?.receivedAt ?? (args?.[0] as { receivedAt?: unknown } | undefined)?.receivedAt;
+
+    now = 100;
+    channel?.onmessage({ type: "repoRetired", repoId: "a" });
+    now = 150;
+    channel?.onmessage({ type: "repoRetired", repoId: "b" });
+    frames[0]?.(0);
+    expect(delivered, "the first batch is delivered at its frame").toHaveLength(1);
+    expect(receivedAt(delivered[0]), "the first message of the batch arrived at 100").toBe(100);
+
+    now = 300;
+    channel?.onmessage({ type: "repoRetired", repoId: "c" });
+    now = 320;
+    frames[1]?.(0);
+    expect(delivered, "the second batch is delivered at its frame").toHaveLength(2);
+    expect(receivedAt(delivered[1]), "the second batch has its own receivedAt").toBe(300);
+    expect((delivered[0]?.[0] as unknown[]).length, "the batch is still the messages in order").toBe(2);
+  });
+});

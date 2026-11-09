@@ -78,6 +78,219 @@
     ],
     "type": "global"
   },
+  "prediction": {
+    "pairs": [
+      {
+        "a": "3333333333333333",
+        "b": "2222222222222222",
+        "level": "overlap",
+        "pairId": "pair-1",
+        "state": "recalculating"
+      }
+    ],
+    "perf": {
+      "backendNs": 600000
+    },
+    "removed": [
+      "pair-old"
+    ],
+    "repoId": "repo-alpha",
+    "type": "prediction"
+  },
+  "repo": {
+    "fleet": {
+      "base": {
+        "name": "main",
+        "status": "confirmed"
+      },
+      "fetchedUtcMs": 1762690000000,
+      "name": "tienda",
+      "pairs": [
+        {
+          "a": "3333333333333333",
+          "b": "2222222222222222",
+          "level": "conflict",
+          "pairId": "pair-1",
+          "state": "current"
+        },
+        {
+          "a": "2222222222222222",
+          "b": "base",
+          "level": null,
+          "pairId": "pair-2",
+          "state": "pending"
+        }
+      ],
+      "pairsTruncated": false,
+      "repoId": "repo-alpha",
+      "tier": "active",
+      "worktrees": [
+        {
+          "detachedAt": null,
+          "folder": "tienda",
+          "key": "1111111111111111",
+          "lastActivityInGap": false,
+          "lastActivityUtcMs": 1762697000000,
+          "main": true,
+          "operation": null,
+          "path": "/w/tienda",
+          "status": {
+            "counts": {
+              "staged": 0,
+              "unstaged": 0,
+              "untracked": 0
+            },
+            "divergence": {
+              "ahead": {
+                "count": 0,
+                "exact": true
+              },
+              "behind": {
+                "count": 0,
+                "exact": true
+              },
+              "state": "counted"
+            },
+            "head": {
+              "kind": "branch",
+              "name": "main"
+            },
+            "state": "ready"
+          }
+        },
+        {
+          "detachedAt": null,
+          "folder": "feat-pagos",
+          "key": "2222222222222222",
+          "lastActivityInGap": false,
+          "lastActivityUtcMs": 1762697090000,
+          "main": false,
+          "operation": "rebase",
+          "path": "/w/feat-pagos",
+          "status": {
+            "counts": {
+              "staged": 0,
+              "unstaged": 2,
+              "untracked": 0
+            },
+            "divergence": {
+              "ahead": {
+                "count": 3,
+                "exact": true
+              },
+              "behind": {
+                "count": 1,
+                "exact": true
+              },
+              "state": "counted"
+            },
+            "head": {
+              "kind": "branch",
+              "name": "feat-pagos"
+            },
+            "state": "ready"
+          }
+        },
+        {
+          "detachedAt": "0123456789abcdef0123456789abcdef01234567",
+          "folder": "feat-login",
+          "key": "3333333333333333",
+          "lastActivityInGap": true,
+          "lastActivityUtcMs": null,
+          "main": false,
+          "operation": null,
+          "path": "/w/feat-login",
+          "status": {
+            "counts": {
+              "staged": 0,
+              "unstaged": 0,
+              "untracked": 0
+            },
+            "divergence": {
+              "ahead": {
+                "count": 10000,
+                "exact": false
+              },
+              "behind": {
+                "count": 0,
+                "exact": true
+              },
+              "state": "counted"
+            },
+            "head": {
+              "kind": "detached"
+            },
+            "state": "ready"
+          }
+        },
+        {
+          "detachedAt": null,
+          "folder": "spike",
+          "key": "4444444444444444",
+          "lastActivityInGap": false,
+          "lastActivityUtcMs": null,
+          "main": false,
+          "operation": null,
+          "path": "/w/spike",
+          "status": {
+            "counts": {
+              "staged": 0,
+              "unstaged": 0,
+              "untracked": 0
+            },
+            "divergence": {
+              "state": "no-commits"
+            },
+            "head": {
+              "kind": "unborn",
+              "name": "spike"
+            },
+            "state": "ready"
+          }
+        },
+        {
+          "detachedAt": null,
+          "folder": "gone",
+          "key": "5555555555555555",
+          "lastActivityInGap": false,
+          "lastActivityUtcMs": null,
+          "main": false,
+          "operation": null,
+          "path": "/w/gone",
+          "status": {
+            "reason": "missing",
+            "state": "unavailable"
+          }
+        },
+        {
+          "detachedAt": null,
+          "folder": "base-less",
+          "key": "6666666666666666",
+          "lastActivityInGap": false,
+          "lastActivityUtcMs": null,
+          "main": false,
+          "operation": null,
+          "path": "/w/base-less",
+          "status": {
+            "counts": {
+              "staged": 0,
+              "unstaged": 0,
+              "untracked": 0
+            },
+            "divergence": {
+              "state": "base-missing"
+            },
+            "head": {
+              "kind": "branch",
+              "name": "x"
+            },
+            "state": "ready"
+          }
+        }
+      ]
+    },
+    "type": "repo"
+  },
   "repoAttention": {
     "attention": {
       "conflicts": {
@@ -91,6 +304,10 @@
     },
     "repoId": "repo-alpha",
     "type": "repoAttention"
+  },
+  "repoClosed": {
+    "repoId": "repo-beta",
+    "type": "repoClosed"
   },
   "repoObserved": {
     "repo": {
@@ -115,6 +332,26 @@
     "repoId": "repo-beta",
     "type": "repoRetired"
   },
+  "repoSession": {
+    "perf": {
+      "backendNs": 800000
+    },
+    "repoId": "repo-alpha",
+    "session": {
+      "agent": {
+        "kind": "claude-code"
+      },
+      "endCause": null,
+      "endedUtcMs": null,
+      "origin": "registered",
+      "sessionId": "claude-1",
+      "startedUtcMs": 1762696000000,
+      "state": "inactive",
+      "stateSinceUtcMs": 1762697500000,
+      "worktreeKey": "2222222222222222"
+    },
+    "type": "repoSession"
+  },
   "repoTier": {
     "repoId": "repo-alpha",
     "tier": "dormant",
@@ -127,5 +364,211 @@
     "protocol": 9,
     "restricted": false,
     "type": "session"
+  },
+  "sessions": {
+    "detectionAvailable": true,
+    "repoId": "repo-alpha",
+    "sessions": [
+      {
+        "agent": {
+          "kind": "claude-code"
+        },
+        "endCause": null,
+        "endedUtcMs": null,
+        "origin": "detected",
+        "sessionId": "claude-1",
+        "startedUtcMs": 1762696000000,
+        "state": "active",
+        "stateSinceUtcMs": 1762697000000,
+        "worktreeKey": "2222222222222222"
+      },
+      {
+        "agent": {
+          "kind": "other",
+          "name": "Aider"
+        },
+        "endCause": "process-gone",
+        "endedUtcMs": 1762697000000,
+        "origin": "registered",
+        "sessionId": "agent-x",
+        "startedUtcMs": 1762696000000,
+        "state": "ended",
+        "stateSinceUtcMs": 1762697000000,
+        "worktreeKey": "3333333333333333"
+      }
+    ],
+    "type": "sessions"
+  },
+  "worktrees": {
+    "fetchedUtcMs": null,
+    "perf": {
+      "backendNs": 1500000
+    },
+    "repoId": "repo-alpha",
+    "type": "worktrees",
+    "worktrees": [
+      {
+        "detachedAt": null,
+        "folder": "tienda",
+        "key": "1111111111111111",
+        "lastActivityInGap": false,
+        "lastActivityUtcMs": 1762697000000,
+        "main": true,
+        "operation": null,
+        "path": "/w/tienda",
+        "status": {
+          "counts": {
+            "staged": 0,
+            "unstaged": 0,
+            "untracked": 0
+          },
+          "divergence": {
+            "ahead": {
+              "count": 0,
+              "exact": true
+            },
+            "behind": {
+              "count": 0,
+              "exact": true
+            },
+            "state": "counted"
+          },
+          "head": {
+            "kind": "branch",
+            "name": "main"
+          },
+          "state": "ready"
+        }
+      },
+      {
+        "detachedAt": null,
+        "folder": "feat-pagos",
+        "key": "2222222222222222",
+        "lastActivityInGap": false,
+        "lastActivityUtcMs": 1762697090000,
+        "main": false,
+        "operation": "rebase",
+        "path": "/w/feat-pagos",
+        "status": {
+          "counts": {
+            "staged": 0,
+            "unstaged": 2,
+            "untracked": 0
+          },
+          "divergence": {
+            "ahead": {
+              "count": 3,
+              "exact": true
+            },
+            "behind": {
+              "count": 1,
+              "exact": true
+            },
+            "state": "counted"
+          },
+          "head": {
+            "kind": "branch",
+            "name": "feat-pagos"
+          },
+          "state": "ready"
+        }
+      },
+      {
+        "detachedAt": "0123456789abcdef0123456789abcdef01234567",
+        "folder": "feat-login",
+        "key": "3333333333333333",
+        "lastActivityInGap": true,
+        "lastActivityUtcMs": null,
+        "main": false,
+        "operation": null,
+        "path": "/w/feat-login",
+        "status": {
+          "counts": {
+            "staged": 0,
+            "unstaged": 0,
+            "untracked": 0
+          },
+          "divergence": {
+            "ahead": {
+              "count": 10000,
+              "exact": false
+            },
+            "behind": {
+              "count": 0,
+              "exact": true
+            },
+            "state": "counted"
+          },
+          "head": {
+            "kind": "detached"
+          },
+          "state": "ready"
+        }
+      },
+      {
+        "detachedAt": null,
+        "folder": "spike",
+        "key": "4444444444444444",
+        "lastActivityInGap": false,
+        "lastActivityUtcMs": null,
+        "main": false,
+        "operation": null,
+        "path": "/w/spike",
+        "status": {
+          "counts": {
+            "staged": 0,
+            "unstaged": 0,
+            "untracked": 0
+          },
+          "divergence": {
+            "state": "no-commits"
+          },
+          "head": {
+            "kind": "unborn",
+            "name": "spike"
+          },
+          "state": "ready"
+        }
+      },
+      {
+        "detachedAt": null,
+        "folder": "gone",
+        "key": "5555555555555555",
+        "lastActivityInGap": false,
+        "lastActivityUtcMs": null,
+        "main": false,
+        "operation": null,
+        "path": "/w/gone",
+        "status": {
+          "reason": "missing",
+          "state": "unavailable"
+        }
+      },
+      {
+        "detachedAt": null,
+        "folder": "base-less",
+        "key": "6666666666666666",
+        "lastActivityInGap": false,
+        "lastActivityUtcMs": null,
+        "main": false,
+        "operation": null,
+        "path": "/w/base-less",
+        "status": {
+          "counts": {
+            "staged": 0,
+            "unstaged": 0,
+            "untracked": 0
+          },
+          "divergence": {
+            "state": "base-missing"
+          },
+          "head": {
+            "kind": "branch",
+            "name": "x"
+          },
+          "state": "ready"
+        }
+      }
+    ]
   }
 }

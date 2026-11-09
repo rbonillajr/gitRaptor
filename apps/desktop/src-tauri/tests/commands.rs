@@ -8,6 +8,7 @@
 use gitraptor_desktop::commands::app_info;
 use gitraptor_desktop::commands::engine_retry::EngineRetryParams;
 use gitraptor_desktop::commands::engine_watch::EngineWatchParams;
+use gitraptor_desktop::commands::fleet_open::FleetOpenParams;
 use gitraptor_desktop::engine::link::{ConnectFailure, Connector, Link};
 use gitraptor_desktop::engine::{EngineHub, NotWatching};
 use gitraptor_desktop::ipc::{CommandError, from_body, parse};
@@ -186,11 +187,14 @@ fn rejects<P: serde::de::DeserializeOwned>(body: Value) {
 
 #[test]
 fn d3_cmds_engine_commands_are_listed_and_allowed() {
-    assert_eq!(
-        commands_json(),
-        ["app_info", "engine_retry", "engine_watch"],
-        "D3-CMDS: commands.json is exactly app_info, engine_watch and engine_retry"
-    );
+    // `fleet_open` joins the list in DS-US-DSK-004 (see the D4-CMD tests below).
+    let listed = commands_json();
+    for name in ["app_info", "engine_retry", "engine_watch"] {
+        assert!(
+            listed.iter().any(|c| c == name),
+            "D3-CMDS: commands.json lacks {name}"
+        );
+    }
     let text = std::fs::read_to_string(Path::new(ROOT).join("capabilities/main.json")).unwrap();
     let cap: Value = serde_json::from_str(&text).unwrap();
     let perms: Vec<&str> = cap["permissions"]
@@ -251,5 +255,98 @@ fn d3_cmds_engine_retry_needs_start_rejects_unknown_fields_and_is_not_watching_a
         serde_json::to_value(CommandError::NotWatching).unwrap(),
         json!({"code": "not-watching"}),
         "D3-CMDS: NotWatching serialises as not-watching"
+    );
+}
+
+// ---------------------------------------------------------------- D4-CMD (DS-US-DSK-004 T002)
+
+#[test]
+fn fleet_open_is_in_the_closed_list_and_the_capability() {
+    assert_eq!(
+        commands_json(),
+        ["app_info", "engine_retry", "engine_watch", "fleet_open"],
+        "D4-CMD: commands.json is the three of US-DSK-003 plus fleet_open"
+    );
+    assert!(
+        command_fns().iter().any(|c| c == "fleet_open"),
+        "D4-CMD: src/commands has a #[tauri::command] fn fleet_open"
+    );
+    let text = std::fs::read_to_string(Path::new(ROOT).join("capabilities/main.json")).unwrap();
+    let cap: Value = serde_json::from_str(&text).unwrap();
+    let perms: Vec<&str> = cap["permissions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p.as_str().unwrap())
+        .collect();
+    assert!(
+        perms.contains(&"allow-fleet-open"),
+        "D4-CMD: capability main lacks allow-fleet-open"
+    );
+}
+
+/// What `fleet_open` decides about `body` before it reaches the supervisor: the envelope and the
+/// id are checked either when the params are read or when the hub is asked to open, never later.
+fn fleet_open_verdict(body: &Value) -> Result<(), CommandError> {
+    let params = parse::<FleetOpenParams>(body)?;
+    let hub = EngineHub::new(Box::new(NoEngine), None);
+    hub.open(params.repo_id).map_err(|e| match e {
+        CommandError::InvalidParams => CommandError::InvalidParams,
+        CommandError::NotWatching => CommandError::NotWatching,
+    })
+}
+
+#[test]
+fn fleet_open_accepts_params_and_rejects_bad_ids() {
+    // A good id gets past the checks: with no supervisor the only thing left is not-watching.
+    assert_eq!(
+        fleet_open_verdict(&json!({"params": {"repoId": "tienda"}})),
+        Err(CommandError::NotWatching),
+        "D4-CMD: {{\"params\":{{\"repoId\":\"tienda\"}}}} must be accepted"
+    );
+    assert_eq!(
+        fleet_open_verdict(&json!({"params": {"repoId": "a".repeat(128)}})),
+        Err(CommandError::NotWatching),
+        "D4-CMD: an id of exactly 128 bytes is accepted"
+    );
+    let invalid = [
+        json!({"params": {"repoId": "tienda", "x": 1}}),
+        json!({"params": {"repoId": "tienda"}, "extra": 1}),
+        json!({"params": {}}),
+        json!({"params": {"repoId": 7}}),
+        json!({"params": {"repoId": ""}}),
+        json!({"params": {"repoId": "a".repeat(129)}}),
+        // 65 two-byte characters: 130 bytes, only 65 chars.
+        json!({"params": {"repoId": "é".repeat(65)}}),
+        json!({"params": {"repoId": "ti\u{0}enda"}}),
+        json!({"params": {"repoId": "ti\nenda"}}),
+        json!({"params": {"repoId": "ti\u{1b}]0;x\u{7}enda"}}),
+        json!({"params": {"repoId": "ti\u{7f}enda"}}),
+    ];
+    for body in invalid {
+        assert_eq!(
+            fleet_open_verdict(&body),
+            Err(CommandError::InvalidParams),
+            "D4-CMD: {body} must be rejected with invalid-params"
+        );
+    }
+}
+
+#[test]
+fn fleet_open_without_a_supervisor_is_not_watching() {
+    assert!(
+        command_fns().iter().any(|c| c == "fleet_open"),
+        "D4-CMD: there is a #[tauri::command] fn fleet_open to answer not-watching"
+    );
+    let hub = EngineHub::new(Box::new(NoEngine), None);
+    assert_eq!(
+        hub.open("tienda".to_owned()),
+        Err(CommandError::NotWatching),
+        "D4-CMD: fleet_open without a supervisor is not-watching"
+    );
+    assert_eq!(
+        serde_json::to_value(CommandError::NotWatching).unwrap(),
+        json!({"code": "not-watching"}),
+        "D4-CMD: NotWatching serialises as not-watching"
     );
 }
