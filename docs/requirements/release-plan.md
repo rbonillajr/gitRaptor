@@ -280,11 +280,12 @@ Lo que cambió respecto del 2026-10-08 (27 PR y 8,8 fichas equivalentes por día
 | Id | Qué | MoSCoW | Estado | Qué le falta |
 |---|---|---|---|---|
 | TS-DSK-001 | Andamiaje de `apps/desktop`: proyecto Tauri del monorepo, frontera de seguridad y ventana vacía | Must | Pend (`ready`) | Nada: es el primer eslabón. Dev Spec lista |
-| TS-DSK-002 | Arranque del motor desde la app y binarios del motor dentro del bundle | Must | Pend (`ready`) | TS-DSK-001 |
+| TS-DSK-002 | Arranque del motor desde la app y binarios del motor dentro del bundle | Must | Pend (`ready`) | TS-DSK-001. Dev Spec lista |
+| TS-GRP-009 | Clase de cliente `desktop` y perfil de lectura `mcp` cuando un agente abre la app | Must | Pend (`draft`) | Bloquea la primera escritura de la app (US-DSK-001, 002 y 006), no las lecturas: hasta entonces la app lee lo mismo que un agente que ejecuta `raptor` (revisión de seguridad del 2026-11-08) |
 | US-DSK-001 | Añadir un repo sin terminal | Must | Pend (`ready`) | Factor del SO (SPIKE-GRD-002); mientras tanto, comando para copiar |
 | US-DSK-002 | Proteger un repo con un clic | Must | Pend (`ready`) | Factor del SO; mientras tanto, comando para copiar |
 | US-DSK-003 | Estado del motor | Must | Pend (`ready`) | DEP-DSK-5 |
-| US-DSK-004 | Flota en vivo | Must | Pend (`ready`) | DEP-DSK-2 |
+| US-DSK-004 | Flota en vivo | Must | Pend (`ready`) | US-DSK-003. DEP-DSK-2 ya no bloquea (perfil provisional `Cli`, TS-GRP-009) |
 | US-DSK-005 | Grafo de carriles | Must | Pend (`ready`) | Lo que falte de US-CKP-022 |
 | US-DSK-006 | Deshacer de un botón | Must | Pend (`ready`) | Factor del SO para confirmar trabajo ajeno |
 | US-DSK-007 | Bloqueo explicado | Must | Pend (`ready`) | La excepción consciente es el comando `raptor guard exec`, que la app muestra para copiar (Q-DSK-9) |
@@ -310,7 +311,7 @@ Estimada el 2026-11-08 por el Scrum Master, con el [método](#velocidad-observad
 | TS-DSK-001 andamiaje | 1,0 | Proyecto Tauri, frontera de seguridad y job `desktop` en ubuntu |
 | TS-DSK-002 arranque del motor y bundle | 1,0 | `externalBin` y arranque del daemon; sin firma (va en v0.1.0) |
 | US-DSK-003 estado del motor | 1,0 | Primera pantalla con el canal real |
-| US-DSK-004 flota en vivo | 1,5 | Flujo de eventos y saneador SEC-12 compartido |
+| US-DSK-004 flota en vivo | 1,5 | Flujo de eventos (el saneador SEC-12 compartido lo mueve US-DSK-003) |
 | US-DSK-005 grafo de carriles | 1,5 | Pantalla nueva |
 | US-DSK-008 conflictos previstos | 1,0 | TS-CKP-001 ya está implementada: solo se consume `prediction.*` |
 | US-DSK-007 bloqueo explicado | 1,0 | Lectura de `guard.log` y `audit.list` |
