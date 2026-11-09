@@ -47,14 +47,14 @@ export const useUiStore = create<UiState & UiActions & FleetSelection>()(
       selectedRepoId: null,
       previousRepoId: null,
       center: { view: "main" },
-      openPairDetail: () => {},
-      backToMain: () => {},
-      closePairDetail: () => {},
+      openPairDetail: ({ repoId, pairId }) => set({ center: { view: "pair", repoId, pairId } }),
+      backToMain: () => set({ center: { view: "main" } }),
+      closePairDetail: () => set({ center: { view: "main" } }),
       selectRepo: (id) =>
         set((s) =>
           id === null || s.selectedRepoId === null || s.selectedRepoId === id
-            ? { selectedRepoId: id }
-            : { selectedRepoId: id, previousRepoId: s.selectedRepoId },
+            ? { selectedRepoId: id, center: s.selectedRepoId === id ? s.center : { view: "main" } }
+            : { selectedRepoId: id, previousRepoId: s.selectedRepoId, center: { view: "main" } },
         ),
       toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
       toggleDetail: () => set((s) => ({ detailOpen: !s.detailOpen })),

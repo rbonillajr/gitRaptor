@@ -23,7 +23,9 @@
     "common": {
       "close": "Close",
       "cancel": "Cancel",
-      "loading": "Loading…"
+      "loading": "Loading…",
+      "copied": "Copied",
+      "copyFailed": "Couldn't copy. Select the command and copy it by hand."
     },
     "button": {
       "busy": "In progress"
@@ -218,6 +220,134 @@
         "engine": "Engine running",
         "git": "Git {{version}} found"
       }
+    }
+  },
+  "conflicts": {
+    "panel": {
+      "title": "Predicted conflicts",
+      "list": "Predicted conflicts in {{repo}}",
+      "more_one": "and {{count}} more conflict",
+      "more_other": "and {{count}} more conflicts",
+      "less": "Show fewer"
+    },
+    "band": {
+      "conflict": "⚡ predicted conflict",
+      "overlap": "⚠ same files, not committed yet",
+      "pair": "{{a}} ↔ {{b}}",
+      "more_one": "and {{count}} more",
+      "more_other": "and {{count}} more",
+      "moreTruncated": "and more",
+      "new": "new",
+      "open": "View",
+      "openLabel": "View the conflict between {{a}} and {{b}}",
+      "a11y": "{{level}} between {{a}} and {{b}}, {{file}}, {{freshness}}"
+    },
+    "side": {
+      "base": "{{base}} (main branch)"
+    },
+    "freshness": {
+      "ago": "{{age}} ago",
+      "stale": "outdated · {{age}} ago · recalculating",
+      "clear": "No predicted conflicts · {{age}} ago",
+      "calculating_one": "Calculating {{n}} of 1 pair",
+      "calculating_other": "Calculating {{n}} of {{count}} pairs",
+      "calculatingSince_one": "Calculating {{n}} of 1 pair · last result {{age}} ago",
+      "calculatingSince_other": "Calculating {{n}} of {{count}} pairs · last result {{age}} ago",
+      "pending_one": "Pending: {{reason}} (1 pair)",
+      "pending_other": "Pending: {{reason}} ({{count}} pairs)",
+      "notComputable_one": "Not computable: {{reason}} (1 pair)",
+      "notComputable_other": "Not computable: {{reason}} ({{count}} pairs)"
+    },
+    "reason": {
+      "baseUnconfirmed": "confirm the base branch",
+      "operationInProgress": "an operation is in progress",
+      "powerSaving": "power saving is on",
+      "dormant": "the repo is dormant",
+      "baseMissing": "the base branch is missing",
+      "missingObject": "a Git object is missing",
+      "shallow": "the clone is shallow",
+      "limitExceeded": "a limit was exceeded",
+      "error": "the calculation failed"
+    },
+    "base": {
+      "pending": "Base branch waiting for confirmation ({{base}})",
+      "hint": "Run it in your own terminal (not an agent's). It shows what it will do and asks before doing it.",
+      "hintFolder": "Run it in your own terminal, in the folder of {{repo}}. It shows what it will do and asks before doing it.",
+      "raptorUnknown": "GitRaptor can't find its own `raptor` to write the command. Confirm the base branch from GitRaptor's terminal tools."
+    },
+    "limits": {
+      "line": "Uncommitted work counts as overlap; predicted conflicts only use committed work.",
+      "open": "Limits (?)",
+      "title": "Prediction limits"
+    },
+    "limit": {
+      "overlapIncludesUncommitted": "⚠ counts work that is not committed",
+      "conflictCommittedOnly": "⚡ uses only committed work",
+      "noMergeDriversOrAttributes": "Merge drivers and .gitattributes are not applied",
+      "renameLimit": "Rename detection stops at a limit",
+      "insertionsMayMerge": "Without ⚡ the merge may still conflict",
+      "joinedHunks": "Nearby edits may be joined in one hunk",
+      "pairIgnoresBaseMoves": "A pair ignores later moves of the base",
+      "localOnly": "Local only: nothing is fetched or pushed"
+    },
+    "kind": {
+      "content": "content",
+      "addAdd": "added in both",
+      "modifyDelete": "modified and deleted",
+      "rename": "renamed in both",
+      "directoryFile": "file and directory",
+      "binary": "binary",
+      "submodule": "submodule"
+    },
+    "range": {
+      "line": "line {{start}}",
+      "lines": "lines {{start}}–{{end}}",
+      "more": "and more ranges",
+      "a11y": "lines {{start}} to {{end}}"
+    },
+    "detail": {
+      "title": "⚡ {{a}} ↔ {{b}} are going to collide",
+      "titleOverlap": "⚠ {{a}} and {{b}} are editing the same files",
+      "titleBase": "⚡ {{a}} is going to collide with {{base}}",
+      "computed": "{{a}} ↔ {{b}} · computed {{age}} ago",
+      "conflict": "Predicted conflict (committed work)",
+      "overlap": "Overlap (uncommitted changes)",
+      "side": "{{side}} — {{ranges}}",
+      "mergeRule": "has its own merge rule: the real merge may differ",
+      "truncated": "Not every file is listed.",
+      "todo": "Simplest fix: merge one branch first, then have the other agent update.",
+      "prediction": "This is a prediction. It doesn't use your merge rules or .gitattributes.",
+      "loading": "Loading the files…",
+      "calculating": "Calculating…",
+      "resolved": "No conflict predicted between {{a}} and {{b}} anymore ({{age}} ago).",
+      "gone": "This pair is no longer predicted.",
+      "back": "Back to the fleet",
+      "todoTitle": "What to do",
+      "sideA11y": "{{side}}, {{ranges}}",
+      "conflictHint": "Two branches changed the same part of a file; merging them will need a choice.",
+      "overlapHint": "Two agents are editing the same file, not committed yet."
+    },
+    "tooltip": {
+      "conflict": "Two branches changed the same part of a file; merging them will need a choice.",
+      "overlap": "Two agents are editing the same file, not committed yet."
+    },
+    "a11y": {
+      "conflict": "predicted conflict",
+      "overlap": "same files, not committed yet"
+    },
+    "toast": {
+      "withFile_one": "⚡ Predicted conflict: {{a}} ↔ {{b}} in {{file}}",
+      "withFile_other": "⚡ Predicted conflict: {{a}} ↔ {{b}} in {{file}} and {{count}} more",
+      "noFile": "⚡ Predicted conflict: {{a}} ↔ {{b}}",
+      "otherRepo": "⚡ New predicted conflict in {{repo}}",
+      "many": "⚡ {{count}} new predicted conflicts",
+      "open": "View"
+    },
+    "pill_one": "⚡ {{count}} predicted conflict",
+    "pill_other": "⚡ {{count}} predicted conflicts",
+    "pill": {
+      "label": "{{count}} predicted conflicts across your repos. Open them",
+      "compact": "⚡ {{count}}"
     }
   }
 }

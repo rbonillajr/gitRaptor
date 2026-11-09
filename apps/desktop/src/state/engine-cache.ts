@@ -80,12 +80,10 @@ export function applyEngineBatch(client: QueryClient, batch: readonly EngineMess
         }));
         break;
       case "repo":
-        client.setQueryData<RepoFleet>(engineKeys.repo(message.fleet.repoId), {
-          repo: message.fleet,
-          sessions: new Map(),
-          detection: null,
-          details: new Map(),
-          lastComputed: new Map(),
+        client.setQueryData<RepoFleet>(engineKeys.repo(message.fleet.repoId), (old) => {
+          const inSnapshot = new Set(message.fleet.pairs.map((p) => p.pairId));
+          const lastComputed = new Map([...(old?.lastComputed ?? [])].filter(([id]) => inSnapshot.has(id)));
+          return { repo: message.fleet, sessions: new Map(), detection: null, details: new Map(), lastComputed };
         });
         break;
       case "worktrees":
@@ -110,12 +108,41 @@ export function applyEngineBatch(client: QueryClient, batch: readonly EngineMess
         break;
       case "prediction":
         patchFleet(message.repoId, (f) => {
-          const incoming = new Map(message.pairs.map((p) => [p.pairId, p]));
           const removed = new Set(message.removed);
-          const kept = f.repo.pairs.filter((p) => !removed.has(p.pairId)).map((p) => incoming.get(p.pairId) ?? p);
-          const known = new Set(f.repo.pairs.map((p) => p.pairId));
-          const added = message.pairs.filter((p) => !known.has(p.pairId) && !removed.has(p.pairId));
-          return { ...f, repo: { ...f.repo, pairs: [...kept, ...added] } };
+          const lastComputed = new Map(f.lastComputed);
+          const details = new Map(f.details);
+          for (const id of removed) {
+            lastComputed.delete(id);
+            details.delete(id);
+          }
+          const byId = new Map(f.repo.pairs.filter((p) => !removed.has(p.pairId)).map((p) => [p.pairId, p]));
+          for (const incoming of message.pairs) {
+            if (removed.has(incoming.pairId)) continue;
+            const stored = byId.get(incoming.pairId);
+            if (stored !== undefined && incoming.rev < stored.rev) continue;
+            if (stored?.computedAtUtcMs != null && incoming.computedAtUtcMs == null) lastComputed.set(incoming.pairId, stored.computedAtUtcMs);
+            byId.set(incoming.pairId, incoming);
+          }
+          return { ...f, repo: { ...f.repo, pairs: [...byId.values()] }, details, lastComputed };
+        });
+        break;
+      case "pairDetails":
+        patchFleet(message.repoId, (f) => {
+          const byId = new Map(f.repo.pairs.map((p) => [p.pairId, p]));
+          const details = new Map(f.details);
+          const lastComputed = new Map(f.lastComputed);
+          for (const detail of message.details) {
+            const id = detail.pair.pairId;
+            const stored = byId.get(id);
+            if (stored !== undefined && detail.pair.rev < stored.rev) continue;
+            if (stored === undefined || detail.pair.rev > stored.rev) {
+              if (stored?.computedAtUtcMs != null && detail.pair.computedAtUtcMs == null) lastComputed.set(id, stored.computedAtUtcMs);
+              byId.set(id, detail.pair);
+            }
+            details.set(id, detail);
+          }
+          const pairsTruncated = message.filled ? false : f.repo.pairsTruncated;
+          return { ...f, repo: { ...f.repo, pairs: [...byId.values()], pairsTruncated }, details, lastComputed };
         });
         break;
       case "repoClosed":
@@ -125,7 +152,6 @@ export function applyEngineBatch(client: QueryClient, batch: readonly EngineMess
         break;
       case "conn":
       case "session":
-      case "pairDetails":
         break;
     }
   }

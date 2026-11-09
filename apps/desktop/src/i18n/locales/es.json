@@ -23,7 +23,9 @@
     "common": {
       "close": "Cerrar",
       "cancel": "Cancelar",
-      "loading": "Cargando…"
+      "loading": "Cargando…",
+      "copied": "Copiado",
+      "copyFailed": "No se pudo copiar. Selecciona el comando y cópialo a mano."
     },
     "button": {
       "busy": "En curso"
@@ -218,6 +220,134 @@
         "engine": "Motor en marcha",
         "git": "Git {{version}} encontrado"
       }
+    }
+  },
+  "conflicts": {
+    "panel": {
+      "title": "Conflictos previstos",
+      "list": "Conflictos previstos en {{repo}}",
+      "more_one": "y {{count}} conflicto más",
+      "more_other": "y {{count}} conflictos más",
+      "less": "Mostrar menos"
+    },
+    "band": {
+      "conflict": "⚡ conflicto previsto",
+      "overlap": "⚠ mismos archivos sin guardar en commit",
+      "pair": "{{a}} ↔ {{b}}",
+      "more_one": "y {{count}} más",
+      "more_other": "y {{count}} más",
+      "moreTruncated": "y más",
+      "new": "nuevo",
+      "open": "Ver",
+      "openLabel": "Ver el conflicto entre {{a}} y {{b}}",
+      "a11y": "{{level}} entre {{a}} y {{b}}, {{file}}, {{freshness}}"
+    },
+    "side": {
+      "base": "{{base}} (rama principal)"
+    },
+    "freshness": {
+      "ago": "hace {{age}}",
+      "stale": "desactualizado · hace {{age}} · recalculando",
+      "clear": "Sin conflictos previstos · hace {{age}}",
+      "calculating_one": "Calculando {{n}} de 1 par",
+      "calculating_other": "Calculando {{n}} de {{count}} pares",
+      "calculatingSince_one": "Calculando {{n}} de 1 par · último resultado hace {{age}}",
+      "calculatingSince_other": "Calculando {{n}} de {{count}} pares · último resultado hace {{age}}",
+      "pending_one": "Pendiente: {{reason}} (1 par)",
+      "pending_other": "Pendiente: {{reason}} ({{count}} pares)",
+      "notComputable_one": "No calculable: {{reason}} (1 par)",
+      "notComputable_other": "No calculable: {{reason}} ({{count}} pares)"
+    },
+    "reason": {
+      "baseUnconfirmed": "confirma la rama base",
+      "operationInProgress": "operación en curso",
+      "powerSaving": "ahorro de energía activo",
+      "dormant": "el repo está en reposo",
+      "baseMissing": "falta la rama base",
+      "missingObject": "falta un objeto de Git",
+      "shallow": "el clon es superficial",
+      "limitExceeded": "se superó un límite",
+      "error": "el cálculo falló"
+    },
+    "base": {
+      "pending": "Rama base pendiente de confirmar ({{base}})",
+      "hint": "Ejecútalo en tu propia terminal (no en la de un agente). Te enseñará qué va a hacer y te preguntará antes.",
+      "hintFolder": "Ejecútalo en tu propia terminal, en la carpeta de {{repo}}. Te enseñará qué va a hacer y te preguntará antes.",
+      "raptorUnknown": "GitRaptor no encuentra su propio `raptor` para escribir el comando. Confirma la rama base con las herramientas de terminal de GitRaptor."
+    },
+    "limits": {
+      "line": "La predicción incluye lo sin commitear como solape; el conflicto previsto solo usa lo commiteado.",
+      "open": "Límites (?)",
+      "title": "Límites de la predicción"
+    },
+    "limit": {
+      "overlapIncludesUncommitted": "⚠ cuenta lo que no está commiteado",
+      "conflictCommittedOnly": "⚡ solo usa lo commiteado",
+      "noMergeDriversOrAttributes": "No aplica drivers de merge ni .gitattributes",
+      "renameLimit": "La detección de renombrados tiene tope",
+      "insertionsMayMerge": "Sin ⚡ el merge aún puede tener conflictos",
+      "joinedHunks": "Ediciones cercanas pueden unirse en un hunk",
+      "pairIgnoresBaseMoves": "El par ignora cambios posteriores de la base",
+      "localOnly": "Solo local: sin fetch ni push"
+    },
+    "kind": {
+      "content": "contenido",
+      "addAdd": "añadido en los dos",
+      "modifyDelete": "modificado y borrado",
+      "rename": "renombrado en los dos",
+      "directoryFile": "archivo y carpeta",
+      "binary": "binario",
+      "submodule": "submódulo"
+    },
+    "range": {
+      "line": "línea {{start}}",
+      "lines": "líneas {{start}}–{{end}}",
+      "more": "y más rangos",
+      "a11y": "líneas {{start}} a {{end}}"
+    },
+    "detail": {
+      "title": "⚡ {{a}} ↔ {{b}} van a chocar",
+      "titleOverlap": "⚠ {{a}} y {{b}} están editando los mismos archivos",
+      "titleBase": "⚡ {{a}} va a chocar con {{base}}",
+      "computed": "{{a}} ↔ {{b}} · calculado hace {{age}}",
+      "conflict": "Conflicto previsto (trabajo ya en commits)",
+      "overlap": "Solape (cambios aún sin commit)",
+      "side": "{{side}} — {{ranges}}",
+      "mergeRule": "tiene su propia regla de merge: el merge real puede ser distinto",
+      "truncated": "No se listan todos los archivos.",
+      "todo": "Lo más sencillo: integra una rama primero y que el otro agente se actualice después.",
+      "prediction": "Esto es una predicción. No usa tus reglas de merge ni .gitattributes.",
+      "loading": "Cargando los archivos…",
+      "calculating": "Calculando…",
+      "resolved": "Ya no se prevé conflicto entre {{a}} y {{b}} (hace {{age}}).",
+      "gone": "Este par ya no se calcula.",
+      "back": "Volver a la flota",
+      "todoTitle": "Qué hacer",
+      "sideA11y": "{{side}}, {{ranges}}",
+      "conflictHint": "Dos ramas cambiaron la misma parte de un archivo; al integrarlas, Git pedirá elegir.",
+      "overlapHint": "Dos agentes están editando el mismo archivo, aún sin commit."
+    },
+    "tooltip": {
+      "conflict": "Dos ramas cambiaron la misma parte de un archivo; al integrarlas, Git pedirá elegir.",
+      "overlap": "Dos agentes están editando el mismo archivo, aún sin commit."
+    },
+    "a11y": {
+      "conflict": "conflicto previsto",
+      "overlap": "mismos archivos sin commit"
+    },
+    "toast": {
+      "withFile_one": "⚡ Conflicto previsto: {{a}} ↔ {{b}} en {{file}}",
+      "withFile_other": "⚡ Conflicto previsto: {{a}} ↔ {{b}} en {{file}} y {{count}} más",
+      "noFile": "⚡ Conflicto previsto: {{a}} ↔ {{b}}",
+      "otherRepo": "⚡ Nuevo conflicto previsto en {{repo}}",
+      "many": "⚡ {{count}} nuevos conflictos previstos",
+      "open": "Ver"
+    },
+    "pill_one": "⚡ {{count}} conflicto previsto",
+    "pill_other": "⚡ {{count}} conflictos previstos",
+    "pill": {
+      "label": "{{count}} conflictos previstos en tus repos. Abrirlos",
+      "compact": "⚡ {{count}}"
     }
   }
 }

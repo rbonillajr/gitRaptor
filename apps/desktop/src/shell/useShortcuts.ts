@@ -22,7 +22,8 @@ export function useShortcuts(handlers: ShortcutHandlers): void {
       event.preventDefault();
       if (event.altKey) handlers.onToggleDetail();
       else handlers.onToggleSidebar();
-    } else if (event.key === "Escape") {
+    } else if (event.key === "Escape" && !event.defaultPrevented) {
+      // A layer that closed on this Esc marks it consumed (D18); one Esc closes one layer.
       handlers.onEscape();
     }
   });

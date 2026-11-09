@@ -1,4 +1,7 @@
-import type { ParseKeys } from "i18next";
+import type { ParseKeys as AllKeys } from "i18next";
+
+/** Catalog keys that are texts: `conflicts.pill` is a plural base with sub-keys (`pill_one`, `pill.label`), not a text. */
+type ParseKeys = Exclude<AllKeys, "conflicts.pill">;
 import type { ConnState, GlobalDto, ResyncReason, SessionInfo, Tier } from "@/client/engine-types";
 
 /** Minimum Git version the engine needs; the same literal as the TUI's `MIN_GIT` (checked on the Rust side). */
