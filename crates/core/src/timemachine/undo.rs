@@ -1114,16 +1114,35 @@ impl UndoStep<'_> {
         if excluded {
             return Err(self.refuse(ctx, TmRejectReason::NotSelectable));
         }
-        // The events again, now that the repo is held: what ran since the plan counts.
+        // The events again, now that the repo is held: what ran since the plan counts. The
+        // branch rule reads them without the anchored echoes of the set's own undos; when the
+        // oplog cannot say which those are, the check is unverified (fail closed).
         let events = match tail.engine {
             Some(deps) => deps
                 .engine
                 .raw_events(&tail.repo_id, &tail.worktree)
-                .map(|events| {
-                    events
+                .and_then(|events| {
+                    let events: Vec<_> = events
                         .into_iter()
                         .filter(|e| e.seq <= tail.intent_mark)
-                        .collect::<Vec<_>>()
+                        .collect();
+                    let (ops, snaps) = {
+                        let log = lock(ctx.oplog());
+                        (
+                            log.operations(&Default::default()).ok()?,
+                            log.snapshots(&super::oplog::SnapshotFilter::default())
+                                .ok()?,
+                        )
+                    };
+                    Some(super::undo_agent::branch_rule_events(
+                        &events,
+                        &ops,
+                        &snaps,
+                        deps.engine.generation_floor(&tail.repo_id),
+                        &tail.worktree.to_string_lossy(),
+                        &tail.undone,
+                        &sel.own_sessions,
+                    ))
                 }),
             None => Some(Vec::new()),
         };

@@ -73,6 +73,9 @@ pub(super) struct SelectivePlan {
     /// Per branch: the mark of the base of the agent's first change on it.
     pub(super) first_base: BTreeMap<String, i64>,
     pub(super) worktree_key: String,
+    /// The sessions whose current owner the selector picks: an echo the engine gave to one of
+    /// them may still be GitRaptor's.
+    pub(super) own_sessions: BTreeSet<String>,
 }
 
 /// What [`plan`] reads besides the repo it holds.
@@ -223,7 +226,14 @@ pub(super) fn plan(input: &AgentPlanInput<'_, '_>) -> Result<Planned, PlanRefusa
         }
     }
     let snaps = log.snapshots(&super::oplog::SnapshotFilter::default());
+    let ops = log.operations(&Default::default());
     drop(log);
+    let own_sessions: BTreeSet<String> = sessions
+        .0
+        .iter()
+        .filter(|(_, owner)| selector.selects(owner))
+        .map(|(session, _)| session.clone())
+        .collect();
     let set: Vec<OpRef> = undone.iter().map(|u| u.op.clone()).collect();
     if set.is_empty() {
         return Err(reject(TmRejectReason::NothingToUndo, &own_scope, &[]));
@@ -385,13 +395,13 @@ pub(super) fn plan(input: &AgentPlanInput<'_, '_>) -> Result<Planned, PlanRefusa
         .as_ref()
         .ok()
         .and_then(|s| overlap::last_clean_point(s, &wt_key, input.raw));
-    let report = match (&snaps, &point) {
-        (Err(_), _) => OverlapReport {
+    let report = match (&snaps, &ops, &point) {
+        (Err(_), _, _) | (_, Err(_), Some(_)) => OverlapReport {
             unverified: true,
             ..OverlapReport::default()
         },
-        (Ok(_), None) => OverlapReport::default(),
-        (Ok(_), Some((id, point_mark))) => {
+        (Ok(_), _, None) => OverlapReport::default(),
+        (Ok(snaps), Ok(ops), Some((id, point_mark))) => {
             let older: BTreeMap<Subject, (Value, i64)> = finals
                 .iter()
                 .filter(|(_, (_, mark))| mark < point_mark)
@@ -404,6 +414,15 @@ pub(super) fn plan(input: &AgentPlanInput<'_, '_>) -> Result<Planned, PlanRefusa
                 .filter(|e| e.seq <= *point_mark)
                 .cloned()
                 .collect();
+            let events = branch_rule_events(
+                &events,
+                ops,
+                snaps,
+                input.raw.floor,
+                &key,
+                &set,
+                &own_sessions,
+            );
             overlap::check_selected(
                 store,
                 &SelectedInput {
@@ -465,6 +484,7 @@ pub(super) fn plan(input: &AgentPlanInput<'_, '_>) -> Result<Planned, PlanRefusa
             finals,
             first_base,
             worktree_key: wt_key,
+            own_sessions,
         }),
     })
 }
@@ -802,19 +822,124 @@ pub(super) fn is_excluded(exclusions: &[super::oplog::Exclusion], key: &str, pat
         })
 }
 
-/// What the branch rule of an undo by agent reads from `events` (TD-TMC-003). Stub until the
-/// plan is approved: the events as they are.
-#[allow(dead_code)]
+/// What the branch rule of an undo by agent reads from `events`: the events as they are, minus
+/// the anchored echo of a finished undo (or redo of one) that only moved work of `set`, and with
+/// any other anchored echo of GitRaptor attributed to the requester of its operation.
+///
+/// An event is dropped only when it falls in the anchored window of such an operation, in no
+/// window (anchored or not) of any other operation of `key` from `floor` on, and its raw actor
+/// is unattributed or one of `own_sessions`. Anything in doubt counts as it is, so the rule
+/// refuses more, never less. The order of `events` is kept.
 pub(super) fn branch_rule_events(
     events: &[RawGitEvent],
-    _ops: &[super::oplog::OperationView],
-    _snaps: &[super::oplog::SnapshotView],
-    _floor: i64,
-    _key: &str,
-    _set: &[OpRef],
-    _own_sessions: &BTreeSet<String>,
+    ops: &[super::oplog::OperationView],
+    snaps: &[super::oplog::SnapshotView],
+    floor: i64,
+    key: &str,
+    set: &[OpRef],
+    own_sessions: &BTreeSet<String>,
 ) -> Vec<RawGitEvent> {
-    events.to_vec()
+    use super::oplog::{OperationState, SnapshotLevel, Target};
+
+    let mut anchors: HashMap<&str, i64> = HashMap::new();
+    for s in snaps {
+        if s.record.level == SnapshotLevel::Observation
+            && let (Some(cause), Some(mark)) =
+                (s.record.cause_operation.as_deref(), s.record.engine_mark)
+        {
+            let slot = anchors.entry(cause).or_insert(mark);
+            *slot = (*slot).max(mark);
+        }
+    }
+    let only_set = |refs: &[OpRef]| !refs.is_empty() && refs.iter().all(|r| set.contains(r));
+    let qualifies = |o: &super::oplog::OperationView| -> bool {
+        if o.state != OperationState::Finished {
+            return false;
+        }
+        match (&o.record.kind, &o.record.target) {
+            (OperationKind::Undo, Target::Undo(refs)) => only_set(refs),
+            (OperationKind::Redo, Target::Redo(undo_id)) => ops.iter().any(|u| {
+                u.record.operation_id == *undo_id
+                    && u.state == OperationState::Finished
+                    && matches!(
+                        (&u.record.kind, &u.record.target),
+                        (OperationKind::Undo, Target::Undo(refs)) if only_set(refs)
+                    )
+            }),
+            _ => false,
+        }
+    };
+    // (operation, anchored end, end of its window, whether it only moved the set's work)
+    let ran: Vec<(&super::oplog::OperationView, Option<i64>, i64, bool)> = ops
+        .iter()
+        .filter(|o| {
+            o.record.seq >= floor
+                && o.record.scope.worktrees.iter().any(|w| w == key)
+                && matches!(
+                    o.state,
+                    OperationState::Applying
+                        | OperationState::Finished
+                        | OperationState::Interrupted
+                )
+        })
+        .map(|o| {
+            let anchor = anchors.get(o.record.operation_id.as_str()).copied();
+            let next = || {
+                snaps
+                    .iter()
+                    .filter(|s| {
+                        s.record.seq > o.record.seq
+                            && s.record.worktrees.iter().any(|w| w == key)
+                            && s.record.cause_operation.as_deref() != Some(&o.record.operation_id)
+                    })
+                    .filter_map(|s| s.record.engine_mark)
+                    .filter(|m| *m > o.record.engine_mark)
+                    .min()
+            };
+            let end = anchor.or_else(next).unwrap_or(i64::MAX);
+            (o, anchor, end, anchor.is_some() && qualifies(o))
+        })
+        .collect();
+    let mut foreign_anchored: Vec<_> = ran
+        .iter()
+        .filter(|(_, anchor, _, own)| anchor.is_some() && !own)
+        .collect();
+    foreign_anchored.sort_by_key(|(o, ..)| o.record.seq);
+
+    let inside = |o: &super::oplog::OperationView, end: i64, seq: i64| {
+        o.record.engine_mark < seq && seq <= end
+    };
+    events
+        .iter()
+        .filter_map(|e| {
+            let in_own = ran
+                .iter()
+                .any(|(o, _, end, own)| *own && inside(o, *end, e.seq));
+            let in_other = ran
+                .iter()
+                .any(|(o, _, end, own)| !own && inside(o, *end, e.seq));
+            let echo_actor = match &e.actor {
+                Requester::Unattributed => true,
+                Requester::Agent { session_id, .. } => own_sessions.contains(session_id),
+            };
+            if in_own && !in_other && echo_actor {
+                return None;
+            }
+            let mut kept = e.clone();
+            let foreign_session = matches!(
+                &e.actor,
+                Requester::Agent { session_id, .. } if !own_sessions.contains(session_id)
+            );
+            if !foreign_session
+                && let Some((o, ..)) = foreign_anchored
+                    .iter()
+                    .find(|(o, _, end, _)| inside(o, *end, e.seq))
+            {
+                kept.actor = o.record.requester.clone();
+            }
+            Some(kept)
+        })
+        .collect()
 }
 
 #[cfg(test)]
