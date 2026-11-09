@@ -32,3 +32,39 @@ describe("FE3 catalogs", () => {
     }
   });
 });
+
+// TS003-I18N (TS-DSK-003 T002): the 21 ui.* keys of the Dev Spec (§ Claves i18n).
+const UI_KEYS = [
+  "ui.common.close", "ui.common.cancel", "ui.common.loading", "ui.button.busy", "ui.chip.remove",
+  "ui.pill.reversible", "ui.pill.confirm", "ui.pill.irreversible", "ui.pill.live",
+  "ui.status.active", "ui.status.inactive", "ui.status.conflict", "ui.status.live",
+  "ui.tree.loading", "ui.toast.region", "ui.toast.kind.success", "ui.toast.kind.warning", "ui.toast.kind.error",
+  "ui.tooltip.shortcut", "ui.table.settings", "ui.table.loading",
+];
+
+describe("TS003-I18N ui.* keys", () => {
+  const entries = { en: flatten(en), es: flatten(es) };
+  const text = (lang: "en" | "es", k: string) => String(entries[lang].find(([key]) => key === k)?.[1] ?? "");
+
+  it("TS003-I18N: en and es carry the 21 ui.* keys of the primitives", () => {
+    expect(UI_KEYS).toHaveLength(21);
+    for (const lang of ["en", "es"] as const) {
+      const keys = new Set(entries[lang].map(([k]) => k));
+      for (const key of UI_KEYS) expect(keys.has(key), `${lang} lacks ${key}`).toBe(true);
+    }
+  });
+
+  it("TS003-I18N: interpolated keys keep their placeholders in both languages", () => {
+    for (const lang of ["en", "es"] as const) {
+      expect(text(lang, "ui.chip.remove"), `${lang}: ui.chip.remove needs {{label}}`).toContain("{{label}}");
+      expect(text(lang, "ui.tooltip.shortcut"), `${lang}: ui.tooltip.shortcut needs {{keys}}`).toContain("{{keys}}");
+    }
+  });
+
+  it("TS003-I18N: the texts the spec quotes (busy, recoverable)", () => {
+    expect(text("en", "ui.button.busy")).toBe("In progress");
+    expect(text("es", "ui.button.busy")).toBe("En curso");
+    expect(text("en", "ui.pill.reversible")).toBe("Recoverable");
+    expect(text("es", "ui.pill.reversible")).toBe("Recuperable");
+  });
+});

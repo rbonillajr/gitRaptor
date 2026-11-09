@@ -73,3 +73,24 @@ describe("V5 untrusted HTML and imports", () => {
     expect(await errors(code, "src/client/x.ts"), "src/client may import @tauri-apps/api").toEqual([]);
   });
 });
+
+describe("TS003-BOUNDARIES src/ui purity and the dev catalog", () => {
+  it("TS003-BOUNDARIES: @/state is an error in src/ui", async () => {
+    const code = 'import { useUiStore } from "@/state/ui-store";\nexport const y = useUiStore;\n';
+    expect(await errors(code, "src/ui/x.tsx"), "@/state in src/ui must be rejected").not.toEqual([]);
+  });
+
+  it("TS003-BOUNDARIES: @/shell, @/dev and @/app are errors in src/ui", async () => {
+    for (const spec of ["@/shell/TitleBar", "@/dev/catalog/Catalog", "@/app/App"]) {
+      const code = `import x from "${spec}";\nexport const y = x;\n`;
+      expect(await errors(code, "src/ui/x.tsx"), `${spec} in src/ui must be rejected`).not.toEqual([]);
+    }
+  });
+
+  it("TS003-BOUNDARIES: only main.tsx may import @/dev", async () => {
+    const code = 'import "@/dev/catalog/Catalog";\n';
+    expect(await errors(code, "src/shell/x.tsx"), "@/dev in src/shell must be rejected").not.toEqual([]);
+    expect(await errors(code, "src/state/x.ts"), "@/dev in src/state must be rejected").not.toEqual([]);
+    expect(await errors(code, "src/main.tsx"), "src/main.tsx may import the dev catalog").toEqual([]);
+  });
+});

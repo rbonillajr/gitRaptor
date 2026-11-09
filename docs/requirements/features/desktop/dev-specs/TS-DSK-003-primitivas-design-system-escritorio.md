@@ -261,6 +261,7 @@ graph LR
 - `apps/desktop/src/i18n/locales/en.json` (**MODIFY**)
 - `apps/desktop/src/i18n/locales/es.json` (**MODIFY**)
 - `apps/desktop/eslint.config.js` (**MODIFY**)
+- `apps/desktop/src/i18n/catalog.test.ts` (**MODIFY**): además de la paridad, comprueba que existen las 21 claves `ui.*` de [§ Claves i18n](#claves-i18n) en en y es (la escribe el criterion-tester)
 - `apps/desktop/tests/eslint-v5.test.ts` (**MODIFY**)
 - `apps/desktop/tests/ui-tokens-lint.test.ts` (**CREATE**)
 - `apps/desktop/tests/ui-motion.test.ts` (**CREATE**)
@@ -445,7 +446,7 @@ graph LR
 - `CatalogGrid.tsx`: una `<section>` por primitiva con `<h2>` (nombre en inglés); filas = variantes y tamaños; columnas = `rest`, `hover`, `focus`, `pressed`, `disabled`, `error` (solo donde aplique, spec § 1.2), pintadas con `data-force`. Casos límite de la spec § 5.4: etiqueta larga con elipsis, solo icono, con contador, 3 niveles de sangría, 6 y 3 columnas, un toast de cada tipo. Overlays: su `*Surface` estática (Dialog `confirm` e `info`, Menu con un ítem resaltado, Popover con tres `Toggle`, Tooltip con atajo, Toast de cada tipo) y un disparador real por overlay. Cada primitiva solo sobre sus superficies permitidas (`bg-surface-panel`, `bg-surface-control`, `bg-surface-raised`), sin fila «no usar» (Notas G3). Textos de ejemplo literales en inglés (D16).
 - `catalog.css`: layout del catálogo con `display: grid` y variables `--gr-*` (sin hex ni px salvo anchos de columna de ejemplo de la grilla), y `[data-gr-motion="reduce"] { --gr-motion-fast: 0s; }`. Ningún panel crea contenedor de bloque para `position: fixed` (sin `transform`, `filter` ni `contain`), para que los overlays reales se posicionen sobre el viewport.
 - `Catalog.test.tsx`: renderiza `Catalog`; los dos paneles existen con su `data-theme`; axe sobre cada panel sin violaciones (con `color-contrast` desactivado, como `AppShell.test.tsx`); el conmutador pone `data-gr-motion="reduce"`; cambiar a `es` cambia `ui.pill.reversible` de «Recoverable» a «Recuperable».
-- `catalog-excluded.test.ts` (`// @vitest-environment node`, timeout 180 000 ms): `build()` de `vite` con `configFile` = `apps/desktop/vite.config.ts`, `root` = `apps/desktop`, `mode: "production"`, `logLevel: "silent"` y `build.outDir` en un directorio temporal (`mkdtemp`, `emptyOutDir: true`); recorre todos los archivos del resultado y falla si alguno contiene `gr-dev-catalog` o `data-gr-dev-catalog`, o si un nombre de archivo contiene `catalog`. Control positivo: `src/dev/catalog/Catalog.tsx` contiene `gr-dev-catalog` (el test no puede pasar en vacío). Borra el temporal al terminar.
+- `catalog-excluded.test.ts` (entorno jsdom por defecto, porque `tests/setup.ts` usa `window`; timeout 180 000 ms): `build()` de `vite` con `configFile` = `apps/desktop/vite.config.ts`, `root` = `apps/desktop`, `mode: "production"`, `logLevel: "silent"` y `build.outDir` en un directorio temporal (`mkdtemp`, `emptyOutDir: true`); recorre todos los archivos del resultado y falla si alguno contiene `gr-dev-catalog` o `data-gr-dev-catalog`, o si un nombre de archivo contiene `catalog`. Control positivo: `src/dev/catalog/Catalog.tsx` contiene `gr-dev-catalog` (el test no puede pasar en vacío). Borra el temporal al terminar.
 - **Si el chunk del catálogo aparece en el build** (el empaquetador no elimina el `import()` de la rama muerta): en `vite.config.ts`, un plugin `{ name: "gr-dev-catalog-strip", apply: "build", resolveId(id) { … } }` que resuelve `./dev/catalog/Catalog` a un módulo virtual vacío (`export const Catalog = () => null;`). No hace falta decidir nada más: el test es el que manda.
 
 - **Depende:** T008
@@ -1003,7 +1004,7 @@ Común a todas: render en `en` y en `es` (con `i18n.changeLanguage`) y `axe.run(
 | Enter en Cancelar no confirma | `src/ui/Dialog.test.tsx` |
 | El catálogo no existe en el release | `tests/catalog-excluded.test.ts` |
 | `src/ui` sigue puro; `src/dev` solo desde `main.tsx` | `tests/eslint-v5.test.ts` |
-| Paridad en/es de `ui.*` | `src/i18n/catalog.test.ts` |
+| Paridad en/es y presencia de las 21 claves `ui.*` | `src/i18n/catalog.test.ts` |
 
 ### 9.5 Plataformas
 
