@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import {
   Button,
   Chip,
+  CopyCommand,
   Dialog,
   DialogSurface,
   Gear,
@@ -13,7 +14,10 @@ import {
   PopoverSurface,
   RepoBadge,
   SegmentedControl,
+  Skeleton,
+  StatePanel,
   StatusDot,
+  StatusPill,
   Table,
   Toggle,
   Tooltip,
@@ -250,6 +254,38 @@ export function CatalogGrid() {
             <Pill kind="reversible" />
             <Pill kind="live" />
           </Row>
+        </Surface>
+      </Section>
+
+      <Section name="StatusPill">
+        <Surface>
+          <Row label="tones">
+            <StatusPill symbol="●" tone="success" label="Live" />
+            <StatusPill symbol="◐" tone="warning" label="Catching up…" />
+            <StatusPill symbol="✖" tone="danger" label="Engine stopped" />
+            <StatusPill symbol="◌" tone="muted" label="Connecting to the engine…" />
+          </Row>
+        </Surface>
+      </Section>
+
+      <Section name="StatePanel">
+        <Surface>
+          <StatePanel title="Engine stopped" message="No history is being recorded for your repos." action={<Button size="sm">Retry now</Button>} />
+          <StatePanel tone="error" title="Incompatible engine" message="The running engine is older than this app." />
+        </Surface>
+      </Section>
+
+      <Section name="CopyCommand">
+        <Surface>
+          <Row label="command">
+            <CopyCommand command="raptor daemon start" />
+          </Row>
+        </Surface>
+      </Section>
+
+      <Section name="Skeleton">
+        <Surface>
+          <Skeleton />
         </Surface>
       </Section>
 
