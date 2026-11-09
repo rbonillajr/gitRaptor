@@ -93,8 +93,11 @@ pub(super) struct AgentPlanInput<'a, 'c> {
     /// The text of `--agent`.
     pub(super) selector: &'a str,
     pub(super) since_ms: i64,
-    /// Where the overlap check's budget ends.
+    /// Where the overlap check's budget ends, before any wait for a base point.
     pub(super) deadline: Instant,
+    /// The engine and the continuous capture; `None` for doubles: nothing is waited for.
+    pub(super) engine: Option<&'a super::continuous::CaptureDeps>,
+    pub(super) repo_id: &'a str,
 }
 
 /// The current owner of a raw event: what the one attribution read says of its session;
@@ -225,7 +228,7 @@ pub(super) fn plan(input: &AgentPlanInput<'_, '_>) -> Result<Planned, PlanRefusa
             }
         }
     }
-    let snaps = log.snapshots(&super::oplog::SnapshotFilter::default());
+    let mut snaps = log.snapshots(&super::oplog::SnapshotFilter::default());
     let ops = log.operations(&Default::default());
     drop(log);
     let own_sessions: BTreeSet<String> = sessions
@@ -238,6 +241,60 @@ pub(super) fn plan(input: &AgentPlanInput<'_, '_>) -> Result<Planned, PlanRefusa
     if set.is_empty() {
         return Err(reject(TmRejectReason::NothingToUndo, &own_scope, &[]));
     }
+
+    // base-wait: begin
+    // A reset or a branch move of an agent whose base is still being captured is waited for,
+    // with no lock held: the capture needs the oplog and the store's writer to seal it.
+    let own_worktree = PlanWorktree {
+        key: wt_key.clone(),
+        root: PathBuf::from(&key),
+        recreate_id: None,
+        keep: BTreeSet::new(),
+    };
+    let raw_own = HashMap::from([(own_worktree.root.clone(), input.raw.clone())]);
+    let missing = |views: &[super::oplog::SnapshotView]| -> Vec<i64> {
+        undone
+            .iter()
+            .filter_map(|u| {
+                let OpRef::GitEvent(seq) = &u.op else {
+                    return None;
+                };
+                let event = input.raw.events.iter().find(|e| e.seq == *seq)?;
+                let by_base = !matches!(
+                    event.kind,
+                    GitEventKind::Commit | GitEventKind::Merge | GitEventKind::Rebase
+                );
+                let agent = !matches!(u.requester, Requester::Unattributed);
+                (by_base
+                    && agent
+                    && overlap::agent_base(
+                        views,
+                        &own_worktree,
+                        &raw_own,
+                        &u.requester,
+                        "",
+                        &u.op,
+                        input.deadline,
+                    )
+                    .is_none())
+                .then_some(*seq)
+            })
+            .collect()
+    };
+    let mut waited = Duration::ZERO;
+    let pending = snaps.as_deref().map(&missing).unwrap_or_default();
+    if let Some(wait) = super::base_wait::wait_for_bases(input.engine, input.repo_id, &pending) {
+        snaps = lock(input.oplog).snapshots(&super::oplog::SnapshotFilter::default());
+        let found = snaps
+            .as_deref()
+            .is_ok_and(|views| missing(views).is_empty());
+        if let Some(deps) = input.engine {
+            wait.log(&deps.logger, input.repo_id, found);
+        }
+        waited = wait.waited;
+    }
+    // base-wait: end
+    let deadline = input.deadline + waited;
 
     // Each operation of the set: undoable on its own, and its change.
     let read_until = Instant::now() + CHANGE_READ_LIMIT;
@@ -433,7 +490,7 @@ pub(super) fn plan(input: &AgentPlanInput<'_, '_>) -> Result<Planned, PlanRefusa
                     set: &set,
                     events: &events,
                     last_point: Some(id),
-                    deadline: input.deadline,
+                    deadline,
                 },
             )
         }
@@ -487,6 +544,7 @@ pub(super) fn plan(input: &AgentPlanInput<'_, '_>) -> Result<Planned, PlanRefusa
             worktree_key: wt_key,
             own_sessions,
         }),
+        waited,
     })
 }
 

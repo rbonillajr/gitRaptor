@@ -307,6 +307,8 @@ pub(super) struct Planned {
     pub(super) overlap: OverlapReport,
     /// An undo by agent: the subjects it writes, each with its value.
     pub(super) selective: Option<super::undo_agent::SelectivePlan>,
+    /// How long the plan waited for the capture of a base point: outside the overlap budget.
+    pub(super) waited: Duration,
 }
 
 /// The engine's side of an undo's plan (US-TMC-004): the worktree's raw Git
@@ -551,6 +553,8 @@ fn plan(
     events_complete: bool,
     deadline: Instant,
     selection: Selection,
+    engine: Option<&CaptureDeps>,
+    repo_id: &str,
 ) -> Result<Planned, PlanRefusal> {
     // The oplog is held while the stack and the target are read, and released before the
     // confirmation gate: that walks the caller's process tree. The repo's write lock (held by
@@ -757,27 +761,55 @@ fn plan(
     let (mut worktrees, mut refs) = materialize(common_dir, &meta, &scope).map_err(refuse)?;
     // Phase 1 of the overlap check (ADR-TMC-005 § 5), before `ref-in-use`: a branch another
     // actor moved is kept, so it never moves and cannot make the undo `ref-in-use`.
-    let report = {
+    let read = || {
         let log = lock(oplog_lock);
-        let ops = log.operations(&Default::default());
-        let snaps = log.snapshots(&super::oplog::SnapshotFilter::default());
-        drop(log);
+        (
+            log.operations(&Default::default()),
+            log.snapshots(&super::oplog::SnapshotFilter::default()),
+        )
+    };
+    macro_rules! input {
+        ($ops:expr, $snaps:expr, $deadline:expr) => {
+            OverlapInput {
+                reference: &owners,
+                undone: &set,
+                target: &target,
+                worktrees: &worktrees,
+                refs: &refs,
+                ops: $ops,
+                snaps: $snaps,
+                raw: raw_all,
+                deadline: $deadline,
+            }
+        };
+    }
+    let (mut ops, mut snaps) = read();
+    // base-wait: begin
+    // An agent's change whose base is still being captured is waited for, with no lock held:
+    // the capture needs the oplog and the store's writer to seal it.
+    let mut waited = Duration::ZERO;
+    let missing = match (&ops, &snaps) {
+        (Ok(o), Ok(s)) => overlap::missing_agent_bases(&input!(o, s, deadline)),
+        _ => Vec::new(),
+    };
+    if let Some(wait) = super::base_wait::wait_for_bases(engine, repo_id, &missing) {
+        (ops, snaps) = read();
+        let found = match (&ops, &snaps) {
+            (Ok(o), Ok(s)) => overlap::missing_agent_bases(&input!(o, s, deadline)).is_empty(),
+            _ => false,
+        };
+        if let Some(deps) = engine {
+            wait.log(&deps.logger, repo_id, found);
+        }
+        waited = wait.waited;
+    }
+    // base-wait: end
+    let deadline = deadline + waited;
+    let report = {
         match (ops, snaps) {
-            (Ok(ops), Ok(snaps)) => overlap::check_with(
-                store,
-                &OverlapInput {
-                    reference: &owners,
-                    undone: &set,
-                    target: &target,
-                    worktrees: &worktrees,
-                    refs: &refs,
-                    ops: &ops,
-                    snaps: &snaps,
-                    raw: raw_all,
-                    deadline,
-                },
-                events_complete,
-            ),
+            (Ok(ops), Ok(snaps)) => {
+                overlap::check_with(store, &input!(&ops, &snaps, deadline), events_complete)
+            }
             _ => OverlapReport {
                 unverified: true,
                 ..OverlapReport::default()
@@ -854,6 +886,7 @@ fn plan(
         confirmed,
         overlap: report,
         selective: None,
+        waited,
     })
 }
 
@@ -1355,6 +1388,8 @@ pub fn undo_selected(
                 selector,
                 since_ms,
                 deadline: overlap_started + OVERLAP_BUDGET,
+                engine: env.engine,
+                repo_id,
             })
         }
         _ => plan(
@@ -1370,6 +1405,8 @@ pub fn undo_selected(
             events_complete,
             overlap_started + OVERLAP_BUDGET,
             selection.clone(),
+            env.engine,
+            repo_id,
         ),
     };
     let planned = match planned {
@@ -1388,7 +1425,9 @@ pub fn undo_selected(
         }
     };
     // Phase 2 gets what phase 1 left of the budget.
-    let tail_budget = OVERLAP_BUDGET.saturating_sub(overlap_started.elapsed());
+    // The wait for a base point does not count.
+    let tail_budget =
+        OVERLAP_BUDGET.saturating_sub(overlap_started.elapsed().saturating_sub(planned.waited));
     let target_ref: Vec<OpRef> = planned.undone.iter().map(|u| u.op.clone()).collect();
     let (Some(store), Some(main_root)) = (repo.store.as_deref(), repo.main_root.clone()) else {
         return Err(rejected(

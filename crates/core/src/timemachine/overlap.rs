@@ -380,6 +380,27 @@ fn base_point_of<'s>(input: &OverlapInput<'s>, undone: &OpRef) -> Option<Point<'
     }
 }
 
+/// The raw events among `input.undone` that have no base yet while the reference is an agent:
+/// the captures an undo may wait for. Empty for an unattributed reference, whose base falls back
+/// to the target, and for oplog operations, whose anchor is taken synchronously.
+pub(crate) fn missing_agent_bases(input: &OverlapInput<'_>) -> Vec<i64> {
+    if input
+        .reference
+        .iter()
+        .all(|r| matches!(r, Requester::Unattributed))
+    {
+        return Vec::new();
+    }
+    input
+        .undone
+        .iter()
+        .filter_map(|op| match op {
+            OpRef::GitEvent(seq) if base_point_of(input, op).is_none() => Some(*seq),
+            _ => None,
+        })
+        .collect()
+}
+
 /// The clean, available points after `base`, oldest first. A point that is unavailable or
 /// shadowed by a prior is not a place to cut: its two segments merge.
 fn clean_points_after<'s>(input: &OverlapInput<'s>, base: &Point<'_>) -> Vec<Point<'s>> {
