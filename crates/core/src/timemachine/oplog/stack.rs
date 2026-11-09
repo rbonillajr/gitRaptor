@@ -61,6 +61,8 @@ pub struct UndoStack {
     number: HashMap<OpRef, u64>,
     /// Active barriers: the selective undo and the highest history number done when it ran.
     barriers: Vec<(String, u64)>,
+    /// The operation that emptied a pending redo, until a later undo opens a new one.
+    invalidated_by: Option<OpRef>,
 }
 
 impl UndoStack {
@@ -77,6 +79,9 @@ impl UndoStack {
                 StackItem::Do(op) => {
                     next += 1;
                     stack.number.entry(op.clone()).or_insert(next);
+                    if !stack.redo.is_empty() {
+                        stack.invalidated_by = Some(op.clone());
+                    }
                     stack.done.push(op);
                     stack.redo.clear();
                 }
@@ -98,6 +103,7 @@ impl UndoStack {
                         }
                     }
                     stack.redo.push((undo, targets));
+                    stack.invalidated_by = None;
                 }
                 StackItem::Redo { undo, .. } => {
                     if let Some(pos) = stack.redo.iter().rposition(|(u, _)| *u == undo) {
@@ -142,7 +148,7 @@ impl UndoStack {
 
     /// The operation that cleared the redo, if a new change after the last undo invalidated it.
     pub fn redo_invalidated(&self) -> Option<&OpRef> {
-        None
+        self.invalidated_by.as_ref()
     }
 }
 

@@ -37,8 +37,7 @@ impl PlanKind {
         match self {
             Self::Undo => "undo",
             Self::Restore => "restore",
-            // Placeholder until the redo is built: shares the undo's hash.
-            Self::Redo => "undo",
+            Self::Redo => "redo",
         }
     }
 }
