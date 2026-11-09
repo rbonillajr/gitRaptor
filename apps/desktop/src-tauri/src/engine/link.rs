@@ -150,6 +150,9 @@ fn link_error(err: ClientError) -> LinkError {
 
 /// A [`Connector`] to a runtime folder known beforehand. It never starts the engine: with
 /// `start` it connects all the same.
+///
+/// It does **not** check B-3 (who serves the socket): it is for tests and fake daemons. The app
+/// connects to the engine only through [`super::launcher::BundleConnector`], which does.
 pub struct SocketConnector {
     pub runtime: PathBuf,
 }
