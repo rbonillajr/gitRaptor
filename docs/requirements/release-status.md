@@ -287,7 +287,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### M2
 
-104 fichas: 41 implementado, 3 hecho, 22 implementado en parte, 5 listo, 33 borrador.
+104 fichas: 42 implementado, 3 hecho, 22 implementado en parte, 5 listo, 32 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
