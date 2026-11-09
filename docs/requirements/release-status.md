@@ -14,7 +14,7 @@
 | Hecho (`done`) | 3 |
 | Implementado en parte (`partially-implemented`) | 29 |
 | Listo (`ready`) | 27 |
-| Borrador (`draft`) | 58 |
+| Borrador (`draft`) | 57 |
 | Bloqueado (`blocked`) | 1 |
 | **Total** | **183** |
 
@@ -22,7 +22,7 @@
 
 | Feature | Implementado | Hecho | Implementado en parte | Listo | Borrador | Bloqueado | Total |
 |---|---|---|---|---|---|---|---|
-| [cockpit](#cockpit) | 9 | 0 | 6 | 2 | 21 | 1 | 39 |
+| [cockpit](#cockpit) | 10 | 0 | 6 | 2 | 20 | 1 | 39 |
 | [desktop](#desktop) | 2 | 0 | 1 | 20 | 0 | 0 | 23 |
 | [guardrails](#guardrails) | 14 | 0 | 7 | 1 | 3 | 0 | 25 |
 | [mcp](#mcp) | 7 | 0 | 4 | 0 | 9 | 0 | 20 |
@@ -31,7 +31,7 @@
 
 ### cockpit
 
-39 fichas: 9 implementado, 6 implementado en parte, 2 listo, 21 borrador, 1 bloqueado.
+39 fichas: 10 implementado, 6 implementado en parte, 2 listo, 20 borrador, 1 bloqueado.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -43,6 +43,7 @@
 | [TS-CKP-005](features/cockpit/technical-stories/TS-CKP-005-biblioteca-componentes-tui.md) | Biblioteca de componentes TUI v0: los 10 widgets del design system, con snapshots y galería | Implementado (`implemented`) | #111, #115 | — |
 | [US-CKP-001](features/cockpit/user-stories/US-CKP-001-flota-en-vivo.md) | El desarrollador ve en vivo qué agente trabaja en cada worktree de un repo | Implementado (`implemented`) | #118, #126, #129, #130, #131, #136, #175 | — |
 | [US-CKP-003](features/cockpit/user-stories/US-CKP-003-estados-motor-conexion.md) | La TUI dice en qué estado está el motor y qué hacer en cada caso | Implementado (`implemented`) | #282 | — |
+| [US-CKP-007](features/cockpit/user-stories/US-CKP-007-frescura-prediccion.md) | Una predicción vieja nunca se presenta como actual | Implementado (`implemented`) | #339 | — |
 | [US-CKP-026](features/cockpit/user-stories/US-CKP-026-autoria-en-la-flota.md) | El desarrollador ve en la flota de quién es el último commit de cada worktree y con qué agente | Implementado (`implemented`) | #147 | — |
 | [SPIKE-CKP-001](features/cockpit/technical-stories/SPIKE-CKP-001-prediccion-5s.md) | Predicción de conflictos en ≤ 5 s p95 sin escribir en el repo: merge en memoria frente a almacén en el perfil | Implementado en parte (`partially-implemented`) | #266 | 3 |
 | [US-CKP-002](features/cockpit/user-stories/US-CKP-002-orden-atencion-terminadas.md) | La lista pone primero lo que pide atención y no se llena de sesiones viejas | Implementado en parte (`partially-implemented`) | #284 | — |
@@ -57,7 +58,6 @@
 | [TS-CKP-008](features/cockpit/technical-stories/TS-CKP-008-preparar-y-quitar-del-indice.md) | Operaciones del catálogo para preparar y quitar del índice por archivo, fragmento y línea | Borrador (`draft`) | — | — |
 | [TS-CKP-009](features/cockpit/technical-stories/TS-CKP-009-commit-capa-cockpit.md) | Operación commit del catálogo abierta a la capa cockpit | Borrador (`draft`) | — | — |
 | [US-CKP-004](features/cockpit/user-stories/US-CKP-004-selector-repo-preferencias.md) | El desarrollador cambia de repo y la TUI recuerda cómo la dejó | Borrador (`draft`) | — | — |
-| [US-CKP-007](features/cockpit/user-stories/US-CKP-007-frescura-prediccion.md) | Una predicción vieja nunca se presenta como actual | Borrador (`draft`) | — | — |
 | [US-CKP-008](features/cockpit/user-stories/US-CKP-008-alerta-conflicto-nuevo.md) | El desarrollador se entera en la TUI cuando aparece un conflicto previsto nuevo | Borrador (`draft`) | — | — |
 | [US-CKP-009](features/cockpit/user-stories/US-CKP-009-base-pendiente.md) | Con la rama base sin confirmar, la predicción contra la base queda pendiente | Borrador (`draft`) | — | — |
 | [US-CKP-010](features/cockpit/user-stories/US-CKP-010-kpi-deteccion.md) | El desarrollador sabe qué parte de los conflictos reales se vio antes de ocurrir | Borrador (`draft`) | — | — |
@@ -286,7 +286,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### M2
 
-104 fichas: 39 implementado, 3 hecho, 22 implementado en parte, 5 listo, 35 borrador.
+104 fichas: 40 implementado, 3 hecho, 22 implementado en parte, 5 listo, 34 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -302,6 +302,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [TS-TMC-002](features/time-machine/technical-stories/TS-TMC-002-oplog-diario.md) | Oplog de la Time Machine con diario de intención y recuperación | Implementado (`implemented`) | #32, #176 | — |
 | [TS-TMC-003](features/time-machine/technical-stories/TS-TMC-003-escritura-aplicador.md) | Capa de escritura acotada y aplicador de estados | Implementado (`implemented`) | #45, #171, #172 | — |
 | [US-CKP-003](features/cockpit/user-stories/US-CKP-003-estados-motor-conexion.md) | La TUI dice en qué estado está el motor y qué hacer en cada caso | Implementado (`implemented`) | #282 | — |
+| [US-CKP-007](features/cockpit/user-stories/US-CKP-007-frescura-prediccion.md) | Una predicción vieja nunca se presenta como actual | Implementado (`implemented`) | #339 | — |
 | [US-CKP-026](features/cockpit/user-stories/US-CKP-026-autoria-en-la-flota.md) | El desarrollador ve en la flota de quién es el último commit de cada worktree y con qué agente | Implementado (`implemented`) | #147 | — |
 | [US-GRD-002](features/guardrails/user-stories/US-GRD-002-hooks-previos-respetados.md) | Los hooks que el repo ya tenía siguen funcionando al protegerlo | Implementado (`implemented`) | #193 | — |
 | [US-GRD-006](features/guardrails/user-stories/US-GRD-006-excepcion-consciente.md) | El desarrollador hace a conciencia una operación prohibida y queda constancia | Implementado (`implemented`) | #295, #301 | — |
@@ -361,7 +362,6 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [TS-TMC-005](features/time-machine/technical-stories/TS-TMC-005-undo-espera-punto-base.md) | El undo espera, con plazo propio, la captura que da su punto base B en vez de responder `overlap-unverified` de inmediato | Listo (`ready`) | — | — |
 | [TD-TMC-001](features/time-machine/technical-stories/TD-TMC-001-previo-hook-plazo-y-cupo-sin-atribuir.md) | Previo de hook: plazo real, cupo barato y cubo «sin atribuir» acotado, antes de que un fallo deniegue (US-GRD-017) | Borrador (`draft`) | — | — |
 | [US-CKP-004](features/cockpit/user-stories/US-CKP-004-selector-repo-preferencias.md) | El desarrollador cambia de repo y la TUI recuerda cómo la dejó | Borrador (`draft`) | — | — |
-| [US-CKP-007](features/cockpit/user-stories/US-CKP-007-frescura-prediccion.md) | Una predicción vieja nunca se presenta como actual | Borrador (`draft`) | — | — |
 | [US-CKP-008](features/cockpit/user-stories/US-CKP-008-alerta-conflicto-nuevo.md) | El desarrollador se entera en la TUI cuando aparece un conflicto previsto nuevo | Borrador (`draft`) | — | — |
 | [US-CKP-009](features/cockpit/user-stories/US-CKP-009-base-pendiente.md) | Con la rama base sin confirmar, la predicción contra la base queda pendiente | Borrador (`draft`) | — | — |
 | [US-CKP-010](features/cockpit/user-stories/US-CKP-010-kpi-deteccion.md) | El desarrollador sabe qué parte de los conflictos reales se vio antes de ocurrir | Borrador (`draft`) | — | — |

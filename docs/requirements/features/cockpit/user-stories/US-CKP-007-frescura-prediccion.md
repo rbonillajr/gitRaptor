@@ -2,10 +2,10 @@
 id: US-CKP-007
 title: "Una predicción vieja nunca se presenta como actual"
 type: us
-status: draft
+status: implemented
 priority: high
 created: 2026-10-04
-updated: 2026-10-27
+updated: 2026-11-09
 feature: cockpit
 related:
   context:
@@ -83,3 +83,11 @@ Resumen de la [Dev Spec DS-US-CKP-007](../dev-specs/US-CKP-007-frescura-predicci
 
 - **Diseño:** DSYS-GRP-001.
 - **Dev Spec:** [DS-US-CKP-007](../dev-specs/US-CKP-007-frescura-prediccion.md).
+
+## Estado de la implementación (2026-11-09)
+
+Implementado en: PR #339 ([DS-US-CKP-007](../dev-specs/US-CKP-007-frescura-prediccion.md)).
+
+Verificado en macOS con pruebas de pantalla por la API pública (`apps/cli/tests/tui_freshness.rs`, S1 a S7) y snapshots sin color y en ASCII, en en/es. Los escenarios 2a, 2c y 3a los garantiza el motor (TS-CKP-001: T003, T012 y T009, ya en `main` por #314). La confirmación de la base en runtime que no replanifica (G-B, TS-CKP-011) sigue abierta y no afecta a esta historia.
+
+Linux y Windows: *Pendiente: etapa de validación multiplataforma* (XP-21; [`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
