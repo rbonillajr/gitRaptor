@@ -115,7 +115,13 @@ Un job por SO, `engine bench (<so>)`, de unos 15 a 30 minutos. La protección de
   - RES-03: despertares en reposo.
   - RES-04: vigilancias de inotify frente a `max_user_watches` y vuelta a la línea base tras 100 altas y bajas.
   - RES-05: el banco solo reporta el crecimiento del perfil.
-  - RES-07: escenario con todos los núcleos saturados, que bloquea TS-GRP-005.
+  - RES-07: escenario con todos los núcleos saturados, que bloquea TS-GRP-005. **Escenario hecho (2026-11-08, PR #PRB de TS-GRP-005):** `cargo bench -p gitraptor-core --bench tm_snapshot -- --saturated` y `cargo bench -p gitraptor-cli --bench engine -- --quick --saturated`, con un proceso ocupado por núcleo lógico (`gitraptor_testkit::cpu_load`). Primera medición en el Mac de desarrollo (10 núcleos), **no válida como gate**, porque había otros workers en marcha (carga 25–38):
+    - Previo, 10 worktrees, p95: 119 a 255 ms.
+    - Espera al escritor, p95: 9,2 a 24,6 ms. Sin el saturador ya daba 20,5–22,9 ms, así que el ruido viene de la máquina.
+    - Motor, escenarios de una edición, p95: 148 a 231 ms, todos ≤ 300.
+    - `burst-1k`: 562–660 ms, por encima del techo provisional de 420 ms; es el hueco conocido de TD-GRP-002.
+    - Retraso de despertar en `Utility`, como dato (§ 6.3): p50 111–123 ms y p95 156–192 ms con temporizadores de 100 ms.
+    Pendiente: repetirlo en una máquina tranquila.
   - El hallazgo del § 6.3 (coalescing de timers) toca a RES-06: un trabajo en clase `utility` o `background` en macOS puede despertarse tarde. TS-GRP-005 debe medirlo con este banco antes de bajar de clase al observador.
 - **Agotamiento de watches de inotify**: 3.398 watches en el runner de Linux con 10 worktrees; el modo degradado queda para US-GRP-003 y US-GRP-004.
 

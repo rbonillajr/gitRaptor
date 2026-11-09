@@ -225,7 +225,7 @@ Estados (al 2026-10-28, sacados de [release-status.md](release-status.md)): **I*
 | TS-GRP-004 | Canal: N8 a N11 y retención de la auditoría | Should | P | — |
 | INF-GRP-001 | Parte de M2: auditoría de `exec` en macOS (eslogger) | Must | P | — |
 | INF-GRP-002 | Parte de M2: RES-01 de 10 min, RES-03, RES-05, RES-07 y `tiered-scale` | Must | P | — |
-| TS-GRP-005 | Prioridad del SO: clases de trabajo y ahorro de energía | Should | P (PR #298) | La ficha no lista pendientes |
+| TS-GRP-005 | Prioridad del SO: clases de trabajo y ahorro de energía | Should | P (PR #298, PR #PRB) | Faltan TD-TMC-002 (RES-06 del hashing de la captura) y la cifra de RES-07 en una máquina tranquila |
 | TD-GRP-002, TD-GRP-003 | Motor bajo ráfaga; NFR-04 en la máquina de referencia | Must | R (ready) | — |
 
 **Fuera de M2** (no bloquean el cierre): los Could US-GRP-018 (`raptor doctor`), US-GRP-019 (batería), US-GRP-021 (`raptor clone`) y US-TMC-017 (retención personal); US-TMC-021 (Fase 2); SPIKE-GRP-001 (es de M1). SPIKE-GRD-001, SPIKE-GRP-002 y TD-GRP-001 van a M3, porque lo único que les falta es Linux y Windows. US-GRP-014 y US-GRP-015 van a v0.1.0: son la experiencia de una máquina nueva y solo tienen sentido cuando instala otra persona. **Recorte del 2026-11-08** ([detalle](#recorte-de-shoulds-de-m2-aplicado)): la cola de confirmación (US-GRD-015, US-CKP-023 y US-MCP-014) queda después de v0.1.0 (Fase 2, sin hito); US-GRD-013, US-TMC-022 y US-GRP-016 van a M3; US-CKP-011, US-TMC-008, US-GRP-006 y US-GRP-013 van a v0.1.0 (M4).

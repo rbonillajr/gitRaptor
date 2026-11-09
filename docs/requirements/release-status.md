@@ -289,7 +289,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### M2
 
-104 fichas: 42 implementado, 3 hecho, 22 implementado en parte, 5 listo, 32 borrador.
+105 fichas: 42 implementado, 3 hecho, 22 implementado en parte, 5 listo, 33 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -366,6 +366,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [TS-CKP-011](features/cockpit/technical-stories/TS-CKP-011-base-confirmada-replanifica.md) | Confirmar la base en runtime refresca la base publicada y replanifica los pares contra la base | Listo (`ready`) | — | — |
 | [TS-TMC-005](features/time-machine/technical-stories/TS-TMC-005-undo-espera-punto-base.md) | El undo espera, con plazo propio, la captura que da su punto base B en vez de responder `overlap-unverified` de inmediato | Listo (`ready`) | — | — |
 | [TD-TMC-001](features/time-machine/technical-stories/TD-TMC-001-previo-hook-plazo-y-cupo-sin-atribuir.md) | Previo de hook: plazo real, cupo barato y cubo «sin atribuir» acotado, antes de que un fallo deniegue (US-GRD-017) | Borrador (`draft`) | — | — |
+| [TD-TMC-002](features/time-machine/technical-stories/TD-TMC-002-captura-blobs-fuera-del-escritor.md) | Captura continua: blobs fuera del escritor del almacén, para bajar su hashing a background (RES-06) | Borrador (`draft`) | — | — |
 | [US-CKP-004](features/cockpit/user-stories/US-CKP-004-selector-repo-preferencias.md) | El desarrollador cambia de repo y la TUI recuerda cómo la dejó | Borrador (`draft`) | — | — |
 | [US-CKP-009](features/cockpit/user-stories/US-CKP-009-base-pendiente.md) | Con la rama base sin confirmar, la predicción contra la base queda pendiente | Borrador (`draft`) | — | — |
 | [US-CKP-010](features/cockpit/user-stories/US-CKP-010-kpi-deteccion.md) | El desarrollador sabe qué parte de los conflictos reales se vio antes de ocurrir | Borrador (`draft`) | — | — |
@@ -446,7 +447,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### Sin hito
 
-38 fichas sin hito asignado.
+37 fichas sin hito asignado.
 
 ## Implementadas en parte: lo que falta
 

@@ -8,7 +8,7 @@ domain: GRP
 priority: high
 complexity: high
 created: 2026-10-05
-updated: 2026-10-28
+updated: 2026-11-08
 related:
   adrs: [ADR-GRP-015, ADR-GRP-005, ADR-GRP-010, ADR-CKP-001, ADR-TMC-004, ADR-TMC-006]
   stories: [US-GRP-017, US-GRP-019, US-TMC-004, TS-GRP-003, INF-GRP-002, TS-TMC-001, TS-CKP-001]
@@ -67,25 +67,21 @@ tags: [motor-local, recursos, prioridad, qos, nice, ionice, ecoqos, bateria, dae
 - macOS: desenchufar el portátil y comprobar el modo en `raptor status --resources` (cuando exista US-GRP-017).
 - Linux y Windows: **Pendiente: etapa de validación multiplataforma**.
 
-## Estado de la implementación (2026-10-28)
+## Estado de la implementación (2026-11-08)
 
-Implementado en: PR #298 (en parte, PR-A: T001 a T006 de DS-TS-GRP-005).
+Implementado en: PR #298 (PR-A: T001 a T006) y PR #PRB (PR-B: T007 a T014 de DS-TS-GRP-005). Queda en `partially-implemented` por los pendientes de abajo.
 
-- **Hecho (macOS):**
-  - `macsys::qos` fija y lee la QoS del hilo y baja un hijo antes de `exec` (nice y política de E/S del proceso). Es la cuarta superficie `unsafe` de `macsys`, registrada en ADR-GRP-002.
-  - `work_class` lanza hilos con clase, baja por un tramo sin subir nunca y lleva el registro de pools.
-  - `power` resuelve el modo a partir de `engine.powerSaving` (solo en el nivel de perfil) y de la fuente. La fuente es `UnknownPowerSource`, así que `auto` no ahorra todavía.
-  - El daemon resuelve el modo antes de arrancar los módulos, lo mantiene con el hilo `raptor-power` (en `Utility`) y lo da a los consumidores con `Daemon::power()`.
-  - `raptor-discovery`, `raptor-guard-health`, `raptor-resources` y `raptor-dormant-sweep` corren en `Utility`, y la reconciliación periódica baja a `Utility` solo durante su tramo.
-  - Cierra G5 de DS-TS-CKP-001.
-- **Decisión nueva:** D17. Los hilos reciben solo la QoS, porque en macOS 26 una política de E/S de hilo saca al hilo de la QoS.
-- **Falta (PR-B, T007 a T014):**
-  - la fuente de energía real de macOS;
-  - publicar `pools` y `power_saving` en `engine.resources`;
-  - la reconciliación espaciada;
-  - las clases en el camino del snapshot previo;
-  - la clase de los `git` hijos;
-  - el test de la unidad de autoarranque;
-  - el gate RES-07.
-- **Linux y Windows:** degradación fail-closed. `macsys` y `policy` compilan con clippy para Windows; `core` no se pudo compilar para Linux ni Windows desde el Mac (`libsqlite3-sys`). Se comprueba en el CI. Pendiente en la etapa de validación multiplataforma (XP-45).
-
+- **Hecho en el PR-A (macOS):** `macsys::qos`, `work_class` (clases, tramos y registro de pools), `power` (modo resuelto de `engine.powerSaving` y la fuente), el hilo `raptor-power` y `Daemon::power()`, y las clases de los hilos que no tocan el camino del snapshot previo. Decisión D17: los hilos reciben solo la QoS.
+- **Hecho en el PR-B (macOS):**
+  - Fuente de energía real: batería por IOKit y bajo consumo por `NSProcessInfo` (`macsys::power`, `ffi_power`). Con `auto`, desenchufar o activar el bajo consumo pone el motor en ahorro en ≤ 30 s. Revisión de seguridad aceptada, `objc_msgSend` incluido; registrada en ADR-GRP-002 (cierra G1).
+  - `engine.resources` publica `power_saving` en todos los SO y `pools` (los pools vivos) en macOS.
+  - En ahorro, la reconciliación periódica pasa de 5 a 15 min, y el barrido y la reconciliación lenta de los dormidos pasan a 300 s y 180 min. Al volver a corriente, el próximo plazo se recalcula sin disparar una reconciliación.
+  - Clases del camino del previo (D18): `raptor-conn`, `raptor-prior` y el hashing de un previo en `UserInitiated`, `raptor-tm-capture` en `Default` como pool `Capture`, y `raptor-tm-seed` en `Background`.
+  - Un `git` lanzado por un hilo `Utility` o `Background` sale con nice 5 o 10, sin bajar nunca de un nice heredado mayor. El coste de perder `posix_spawn` es de 0,29 ms en el p95 (presupuesto 5 ms).
+  - Test de la plist de launchd (`ProcessType=Standard`).
+  - Escenario `--saturated` (RES-07) en los bancos `tm_snapshot` y `engine`.
+- **Decisión nueva:** D18. La captura continua hashea con el escritor tomado, así que sigue en `Default` (Enmienda 2026-11-08 de ADR-GRP-015).
+- **Pendiente:**
+  - **RES-06 del hashing de la captura continua:** espera a [TD-TMC-002](../../time-machine/technical-stories/TD-TMC-002-captura-blobs-fuera-del-escritor.md), que saca los blobs del escritor.
+  - **RES-07, la cifra en verde:** el escenario existe, pero en el Mac de desarrollo, con otros workers en marcha (carga 25–38 en 10 núcleos), la espera del previo al escritor ya supera los 10 ms sin carga añadida. La medición válida necesita una máquina tranquila. Las cifras están en el PR y en INF-GRP-002.
+- **Linux y Windows:** degradación fail-closed. Las clases no se aplican, `pools` es `null` y la fuente es `Unknown`. Pendiente en la etapa de validación multiplataforma (XP-45).
