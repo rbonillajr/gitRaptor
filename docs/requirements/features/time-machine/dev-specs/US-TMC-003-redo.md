@@ -593,7 +593,7 @@ Aplicada el 2026-10-27 en [US-TMC-003](../user-stories/US-TMC-003-redo.md): el P
 
 ## Enmienda (2026-11-09, implementación)
 
-Implementado en: PR #NNN. Decisiones tomadas al implementar. Cada una es una **decisión del orquestador (2026-11-09)**, salvo donde se dice otra cosa. Brief de la corrida: [`docs/dev-briefs/us-tmc-003-redo.2-plan.md`](../../../../dev-briefs/us-tmc-003-redo.2-plan.md) (deriva D-A a D-G y decisiones P1 a P4).
+Implementado en: PR #335. Decisiones tomadas al implementar. Cada una es una **decisión del orquestador (2026-11-09)**, salvo donde se dice otra cosa. Brief de la corrida: [`docs/dev-briefs/us-tmc-003-redo.2-plan.md`](../../../../dev-briefs/us-tmc-003-redo.2-plan.md) (deriva D-A a D-G y decisiones P1 a P4).
 
 | # | Decisión | Por qué |
 |---|---|---|
