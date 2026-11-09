@@ -338,7 +338,6 @@ fn uncommitted_work_only_overlaps() {
 
 /// Cada agente contra la base confirmada.
 #[test]
-#[ignore = "G-B: confirming the base at runtime does not replan (follow-up of US-CKP-006)"]
 fn a_worktree_against_the_confirmed_base_shows_the_conflict() {
     let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let shop = Shop::new();
