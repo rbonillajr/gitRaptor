@@ -279,7 +279,7 @@ Lo que cambió respecto del 2026-10-08 (27 PR y 8,8 fichas equivalentes por día
 
 | Id | Qué | MoSCoW | Estado | Qué le falta |
 |---|---|---|---|---|
-| TS-DSK-001 | Andamiaje de `apps/desktop`: proyecto Tauri del monorepo, frontera de seguridad y ventana vacía | Must | Pend (`ready`) | Nada: es el primer eslabón. Dev Spec lista |
+| TS-DSK-001 | Andamiaje de `apps/desktop`: proyecto Tauri del monorepo, frontera de seguridad y ventana vacía | Must | Hecho (PR #327) | Nada: es el primer eslabón |
 | TS-DSK-002 | Arranque del motor desde la app y binarios del motor dentro del bundle | Must | Pend (`ready`) | TS-DSK-001. Dev Spec lista |
 | TS-GRP-009 | Clase de cliente `desktop` y perfil de lectura `mcp` cuando un agente abre la app | Must | Pend (`draft`) | Bloquea la primera escritura de la app (US-DSK-001, 002 y 006), no las lecturas: hasta entonces la app lee lo mismo que un agente que ejecuta `raptor` (revisión de seguridad del 2026-11-08) |
 | US-DSK-001 | Añadir un repo sin terminal | Must | Pend (`ready`) | Factor del SO (SPIKE-GRD-002); mientras tanto, comando para copiar |

@@ -2,7 +2,7 @@
 id: TS-DSK-001
 title: "Andamiaje de apps/desktop: proyecto Tauri del monorepo, frontera de seguridad y ventana B1 vacía"
 type: ts
-status: ready
+status: implemented
 feature: desktop
 domain: GRP
 priority: high
@@ -70,3 +70,5 @@ tags: [desktop, tauri, react, vite, nx, andamiaje, csp, capabilities, ipc, token
 
 - `pnpm nx run @gitraptor/desktop:tauri:dev` en macOS: la ventana se abre, ⌘B y ⌥⌘B pliegan los paneles, el tema cambia y persiste al reabrir, y la ventana no aparece en una captura de pantalla.
 - Inspector desactivado en un build de release (`tauri:build` sin bundle) en macOS.
+
+Implementado en: PR #327. Pendiente de la verificación manual en macOS: `tauri dev` con atajos, `tauri build` sin inspector y la captura negra de `contentProtected` (la prueba automática salió no concluyente).
