@@ -55,6 +55,21 @@ const MAX_DEPTH: usize = 64;
 /// Samples kept per repo; older ones can no longer match a batch.
 const MAX_SIGHTINGS: usize = 256;
 
+/// Oldest write that still gets an S3 notice from the repo read that found it
+/// ([`ObserverHooks::git_dir_written`]): the sample is taken at that read, and
+/// the later, the longer a writing `git` of a session alive across a foreign
+/// write in its worktree has to be taken as its author (ADR-GRP-012, amendment
+/// 2026-11-09). About 3× the 1085 ms measured under load ~40.
+pub const READ_WRITE_MAX_AGE: Duration = Duration::from_secs(3);
+
+/// Age of a write found by a repo read, in milliseconds, and whether it is
+/// recent enough to get an S3 notice ([`READ_WRITE_MAX_AGE`]).
+pub fn read_write_age(written_us: u64) -> (u64, bool) {
+    let age_us = wall_us().saturating_sub(written_us);
+    let max_us = u64::try_from(READ_WRITE_MAX_AGE.as_micros()).unwrap_or(u64::MAX);
+    (age_us / 1_000, age_us <= max_us)
+}
+
 /// Most `git`s whose argv and environment are read per sample (foreign ones
 /// and those of a session alike); past it a `git` is unreadable (`None`): a
 /// foreign one counts in the whole repo and one of a session is no evidence,
@@ -1371,7 +1386,9 @@ impl ObserverHooks for Hooks {
     }
 
     fn git_dir_written(&self, repo_id: &str, t_recv: u64, written_us: u64) {
-        self.notice(repo_id, t_recv, written_us);
+        if read_write_age(written_us).1 {
+            self.notice(repo_id, t_recv, written_us);
+        }
     }
 }
 

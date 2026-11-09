@@ -22,19 +22,20 @@ use gitraptor_api::{Actor, AgentKind as ApiAgentKind, AgentOrigin, Timings, Untr
 
 use super::attribution::{actor_of, effective_of};
 use super::{
-    Daemon, Field, RegisterRequest, RegistrationError, RepoCommandError, WithdrawRequest, env,
-    now_ms, profile_error_kind,
+    Daemon, Field, Logger, RegisterRequest, RegistrationError, RepoCommandError, WithdrawRequest,
+    env, now_ms, profile_error_kind,
 };
 use crate::detect::{
     Detector, Diagnostics, OpenSession, PresentSession, RefMove, RegisteredSession, S3Counts,
     S3Outcome, S3Scope, SessionChange, SessionConfig, SystemProcLister, detection_supported,
+    read_write_age,
 };
 use crate::observe::RepoRead;
 use crate::profile::{
     Agent, AgentKind, Author, EndCause, NewEvent, Origin, RecordKind, RepoStore, Session,
     Timestamp, WriteOp,
 };
-use crate::watch::{ObservedBatch, ObserverHooks, RawEvent};
+use crate::watch::{FanoutHooks, ObservedBatch, ObserverHooks, RawEvent};
 
 /// Evidence stored with an event that S3 attributed (ADR-GRP-013 § 1).
 const S3_EVIDENCE: &str = r#"{"signals":["s3"]}"#;
@@ -186,6 +187,32 @@ fn start_changes(
         .collect()
 }
 
+/// Logs the age of every write a repo read gave an S3 notice for, kept or dropped by
+/// `READ_WRITE_MAX_AGE` (TD-GRP-005, ADR-GRP-012 amendment 2026-11-09): the data to tune that
+/// bound in dogfooding. Integers, a boolean and the filtered repo id only (SEC-04).
+struct ReadNoticeLog(Logger);
+
+impl ObserverHooks for ReadNoticeLog {
+    fn worktree_touched(&self, _repo_id: &str, _root: &Path) {}
+
+    fn git_dir_touched(&self, _repo_id: &str, _t_recv: u64) {}
+
+    fn git_dir_written(&self, repo_id: &str, _t_recv: u64, written_us: u64) {
+        let (age_ms, kept) = read_write_age(written_us);
+        self.0.info(
+            "s3_read_notice",
+            &[
+                ("repo", Field::id(repo_id)),
+                (
+                    "age_ms",
+                    Field::from(i64::try_from(age_ms).unwrap_or(i64::MAX)),
+                ),
+                ("kept", kept.into()),
+            ],
+        );
+    }
+}
+
 /// The fields of the `s3_evidence` log line: integers, fixed texts and the
 /// filtered repo id, never a path, a name, a pid or an argv (SEC-04).
 fn s3_log_fields(
@@ -244,7 +271,10 @@ impl Daemon {
                 &[("os", std::env::consts::OS.into())],
             );
         }
-        detector.observer_hooks()
+        Arc::new(FanoutHooks(vec![
+            detector.observer_hooks(),
+            Arc::new(ReadNoticeLog(self.logger.clone())),
+        ]))
     }
 
     /// Starts detecting in a repo and closes, as ended during a gap, the

@@ -190,15 +190,15 @@ fn evidence_does_not_wait_without_pending_notices() {
     assert!(start.elapsed() < WAIT / 2, "{:?}", start.elapsed());
 }
 
-/// The backup poll's notice measures "started before" against the write it
-/// found (the `HEAD` reflog's mtime), not against when it ran: a session's
-/// `git` that started after that write is no evidence, however late the poll.
+/// A repo read's notice measures "started before" against the write it found
+/// (the `HEAD` reflog's mtime), not against when it ran: a session's `git`
+/// that started after that write is no evidence, however late the read.
 #[test]
-fn a_poll_notice_cuts_started_before_at_the_write() {
+fn a_read_notice_cuts_started_before_at_the_write() {
     let b = Barrier::new(WAIT);
     b.release();
-    // The session's `git` (31) started 1 ms ago; this write is a minute old.
-    b.hooks.git_dir_written("r", 1_000, wall_us() - 60_000_000);
+    // The session's `git` (31) started 1 ms ago; this write is half a second old.
+    b.hooks.git_dir_written("r", 1_000, wall_us() - 500_000);
     assert_eq!(b.evidence(1_000), S3Outcome::NoSighting);
     // A write after the `git` started: it may have made it.
     b.hooks.git_dir_written("r", 900_000_000, wall_us());
@@ -206,4 +206,25 @@ fn a_poll_notice_cuts_started_before_at_the_write() {
         S3Outcome::Attributed(p) => assert_eq!(p.session_id, "20:2000"),
         other => panic!("{other:?}"),
     }
+}
+
+/// A write older than `READ_WRITE_MAX_AGE` gets no notice: a writing `git` of
+/// the session that started before it and is still alive is no evidence.
+#[test]
+fn a_read_notice_of_an_old_write_is_dropped() {
+    let b = Barrier::new(WAIT);
+    b.release();
+    let old = READ_WRITE_MAX_AGE.as_micros() as u64 + 2_000_000;
+    // A writing `git` of the session alive since before that write.
+    b.procs.table.add(
+        32,
+        20,
+        wall_us() - old - 1_000_000,
+        "/usr/bin/git",
+        Some(WT),
+    );
+    b.hooks.git_dir_written("r", 1_000, wall_us() - old);
+    assert_eq!(b.evidence(1_000), S3Outcome::NoSighting);
+    let (age_ms, kept) = read_write_age(wall_us() - old);
+    assert!(!kept && age_ms * 1_000 >= old, "{age_ms}");
 }
