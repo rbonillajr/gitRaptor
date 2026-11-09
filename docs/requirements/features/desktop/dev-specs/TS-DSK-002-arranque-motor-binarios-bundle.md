@@ -2,9 +2,9 @@
 id: DS-TS-DSK-002
 title: "Dev Spec — Arranque del motor desde la app y binarios del motor en el bundle"
 type: dev-spec
-status: spec-ready
+status: partially-implemented
 created: 2026-11-08
-updated: 2026-11-08
+updated: 2026-11-09
 story: TS-DSK-002
 feature: desktop
 domain: GRP
@@ -60,6 +60,8 @@ tags: [desktop, dep-dsk-5, ensure, connector, bundle-connector, externalbin, dmg
 ---
 
 # DS-TS-DSK-002 · Arranque del motor desde la app y binarios del motor en el bundle
+
+> Implementado en: PR #334 (T001 a T006). Pendiente: T007, T008 y T009. Ajustes de la implementación (A1 a A4, sin cambiar nombres ni firmas): [`ts-dsk-002-engine-link.prep.md`](../../../../dev-briefs/ts-dsk-002-engine-link.prep.md).
 
 ## Contexto rápido
 

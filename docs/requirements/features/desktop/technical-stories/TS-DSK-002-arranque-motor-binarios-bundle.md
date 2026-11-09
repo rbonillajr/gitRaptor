@@ -2,13 +2,13 @@
 id: TS-DSK-002
 title: "Arranque del motor desde la app y binarios del motor dentro del bundle"
 type: ts
-status: ready
+status: partially-implemented
 feature: desktop
 domain: GRP
 priority: high
 complexity: medium
 created: 2026-11-08
-updated: 2026-11-08
+updated: 2026-11-09
 related:
   context: [CTX-DSK-001]
   adrs: [ADR-GRP-014, ADR-GRP-017, ADR-GRP-005, ADR-CKP-003, ADR-GRP-016]
@@ -65,3 +65,14 @@ tags: [desktop, dep-dsk-5, revision-seguridad, arranque-bajo-demanda, externalbi
 - En macOS, con la alpha instalada en `/Applications` y sin otro `raptor`: abrir la app arranca el motor y `raptor daemon status` del bundle lo muestra.
 - Con un `raptor` de Homebrew o de `install.sh` sirviendo un daemon de versión anterior: la app no lo reemplaza y muestra la acción para actualizarlo.
 - App abierta desde la imagen montada o con traslocación de Gatekeeper: el autoarranque no se ofrece.
+
+### Estado de implementación
+
+Implementado en: PR #334 (T001 a T006 de la Dev Spec): `EnsureReport`, `ReplacePolicy`, la comprobación B-3, `raptor daemon ensure --json` y la costura `engine::link` con `BundleConnector`.
+
+Estado: implementación parcial. Pendiente:
+
+- T007: diálogo nativo (`tauri-plugin-dialog`) y comandos `engine_autostart_offer` / `engine_autostart`.
+- T008: el `.dmg` de la alpha con `raptor` y `raptor-mcp`.
+- T009: la verificación manual con la app instalada (incluye el caso positivo de `bundled_raptor()`).
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma*.
