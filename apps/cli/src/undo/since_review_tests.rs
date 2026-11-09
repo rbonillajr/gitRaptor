@@ -28,7 +28,8 @@ fn rejected(reason: &str) -> ClientError {
 #[test]
 fn the_new_texts_exist_in_en_and_es_with_the_same_markers() {
     for key in [
-        "undo.confirm-plan-since",
+        "undo.confirm-plan-since.one",
+        "undo.confirm-plan-since.many",
         "undo.reason.raw-git-not-covered-since",
         "undo.reason.target-unavailable-since",
     ] {
@@ -61,10 +62,10 @@ fn the_confirmation_of_a_period_counts_operations_and_cut_owners() {
     let more = t("undo.overlap.more", &[("count", &10)]);
     assert_eq!(
         text,
-        t(
+        tn(
             "undo.confirm-plan-since",
+            3,
             &[
-                ("count", &3),
                 ("since", &"20m"),
                 ("operation", &"script"),
                 ("id", &"op-b"),

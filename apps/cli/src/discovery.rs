@@ -15,7 +15,7 @@ use gitraptor_api::rpc::code;
 use gitraptor_api::untrusted::sanitize;
 use gitraptor_core::client::{Client, ClientError};
 
-use crate::i18n::t;
+use crate::i18n::{t, tn};
 use crate::{command_path, confirm, engine, error_text, offers, refusal_text};
 
 /// The engine, when it offers `method`: a daemon older than this binary does not know discovery.
@@ -132,7 +132,7 @@ fn print_added(result: &RootAddResult) {
     match result.candidates {
         0 => {}
         1 => println!("{}", t("discovery.found-one", &[])),
-        count => println!("{}", t("discovery.found", &[("count", &count)])),
+        count => println!("{}", tn("discovery.found", u64::from(count), &[])),
     }
     if result.candidates > 0 {
         println!("{}", t("discovery.found-hint", &[]));
@@ -198,12 +198,10 @@ pub(crate) fn roots_remove(path: PathBuf) -> ExitCode {
         Ok(result) => {
             println!(
                 "{}",
-                t(
+                tn(
                     "discovery.root-removed",
-                    &[
-                        ("path", &text(&result.root)),
-                        ("count", &result.candidates_removed)
-                    ]
+                    u64::from(result.candidates_removed),
+                    &[("path", &text(&result.root))]
                 )
             );
             ExitCode::SUCCESS

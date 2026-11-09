@@ -87,7 +87,11 @@ pub(super) fn kept_lines_of(tr: Tr, kept: &[KeptPath], total: usize) -> Vec<Stri
         return Vec::new();
     }
     let total = total.max(kept.len());
-    let mut lines = vec![tr.t("undo.overlap.kept", &[("count", &total)])];
+    let mut lines = vec![tr.tn(
+        "undo.overlap.kept",
+        u64::try_from(total).unwrap_or(u64::MAX),
+        &[],
+    )];
     for k in kept.iter().take(SHOWN) {
         lines.push(tr.t(
             "undo.overlap.kept-path",

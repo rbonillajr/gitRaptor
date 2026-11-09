@@ -37,7 +37,7 @@ mod since_review_tests;
 #[path = "agent_tests.rs"]
 mod agent_tests;
 
-use crate::i18n::{Tr, t};
+use crate::i18n::{Tr, t, tn};
 use crate::{engine, error_text, shown};
 
 const CMD: &str = "raptor undo";
@@ -193,10 +193,10 @@ fn plan_text(data: &TmConfirmData, since: Option<&str>) -> String {
             format!("{owners}, {more}")
         };
     }
-    t(
+    tn(
         "undo.confirm-plan-since",
+        data.undone_count.max(1),
         &[
-            ("count", &data.undone_count.max(1)),
             ("since", &sanitize(since)),
             ("operation", &operation),
             ("id", &id),
@@ -224,13 +224,13 @@ fn print_done(result: &UndoResult, worktree: &Path, since: Option<&str>, ask: Op
         );
     } else if let Some(since) = since {
         // A period may take back one operation or many: the count, the oldest and the prior.
-        let count = result.undone_operation_ids.len().max(1).to_string();
+        let count = u64::try_from(result.undone_operation_ids.len().max(1)).unwrap_or(u64::MAX);
         println!(
             "{CMD}: {}",
-            t(
+            tn(
                 "undo.done-since",
+                count,
                 &[
-                    ("count", &count),
                     ("since", &sanitize(since)),
                     ("worktree", &shown(worktree)),
                     ("oldest", &sanitize(&result.undone_operation_id)),

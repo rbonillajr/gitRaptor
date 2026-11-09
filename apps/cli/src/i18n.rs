@@ -65,6 +65,19 @@ pub fn t(key: &str, args: &[(&str, &dyn std::fmt::Display)]) -> String {
     text
 }
 
+/// The key of the plural form of `key` for `count`: `<key>.one` for exactly 1, else
+/// `<key>.many` (also 0).
+fn plural_key(key: &str, count: u64) -> String {
+    format!("{key}.{}", if count == 1 { "one" } else { "many" })
+}
+
+/// The message `<key>.one` or `<key>.many` for `count`, with `{count}` and `args` filled.
+pub fn tn(key: &str, count: u64, args: &[(&str, &dyn std::fmt::Display)]) -> String {
+    let mut all: Vec<(&str, &dyn std::fmt::Display)> = vec![("count", &count)];
+    all.extend_from_slice(args);
+    t(&plural_key(key, count), &all)
+}
+
 /// A language chosen by the caller, so a renderer can be tested in English and Spanish in one
 /// process.
 #[derive(Clone, Copy)]
@@ -93,6 +106,15 @@ impl Tr {
             text = text.replace(&format!("{{{name}}}"), &value.to_string());
         }
         text
+    }
+}
+
+impl Tr {
+    /// [`tn`] in this language.
+    pub fn tn(self, key: &str, count: u64, args: &[(&str, &dyn std::fmt::Display)]) -> String {
+        let mut all: Vec<(&str, &dyn std::fmt::Display)> = vec![("count", &count)];
+        all.extend_from_slice(args);
+        self.t(&plural_key(key, count), &all)
     }
 }
 
@@ -175,6 +197,39 @@ mod tests {
                     first, *feature,
                     "the group {group}. is in {first} and {feature}"
                 );
+            }
+        }
+    }
+
+    #[test]
+    fn plurals_pick_one_or_many() {
+        assert_eq!(plural_key("a.b", 1), "a.b.one");
+        assert_eq!(plural_key("a.b", 0), "a.b.many");
+        assert_eq!(plural_key("a.b", 2), "a.b.many");
+        // `{count}` is filled, and the language is the caller's.
+        let en = Tr { spanish: false };
+        let es = Tr { spanish: true };
+        assert_eq!(en.tn("timeline.entries", 1, &[]), "1 entry");
+        assert_eq!(en.tn("timeline.entries", 3, &[]), "3 entries");
+        assert_eq!(es.tn("timeline.entries", 1, &[]), "1 entrada");
+        assert_eq!(es.tn("timeline.entries", 0, &[]), "0 entradas");
+    }
+
+    /// Every `.one` has its `.many` (and the other way round) in both languages.
+    #[test]
+    fn every_plural_has_both_forms() {
+        for catalog in [EN, ES] {
+            let keys: Vec<&str> = catalog
+                .iter()
+                .flat_map(|(_, file)| entries(file).map(|(k, _)| k))
+                .collect();
+            for key in &keys {
+                if let Some(base) = key.strip_suffix(".one") {
+                    assert!(keys.contains(&format!("{base}.many").as_str()), "{base}");
+                }
+                if let Some(base) = key.strip_suffix(".many") {
+                    assert!(keys.contains(&format!("{base}.one").as_str()), "{base}");
+                }
             }
         }
     }

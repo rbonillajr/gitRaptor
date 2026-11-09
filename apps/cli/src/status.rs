@@ -128,7 +128,6 @@ pub fn text(snapshot: &Snapshot, sessions: &SessionsInfo, verbose: bool, tr: Tr)
 /// Temporary files the sweep after a crash kept (DS-TS-TMC-003, Enmienda T2): `raptor undo` is
 /// offered only while the interrupted operation is still the last one.
 fn kept_temps_text(out: &mut String, kept: &KeptTempsView, tr: Tr) {
-    let count = kept.count.to_string();
     let operation = sanitize(&kept.operation_id);
     let key = if kept.undo_next {
         "status.kept-temps"
@@ -138,7 +137,7 @@ fn kept_temps_text(out: &mut String, kept: &KeptTempsView, tr: Tr) {
     let _ = writeln!(
         out,
         "  {}",
-        tr.t(key, &[("count", &count), ("operation", &operation)])
+        tr.tn(key, u64::from(kept.count), &[("operation", &operation)])
     );
     if kept.foreign > 0 {
         let foreign = kept.foreign.to_string();
@@ -240,7 +239,7 @@ fn worktree_text(out: &mut String, w: &WorktreeView, base: &str, verbose: bool, 
                 let _ = writeln!(out, "    {}", tr.t(key, &[]));
             }
             if w.unmerged_paths > 0 {
-                let line = tr.t("status.unmerged", &[("count", &w.unmerged_paths)]);
+                let line = tr.tn("status.unmerged", u64::from(w.unmerged_paths), &[]);
                 let _ = writeln!(out, "    {line}");
             }
             let _ = writeln!(out, "    {}", divergence_text(divergence, base, tr));
