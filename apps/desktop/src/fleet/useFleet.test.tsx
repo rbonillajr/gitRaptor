@@ -2,8 +2,7 @@
 // global snapshot arrives with none chosen or the chosen one disappears, calls fleet_open on every change of
 // selectedRepoId, and reads the repo entry from the cache with no network queryFn.
 //
-// Assumed shape (the plan does not fix it): `useFleet()` takes no argument and returns the query of the open repo,
-// so its `data` is the `RepoFleet` (or `undefined` until the snapshot is in); a `fleet` property is accepted too.
+// `useFleet()` takes no argument and returns the UseQueryResult of engineKeys.repo(selectedRepoId): `data` is the `RepoFleet`.
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { clearMocks, mockIPC } from "@tauri-apps/api/mocks";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
@@ -40,9 +39,9 @@ const selected = () => useUiStore.getState().selectedRepoId;
 
 function mount() {
   const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
-  return renderHook(() => useFleet() as unknown as { data?: RepoFleet; fleet?: RepoFleet }, { wrapper });
+  return renderHook(() => useFleet() as unknown as { data?: RepoFleet }, { wrapper });
 }
-const fleetOf = (r: { current: { data?: RepoFleet; fleet?: RepoFleet } | undefined }) => r.current?.data ?? r.current?.fleet;
+const fleetOf = (r: { current: { data?: RepoFleet } | undefined }) => r.current?.data;
 
 beforeEach(() => {
   client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } });

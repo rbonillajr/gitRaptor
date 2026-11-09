@@ -213,6 +213,7 @@ graph LR
 - Eventos del ámbito del repo abierto con `Apply`: `worktree.state` → `worktrees`; `session.state` → `repoSession`; `prediction.changed` → `prediction`. Los demás tipos avanzan la secuencia y se ignoran. Un `scope.event` de otro ámbito se descarta sin tocar ninguna secuencia.
 - `ingest.rs`: `key(raw: &str) -> String` (FNV-1a 64, 16 dígitos hex en minúscula, sobre los bytes crudos); `repo`, `worktree`, `session`, `pair` (§ Contratos compartidos). Toda ruta y nombre pasa por `display::visible`; la carpeta es el último componente de la ruta cruda, saneado después de cortarlo. `detached_at` solo pasa si son 40 o 64 dígitos hex, y se manda entero (la UI corta a 7). `Actor::Agent { kind: claude-code }` → `{ kind: "claude-code" }`; `other` → `{ kind: "other", name }` saneado; `Actor::Unattributed` no aparece en `SessionView` (siempre es un agente) y, si llegara, la sesión se descarta.
 - `fleet_open` según [§ Contrato de API](#contrato-de-api); llama `EngineHub::open`. `commands.json` suma `"fleet_open"` y la capability `allow-fleet-open`.
+- **Decisión del orquestador (2026-11-09), tras el crítico**: el id de `fleet_open` se valida al deserializar `FleetOpenParams` o al principio de `EngineHub::open`, **antes** de comprobar que hay supervisor (un id inválido da `invalid-params` aunque no haya `watch`); `CommandError` no gana variantes.
 
 - **Depende:** T001
 - **Refs:** D3, D8; DS-US-CKP-001 § 2 y D1; ADR-CKP-003 § 4
@@ -237,6 +238,7 @@ graph LR
 - `applyEngineBatch`: `repo` → `setQueryData(engineKeys.repo(id), { repo, sessions: new Map(), detection: null })` (reemplaza y vacía sesiones, D3); `worktrees` → reemplaza `repo.worktrees` y `repo.fetchedUtcMs`; `sessions` → fusiona la lista con la regla de D3 y fija `detection`; `repoSession` → fusiona una; `prediction` → upsert por `pairId` y quita `removed`; `repoClosed` → `removeQueries(engineKeys.repo(id))` y `selectRepo(null)` si era el elegido. Nunca muta el objeto anterior.
 - `ui-store.ts`: `selectedRepoId: string | null` y `selectRepo(id)`, **sin** persistir (`partialize` no cambia; el test de las cuatro claves sigue en verde).
 - `useFleet.ts`: elige el repo por defecto (D2) cuando llega `global` sin elegido o el elegido desaparece; en cada cambio de `selectedRepoId` llama `call("fleet_open", { repoId })`; expone `useQuery({ queryKey: engineKeys.repo(id), queryFn: skipToken })`.
+- **Decisión del orquestador (2026-11-09), tras el crítico**: `useFleet()` no recibe argumentos, lo monta `EngineCenter` (una sola vez) y devuelve el `UseQueryResult<RepoFleet>` de `engineKeys.repo(selectedRepoId)` (con `skipToken` sin repo elegido).
 
 - **Depende:** T002
 - **Refs:** ADR-GRP-004, Enmienda D7; D2, D3
@@ -305,10 +307,13 @@ graph LR
 - `apps/desktop/src/client/engine-stream.ts` (**MODIFY**)
 - `apps/desktop/src/fleet/FleetView.tsx` (**MODIFY**)
 - `apps/desktop/src/fleet/FleetView.test.tsx` (**MODIFY**)
+- `apps/desktop/src/app/App.tsx` (**MODIFY**: pasa `receivedAt` al almacén)
+- `apps/desktop/src/state/engine-store.ts` (**MODIFY**: `lastRepoBatch`)
 
 **Reglas**
 - Backend: `worktrees`, `repoSession` y `prediction` llevan `perf: { backendNs }` = `monotonic_ns()` al enviar menos el `recv_ns` del `Link::next` (costura de DS-TS-DSK-002) que trajo el evento. Ajuste tras la revisión (2026-11-08), validado por Arquitecto / security-expert.
 - `engine-stream.ts`: cada lote lleva `receivedAt` = `performance.now()` del primer mensaje del lote.
+- **Decisión del orquestador (2026-11-09), tras el crítico**: `watchEngine` entrega cada lote como `onBatch(messages, { receivedAt })` (segundo argumento, no propiedad del array); `App.tsx` aplica el lote y, si trae mensajes del repo, anota `{ receivedAt, n }` en `engine-store.ts` (`lastRepoBatch`) y `FleetView` lo lee tras su commit para medir. `perf.backendNs` es siempre mayor que 0 y menor que 20 ms en el daemon falso.
 - `FleetView`: tras el commit de React que aplicó un lote con mensajes del repo, en el primer `requestAnimationFrame`, `performance.measure("gr:fleet-delta", { start: receivedAt })`, y `performance.mark("gr:fleet-delta-painted")`.
 
 - **Depende:** T005

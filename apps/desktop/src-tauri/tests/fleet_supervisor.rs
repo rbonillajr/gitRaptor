@@ -1034,8 +1034,8 @@ fn fleet_deltas_carry_backend_perf() {
         ("prediction", prediction_ns),
     ] {
         assert!(
-            ns < 20_000_000,
-            "D4-FRESH: perf.backendNs of `{what}` is {ns} ns, over the 20 ms of the backend share"
+            ns > 0 && ns < 20_000_000,
+            "D4-FRESH: perf.backendNs of `{what}` is {ns} ns, it must be above 0 and under the 20 ms of the backend share"
         );
     }
 }
