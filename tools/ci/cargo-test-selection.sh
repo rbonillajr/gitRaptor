@@ -29,8 +29,8 @@ fi
 
 selection=(--workspace --exclude gitraptor-desktop)
 for member in $(cargo metadata --no-deps --format-version 1 | jq -r '.packages[].name' | tr -d '\r'); do
+  [ "$member" = gitraptor-desktop ] && continue
   case " $PROJECTS " in
-    gitraptor-desktop) ;;
     *" $member "*) ;;
     *) selection+=(--exclude "$member") ;;
   esac
