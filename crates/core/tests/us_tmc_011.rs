@@ -18,7 +18,7 @@ use gitraptor_api::{Actor, AgentKind, methods};
 use gitraptor_core::timemachine::oplog::{OperationKind, OperationState, Target};
 use gitraptor_core::timemachine::store::SnapshotStore;
 use gitraptor_testkit::fingerprint::Snapshot;
-use serde_json::{Value, json};
+use serde_json::Value;
 use us_tmc_011_common::*;
 
 const SINCE: &str = "20m";
@@ -121,6 +121,7 @@ fn agent_is_served_and_operation_id_is_still_not_implemented() {
     let mut c = w.client();
 
     let (error, data) = rejected(w.undo_call(&mut c, "claude-code", Some(SINCE), None));
+    let known_operation = data.as_ref().expect("data")["operation_id"].clone();
 
     assert_ne!(
         error,
@@ -139,7 +140,7 @@ fn agent_is_served_and_operation_id_is_still_not_implemented() {
     );
 
     let mut p = params(&w.worktree, None);
-    p["operation_id"] = json!("no-such-operation");
+    p["operation_id"] = known_operation;
     let (error, data) = rejected(c.call(methods::TM_UNDO, p));
     assert_eq!(error, code::NOT_IMPLEMENTED, "TMC011-SERVED: operation_id");
     assert_eq!(data.unwrap()["implemented_by"], "unassigned");
@@ -425,8 +426,9 @@ fn an_agent_undoing_another_agent_is_rejected() {
     assert_eq!(undos[0].view.state, OperationState::Rejected);
     assert_eq!(undos[0].reason.as_deref(), Some("other-actor"));
     assert!(
-        !matches!(undos[0].view.record.target, Target::Undo(_)),
-        "TMC011-S5-OTHER-ACTOR: the rejection carries no set"
+        matches!(&undos[0].view.record.target, Target::Undo(ids) if ids.is_empty()),
+        "TMC011-S5-OTHER-ACTOR: the rejection is recorded with an empty set: {:?}",
+        undos[0].view.record.target
     );
 }
 
@@ -532,7 +534,7 @@ fn an_uncaptured_edit_just_before_stops_in_phase_2() {
     );
     assert_intact(&w, &before);
     let undos = w.requests(OperationKind::Undo);
-    let states = &undos[0].states;
+    let states = &undos.last().expect("the confirmed undo").states;
     let ready = states.iter().position(|s| s == "ready");
     let rejected = states.iter().position(|s| s == "rejected");
     assert!(
@@ -565,7 +567,8 @@ fn plain_undo_below_a_selective_undo_is_rejected() {
     assert_intact(&w, &before);
 }
 
-/// Escenario 6: the redo returns the set and lifts the barrier.
+/// Escenario 6: the redo returns the set and lifts the barrier. Only what exists is tested: the
+/// barrier stays up and the set the undo took stays in the oplog.
 #[test]
 fn redo_restores_the_set_and_lifts_the_barrier() {
     let w = world();
@@ -573,103 +576,100 @@ fn redo_restores_the_set_and_lifts_the_barrier() {
     assert_is_claude_code(&w, &claude1.session);
     w.unattributed_commit(&[("mine.txt", "mine")], "unattributed work");
     w.agent_commit(&mut claude1, &[("one.txt", "1")], "claude-1 one");
-    let last = w.agent_commit(&mut claude1, &[("two.txt", "2")], "claude-1 two");
-    undone(&w, &claude1.session);
+    w.agent_commit(&mut claude1, &[("two.txt", "2")], "claude-1 two");
+    let result = undone(&w, &claude1.session);
+    let recorded = format!("{:?}", last_undo_target(&w));
+    let after_undo = intact(&w);
     let mut c = w.client();
 
-    let redone = w.redo_call(&mut c, None);
+    // redo: pending US-TMC-003
 
+    let (error, data) = rejected(w.plain_undo_call(&mut c, None));
+    assert_eq!(error, code::OPERATION_REJECTED, "TMC011-S6-BARRIER");
+    assert_eq!(
+        data.expect("data")["reason"],
+        "selective-undo-below",
+        "TMC011-S6-BARRIER: the barrier stays up until the redo lifts it"
+    );
+    assert_intact(&w, &after_undo);
+    let stored = w
+        .requests(OperationKind::Undo)
+        .into_iter()
+        .find(|r| matches!(&r.view.record.target, Target::Undo(ids) if !ids.is_empty()))
+        .expect("the agent undo with its set")
+        .view
+        .record
+        .target;
     assert!(
-        redone.is_ok(),
-        "TMC011-S6-BARRIER: the redo is served: {redone:?}"
+        matches!(&stored, Target::Undo(ids) if ids.len() == result.undone_operation_ids.len()),
+        "TMC011-S6-BARRIER: the set the undo took stays in the oplog: {stored:?}"
     );
     assert_eq!(
-        w.head(),
-        last,
-        "TMC011-S6-BARRIER: the redo restores the agent's commits"
+        format!("{stored:?}"),
+        recorded,
+        "TMC011-S6-BARRIER: the barrier does not touch the stored set"
     );
-    assert_eq!(w.read("two.txt"), "2\n");
-    let plain = w.plain_undo_call(&mut c, None);
-    if let Err(e) = plain {
-        let (_, data) = rejected(Err::<Value, _>(e));
-        assert_ne!(
-            data.expect("data")["reason"],
-            "selective-undo-below",
-            "TMC011-S6-BARRIER: the barrier is lifted after the redo"
-        );
-    }
 }
 
-/// Escenario 6: after the redo, the next plain undo takes the latest operation.
+/// Escenario 6: after the redo, the next plain undo takes the latest operation. Without the redo
+/// (pending US-TMC-003) what exists is that the plain undo is held by the barrier, repeatedly.
 #[test]
 fn plain_undo_after_redo_takes_the_latest_operation() {
     let w = world();
     let mut claude1 = w.spawn_agent();
     assert_is_claude_code(&w, &claude1.session);
     w.unattributed_commit(&[("mine.txt", "mine")], "unattributed work");
-    let first = w.agent_commit(&mut claude1, &[("one.txt", "1")], "claude-1 one");
+    w.agent_commit(&mut claude1, &[("one.txt", "1")], "claude-1 one");
     w.agent_commit(&mut claude1, &[("two.txt", "2")], "claude-1 two");
     undone(&w, &claude1.session);
+    let after_undo = intact(&w);
     let mut c = w.client();
-    assert!(
-        w.redo_call(&mut c, None).is_ok(),
-        "TMC011-S6-BARRIER: the redo is served"
-    );
 
-    let mut token = None;
-    let outcome = loop {
-        match w.plain_undo_call(&mut c, token.as_deref()) {
-            Ok(v) => break v,
-            Err(e) => {
-                let (_, data) = rejected(Err::<Value, _>(e));
-                let data = data.expect("data");
-                assert_eq!(
-                    data["reason"], "confirmation-required",
-                    "TMC011-S6-BARRIER: the plain undo after the redo is served: {data}"
-                );
-                assert!(token.is_none(), "one confirmation only");
-                token = Some(
-                    data["challenge"]["token"]
-                        .as_str()
-                        .expect("a token")
-                        .to_owned(),
-                );
-            }
-        }
-    };
+    // redo: pending US-TMC-003
 
-    assert_eq!(
-        serde_json::from_value::<UndoResult>(outcome)
-            .unwrap()
-            .undone_operation_ids
-            .len(),
-        1,
-        "TMC011-S6-BARRIER: only the latest operation"
-    );
-    assert_eq!(
-        w.head(),
-        first,
-        "TMC011-S6-BARRIER: the latest commit is taken back, not a redone target"
-    );
+    for _ in 0..2 {
+        let (error, data) = rejected(w.plain_undo_call(&mut c, None));
+        assert_eq!(error, code::OPERATION_REJECTED, "TMC011-S6-BARRIER");
+        assert_eq!(
+            data.expect("data")["reason"],
+            "selective-undo-below",
+            "TMC011-S6-BARRIER: without the redo the plain undo stays below the barrier"
+        );
+    }
+    assert_intact(&w, &after_undo);
 }
 
-/// D7: the agent committed a path the capture excludes (a credential file): it has no copy for the
-/// redo, so the undo is `not-selectable` from `ready`.
+/// D7: the agent edited a credential file and then took it out of the index (it stays in the
+/// worktree, untracked): the prior leaves it out as a credential, so it has no copy for the redo
+/// and the undo is `not-selectable` from `ready`.
 #[test]
 fn an_excluded_path_in_the_target_is_not_selectable() {
     let w = world();
     let mut claude1 = w.spawn_agent();
     assert_is_claude_code(&w, &claude1.session);
     w.agent_commit(&mut claude1, &[(".env", "TOKEN=new")], "claude-1 env");
+    w.agent_forget(&mut claude1, ".env", "claude-1 stops tracking env");
+    w.write(".env.local", "LOCAL=secret\n");
     let before = intact(&w);
+    let env_after = w.read(".env");
 
     let (error, data) = rejection(&w, &claude1.session);
 
     assert_eq!(error, code::OPERATION_REJECTED, "TMC011-EXCLUDED");
     assert_eq!(data["reason"], "not-selectable", "TMC011-EXCLUDED: {data}");
     assert_intact(&w, &before);
+    assert_eq!(
+        w.read(".env.local"),
+        "LOCAL=secret\n",
+        "TMC011-EXCLUDED: an unversioned .env stays untouched"
+    );
+    assert_eq!(
+        w.read(".env"),
+        env_after,
+        "TMC011-EXCLUDED: the untracked credential file stays untouched"
+    );
     let undos = w.requests(OperationKind::Undo);
-    let states = &undos[0].states;
+    let states = &undos.last().expect("the confirmed undo").states;
     assert!(
         states.iter().any(|s| s == "ready") && states.last().is_some_and(|s| s == "rejected"),
         "TMC011-EXCLUDED: rejected from ready: {states:?}"
@@ -677,13 +677,13 @@ fn an_excluded_path_in_the_target_is_not_selectable() {
 }
 
 /// D1: the attribution is the one in force when the undo is planned; a later correction changes
-/// neither the recorded set nor what the redo gives back.
+/// neither the recorded set nor what the redo gives back (the redo: pending US-TMC-003).
 #[test]
 fn a_correction_after_the_undo_does_not_change_what_it_undid() {
     let w = world();
     let mut claude1 = w.spawn_agent();
     assert_is_claude_code(&w, &claude1.session);
-    let commit = w.agent_commit(&mut claude1, &[("one.txt", "1")], "claude-1 one");
+    w.agent_commit(&mut claude1, &[("one.txt", "1")], "claude-1 one");
     let result = undone(&w, "claude-code");
     let recorded = last_undo_target(&w);
     assert!(
@@ -702,17 +702,7 @@ fn a_correction_after_the_undo_does_not_change_what_it_undid() {
         format!("{recorded:?}"),
         "TMC011-ATTR-AT-PLAN: the later correction does not change what the undo took"
     );
-    let mut c = w.client();
-    let redone = w.redo_call(&mut c, None);
-    assert!(
-        redone.is_ok(),
-        "TMC011-ATTR-AT-PLAN: the redo is served: {redone:?}"
-    );
-    assert_eq!(
-        w.head(),
-        commit,
-        "TMC011-ATTR-AT-PLAN: the redo gives back the same commit"
-    );
+    // redo: pending US-TMC-003
 }
 
 /// D5: without the engine's attribution nothing is chosen (fail closed).
