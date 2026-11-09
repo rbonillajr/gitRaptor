@@ -2,7 +2,7 @@
 id: DS-TS-DSK-001
 title: "Dev Spec — Andamiaje de apps/desktop"
 type: dev-spec
-status: spec-ready
+status: implemented
 created: 2026-11-08
 updated: 2026-11-08
 story: TS-DSK-001
@@ -571,3 +571,5 @@ macOS (T009) y ubuntu (job `desktop`). Windows y Linux en máquina real: **Pendi
 | G4 | Marcar `desktop` como check obligatorio en la protección de `main` (D8) es un ajuste del repositorio, no del código | Añadirlo tras el primer verde en `main` | Rene / orquestador |
 | G5 | Añadir un comando toca `commands.json`, `commands/mod.rs` y `capabilities/main.json`, tres archivos compartidos (ADR-GRP-016). Con varias historias de la app en paralelo, rebasar es mecánico | Si se vuelve un cuello de botella, generar el `generate_handler!` y la capability desde `commands.json` en `build.rs` | Arquitecto |
 | G6 | `pnpm audit` del workspace completo reporta avisos ya presentes en `main` en herramientas de desarrollo (nx/@monodon/rust: axios, follow-redirects, smol-toml, brace-expansion; style-dictionary: deepmerge, glob, qs; minimatch vía eslint/vitest). `--prod` está limpio | El job `desktop` corre `pnpm audit --prod` como paso bloqueante (lo que viaja en el bundle del webview, ADR-GRP-017 R-2) y `pnpm audit` completo como informativo (`continue-on-error: true`). Arreglar las herramientas de desarrollo es un seguimiento aparte, fuera del alcance de TS-DSK-001 | Orquestador (2026-11-08), validada por Arquitecto |
+
+Implementado en: PR #327.

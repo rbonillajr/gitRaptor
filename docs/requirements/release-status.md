@@ -10,10 +10,10 @@
 
 | Estado | Fichas |
 |---|---|
-| Implementado (`implemented`) | 62 |
+| Implementado (`implemented`) | 63 |
 | Hecho (`done`) | 3 |
 | Implementado en parte (`partially-implemented`) | 27 |
-| Listo (`ready`) | 27 |
+| Listo (`ready`) | 26 |
 | Borrador (`draft`) | 58 |
 | Bloqueado (`blocked`) | 1 |
 | **Total** | **178** |
@@ -23,7 +23,7 @@
 | Feature | Implementado | Hecho | Implementado en parte | Listo | Borrador | Bloqueado | Total |
 |---|---|---|---|---|---|---|---|
 | [cockpit](#cockpit) | 9 | 0 | 6 | 1 | 21 | 1 | 38 |
-| [desktop](#desktop) | 0 | 0 | 0 | 22 | 0 | 0 | 22 |
+| [desktop](#desktop) | 1 | 0 | 0 | 21 | 0 | 0 | 22 |
 | [guardrails](#guardrails) | 14 | 0 | 7 | 1 | 3 | 0 | 25 |
 | [mcp](#mcp) | 7 | 0 | 4 | 0 | 9 | 0 | 20 |
 | [motor-local](#motor-local) | 17 | 2 | 9 | 3 | 11 | 0 | 42 |
@@ -76,13 +76,13 @@
 
 ### desktop
 
-22 fichas: 22 listo.
+22 fichas: 1 implementado, 21 listo.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
+| [TS-DSK-001](features/desktop/technical-stories/TS-DSK-001-andamiaje-app-escritorio.md) | Andamiaje de apps/desktop: proyecto Tauri del monorepo, frontera de seguridad y ventana B1 vacía | Implementado (`implemented`) | — | — |
 | [SPIKE-DSK-001](features/desktop/technical-stories/SPIKE-DSK-001-identidad-firmada-app.md) | Verificar en el daemon la firma de la app de escritorio desde su audit token sin romper unsafe_code = forbid | Listo (`ready`) | — | — |
 | [SPIKE-DSK-002](features/desktop/technical-stories/SPIKE-DSK-002-lanzamiento-por-agente.md) | Detectar que un agente lanzó la app de escritorio con open -a (evento oapp y keySenderPIDAttr) | Listo (`ready`) | — | — |
-| [TS-DSK-001](features/desktop/technical-stories/TS-DSK-001-andamiaje-app-escritorio.md) | Andamiaje de apps/desktop: proyecto Tauri del monorepo, frontera de seguridad y ventana B1 vacía | Listo (`ready`) | — | — |
 | [TS-DSK-002](features/desktop/technical-stories/TS-DSK-002-arranque-motor-binarios-bundle.md) | Arranque del motor desde la app y binarios del motor dentro del bundle | Listo (`ready`) | — | — |
 | [US-DSK-001](features/desktop/user-stories/US-DSK-001-anadir-repo-sin-terminal.md) | El novato añade su repo a GitRaptor desde la app sin abrir una terminal | Listo (`ready`) | — | — |
 | [US-DSK-002](features/desktop/user-stories/US-DSK-002-proteger-repo-con-un-clic.md) | El novato protege su repo con un clic, sabe qué se instaló y puede quitarlo | Listo (`ready`) | — | — |
@@ -390,11 +390,11 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### M2-UI
 
-11 fichas: 11 listo.
+11 fichas: 1 implementado, 10 listo.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
-| [TS-DSK-001](features/desktop/technical-stories/TS-DSK-001-andamiaje-app-escritorio.md) | Andamiaje de apps/desktop: proyecto Tauri del monorepo, frontera de seguridad y ventana B1 vacía | Listo (`ready`) | — | — |
+| [TS-DSK-001](features/desktop/technical-stories/TS-DSK-001-andamiaje-app-escritorio.md) | Andamiaje de apps/desktop: proyecto Tauri del monorepo, frontera de seguridad y ventana B1 vacía | Implementado (`implemented`) | — | — |
 | [TS-DSK-002](features/desktop/technical-stories/TS-DSK-002-arranque-motor-binarios-bundle.md) | Arranque del motor desde la app y binarios del motor dentro del bundle | Listo (`ready`) | — | — |
 | [TS-GRP-009](features/motor-local/technical-stories/TS-GRP-009-clase-desktop-perfil-lectura.md) | Clase de cliente de la app de escritorio y perfil de lectura mcp con un agente en su ascendencia | Listo (`ready`) | — | — |
 | [US-DSK-001](features/desktop/user-stories/US-DSK-001-anadir-repo-sin-terminal.md) | El novato añade su repo a GitRaptor desde la app sin abrir una terminal | Listo (`ready`) | — | — |
