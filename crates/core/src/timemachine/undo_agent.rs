@@ -832,6 +832,7 @@ pub(super) fn is_excluded(exclusions: &[super::oplog::Exclusion], key: &str, pat
 /// `wt_key`) from `floor` on, and its raw actor
 /// is unattributed or one of `own_sessions`. Anything in doubt counts as it is, so the rule
 /// refuses more, never less. The order of `events` is kept.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn branch_rule_events(
     events: &[RawGitEvent],
     ops: &[super::oplog::OperationView],
