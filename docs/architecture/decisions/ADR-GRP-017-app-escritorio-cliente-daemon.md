@@ -83,7 +83,7 @@ Una app lanzada desde el Dock no tiene terminal: con las reglas actuales recibir
 - **Ventana fuera de capturas** (M-2): `NSWindow.sharingType = .none` en la ventana principal.
 - **Texto no confiable** (SEC-12): el backend aplica las mismas categorías de escape que `present::ingest`. React lo pinta como texto, nunca como HTML ni como markdown (ADR-GRP-004, Enmienda 2026-10-28).
 - **Patrón de aislamiento de Tauri** (*isolation pattern*): **no se adopta** (B-1). La defensa está en el daemon (§ 3 y § 4) y en que no hay un comando genérico (§ 1).
-- **Cadena de suministro del frontend** (R-2, B-1): CI y release instalan con `pnpm install --frozen-lockfile --ignore-scripts` y ejecutan `pnpm audit`.
+- **Cadena de suministro del frontend** (R-2, B-1): CI y release instalan con `pnpm install --frozen-lockfile --ignore-scripts` y ejecutan `pnpm audit --prod` (bloqueante; el `pnpm audit` completo, informativo). Decisión del orquestador (2026-11-08), validada por Arquitecto: el audit completo reporta avisos ya presentes en `main` en herramientas de desarrollo, y `--prod` (lo que viaja en el webview) está limpio.
 
 ### 3. Perfil y capa que recibe la app
 
@@ -192,7 +192,7 @@ El módulo de presencia de ADR-GRD-008 § 6 aún no existe en el código; lo gat
 | Id | Riesgo | Estado |
 |---|---|---|
 | R-1 | Un agente con permiso de Accesibilidad conduce la ventana durante una presencia de sesión | Acotado (A-2): la sesión solo cubre lo revertible en local, dura como mucho 15 min sin escrituras o 4 h, y se invalida al bloquear la pantalla o suspender el equipo. Lo remoto y lo reservado piden factor por acción. Está en la clase de ADR-GRD-007 § 2 |
-| R-2 | Una dependencia npm comprometida en el webview pide escrituras durante la sesión | Mitigado: no hay comando genérico (§ 1); el botón no confirma (§ 4); las escrituras son recuperables y quedan auditadas; CI instala con `--frozen-lockfile --ignore-scripts` y corre `pnpm audit` |
+| R-2 | Una dependencia npm comprometida en el webview pide escrituras durante la sesión | Mitigado: no hay comando genérico (§ 1); el botón no confirma (§ 4); las escrituras son recuperables y quedan auditadas; CI instala con `--frozen-lockfile --ignore-scripts` y corre `pnpm audit --prod` (bloqueante; el completo, informativo) |
 | R-3 | Sin firma (alphas), un proceso del usuario reemplaza el binario de la app | Acotado (A-1): con identidad por ruta no hay presencia de sesión. El factor por acción muestra en el diálogo del SO el texto armado por el daemon |
 | R-4 | El humano aprueba por costumbre un diálogo que provocó un agente | Mitigado: el texto lo arma el daemon con el plan; el código de correlación coincide con el de la app; el texto de la sesión dice "si no abriste tú la app, cancela"; ADR-GRD-008 limita la fatiga |
 | R-5 | Un agente con Accesibilidad lee la ventana (`AXValue`) | Aceptado, riesgo bajo (M-2): solo lectura. `sharingType = .none` corta las capturas de pantalla |
