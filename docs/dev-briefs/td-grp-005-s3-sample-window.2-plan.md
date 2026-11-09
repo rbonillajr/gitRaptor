@@ -27,14 +27,14 @@ La tarea de verificación de extremo a extremo no edita ficheros.
 
 ```mermaid
 flowchart LR
-  R[router: git_dir_touched] -->|Notice t_recv,wall_us| Q[(cola)]
+  R["router: git_dir_touched"] -->|"Notice t_recv, wall_us"| Q[("cola")]
   Q --> L[sample_loop]
-  L -->|primer aviso| S[sample_queued vec!(first)]
-  L -->|try_recv: TODOS los avisos| S
-  S -->|1 lectura procs.list| V[vista por repo: owner/cwd/facts]
-  V -->|started_before por wall_us de cada aviso| G[agrupar por máscara]
-  G -->|Sighting t_recvs| RING[(ring por repo, MAX_SIGHTINGS)]
-  RING --> E[evidence: algún t_recv en ventana]
+  L -->|primer aviso| S["sample_queued: el primero"]
+  L -->|"try_recv: todos los avisos"| S
+  S -->|"1 lectura procs.list"| V["vista por repo: owner, cwd, facts"]
+  V -->|"started_before por aviso"| G["agrupar por máscara"]
+  G -->|Sighting t_recvs| RING[("ring por repo, MAX_SIGHTINGS")]
+  RING --> E["evidence: algún t_recv en ventana"]
 ```
 
 ### T001 — Tracer bullet: el aviso del commit en cola cuenta como evidencia
