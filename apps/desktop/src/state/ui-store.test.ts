@@ -128,3 +128,30 @@ describe("D8 ui store center (DS-US-DSK-008 D7)", () => {
     expect(localStorage.getItem(KEY) ?? "", "the pair id never reaches localStorage").not.toContain("p1");
   });
 });
+
+describe("D7 ui store guardrails (DS-US-DSK-007 T003)", () => {
+  beforeEach(() => {
+    useUiStore.setState({ selectedRepoId: null, center: { view: "main" } });
+  });
+
+  it("openGuardrails puts the guardrails view in the center and backToMain returns", () => {
+    useUiStore.getState().openGuardrails();
+    expect(useUiStore.getState().center, "openGuardrails sets the guardrails destination").toEqual({ view: "guardrails" });
+    useUiStore.getState().backToMain();
+    expect(useUiStore.getState().center).toEqual({ view: "main" });
+  });
+
+  it("openGuardrails replaces an open pair", () => {
+    useUiStore.getState().openPairDetail({ repoId: "tienda", pairId: "p1" });
+    useUiStore.getState().openGuardrails();
+    expect(useUiStore.getState().center, "the guardrails view replaces the pair").toEqual({ view: "guardrails" });
+  });
+
+  it("openGuardrails is not persisted and the four keys stay the only ones", () => {
+    useUiStore.getState().openGuardrails();
+    useUiStore.getState().cycleTheme();
+    expect(useUiStore.getState().center.view, "the view is open in memory").toBe("guardrails");
+    expect(Object.keys(stored()?.state ?? {}).sort(), "the four keys stay the only ones").toEqual(["detailOpen", "language", "sidebarOpen", "theme"]);
+    expect(localStorage.getItem(KEY) ?? "", "the view never reaches localStorage").not.toContain("guardrails");
+  });
+});

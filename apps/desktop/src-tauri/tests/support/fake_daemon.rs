@@ -25,6 +25,11 @@ use gitraptor_api::catalog::Layer;
 use gitraptor_api::client::transport;
 use gitraptor_api::discovery::{CandidateView, CandidatesResult};
 use gitraptor_api::event::Event;
+use gitraptor_api::guard::{
+    ExceptionPlanView, GuardLogEntry, GuardLogResult, GuardLogSummary, GuardStatus,
+    LoggedOperation, LoggedRef, PendingAction, PendingKind, Permission, ProtectionState, RefChange,
+    Rule,
+};
 use gitraptor_api::messages::{
     BaseBranchView, BaseStatusView, ChangeCounts, CommitCountView, ConnectionProfile, DaemonView,
     DivergenceView, EngineStateView, EngineView, HeadView, HelloResult, IncompatibleData,
@@ -85,6 +90,14 @@ pub struct Script {
     /// Push `scope.resync` (slow consumer) of the repo of the `nth` (1-based) `prediction.list`
     /// call right before answering it.
     pub resync_during_list: Option<usize>,
+    /// `guard.status` answer; `None` answers `METHOD_NOT_FOUND` (DS-US-DSK-007 T001).
+    pub guard_status: Option<GuardStatus>,
+    /// `guard.log` answer; `None` answers `METHOD_NOT_FOUND`.
+    pub guard_log: Option<GuardLogResult>,
+    /// Answer `guard.status` with `INTERNAL` "guardrails unavailable".
+    pub guard_status_fails: bool,
+    /// Answer `guard.log` with `INTERNAL` "guardrails unavailable".
+    pub guard_log_fails: bool,
 }
 
 impl Default for Script {
@@ -122,6 +135,10 @@ impl Default for Script {
             prediction: HashMap::new(),
             refuse_list: false,
             resync_during_list: None,
+            guard_status: None,
+            guard_log: None,
+            guard_status_fails: false,
+            guard_log_fails: false,
         }
     }
 }
@@ -609,6 +626,36 @@ fn answer(shared: &Shared, request: &Request, params: Value) -> Response {
             }
             Response::ok(id, prediction::page(details, p.cursor.as_deref()))
         }
+        methods::GUARD_STATUS => {
+            if script.guard_status_fails {
+                return Response::err(
+                    Some(id),
+                    ErrorObject::new(code::INTERNAL, "guardrails unavailable"),
+                );
+            }
+            match script.guard_status {
+                Some(status) => Response::ok(id, status),
+                None => Response::err(
+                    Some(id),
+                    ErrorObject::new(code::METHOD_NOT_FOUND, "method not found"),
+                ),
+            }
+        }
+        methods::GUARD_LOG => {
+            if script.guard_log_fails {
+                return Response::err(
+                    Some(id),
+                    ErrorObject::new(code::INTERNAL, "guardrails unavailable"),
+                );
+            }
+            match script.guard_log {
+                Some(log) => Response::ok(id, log),
+                None => Response::err(
+                    Some(id),
+                    ErrorObject::new(code::METHOD_NOT_FOUND, "method not found"),
+                ),
+            }
+        }
         methods::EVENTS_UNSUBSCRIBE => match serde_json::from_value::<UnsubscribeParams>(params) {
             Ok(_) => Response::ok(id, json!({})),
             Err(_) => invalid(&id),
@@ -1057,4 +1104,162 @@ pub fn script_tienda_pending(s: &mut Script) {
         "tienda".to_owned(),
         vec![pagos_login_conflict(PAIR_REV), overlap_detail(pending, &[])],
     );
+}
+
+// ------------------------------------------------------------ DS-US-DSK-007 scripts
+
+/// 2023-11-15 10:58:00 UTC: when the force-push of the "tienda" script was denied.
+pub const GUARD_PUSH_AT: i64 = 1_700_045_880_000;
+
+/// A log entry: a force-push denial of `claude-code` from `/w/wt/feat-pagos` (branch
+/// `feat-pagos`) to `main` in `origin` (`minimum.force-push` and `policy.protected-branch`), with
+/// the top-level keys of `overrides` (wire names, `guard.log` form) replacing the defaults.
+pub fn log_entry(overrides: Value) -> GuardLogEntry {
+    let mut base = json!({
+        "atMs": GUARD_PUSH_AT,
+        "utcOffsetS": 0,
+        "lastMs": GUARD_PUSH_AT,
+        "count": 1,
+        "worktree": {"untrusted": TIENDA_PAGOS},
+        "branch": {"untrusted": "feat-pagos"},
+        "actor": "claude-code",
+        "operation": {
+            "kind": "push",
+            "remote": {"untrusted": "origin"},
+            "refs": [{"name": {"untrusted": "main"}, "change": "force"}]
+        },
+        "kind": "denial",
+        "detail": "full",
+        "effect": "deny",
+        "appliedEffect": "deny",
+        "reasons": [
+            {"rule": "minimum.force-push", "level": "minimum", "cause": "not-fast-forward"},
+            {"rule": "policy.protected-branch", "level": "floor"}
+        ],
+        "layer": "hooks",
+        "origin": "daemon",
+        "decisionId": "d-push"
+    });
+    for (key, value) in overrides.as_object().expect("overrides are an object") {
+        base[key.as_str()] = value.clone();
+    }
+    serde_json::from_value(base).expect("a valid guard.log entry")
+}
+
+/// `guard.status` of a repo with the given protection and pending action.
+pub fn guard_status(state: ProtectionState, pending: Option<PendingAction>) -> GuardStatus {
+    GuardStatus {
+        repo_id: "tienda".to_owned(),
+        state,
+        permission: Permission::Granted,
+        offer: false,
+        protected_bases: vec![Untrusted::new("main")],
+        base_confirmed: true,
+        not_preventable: Vec::new(),
+        last_refusal: Vec::new(),
+        misnamed_settings: Vec::new(),
+        pending,
+        hooks: None,
+        diagnostics: Vec::new(),
+        minimum_set: None,
+        confirm: None,
+    }
+}
+
+/// An exception announced in a terminal: `operation` and `rules`, a 10 s window.
+pub fn pending_exception(operation: LoggedOperation, rules: Vec<Rule>) -> PendingAction {
+    PendingAction {
+        action_id: "act-1".to_owned(),
+        action: PendingKind::Exception,
+        applies_at_ms: GUARD_PUSH_AT + 70_000,
+        window_ms: 10_000,
+        exception: Some(ExceptionPlanView { operation, rules }),
+    }
+}
+
+/// The push of the default [`log_entry`] as the engine normalizes it.
+pub fn forced_main_push() -> LoggedOperation {
+    LoggedOperation::Push {
+        remote: Some(Untrusted::new("origin")),
+        refs: vec![LoggedRef {
+            name: Untrusted::new("main"),
+            change: RefChange::Force,
+        }],
+    }
+}
+
+/// The "tienda" log, most recent first: a force-push denial, a commit denial in `main`, a
+/// rebase denial in `feat-login`, the `exception` and the `exception-cancelled` of the same
+/// push, plus a `notice` and a `protection-state` that are not blocks. Seven entries.
+pub fn tienda_guard_log() -> GuardLogResult {
+    let later = GUARD_PUSH_AT + 60_000;
+    GuardLogResult {
+        since_ms: GUARD_PUSH_AT - 86_400_000,
+        summary: GuardLogSummary {
+            blocked: 3,
+            notices: 1,
+            rate_limited: 0,
+            exceptions: 1,
+            exceptions_rejected: 0,
+        },
+        entries: vec![
+            log_entry(json!({
+                "atMs": later + 2_000, "lastMs": later + 2_000, "kind": "exception-cancelled",
+                "actor": "other", "effect": "deny", "appliedEffect": "deny",
+                "decisionId": "d-cancelled"
+            })),
+            log_entry(json!({
+                "atMs": later, "lastMs": later, "kind": "exception",
+                "effect": "deny", "appliedEffect": "allow", "decisionId": "d-exception"
+            })),
+            log_entry(json!({
+                "atMs": GUARD_PUSH_AT - 1_000, "lastMs": GUARD_PUSH_AT - 1_000,
+                "worktree": {"untrusted": TIENDA_LOGIN}, "branch": {"untrusted": "feat-login"},
+                "operation": {"kind": "rebase"},
+                "reasons": [{"rule": "permission.rebase", "level": "local"}],
+                "decisionId": "d-rebase"
+            })),
+            log_entry(json!({
+                "atMs": GUARD_PUSH_AT - 2_000, "lastMs": GUARD_PUSH_AT - 2_000,
+                "worktree": {"untrusted": TIENDA_MAIN}, "branch": {"untrusted": "main"},
+                "actor": "other",
+                "operation": {"kind": "commit", "stage": "pre-commit"},
+                "reasons": [{"rule": "policy.forbidden-path", "level": "floor"}],
+                "decisionId": "d-commit"
+            })),
+            log_entry(json!({})),
+            log_entry(json!({
+                "atMs": GUARD_PUSH_AT - 3_000, "lastMs": GUARD_PUSH_AT - 3_000,
+                "kind": "notice", "effect": "allow", "appliedEffect": "allow",
+                "operation": {"kind": "commit", "stage": "commit-msg"},
+                "reasons": [{"rule": "authorship.trailer-required", "level": "profile"}],
+                "decisionId": "d-notice"
+            })),
+            log_entry(json!({
+                "atMs": GUARD_PUSH_AT - 4_000, "lastMs": GUARD_PUSH_AT - 4_000,
+                "kind": "protection-state", "effect": "allow", "appliedEffect": "allow",
+                "actor": null,
+                "operation": {"kind": "protection-state", "from": "active", "to": "active",
+                              "expected": true},
+                "reasons": [], "decisionId": "d-protection"
+            })),
+        ],
+        unlogged_periods: Vec::new(),
+    }
+}
+
+/// "tienda" and "notas" plus the guard of "tienda": protected `full`, no pending action and the
+/// seven-entry [`tienda_guard_log`].
+pub fn script_tienda_guard(s: &mut Script) {
+    script_tienda_and_notas(s);
+    s.guard_status = Some(guard_status(ProtectionState::Full, None));
+    s.guard_log = Some(tienda_guard_log());
+}
+
+/// The alternative script: `guard.status` answers (`hooks-only`) and `guard.log` fails with
+/// `INTERNAL` "guardrails unavailable".
+pub fn script_tienda_guard_log_unavailable(s: &mut Script) {
+    script_tienda_and_notas(s);
+    s.guard_status = Some(guard_status(ProtectionState::HooksOnly, None));
+    s.guard_log_fails = true;
 }

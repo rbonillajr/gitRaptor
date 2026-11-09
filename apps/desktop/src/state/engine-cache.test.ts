@@ -10,7 +10,7 @@ import type { EngineMessage, PairDetailDto, PairDto, RepoFleetDto, GlobalDto, Re
 import { engineKeys } from "@/client/queries";
 import { pair as pairFixture, session as sessionOf, tienda } from "@/fleet/fixtures";
 import fixture from "../../tests/fixtures/engine-messages.json";
-import { applyEngineBatch } from "./engine-cache";
+import { applyEngineBatch, type GuardBlocks } from "./engine-cache";
 import { useEngineStore } from "./engine-store";
 import { useUiStore } from "./ui-store";
 
@@ -33,6 +33,8 @@ const VARIANTS = [
   "repoSession",
   "prediction",
   "pairDetails",
+  "guardBlocks",
+  "guardBlocksUnavailable",
   "repoClosed",
 ] as const satisfies readonly Variant[];
 
@@ -449,5 +451,108 @@ describe("D8 pair details in the fleet cache (DS-US-DSK-008 D4, D10, L-02)", () 
     expect(entry?.repo.limits, "limits").toEqual(repo.fleet.limits);
     expect(entry?.repo.confirmCommand, "confirmCommand").toEqual(repo.fleet.confirmCommand);
     expect(entry?.repo.pairsTruncated, "filled clears the truncation").toBe(false);
+  });
+});
+
+// D7-CACHE (DS-US-DSK-007 T003): guardBlocks and guardBlocksUnavailable fill engineKeys.guard(repoId) with setQueryData
+// only; an unavailable read keeps the entries; repoClosed removes the entry; a not-open of a repo no longer chosen is ignored.
+describe("D7-CACHE guard blocks", () => {
+  type Blocks = Extract<EngineMessage, { type: "guardBlocks" }>["blocks"];
+  const blockEntry = (id: string, lastMs: number): Blocks["entries"][number] => ({
+    decisionId: id,
+    kind: "denial",
+    atMs: lastMs,
+    lastMs,
+    count: 1,
+    actor: { kind: "claude-code" },
+    worktree: { folder: "feat-pagos", path: "/w/tienda/feat-pagos" },
+    branch: "feat-pagos",
+    operation: { kind: "push", remote: "origin", refs: [{ name: "main", change: "force" }] },
+    rules: [{ rule: "minimum.force-push", level: "minimum", cause: null }],
+    layer: "hooks",
+    detail: "full",
+    exception: { state: "offered", command: "'raptor' 'guard' 'exec' '--' 'git' 'push'" },
+  });
+  const blocks = (repoId = "tienda", entries = [blockEntry("d1", 1_000), blockEntry("d2", 2_000)]): Blocks => ({
+    repoId,
+    protection: { state: "full" },
+    sinceMs: 0,
+    summary: { blocked: entries.length, exceptions: 0, exceptionsRejected: 0 },
+    entries,
+    pending: null,
+    unlogged: [],
+  });
+  const guardOf = (repoId: string) => client.getQueryData<GuardBlocks>(engineKeys.guard(repoId));
+  const unavailable = (repoId: string, cause: "log-unavailable" | "not-observed" | "refused" | "not-open" = "log-unavailable"): EngineMessage => ({
+    type: "guardBlocksUnavailable",
+    repoId,
+    cause,
+    protection: { state: "full" },
+  });
+
+  beforeEach(() => {
+    useUiStore.setState({ selectedRepoId: "tienda" });
+  });
+
+  it("D7-CACHE: guardBlocks stores a ready entry with the blocks of the repo", () => {
+    const b = blocks();
+    apply({ type: "guardBlocks", blocks: b });
+    expect(guardOf("tienda"), "guardBlocks must fill engineKeys.guard(repoId) as ready").toEqual({ state: "ready", ...b });
+  });
+
+  it("D7-CACHE: a new guardBlocks replaces the previous one and never mutates it", () => {
+    apply({ type: "guardBlocks", blocks: blocks() });
+    const before = guardOf("tienda");
+    const next = blocks("tienda", [blockEntry("d3", 3_000)]);
+    apply({ type: "guardBlocks", blocks: next });
+    expect(guardOf("tienda"), "the later read replaces the entries").toEqual({ state: "ready", ...next });
+    expect(guardOf("tienda"), "a fresh object").not.toBe(before);
+    expect((before as { entries: unknown[] }).entries, "the old object keeps its entries").toHaveLength(2);
+  });
+
+  it("D7-CACHE: an unavailable read keeps the entries that were already there", () => {
+    const b = blocks();
+    apply({ type: "guardBlocks", blocks: b });
+    apply(unavailable("tienda"));
+    const entry = guardOf("tienda");
+    expect(entry?.state, "the read failed").toBe("unavailable");
+    if (entry?.state !== "unavailable") throw new Error("expected unavailable");
+    expect(entry.cause).toBe("log-unavailable");
+    expect(entry.protection).toEqual({ state: "full" });
+    expect(entry.entries, "an unavailable read must not erase the entries").toEqual(b.entries);
+  });
+
+  it("D7-CACHE: an unavailable read with no previous entries has none and no read time", () => {
+    apply(unavailable("tienda", "not-observed"));
+    const entry = guardOf("tienda");
+    if (entry?.state !== "unavailable") throw new Error("guardBlocksUnavailable must fill the cache as unavailable");
+    expect(entry.entries).toEqual([]);
+    expect(entry.readAtMs, "nothing was ever read").toBeNull();
+  });
+
+  it("D7-CACHE: repoClosed removes the guard entry of that repo", () => {
+    apply({ type: "guardBlocks", blocks: blocks() });
+    expect(guardOf("tienda"), "precondition: the entry exists").toBeDefined();
+    apply({ type: "repoClosed", repoId: "tienda" });
+    expect(guardOf("tienda"), "repoClosed must remove engineKeys.guard(repoId)").toBeUndefined();
+  });
+
+  it("D7-CACHE: ignores not-open of a repo no longer chosen", () => {
+    useUiStore.setState({ selectedRepoId: "notas" });
+    apply(unavailable("tienda", "not-open"));
+    expect(guardOf("tienda"), "a not-open of a repo that is not the chosen one writes nothing").toBeUndefined();
+  });
+
+  it("D7-CACHE: not-open of the chosen repo is stored", () => {
+    apply(unavailable("tienda", "not-open"));
+    expect(guardOf("tienda")?.state, "a not-open of the chosen repo is shown as unavailable").toBe("unavailable");
+  });
+
+  it("D7-CACHE: guard messages never touch the global entry", () => {
+    apply(msg("global"));
+    const before = global();
+    apply({ type: "guardBlocks", blocks: blocks() });
+    expect(global()).toEqual(before);
+    expect(guardOf("tienda"), "and the guard entry is there").toBeDefined();
   });
 });

@@ -9,6 +9,7 @@ use gitraptor_desktop::commands::app_info;
 use gitraptor_desktop::commands::engine_retry::EngineRetryParams;
 use gitraptor_desktop::commands::engine_watch::EngineWatchParams;
 use gitraptor_desktop::commands::fleet_open::FleetOpenParams;
+use gitraptor_desktop::commands::guard_blocks::GuardBlocksParams;
 use gitraptor_desktop::engine::link::{ConnectFailure, Connector, Link};
 use gitraptor_desktop::engine::{EngineHub, NotWatching};
 use gitraptor_desktop::ipc::{CommandError, from_body, parse};
@@ -189,8 +190,14 @@ fn rejects<P: serde::de::DeserializeOwned>(body: Value) {
 fn d3_cmds_engine_commands_are_listed_and_allowed() {
     assert_eq!(
         commands_json(),
-        ["app_info", "engine_retry", "engine_watch", "fleet_open"],
-        "D3-CMDS: commands.json is exactly app_info, engine_watch, engine_retry and fleet_open"
+        [
+            "app_info",
+            "engine_retry",
+            "engine_watch",
+            "fleet_open",
+            "guard_blocks"
+        ],
+        "D3-CMDS: commands.json is exactly app_info, engine_watch, engine_retry, fleet_open and guard_blocks"
     );
     let text = std::fs::read_to_string(Path::new(ROOT).join("capabilities/main.json")).unwrap();
     let cap: Value = serde_json::from_str(&text).unwrap();
@@ -261,8 +268,14 @@ fn d3_cmds_engine_retry_needs_start_rejects_unknown_fields_and_is_not_watching_a
 fn fleet_open_is_in_the_closed_list_and_the_capability() {
     assert_eq!(
         commands_json(),
-        ["app_info", "engine_retry", "engine_watch", "fleet_open"],
-        "D4-CMD: commands.json is the three of US-DSK-003 plus fleet_open"
+        [
+            "app_info",
+            "engine_retry",
+            "engine_watch",
+            "fleet_open",
+            "guard_blocks"
+        ],
+        "D4-CMD: commands.json is the three of US-DSK-003 plus fleet_open and guard_blocks"
     );
     assert!(
         command_fns().iter().any(|c| c == "fleet_open"),
@@ -366,5 +379,121 @@ fn the_prediction_detail_adds_no_ipc_command() {
     assert!(
         declared.is_empty(),
         "D8-CMD: a #[tauri::command] is about predictions: {declared:?}"
+    );
+}
+
+// ---------------------------------------------------------------- D7-WIRE (DS-US-DSK-007 T002)
+
+#[test]
+fn guard_blocks_is_in_the_closed_list_and_the_capability() {
+    assert_eq!(
+        commands_json(),
+        [
+            "app_info",
+            "engine_retry",
+            "engine_watch",
+            "fleet_open",
+            "guard_blocks"
+        ],
+        "D7-WIRE: commands.json is exactly the five commands, with guard_blocks (no relaxed 'contains')"
+    );
+    assert_eq!(
+        command_fns(),
+        commands_json(),
+        "D7-WIRE: the #[tauri::command] fns of src/commands are exactly the list"
+    );
+    let text = std::fs::read_to_string(Path::new(ROOT).join("capabilities/main.json")).unwrap();
+    let cap: Value = serde_json::from_str(&text).unwrap();
+    let perms: Vec<&str> = cap["permissions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p.as_str().unwrap())
+        .collect();
+    assert!(
+        perms.contains(&"allow-guard-blocks"),
+        "D7-WIRE: capability main lacks allow-guard-blocks"
+    );
+    let handler = std::fs::read_to_string(Path::new(ROOT).join("src/commands/mod.rs")).unwrap();
+    assert!(
+        handler.contains("guard_blocks::guard_blocks"),
+        "D7-WIRE: the invoke handler must register guard_blocks::guard_blocks"
+    );
+}
+
+/// What `guard_blocks` decides about `body` before it reaches the supervisor.
+fn guard_blocks_verdict(body: &Value) -> Result<(), CommandError> {
+    let params = parse::<GuardBlocksParams>(body)?;
+    let hub = EngineHub::new(Box::new(NoEngine), None);
+    hub.guard_blocks(params.repo_id)
+}
+
+#[test]
+fn guard_blocks_accepts_params_and_rejects_bad_ids() {
+    assert!(
+        commands_json().iter().any(|c| c == "guard_blocks"),
+        "D7-WIRE: guard_blocks is in commands.json, so its params are reachable from the webview"
+    );
+    assert_eq!(
+        guard_blocks_verdict(&json!({"params": {"repoId": "tienda"}})),
+        Err(CommandError::NotWatching),
+        "D7-WIRE: {{\"params\":{{\"repoId\":\"tienda\"}}}} must be accepted"
+    );
+    assert_eq!(
+        guard_blocks_verdict(&json!({"params": {"repoId": "a".repeat(128)}})),
+        Err(CommandError::NotWatching),
+        "D7-WIRE: an id of exactly 128 bytes is accepted"
+    );
+    let invalid = [
+        json!({"params": {"repoId": "tienda", "x": 1}}),
+        json!({"params": {"repoId": "tienda"}, "extra": 1}),
+        json!({"params": {}}),
+        json!({"params": {"repoId": 7}}),
+        json!({"params": {"repoId": ""}}),
+        json!({"params": {"repoId": "a".repeat(129)}}),
+        json!({"params": {"repoId": "é".repeat(65)}}),
+        json!({"params": {"repoId": "ti\u{0}enda"}}),
+        json!({"params": {"repoId": "ti\nenda"}}),
+        json!({"params": {"repoId": "ti\u{1b}]0;x\u{7}enda"}}),
+        json!({"params": {"repoId": "ti\u{7f}enda"}}),
+    ];
+    for body in invalid {
+        assert_eq!(
+            guard_blocks_verdict(&body),
+            Err(CommandError::InvalidParams),
+            "D7-WIRE: {body} must be rejected with invalid-params"
+        );
+    }
+}
+
+#[test]
+fn guard_blocks_without_a_supervisor_is_not_watching() {
+    assert!(
+        command_fns().iter().any(|c| c == "guard_blocks")
+            && commands_json().iter().any(|c| c == "guard_blocks"),
+        "D7-WIRE: guard_blocks is a listed #[tauri::command] that can answer not-watching"
+    );
+    let hub = EngineHub::new(Box::new(NoEngine), None);
+    assert_eq!(
+        hub.guard_blocks("tienda".to_owned()),
+        Err(CommandError::NotWatching),
+        "D7-WIRE: guard_blocks without a supervisor is not-watching"
+    );
+}
+
+/// D7-WIRE: the guard log travels by the `Channel` of the supervisor, so no command is about the
+/// log, the status or the exception, and none receives a path.
+#[test]
+fn the_guard_log_adds_no_ipc_command_other_than_guard_blocks() {
+    let about = |name: &String| {
+        ["guard", "exception", "audit"]
+            .iter()
+            .any(|w| name.contains(w))
+    };
+    let listed: Vec<String> = commands_json().into_iter().filter(about).collect();
+    assert_eq!(
+        listed,
+        ["guard_blocks"],
+        "D7-WIRE: the only guard command is guard_blocks (never guard_exception, guard_cancel…)"
     );
 }

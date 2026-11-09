@@ -78,6 +78,155 @@
     ],
     "type": "global"
   },
+  "guardBlocks": {
+    "blocks": {
+      "entries": [
+        {
+          "actor": {
+            "kind": "claude-code"
+          },
+          "atMs": 1762697000000,
+          "branch": "feat-pagos",
+          "count": 2,
+          "decisionId": "d-push",
+          "detail": "full",
+          "exception": {
+            "command": "'/opt/raptor' 'guard' 'exec' '--' 'git' '-C' '/w/wt/feat-pagos' 'push' '--force-with-lease' '--force-if-includes' 'origin' 'feat-pagos:main'",
+            "state": "offered"
+          },
+          "kind": "denial",
+          "lastMs": 1762697001000,
+          "layer": "hooks",
+          "operation": {
+            "kind": "push",
+            "refs": [
+              {
+                "change": "force",
+                "name": "main"
+              }
+            ],
+            "remote": "origin"
+          },
+          "rules": [
+            {
+              "cause": "not-fast-forward",
+              "level": "minimum",
+              "rule": "minimum.force-push"
+            },
+            {
+              "cause": null,
+              "level": "floor",
+              "rule": "policy.protected-branch"
+            }
+          ],
+          "worktree": {
+            "folder": "feat-pagos",
+            "path": "/w/wt/feat-pagos"
+          }
+        },
+        {
+          "actor": null,
+          "atMs": 1762696000000,
+          "branch": "feat-pagos",
+          "count": 2,
+          "decisionId": "d-commit",
+          "detail": "full",
+          "exception": {
+            "reason": "commit",
+            "state": "not-offered"
+          },
+          "kind": "denial",
+          "lastMs": 1762696001000,
+          "layer": "hooks",
+          "operation": {
+            "kind": "commit"
+          },
+          "rules": [
+            {
+              "cause": null,
+              "level": "floor",
+              "rule": "policy.forbidden-path"
+            }
+          ],
+          "worktree": {
+            "folder": "feat-pagos",
+            "path": "/w/wt/feat-pagos"
+          }
+        },
+        {
+          "actor": {
+            "kind": "other"
+          },
+          "atMs": 1762695000000,
+          "branch": "feat-pagos",
+          "count": 2,
+          "decisionId": "d-exception",
+          "detail": "full",
+          "exception": null,
+          "kind": "exception",
+          "lastMs": 1762695001000,
+          "layer": "hooks",
+          "operation": {
+            "kind": "push",
+            "refs": [
+              {
+                "change": "force",
+                "name": "main"
+              }
+            ],
+            "remote": "origin"
+          },
+          "rules": [
+            {
+              "cause": null,
+              "level": "minimum",
+              "rule": "minimum.force-push"
+            }
+          ],
+          "worktree": {
+            "folder": "feat-pagos",
+            "path": "/w/wt/feat-pagos"
+          }
+        }
+      ],
+      "pending": {
+        "appliesAtMs": 1762697010000,
+        "cancelCommand": "'/opt/raptor' 'guard' 'cancel' '/w/wt/feat-pagos'",
+        "operation": {
+          "kind": "rebase"
+        },
+        "rules": [
+          "permission.rebase"
+        ],
+        "windowMs": 10000
+      },
+      "protection": {
+        "state": "full"
+      },
+      "repoId": "repo-alpha",
+      "sinceMs": 1762000000000,
+      "summary": {
+        "blocked": 3,
+        "exceptions": 1,
+        "exceptionsRejected": 0
+      },
+      "unlogged": [
+        {
+          "fromMs": 1762600000000,
+          "toMs": null
+        }
+      ]
+    },
+    "type": "guardBlocks"
+  },
+  "guardBlocksUnavailable": {
+    "cause": "log-unavailable",
+    "protection": {
+      "state": "hooks-only"
+    },
+    "repoId": "repo-alpha",
+    "type": "guardBlocksUnavailable"
+  },
   "pairDetails": {
     "details": [
       {

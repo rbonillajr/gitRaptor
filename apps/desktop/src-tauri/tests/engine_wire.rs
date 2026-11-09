@@ -14,6 +14,12 @@ use gitraptor_desktop::engine::wire::{
     SessionDto, SessionOrigin, SessionState, Tier, UnavailableReason, WorktreeDto,
     WorktreeStatusDto,
 };
+use gitraptor_desktop::engine::wire::{
+    BlockActorDto, BlockDetail, BlockEntryDto, BlockKind, BlockLayer, BlockRuleDto,
+    BlockWorktreeDto, ExceptionCommandDto, GuardBlocksDto, GuardSummaryDto, GuardUnavailableCause,
+    NotOffered, OperationDto, PendingExceptionDto, ProtectionDto, ProtectionKind, RefChange,
+    RefDto, UnloggedDto,
+};
 use serde_json::{Map, Value};
 
 fn repo(
@@ -465,7 +471,122 @@ fn examples() -> Vec<(&'static str, EngineMessage)> {
                 repo_id: "repo-beta".to_owned(),
             },
         ),
+        ("guardBlocks", guard_blocks_example()),
+        (
+            "guardBlocksUnavailable",
+            EngineMessage::GuardBlocksUnavailable {
+                repo_id: "repo-alpha".to_owned(),
+                cause: GuardUnavailableCause::LogUnavailable,
+                protection: Some(ProtectionDto {
+                    state: ProtectionKind::HooksOnly,
+                }),
+            },
+        ),
     ]
+}
+
+/// D7-WIRE: a denial with a copyable command, one without (a commit), an exception, a pending
+/// exception and an unlogged period: every shape of `GuardBlocksDto`.
+fn guard_blocks_example() -> EngineMessage {
+    let push = OperationDto::Push {
+        remote: Some("origin".to_owned()),
+        refs: vec![RefDto {
+            name: "main".to_owned(),
+            change: RefChange::Force,
+        }],
+    };
+    let entry = |id: &str,
+                 kind: BlockKind,
+                 at_ms: i64,
+                 actor: Option<BlockActorDto>,
+                 operation: OperationDto,
+                 rules: Vec<BlockRuleDto>,
+                 exception: Option<ExceptionCommandDto>| BlockEntryDto {
+        decision_id: id.to_owned(),
+        kind,
+        at_ms,
+        last_ms: at_ms + 1_000,
+        count: 2,
+        actor,
+        worktree: Some(BlockWorktreeDto {
+            folder: "feat-pagos".to_owned(),
+            path: "/w/wt/feat-pagos".to_owned(),
+        }),
+        branch: Some("feat-pagos".to_owned()),
+        operation,
+        rules,
+        layer: BlockLayer::Hooks,
+        detail: BlockDetail::Full,
+        exception,
+    };
+    let rule = |name: &str, level: &str, cause: Option<&str>| BlockRuleDto {
+        rule: name.to_owned(),
+        level: level.to_owned(),
+        cause: cause.map(str::to_owned),
+    };
+    EngineMessage::GuardBlocks {
+        blocks: GuardBlocksDto {
+            repo_id: "repo-alpha".to_owned(),
+            protection: ProtectionDto {
+                state: ProtectionKind::Full,
+            },
+            since_ms: 1_762_000_000_000,
+            summary: GuardSummaryDto {
+                blocked: 3,
+                exceptions: 1,
+                exceptions_rejected: 0,
+            },
+            entries: vec![
+                entry(
+                    "d-push",
+                    BlockKind::Denial,
+                    1_762_697_000_000,
+                    Some(BlockActorDto::ClaudeCode),
+                    push.clone(),
+                    vec![
+                        rule("minimum.force-push", "minimum", Some("not-fast-forward")),
+                        rule("policy.protected-branch", "floor", None),
+                    ],
+                    Some(ExceptionCommandDto::Offered {
+                        command: "'/opt/raptor' 'guard' 'exec' '--' 'git' '-C' '/w/wt/feat-pagos' 'push' '--force-with-lease' '--force-if-includes' 'origin' 'feat-pagos:main'".to_owned(),
+                    }),
+                ),
+                entry(
+                    "d-commit",
+                    BlockKind::Denial,
+                    1_762_696_000_000,
+                    None,
+                    OperationDto::Commit,
+                    vec![rule("policy.forbidden-path", "floor", None)],
+                    Some(ExceptionCommandDto::NotOffered {
+                        reason: NotOffered::Commit,
+                    }),
+                ),
+                entry(
+                    "d-exception",
+                    BlockKind::Exception,
+                    1_762_695_000_000,
+                    Some(BlockActorDto::Other),
+                    push,
+                    vec![rule("minimum.force-push", "minimum", None)],
+                    None,
+                ),
+            ],
+            pending: Some(PendingExceptionDto {
+                applies_at_ms: 1_762_697_010_000,
+                window_ms: 10_000,
+                operation: OperationDto::Rebase,
+                rules: vec!["permission.rebase".to_owned()],
+                cancel_command: Some(
+                    "'/opt/raptor' 'guard' 'cancel' '/w/wt/feat-pagos'".to_owned(),
+                ),
+            }),
+            unlogged: vec![UnloggedDto {
+                from_ms: 1_762_600_000_000,
+                to_ms: None,
+            }],
+        },
+    }
 }
 
 #[test]
