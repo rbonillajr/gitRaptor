@@ -129,6 +129,10 @@ Implementado en: PR #325 (parcial).
 - **Decisiones de la implementación:** ver [DS-US-TMC-011, Enmienda 2026-11-08](../dev-specs/US-TMC-011-undo-por-agente.md).
 - **Pendiente:**
   - **Redo (US-TMC-003, no existe en main):** levantar la barrera con `raptor redo` y rehacer los mismos ids del conjunto. Los tests del escenario 6, de la atribución al planificar y de la demo prueban hasta el undo (barrera activa, ids guardados en el oplog); los pasos de redo quedaron como `// redo: pending US-TMC-003`. Decisión del coordinador (2026-11-08).
+  - **Atribución fiable bajo carga ([TD-GRP-005](../../motor-local/technical-stories/TD-GRP-005-muestra-s3-fuera-de-ventana.md)):**
+    - En una máquina cargada, un commit del agente puede salir sin atribuir (`no-sighting`). La muestra S3 se sella con el aviso más antiguo de la cola y cae fuera de la ventana del evento (`crates/core/src/detect/mod.rs`, `sample_loop`).
+    - La demo de M2 no es fiable en macOS hasta que eso se arregle en el motor. Falló una vez en el CI y unas 3 de 5 en local con carga de 12 a 35.
+    - Por eso la historia sigue en `partially-implemented` (decisión del coordinador, 2026-11-08).
   - Linux y Windows (XP-69, etapa de validación multiplataforma).
   - Revisión de seguridad (Low): un agente que pide `--agent claude-code` puede saber si otra sesión con su mismo nombre tiene trabajo en el worktree (el rechazo `other-actor` llega tras calcular el conjunto, como fija el paso 4 del Diseño). No escribe nada.
   - Sin certificar: la fase P3 de `/implement` corta la suite a los 15 min (nassa-core 0.6.291).

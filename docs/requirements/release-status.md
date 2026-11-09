@@ -165,7 +165,7 @@
 
 ### motor-local
 
-42 fichas: 17 implementado, 2 hecho, 9 implementado en parte, 3 listo, 11 borrador.
+43 fichas: 17 implementado, 2 hecho, 9 implementado en parte, 3 listo, 12 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -201,6 +201,7 @@
 | [TD-GRP-003](features/motor-local/technical-stories/TD-GRP-003-nfr04-maquina-referencia.md) | Presupuesto de NFR-04 sin gate automático: medirlo en una máquina de referencia | Listo (`ready`) | — | — |
 | [TS-GRP-009](features/motor-local/technical-stories/TS-GRP-009-clase-desktop-perfil-lectura.md) | Clase de cliente de la app de escritorio y perfil de lectura mcp con un agente en su ascendencia | Listo (`ready`) | — | — |
 | [TD-GRP-004](features/motor-local/technical-stories/TD-GRP-004-corroborar-ambito-worktree-s3.md) | Corroborar con el reflog de HEAD el ámbito worktree de S3 y blindar la lectura de la redirección | Borrador (`draft`) | — | — |
+| [TD-GRP-005](features/motor-local/technical-stories/TD-GRP-005-muestra-s3-fuera-de-ventana.md) | La muestra S3 de un lote de avisos se sella con el aviso más antiguo y cae fuera de la ventana del evento | Borrador (`draft`) | — | — |
 | [TS-GRP-007](features/motor-local/technical-stories/TS-GRP-007-factor-so-reservados-windows.md) | Factor del SO (Windows Hello) para los comandos reservados de alto riesgo en Windows | Borrador (`draft`) | — | — |
 | [US-GRP-006](features/motor-local/user-stories/US-GRP-006-retirar-y-volver-a-anadir.md) | El desarrollador recupera el historial de un repo que retiró y volvió a añadir | Borrador (`draft`) | — | — |
 | [US-GRP-011](features/motor-local/user-stories/US-GRP-011-worktree-compartido.md) | El desarrollador ve todas las sesiones de un worktree compartido | Borrador (`draft`) | — | — |
@@ -439,7 +440,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### Sin hito
 
-32 fichas sin hito asignado.
+33 fichas sin hito asignado.
 
 ## Implementadas en parte: lo que falta
 
