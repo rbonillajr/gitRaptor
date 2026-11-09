@@ -72,6 +72,13 @@ impl SupervisorHandle {
         self.stop();
     }
 
+    /// Asks the thread to end and lets go of it: an in-flight connect or call must not hold the
+    /// process exit.
+    pub fn shutdown_detached(mut self) {
+        drop(self.tx.send(HubCmd::Shutdown));
+        drop(self.thread.take());
+    }
+
     fn stop(&mut self) {
         drop(self.tx.send(HubCmd::Shutdown));
         if let Some(thread) = self.thread.take() {
@@ -138,6 +145,8 @@ struct Ctx {
     /// Wall time (ms) since which the data may be old.
     stale: Option<u64>,
     resync: Option<ResyncReason>,
+    /// The last incompatibility shown, to keep what an attempt that lost its details had.
+    last_incompat: Option<Incompatibility>,
 }
 
 impl Ctx {
@@ -175,6 +184,19 @@ impl Ctx {
         }
         self.last_conn = Some(msg.clone());
         self.sink.send(msg);
+    }
+
+    /// An incompatibility that repeats the last one without its path keeps that path.
+    fn remember_incompat(&mut self, mut inc: Incompatibility) -> Incompatibility {
+        if let Some(prev) = &self.last_incompat
+            && inc.daemon_path.is_none()
+            && prev.which == inc.which
+            && prev.daemon_version == inc.daemon_version
+        {
+            inc.daemon_path.clone_from(&prev.daemon_path);
+        }
+        self.last_incompat = Some(inc.clone());
+        inc
     }
 
     fn go_live(&mut self) {
@@ -245,6 +267,7 @@ fn run(
         live_wall: None,
         stale: None,
         resync: None,
+        last_incompat: None,
     };
     let mut attempt: u32 = 0;
     // The engine is started only when the app opens and when the user asks (D5).
@@ -298,6 +321,7 @@ fn run(
                 reason: StoppedReason::LaunchFailed,
             },
             Some(ConnectFailure::Incompatible(inc)) => {
+                let inc = ctx.remember_incompat(inc);
                 incompatible(&inc, ctx.own_raptor.as_deref())
             }
             Some(ConnectFailure::Rejected) => ConnState::Rejected,
@@ -584,7 +608,7 @@ fn apply(
                     }
                 }
                 Verdict::Duplicate | Verdict::Drop => {}
-                Verdict::Gap => return resync(link, ctx, track),
+                Verdict::Gap => return resync(link, ctx, track, false),
             }
         }
         methods::NOTIFY_SCOPE_RESYNC => {
@@ -595,7 +619,7 @@ fn apply(
             };
             if resync_note.scope == Scope::Global {
                 ctx.resync = Some(resync_reason(resync_note.reason));
-                return resync(link, ctx, track);
+                return resync(link, ctx, track, true);
             }
         }
         methods::NOTIFY_RESYNC => {
@@ -613,9 +637,16 @@ fn apply(
 }
 
 /// Takes the global scope again and goes back to `live`.
-fn resync(link: &mut dyn Link, ctx: &mut Ctx, track: &mut SeqTrack) -> Option<End> {
+///
+/// Only `scope.resync` subscribes again: after a gap the subscription is still open.
+fn resync(
+    link: &mut dyn Link,
+    ctx: &mut Ctx,
+    track: &mut SeqTrack,
+    subscribe: bool,
+) -> Option<End> {
     ctx.show(ConnState::Syncing);
-    if sync_global(link, ctx, track, true).is_err() {
+    if sync_global(link, ctx, track, subscribe).is_err() {
         return Some(End::Reconnect);
     }
     ctx.go_live();

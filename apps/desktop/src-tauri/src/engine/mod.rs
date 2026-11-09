@@ -60,10 +60,11 @@ impl EngineHub {
         }
     }
 
-    /// Stops the supervisor and waits for its thread; a later `retry` reports [`NotWatching`].
+    /// Asks the supervisor to stop without waiting for its thread, so the process can exit while a
+    /// connection attempt is in flight; a later `retry` reports [`NotWatching`].
     pub fn shutdown(&self) {
         if let Some(running) = lock(&self.handle).take() {
-            running.join();
+            running.shutdown_detached();
         }
     }
 }

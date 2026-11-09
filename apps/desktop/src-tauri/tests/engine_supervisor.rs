@@ -552,9 +552,9 @@ fn a_gap_takes_a_new_snapshot() {
         "D3-SEQ: a gap takes a new snapshot"
     );
     assert_eq!(
-        subscribe_calls(&daemon).last(),
-        Some(&global_subscribe(21, "run-1")),
-        "D3-SEQ: and subscribes from its seq + 1"
+        subscribe_calls(&daemon),
+        [global_subscribe(6, "run-1")],
+        "D3-SEQ: the subscription stays open across a gap: no second scope.subscribe"
     );
     assert_eq!(
         engine_state_messages(&h),
