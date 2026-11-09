@@ -1,7 +1,8 @@
-import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode, type RefObject } from "react";
+import { useEffect, useId, useRef, type ReactNode, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "./Button";
 import { cx } from "./cx";
+import { useDismiss } from "./hooks/useDismiss";
 import { useFadeIn } from "./hooks/useFadeIn";
 import { useFocusTrap } from "./hooks/useFocusTrap";
 import { Close } from "./icons";
@@ -135,12 +136,8 @@ function DialogLayer({ onOpenChange, dismissible, returnFocusRef, ...surface }: 
 
   useFocusTrap(content, true, returnFocusRef ? { returnFocus: returnFocusRef } : undefined);
 
-  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === "Escape" && dismissible) {
-      e.stopPropagation();
-      close();
-    }
-  };
+  // On the document, not on the content: after a click on plain text the focus is on body and a handler there would miss Escape.
+  useDismiss([], dismissible, close, { pointerOutside: false });
 
   const acknowledge = surface.acknowledge
     ? {
@@ -160,7 +157,7 @@ function DialogLayer({ onOpenChange, dismissible, returnFocusRef, ...surface }: 
         className={cx("fixed inset-0 z-(--gr-z-scrim) bg-surface-scrim gr-motion", shown ? "opacity-100" : "opacity-0")}
       />
       <div className="pointer-events-none fixed inset-0 z-(--gr-z-dialog) flex items-center justify-center p-(--gr-window-margin)">
-        <div ref={content} onKeyDown={onKeyDown} className={cx("pointer-events-auto max-w-full gr-motion", shown ? "opacity-100" : "opacity-0")}>
+        <div ref={content} className={cx("pointer-events-auto max-w-full gr-motion", shown ? "opacity-100" : "opacity-0")}>
           <DialogSurface {...surface} {...(acknowledge ? { acknowledge } : {})} onCancel={close} />
         </div>
       </div>
