@@ -47,10 +47,17 @@ export const session = (id: string, folder: string, over: Partial<SessionDto> = 
 
 export const pair = (a: string, b: string, over: Partial<PairDto> = {}): PairDto => ({
   pairId: `${a}~${b}`,
+  rev: 1,
   a: a === "base" ? a : `key-${a}`,
   b: b === "base" ? b : `key-${b}`,
   state: "current",
+  reason: null,
   level: "conflict",
+  computedAtUtcMs: null,
+  overlapFiles: 0,
+  overlapPartial: false,
+  conflictFiles: 0,
+  conflictTruncated: false,
   ...over,
 });
 
@@ -80,9 +87,13 @@ export function tienda(input: FleetInput = {}): RepoFleet {
       worktrees,
       pairs: input.pairs ?? [],
       pairsTruncated: false,
+      limits: [],
+      confirmCommand: { state: "not-offered", reason: "raptor-unknown" },
       ...input.repo,
     },
     sessions: new Map(sessions.map((s) => [s.sessionId, s])),
     detection: input.detection === undefined ? true : input.detection,
+    details: new Map(),
+    lastComputed: new Map(),
   };
 }
