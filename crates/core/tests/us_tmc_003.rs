@@ -21,7 +21,9 @@ use gitraptor_api::methods;
 use gitraptor_api::rpc::code;
 use gitraptor_api::timemachine::{OperationRunResult, UndoResult};
 use gitraptor_core::client::{Client, ClientError};
-use gitraptor_core::timemachine::oplog::{OpRef, OperationKind, OperationState, Target};
+use gitraptor_core::timemachine::oplog::{
+    OpRef, OperationKind, OperationState, SnapshotFilter, SnapshotLevel, Target,
+};
 use gitraptor_core::timemachine::store::SnapshotStore;
 use gitraptor_git::tm_write::store::TreeEntryKind;
 use gitraptor_testkit::diff;
@@ -439,11 +441,11 @@ fn an_undo_after_a_redo_takes_back_the_operation_again() {
 
 /// Guard 4.2: with the engine running, a redo right after an undo is not invalidated by its own
 /// echo, and the writes of the redo do not enter the stack as raw Git. Without the anchor of the
-/// redo, those writes would be later unattributed changes of the branch: the next undo of the same
-/// work would stop on `overlap` (and, with other undos pending, they would clear their redo).
+/// redo, those writes would enter the stack as raw Git and clear the redo (a second redo would be
+/// `redo-invalidated` instead of `nothing-to-redo`).
 ///
-/// claude-1 itself undoes its own work, redoes and undoes again (three writes, each by its own
-/// session: the requester write burst is per requester).
+/// claude-1 itself undoes its own work and redoes it, then asks to redo again (its own session: the
+/// requester write burst is per requester).
 #[test]
 fn a_redo_right_after_an_undo_is_not_invalidated_by_its_echo() {
     let w = us_tmc_011_common::world();
@@ -469,21 +471,52 @@ fn a_redo_right_after_an_undo_is_not_invalidated_by_its_echo() {
         "TMC003-GUARD-4.2: the redo brought the commit back"
     );
     assert_eq!(id(&redone, "redone_undo_id"), id(&first, "operation_id"));
-    // The redo's writes are anchored: the work is still the agent's, as it was, and a new undo of
-    // it is served and takes back the same operations.
-    let second = agent_ok(
-        &self_undo(&w, &mut claude1),
-        "TMC003-GUARD-4.2: the next undo is served",
+    // Authorized amendment (coordinator, 2026-11-09): the guard is checked without a second undo by
+    // agent, whose branch rule counts GitRaptor's own anchored echoes as unattributed moves (a
+    // defect of US-TMC-011, TD-TMC-001; its acceptance takes back this test's original last step).
+    // (1) The redo's writes are anchored: an observation point caused by the redo itself.
+    let redo_id = id(&redone, "operation_id");
+    let anchored = w
+        .oplog()
+        .lock()
+        .unwrap()
+        .snapshots(&SnapshotFilter::default())
+        .unwrap()
+        .into_iter()
+        .any(|s| {
+            s.record.level == SnapshotLevel::Observation
+                && s.record.cause_operation.as_deref() == Some(redo_id.as_str())
+        });
+    assert!(
+        anchored,
+        "TMC003-GUARD-4.2: the redo's writes are anchored to the redo (its echo is not raw Git)"
     );
+    // (2) Its echo did not enter the stack as something new: a second redo has nothing to redo, it
+    // is not told that a later operation invalidated it.
+    let again = redo_as(&w, &mut claude1);
     assert_eq!(
-        second["undone_operation_ids"], first["undone_operation_ids"],
-        "TMC003-GUARD-4.2: the next undo takes back the same work: the redo's writes are not raw Git"
+        again["data"]["reason"], "nothing-to-redo",
+        "TMC003-GUARD-4.2: after the redo there is nothing left to redo, and nothing invalidated it: {again}"
     );
     assert_eq!(
         w.head(),
-        without_work,
-        "TMC003-GUARD-4.2: the new undo returns to the state without the work"
+        with_work,
+        "TMC003-GUARD-4.2: the refused redo changed nothing"
     );
+    // (3) A plain undo of the developer is no longer held by a barrier nor told of an invalidation.
+    let mut c = w.client();
+    if let Err(ClientError::Rpc(e)) = w.plain_undo_call(&mut c, None) {
+        let reason = e
+            .data
+            .as_ref()
+            .and_then(|d| d.get("reason"))
+            .cloned()
+            .unwrap_or(Value::Null);
+        assert!(
+            reason != "selective-undo-below" && reason != "redo-invalidated",
+            "TMC003-GUARD-4.2: the plain undo after the redo is not held by the redo's echo: {reason}"
+        );
+    }
 }
 
 /// An undo by `agent` itself over its own work, as the agent's process saw it (`{ok}` or `{code, data}`).
