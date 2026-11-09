@@ -150,3 +150,73 @@ test('TOK1: check detects a glass.css out of date with glass.json', async () => 
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+// TS-DSK-003 T001 (TS003-TOKENS): new tokens and the bounded [data-theme] blocks (D4, D5).
+const NEW_DARK = {
+  '--gr-surface-scrim': 'rgba(0, 0, 0, 0.55)',
+  '--gr-accent-hover': '#a3c4ff',
+  '--gr-live-bg': 'rgba(245, 165, 36, 0.14)',
+  '--gr-size-ring': '2px',
+  '--gr-size-dialog-width': '480px',
+  '--gr-z-sticky': '10',
+  '--gr-z-drawer': '20',
+  '--gr-z-popover': '40',
+  '--gr-z-scrim': '50',
+  '--gr-z-dialog': '51',
+  '--gr-z-toast': '60',
+  '--gr-z-tooltip': '70',
+};
+const NEW_LIGHT = {
+  '--gr-surface-scrim': 'rgba(20, 24, 32, 0.35)',
+  '--gr-accent-hover': '#1f5bc4',
+  '--gr-live-bg': 'rgba(194, 116, 6, 0.06)',
+};
+
+const scoped = async (theme) => {
+  const css = await readCss();
+  const head = `\n[data-theme="${theme}"] {`;
+  assert.ok(css.includes(head), `TS003-TOKENS: glass.css has no bounded block ${head.trim()}`);
+  return vars(block(css, head));
+};
+
+test('TS003-TOKENS: the new tokens exist in :root with the values of the Dev Spec', async () => {
+  const { dark } = await themes();
+  for (const [name, value] of Object.entries(NEW_DARK)) {
+    assert.equal(dark.get(name), value, `TS003-TOKENS: :root lacks ${name}: ${value}`);
+  }
+});
+
+test('TS003-TOKENS: the light theme overrides scrim, accent-hover and live-bg', async () => {
+  const { light } = await themes();
+  for (const [name, value] of Object.entries(NEW_LIGHT)) {
+    assert.equal(light.get(name), value, `TS003-TOKENS: :root[data-theme="light"] lacks ${name}: ${value}`);
+  }
+});
+
+test('TS003-TOKENS: the two bounded blocks exist, in order, after the media block', async () => {
+  const css = await readCss();
+  const media = css.indexOf('@media (prefers-color-scheme: light)');
+  const dark = css.indexOf('\n[data-theme="dark"] {');
+  const light = css.indexOf('\n[data-theme="light"] {');
+  assert.ok(dark !== -1 && light !== -1, 'TS003-TOKENS: glass.css lacks the [data-theme="dark"] / [data-theme="light"] blocks');
+  assert.ok(media < dark && dark < light, 'TS003-TOKENS: bounded blocks must follow the @media block, dark first');
+  assert.match(css.slice(dark, light), /color-scheme:\s*dark/, 'TS003-TOKENS: the dark bounded block lacks color-scheme: dark');
+  assert.match(css.slice(light), /color-scheme:\s*light/, 'TS003-TOKENS: the light bounded block lacks color-scheme: light');
+});
+
+test('TS003-TOKENS: the bounded blocks carry the same names and values consistent with :root', async () => {
+  const { dark: rootDark, light: rootLight } = await themes();
+  const d = await scoped('dark');
+  const l = await scoped('light');
+  assert.deepEqual([...d.keys()], [...l.keys()], 'TS003-TOKENS: dark and light bounded blocks differ in token names');
+  assert.ok(d.size > 20, 'TS003-TOKENS: bounded blocks are nearly empty');
+  for (const [name, value] of d) assert.equal(value, rootDark.get(name), `TS003-TOKENS: dark bounded ${name} differs from :root`);
+  for (const [name, value] of l) {
+    const expected = rootLight.get(name) ?? rootDark.get(name);
+    assert.equal(value, expected, `TS003-TOKENS: light bounded ${name} differs from :root[data-theme="light"]`);
+  }
+  assert.ok(d.has('--gr-shadow-panel') && l.has('--gr-shadow-panel'), 'TS003-TOKENS: --gr-shadow-panel missing in a bounded block');
+  for (const name of [...d.keys(), ...l.keys()]) {
+    assert.doesNotMatch(name, /^--gr-(motion|space|radius|size|z)-/, `TS003-TOKENS: ${name} must not be in the bounded blocks`);
+  }
+});
