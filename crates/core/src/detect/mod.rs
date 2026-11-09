@@ -62,10 +62,19 @@ const MAX_SIGHTINGS: usize = 256;
 /// 2026-11-09). About 3× the 1085 ms measured under load ~40.
 pub const READ_WRITE_MAX_AGE: Duration = Duration::from_secs(3);
 
+/// A write more than this in the future (clock skew, a forged mtime) gets no
+/// notice: its cut would let every live `git` count as started before it.
+const READ_WRITE_FUTURE: u64 = 1_000_000;
+
 /// Age of a write found by a repo read, in milliseconds, and whether it is
-/// recent enough to get an S3 notice ([`READ_WRITE_MAX_AGE`]).
+/// recent enough to get an S3 notice ([`READ_WRITE_MAX_AGE`]); a write in the
+/// future by more than [`READ_WRITE_FUTURE`] µs never is.
 pub fn read_write_age(written_us: u64) -> (u64, bool) {
-    let age_us = wall_us().saturating_sub(written_us);
+    let now = wall_us();
+    if written_us > now.saturating_add(READ_WRITE_FUTURE) {
+        return (0, false);
+    }
+    let age_us = now.saturating_sub(written_us);
     let max_us = u64::try_from(READ_WRITE_MAX_AGE.as_micros()).unwrap_or(u64::MAX);
     (age_us / 1_000, age_us <= max_us)
 }
@@ -796,6 +805,16 @@ impl Detector {
         }]);
     }
 
+    /// Waits, at most `sample_barrier`, until the samples of every notice sent
+    /// so far are stored (TD-GRP-005): the daemon calls it once per batch,
+    /// before classifying its events, and only for a repo with a present
+    /// session. Without pending notices it returns at once.
+    pub fn await_samples(&self, repo_id: &str) {
+        if self.inner.has_sessions(repo_id) {
+            self.inner.wait_sampled(self.inner.config.sample_barrier);
+        }
+    }
+
     /// The S4 and S3 rules for a Git event of `worktree` observed in the
     /// window that opened at `t_recv` and flushed at `t_flush` (monotonic
     /// marks of the batch). `moved` is the branch move of the event, which
@@ -813,9 +832,6 @@ impl Detector {
             outcome,
             counts: S3Counts::default(),
         };
-        // The notices of this event's writes were sent before it was
-        // classified: their samples count once they are stored.
-        self.inner.wait_sampled(self.inner.config.sample_barrier);
         let st = self.inner.lock();
         let present = |id: &str| {
             st.live
@@ -1387,7 +1403,8 @@ impl ObserverHooks for Hooks {
 
     fn git_dir_written(&self, repo_id: &str, t_recv: u64, written_us: u64) {
         if read_write_age(written_us).1 {
-            self.notice(repo_id, t_recv, written_us);
+            // Never later than now: a cut in the future is no cut.
+            self.notice(repo_id, t_recv, written_us.min(wall_us()));
         }
     }
 }

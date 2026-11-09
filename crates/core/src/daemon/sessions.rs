@@ -557,6 +557,11 @@ impl Daemon {
                     .unwrap_or_default(),
             );
         }
+        // The samples of the notices this batch's writes sent, once per batch
+        // (TD-GRP-005).
+        if !batch.events.is_empty() {
+            detector.await_samples(&batch.repo_id);
+        }
         batch
             .events
             .iter()

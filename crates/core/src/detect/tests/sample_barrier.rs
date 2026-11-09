@@ -1,4 +1,4 @@
-//! The barrier of `Detector::evidence` (TD-GRP-005): an event is classified
+//! The barrier of `Detector::await_samples` (TD-GRP-005): an event is classified
 //! only after the samples of the notices already sent are stored, or after
 //! `sample_barrier` at most. The process table blocks the S3 read until the
 //! test lets it go; every wait is a signal with a timeout, never a fixed sleep.
@@ -114,7 +114,9 @@ impl Barrier {
             .expect("the S3 read never started");
     }
 
+    /// The batch's barrier, then the S3 rule, as the daemon runs them.
     fn evidence(&self, t_recv: u64) -> S3Outcome {
+        self.detector.await_samples("r");
         self.detector
             .evidence(
                 "r",
@@ -142,6 +144,7 @@ fn evidence_waits_for_the_sample_of_a_notice_already_sent() {
     let detector = Arc::clone(&b.detector);
     let (done_tx, done) = channel();
     let classify = std::thread::spawn(move || {
+        detector.await_samples("r");
         let outcome = detector
             .evidence(
                 "r",
@@ -227,4 +230,16 @@ fn a_read_notice_of_an_old_write_is_dropped() {
     assert_eq!(b.evidence(1_000), S3Outcome::NoSighting);
     let (age_ms, kept) = read_write_age(wall_us() - old);
     assert!(!kept && age_ms * 1_000 >= old, "{age_ms}");
+}
+
+/// A write in the future (clock skew, a forged mtime) gets no notice: its cut
+/// would let every live `git` count as started before it.
+#[test]
+fn a_read_notice_of_a_write_in_the_future_is_dropped() {
+    let b = Barrier::new(WAIT);
+    b.release();
+    let future = wall_us() + 10_000_000;
+    assert!(!read_write_age(future).1);
+    b.hooks.git_dir_written("r", 1_000, future);
+    assert_eq!(b.evidence(1_000), S3Outcome::NoSighting);
 }

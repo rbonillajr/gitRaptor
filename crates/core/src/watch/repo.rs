@@ -730,9 +730,12 @@ pub(super) fn run(
 /// microseconds; `None` when it cannot be read. How old a write still counts is the
 /// detector's to decide (`detect::READ_WRITE_MAX_AGE`).
 fn head_log_written_us(git_dir: &Path) -> Option<u64> {
-    let modified = std::fs::metadata(git_dir.join("logs").join("HEAD"))
-        .and_then(|m| m.modified())
-        .ok()?;
+    // Only a regular file: a symlink could lend another file's mtime.
+    let meta = std::fs::symlink_metadata(git_dir.join("logs").join("HEAD")).ok()?;
+    if !meta.is_file() {
+        return None;
+    }
+    let modified = meta.modified().ok()?;
     let since = modified.duration_since(std::time::UNIX_EPOCH).ok()?;
     u64::try_from(since.as_micros()).ok()
 }
@@ -765,15 +768,14 @@ impl Task {
         if moved.is_empty() {
             return;
         }
-        let written = self
-            .shared
-            .worktrees_of(&self.repo_id)
-            .iter()
-            .filter(|wt| moved.contains(&&wt.root))
-            .filter_map(|wt| head_log_written_us(&wt.git_dir))
-            .max();
-        if let Some(written_us) = written {
-            hooks.git_dir_written(&self.repo_id, t_recv, written_us);
+        // One notice per worktree, each cut at its own write: a newer write elsewhere must
+        // never move the cut of an older one.
+        for wt in self.shared.worktrees_of(&self.repo_id) {
+            if moved.contains(&&wt.root)
+                && let Some(written_us) = head_log_written_us(&wt.git_dir)
+            {
+                hooks.git_dir_written(&self.repo_id, t_recv, written_us);
+            }
         }
     }
 
@@ -1409,5 +1411,14 @@ mod tests {
             .unwrap();
         let written = head_log_written_us(dir.path()).expect("an old reflog");
         assert!(written + 4_000_000 <= now_us, "its own mtime, however old");
+        // A symlink lends no mtime.
+        #[cfg(unix)]
+        {
+            let other = tempfile::tempdir().unwrap();
+            let logs = other.path().join("logs");
+            std::fs::create_dir(&logs).unwrap();
+            std::os::unix::fs::symlink(&head, logs.join("HEAD")).unwrap();
+            assert_eq!(head_log_written_us(other.path()), None, "a symlink");
+        }
     }
 }
