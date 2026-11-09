@@ -99,7 +99,7 @@ Implementado en: PR #NNN.
 - **Tests:** unitarios en `crates/api/src/timemachine_redo_tests.rs`, `crates/core/src/timemachine/oplog/stack_redo_tests.rs`, `confirm/redo_tests.rs`, `redo_tests.rs`, `redo_tamper_tests.rs` y `apps/cli/src/undo/redo_tests.rs`; integración con daemon y Git reales en `crates/core/tests/us_tmc_003.rs` y `us_tmc_003_agents.rs` (agentes `raptor-fake-agent`, independientes de la sesión de Claude Code); los pendientes de redo de US-TMC-011 en `crates/core/tests/us_tmc_011.rs`; e2e en `apps/cli/tests/redo_process.rs` y el paso de redo de la demo M2 (`apps/cli/tests/m2_demo_undo_agent.rs`).
 - **Decisiones de la implementación:** ver [DS-US-TMC-003, Enmienda 2026-11-09](../dev-specs/US-TMC-003-redo.md).
 - **Pendiente:**
-  - Linux y Windows (XP-70, etapa de validación multiplataforma).
+  - Linux y Windows (XP-71, etapa de validación multiplataforma).
   - La demo M2 depende de TD-GRP-005 (atribución bajo carga).
   - Sin certificar: modo rápido (sin línea base de suite completa).
 
