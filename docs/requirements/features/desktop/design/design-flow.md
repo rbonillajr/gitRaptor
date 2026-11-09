@@ -4,7 +4,7 @@ title: "Design Flow — App de escritorio, UI-1 (primera versión útil para nov
 type: design-flow
 status: draft
 created: 2026-10-28
-updated: 2026-11-08
+updated: 2026-11-09
 designer: "Diseñador UX (agente), para Rene Bonilla"
 related:
   stories: [US-CKP-001, US-CKP-002, US-CKP-003, US-CKP-006, US-CKP-007, US-CKP-008, US-CKP-019, US-CKP-021, US-CKP-022, US-TMC-002, US-TMC-003, US-TMC-006, US-TMC-009, US-TMC-012, US-TMC-014, US-TMC-023, US-GRD-001, US-GRD-003, US-GRD-004, US-GRD-005, US-GRD-006]
@@ -153,11 +153,11 @@ La maqueta es de baja fidelidad: fija la estructura, no las posiciones al píxel
 
 | Región | Contenido | Comportamiento |
 |---|---|---|
-| **Barra de título** | Toggle del panel izquierdo (`⌘B`), buscador de acciones (`⌘K`), píldora roja de conflictos previstos de todos los repos (solo si hay), cambio de tema, toggle del panel derecho (`⌥⌘B`) | La píldora de conflictos abre el par en e. No hay selector de repo: los repos viven en el árbol |
+| **Barra de título** | Toggle del panel izquierdo (`⌘B`), buscador de acciones (`⌘K`), píldora roja de conflictos previstos de todos los repos (solo si hay), cambio de tema, toggle del panel derecho (`⌥⌘B`) | La píldora de conflictos abre el repo con más conflictos y, si tiene un único par ⚡, su detalle (e); si no, lleva el foco al panel de conflictos. Por debajo de 1000 px muestra solo "⚡ N" (el nombre accesible sigue completo). No hay selector de repo: los repos viven en el árbol |
 | **Toolbar** | Centrada: Deshacer, Rehacer, Fetch (botón partido con menú), Push, Rama, Worktree, Stash, Pop. A la derecha: "Integrar cambios" | "Deshacer" y "Rehacer" operan sobre la copia seleccionada y se desactivan con motivo en tooltip cuando no hay nada que deshacer o rehacer (US-TMC-002). Qué botones están activos en UI-1: § 11, H-10 |
 | **Barra lateral (única)** | Arriba: "Agentes · N en vivo" y "Time Machine". Luego el árbol "Repos" (abajo). Al pie: Guardrails y Ajustes | Tabla siguiente |
-| **Centro** | Cabecera de columnas (Column settings), fila WIP y grafo de carriles | § 4.b. En la vista de Time Machine el centro cede su sitio a la vista completa (§ 4.c) |
-| **Detalle (derecha)** | Pestañas "Cambios sin commit" y "Estado de Agentes"; al seleccionar un commit, el commit | Se oculta con su toggle (`⌥⌘B`) o con `Esc`; ver § 2.4 |
+| **Centro** | Arriba, el panel "Conflictos previstos" (filas de ⚡ y ⚠, frescura, base pendiente, límites; § 4.b); debajo, la cabecera de columnas (Column settings), la fila WIP y el grafo de carriles | § 4.b. El centro tiene un solo destino a la vez: grafo, detalle de un conflicto (§ 4.e), vista de Guardrails (§ 4.d) o Time Machine (§ 4.c); cada "Volver" lleva al grafo (D-15) |
+| **Detalle (derecha)** | UI-1: "Estado de Agentes" (la flota), con ese título y sin lista de pestañas; la pestaña "Cambios sin commit" llega con UI-2 y entonces aparece la lista. Al seleccionar un commit, el commit | Se oculta con su toggle (`⌥⌘B`) o con `Esc`; ver § 2.4. Su toggle se llama "Mostrar estado de agentes" |
 
 **Barra lateral: el árbol**
 
@@ -169,7 +169,7 @@ La maqueta es de baja fidelidad: fija la estructura, no las posiciones al píxel
 | Repo → **Worktrees** | Una fila por copia de trabajo: punto del carril, nombre y punto de estado | Punto lleno y verde = activo; punto hueco = inactivo. Seleccionar una fila la resalta en el grafo y abre su detalle |
 | Repo → **Ramas locales** | `main` con insignia HEAD; `↑N` y `↓N` frente a su remota; "sin publicar" si no existe en origin; punto al día si no hay diferencia | Seleccionar centra el grafo en la rama; si su commit no está en la parte visible, un toast lo dice |
 | Repo → **Remotas → origin → ramas** | Cada rama con su estado: "solo remota", o el icono de que también existe en local | Seleccionar una rama remota solo la localiza en el grafo; trabajar en ella exige un checkout (UI-2) |
-| **Guardrails** (pie) | Escudo y "N violaciones" de hoy | Abre el registro de bloqueos (§ 4.d, lista de bloqueos); sustituye a la pestaña "Bloqueos" |
+| **Guardrails** (pie) | Fila "Guardrails" con ⛔ y N = bloqueos que aún no has visto en esta ejecución (sin ⛔ si no hay) | Abre la vista de bloqueos (§ 4.d, lista de bloqueos); sustituye a la pestaña "Bloqueos". El nombre accesible dice "Guardrails, N bloqueos nuevos" |
 | **Ajustes** (pie) | Idioma, tema, notificaciones | Fuera de este flujo; ver R-2 a R-4 |
 
 El grupo "Worktrees" es el que sustituye a la antigua lista "Agentes" de la barra lateral. Los repos distintos del activo se pliegan y se abren al pulsarlos.
@@ -199,9 +199,11 @@ Mapea los estados de US-CKP-003 a la app. **Ubicación en B1**: el mock no tiene
 
 | Anchura de la ventana | Layout |
 |---|---|
-| ≥ 1360 px | Tres paneles: lateral 252 px, detalle 352 px, gutters de 12 px; el centro ocupa el resto (la cabecera del grafo suma Branch/Tag 195 + Graph 175 + Commit message + Autor 190 + Fecha 120 + Sha 84) |
+| ≥ 1360 px | Tres paneles: lateral 252 px, detalle 352 px, gutters de 12 px; el centro ocupa el resto. Las columnas del grafo (Branch/Tag 195 + Graph 175 + Commit message ≥ 220 + Autor 190 + Fecha 120 + Sha 84) se pliegan según el ancho del centro, no el de la ventana (abajo) |
 | 1000–1359 px | El detalle se oculta por defecto y se abre como cajón superpuesto con `⌥⌘B`, con foco atrapado y `Esc` para cerrar |
-| < 1000 px (mínimo 720 × 560) | Se pliegan las columnas del grafo antes que nada (Column settings; el mensaje del commit siempre visible) y la barra lateral se oculta con `⌘B`; US-CKP-022 ("El grafo cede espacio primero") se aplica a las columnas, no a los avisos |
+| < 1000 px (mínimo 720 × 560) | La barra lateral se oculta con `⌘B`; la píldora de conflictos pasa a "⚡ N". Las columnas siguen la regla de abajo; US-CKP-022 ("El grafo cede espacio primero") se aplica a las columnas, no a los avisos |
+
+**Plegado de columnas (D-18)**: el centro debe alojar las columnas visibles más 220 px de Commit message; si no, se ocultan sin tocar la preferencia guardada, en este orden: Sha, Autor, Fecha, Rama. Graph y Commit message no se pliegan. A 1440 px con el detalle abierto (centro de 788 px) quedan Rama, Graph, Mensaje y Fecha; a 1360 px con detalle, Rama, Graph y Mensaje; con el detalle cerrado, las seis. Column settings marca las plegadas con "No cabe con este ancho".
 
 ⚠️ **ASSUMPTION**: las anchuras de los paneles (252, 352 px) y de las columnas salen del mock; los cortes de 1360 y 1000 px son de partida (el mock no los define) y se afinan en el primer prototipo.
 
@@ -386,7 +388,7 @@ El comando lleva la ruta absoluta del `raptor` que sirve al daemon (ADR-GRP-017 
 |   ● feat-pagos|   |               \                                |   |                    |
 |   ● feat-login|   |                ●─● feat-docs  claude-3 ◐ ⚠1   |   | ⟲ Último punto:    |
 |   ◐ feat-docs |   |                                                |   |   hace 2 min       |
-|  > Ramas loc. |   | + 22 commits más en feat-login      [Mostrar]  |   |                    |
+|  > Ramas loc. |   | + 22 commits más en feat-login                 |   |                    |
 |  > Remotas    |   | La predicción incluye lo sin commitear… [?]    |   |                    |
 | > blog        |   +------------------------------------------------+   +--------------------+
 | ⛨ Guardrails  |
@@ -396,12 +398,13 @@ El comando lleva la ruta absoluta del `raptor` que sirve al daemon (ADR-GRP-017 
 **Contenido**
 
 - **Worktrees y Agentes** (barra lateral y detalle): el grupo "Worktrees" del árbol del repo tiene una fila por copia de trabajo con el punto del carril y su punto de estado; "Agentes · N en vivo" abre en el detalle la flota con su agente, símbolo de estado y color `lane.n`, en el orden de atención de US-CKP-002 (principal, luego lo que pide atención: ⛔, ⚡, hueco de observación; después Activo, Inactivo, Terminado y sin agente). El ✳ coral (`agent.claude`) marca a Claude Code. "Sin agente" se escribe atenuado y nunca "humano" (BR-CKP-CONS-003). Un worktree con dos o más sesiones presentes lleva la marca "compartido".
-- **Grafo con carriles** (centro): carriles finos de 1,5 px, uno por rama de agente desde su merge-base con la base confirmada, con el nombre y el color de su agente (US-CKP-022). Encima del HEAD va la fila **WIP** (lo sin commit). La cabecera es configurable con **Column settings** (⚙): Branch/Tag, Graph, Commit message (siempre visible), Author, Date/Time y Sha. El co-autor (el agente) no va en la columna Author: se ve en el detalle del commit (autoría persona + agente, US-GRD-018). Se ven los 50 commits más recientes y "N commits más" plegados. Un commit sin relación commit→evento dice "sin atribuir" en su tooltip.
+- **Grafo con carriles** (centro): carriles finos de 1,5 px, uno por rama de agente desde su merge-base con la base confirmada, con el nombre y el color de su agente (US-CKP-022). Encima del HEAD va la fila **WIP** (lo sin commit). La cabecera es configurable con **Column settings** (⚙): Branch/Tag, Graph, Commit message (siempre visible), Author, Date/Time y Sha. La columna Author dice "Tú u otro (sin atribuir)" en cada commit mientras el motor no publique el actor por commit (BR-CKP-CONS-003; nunca el autor ni el correo de Git; D-18), con el tooltip "GitRaptor aún no sabe qué agente hizo este commit" y el mismo significado en el nombre accesible de la fila; el co-autor (el agente) se verá en el detalle del commit (UI-2, US-GRD-018). El nombre del agente va en texto normal y su color en un punto: los colores de carril no tienen contraste de texto (DSYS-GRP-002). Se ven los 50 commits más recientes y "N commits más" como fila de texto (sin botón en UI-1).
 - **Conflictos entre carriles**: un ⚡ se pinta como **banda** en el canal entre los dos carriles del par (línea `┆` en `git.conflict` con la insignia "⚡ conflicto previsto · archivo · frescura"); si los carriles no son contiguos, la banda cruza los intermedios en trazo discontinuo y cada carril lleva su insignia `⚡N`. Un ⚠ (solape de lo sin commitear) es solo insignia en los carriles, sin banda. Un par contra la base pone la insignia sobre la línea de `main`.
-- **Detalle** (derecha): dos pestañas, "Cambios sin commit" (staging y composer; UI-2, § 6.1) y "Estado de Agentes" (estado, rama, ahead/behind, archivos sin commitear, conflictos del agente, último punto recuperable). Al seleccionar un commit en el grafo, muestra el commit con su co-autor.
+- **Detalle** (derecha): en UI-1 solo "Estado de Agentes" (estado, rama, ahead/behind, archivos sin commitear, conflictos del agente, último punto recuperable), con ese título y sin lista de pestañas; "Cambios sin commit" (staging y composer, UI-2, § 6.1) trae la lista de pestañas. Al seleccionar un commit en el grafo (UI-2), muestra el commit con su co-autor.
+- **Panel "Conflictos previstos"** (centro, encima del grafo): una fila por par ⚡ y ⚠ (hasta 3; "y N más" despliega el resto) con los dos lados, el primer archivo, la frescura y "Ver"; las líneas de frescura, el aviso de base pendiente con su comando para copiar y la línea de límites. El lienzo del grafo es decorativo para lectores de pantalla, así que este panel es la versión textual de la banda y de las insignias. No vive en la flota: el detalle es un cajón cerrado entre 1000 y 1359 px (D-17).
 - **Línea de límites**: al pie del grafo, siempre visible, "La predicción incluye lo sin commitear como solape; el conflicto previsto solo usa lo commiteado. [?]" (US-CKP-006 "La vista declara sus límites").
 
-**Acciones**: seleccionar agente o carril; abrir el conflicto (→ e); abrir el bloqueo (→ d); "Ver terminadas" (US-CKP-002); "Mostrar" commits plegados; abrir el historial del worktree (→ c filtrado); "Deshacer" (toolbar).
+**Acciones**: seleccionar agente o carril; abrir el conflicto (→ e); abrir el bloqueo (→ d); "Ver terminadas" (US-CKP-002); abrir el historial del worktree (→ c filtrado); "Deshacer" (toolbar); alternar grafo y tabla (`⌥⌘T`, anunciado a lectores de pantalla). Desplegar los commits plegados es de UI-2.
 
 | Estado | Cuándo | Historia / regla | Comportamiento |
 |---|---|---|---|
@@ -410,15 +413,16 @@ El comando lleva la ruta absoluta del `raptor` que sirve al daemon (ADR-GRP-017 
 | calculando predicción | Daemon recién arrancado | US-CKP-007 "Calculando en el cálculo inicial" | Barra: "Conflictos: calculando 3 de 6 pares". Ningún par dice "sin conflictos" |
 | predicción desactualizada | Un worktree commiteó | US-CKP-007 | Insignia del par "desactualizado · hace 40 s · recalculando" en `text.muted`; la banda pasa a trazo discontinuo |
 | sin conflictos | Todos los pares al día y sin ⚡ ni ⚠ | US-CKP-007 | Barra: "✔ Sin conflictos previstos · hace 1 min". Nada en el grafo |
-| conflicto nuevo | Un par pasa a ⚡ | US-CKP-008 | Toast 5 s "⚡ Conflicto previsto: claude-1 ↔ claude-2 en src/api.rs [Ver]" (queda en el centro de avisos); las dos filas suben a la zona de atención; un ⚡ ya alertado no se repite |
+| conflicto nuevo | Un par pasa a ⚡ | US-CKP-008 | Toast 5 s "⚡ Conflicto previsto: claude-1 ↔ claude-2 en src/api.rs [Ver]" (queda en el centro de avisos); las dos filas suben a la zona de atención; un ⚡ ya alertado no se repite. Con 3 o más ⚡ nuevos a la vez, un solo toast "⚡ N nuevos conflictos previstos [Ver]" (D-20) |
 | vacío · sin agentes | Repo observado sin sesiones | ADR-GRP-004 § 3 "Vacíos útiles" | "Aún no hay agentes trabajando en shop. Cuando abras Claude Code en una copia de trabajo, aparecerá aquí." + [Qué es una copia de trabajo] |
 | vacío · sin carriles | Ninguna rama con commits propios | US-CKP-006 (worktree sin trabajo propio) | Solo la línea de la base con "Las ramas de tus agentes aparecerán cuando hagan su primer commit." |
-| error · base no encontrada | La base configurada no existe | US-CKP-022, US-CKP-003 | Sin carriles; "Rama principal develop no encontrada: no se puede calcular cuánto se alejan las ramas." + [Elegir rama principal]; nunca se calcula contra otra rama |
+| error · base no encontrada | La base configurada no existe | US-CKP-022, US-CKP-003 | Sin carriles; "Rama base develop no encontrada: no calculable" y la línea "Comprueba que esa rama existe en el repo: GitRaptor no dibuja carriles contra otra rama"; sin botón en UI-1; nunca se calcula contra otra rama |
+| error · base sin confirmar | La base está sin confirmar | US-CKP-022, US-CKP-009 | Sin carriles; "Base main sin confirmar: confirma la rama base para ver los carriles"; el panel de conflictos encima enseña "Rama base pendiente de confirmar (main)" con el comando `raptor guard confirm` para copiar; los ⚡ entre worktrees siguen a la vista |
 | worktree no disponible | Carpeta borrada a mano | US-CKP-003 | Fila "no disponible: la carpeta ya no existe", sin acciones |
 | más de 8 agentes | 9 o más sesiones | US-CKP-002 | El color se repite; el nombre y el símbolo siempre están en la fila y en el carril |
 | app abierta por un agente | Hay un agente en la ascendencia de la app | US-CKP-019; ADR-GRP-017 § 3 | Banda "Abierta por un agente: vista restringida". Todas las acciones de escritura desactivadas con ese motivo |
 | motor parado / desconectado | — | US-CKP-003 | § 2.3; el grafo se atenúa y muestra la hora del último dato |
-| sin color / lector de pantalla | — | § 7 | El grafo tiene una vista alternativa en tabla (`Cmd+Opción+T`): rama, agente, estado, commits por delante y por detrás, conflictos. Cada insignia tiene texto |
+| sin color / lector de pantalla | — | § 7 | El grafo tiene una vista alternativa en tabla (`Cmd+Opción+T`): rama, agente, estado, commits por delante y por detrás, conflictos. Cada insignia tiene texto. El cambio de vista se anuncia ("Vista en tabla") y el foco no se mueve |
 
 | Clave de copy | es | en |
 |---|---|---|
@@ -431,6 +435,7 @@ El comando lleva la ruta absoluta del `raptor` que sirve al daemon (ADR-GRP-017 
 | `ckp.none` | Sin conflictos previstos · hace {age} | No predicted conflicts · {age} ago |
 | `ckp.limits` | La predicción incluye lo sin commitear como solape; el conflicto previsto solo usa lo commiteado. | Uncommitted work counts as overlap; predicted conflicts only use committed work. |
 | `ckp.base.missing` | Rama principal {base} no encontrada: no se puede calcular. | Main branch {base} not found: can't calculate. |
+| `ckp.author.unattributed` | Tú u otro (sin atribuir) | You or another (unattributed) |
 | `ckp.more` | {n} commits más | {n} more commits |
 
 ---
@@ -578,18 +583,17 @@ El toast dura 5 s y queda en el centro de avisos (DSYS-GRP-001 § 3, Notificatio
 
 ```text
 +--------------------------------------------------------------------------------------------+
-|  ⛔ Bloqueado: claude-4 intentó reescribir el historial de main en el servidor             |
+|  ⛔ Bloqueado: Claude Code · feat-x intentó reescribir el historial de main en el servidor |
 |                                                                                            |
 |  No pasó nada. main sigue igual en tu equipo y en el servidor.                             |
 |                                                                                            |
-|  Qué intentó        Un "push forzado" (?) de feat-x sobre main en origin, a las 10:58.     |
+|  Qué intentó        Un "push forzado" (?) de feat-x sobre main en el servidor (origin), a las 10:58. |
 |  Por qué es         Reemplaza el historial del servidor. Los commits que otras personas    |
 |  peligroso          subieron y no están en tu equipo se perderían para todos.              |
 |  Qué lo frenó       Protección mínima de shop: "push forzado denegado".                    |
 |                                                                                            |
 |  > Detalles técnicos                                                              [ver v]  |
-|      git push --force origin feat-x:main                                                   |
-|      regla: force-push · nivel: por defecto · capa: hooks · actor: claude-4 (detectado)    |
+|      regla: force-push · nivel: por defecto · capa: hooks · actor: Claude Code (detectado)  |
 |                                                                                            |
 |  Qué puedes hacer                                                                          |
 |    · Nada: la protección hizo su trabajo. Puedes decirle al agente que use otra rama.      |
@@ -599,16 +603,18 @@ El toast dura 5 s y queda en el centro de avisos (DSYS-GRP-001 § 3, Notificatio
 +--------------------------------------------------------------------------------------------+
 ```
 
+El motor anota el tipo de agente y la carpeta, no el nombre de la sesión ("claude-4"): el título dice "Claude Code · feat-x" y, sin agente identificado, "se intentó …" (D-19). "Ver en el registro" solo sale cuando el diálogo se abrió desde el toast. "Lo haré yo…" y "Ver en el registro" van en el cuerpo del diálogo y "Entendido" en su pie, con el foco inicial (P2).
+
 #### d2. Excepción consciente: qué vas a hacer
 
 ```text
 +--------------------------------------------------------------------------------------------+
 |  Excepción consciente · solo esta vez                                                      |
 |                                                                                            |
-|  La harás tú, no claude-4. Se ejecuta una sola vez; la regla sigue activa después.         |
+|  La harás tú, no Claude Code. Se ejecuta una sola vez; la regla sigue activa después.      |
 |                                                                                            |
 |   +------------------------------------------------------------------------------------+   |
-|   |  git push --force origin feat-x:main                                               |   |
+|   |  git push --force-with-lease origin feat-x:main                                    |   |
 |   |  repo: shop · copia: feat-x · regla que se salta: push forzado denegado            |   |
 |   +------------------------------------------------------------------------------------+   |
 |                                                                                            |
@@ -641,22 +647,24 @@ El foco inicial está en "Cancelar" y `Enter` no confirma (P2). "Confirmar con T
 +--------------------------------------------------------------------------------------------+
 |  Confirma desde tu terminal                                                                |
 |                                                                                            |
-|  Ahora no podemos pedir Touch ID: {motivo}. Para demostrar que eres tú y no un agente,     |
+|  Esta versión todavía no puede pedir Touch ID. Para demostrar que eres tú y no un agente,  |
 |  ejecuta este comando en tu propia terminal (no en la de un agente):                       |
 |                                                                                            |
 |   +------------------------------------------------------------------------------------+   |
-|   |  /Applications/GitRaptor.app/Contents/MacOS/raptor guard exec --                   |   |
-|   |      git push --force origin feat-x:main                         [[ Copiar ]]      |   |
+|   |  '/Applications/GitRaptor.app/Contents/MacOS/raptor' 'guard' 'exec' '--'           |   |
+|   |      'git' '-C' '/ruta/feat-x' 'push' '--force-with-lease' 'origin' 'feat-x:main'  |   |
+|   |                                                                  [[ Copiar ]]     |   |
 |   +------------------------------------------------------------------------------------+   |
 |   ¿Dónde está la terminal? Pulsa Cmd+Espacio y escribe "Terminal".                         |
 |                                                                                            |
+|  Cuando lo ejecutes tendrás 10 segundos para cancelar: pulsa Ctrl-C en esa terminal.       |
 |  ◌ Esperando a que lo ejecutes… Cuando lo hagas, verás aquí la cuenta atrás.               |
 |                                                                                            |
-|                                                                   [ Cancelar ]             |
+|                                                                   [[ Cerrar ]]             |
 +--------------------------------------------------------------------------------------------+
 ```
 
-`{motivo}` sale del daemon: esta versión aún no tiene la confirmación del sistema, sesión sin interfaz gráfica, demasiados intentos (espera N min), otro diálogo abierto o SO sin soporte. "Copiar" copia el comando en una sola línea. La app no abre la Terminal ni escribe en ella (ADR-GRP-017 § 2).
+En UI-1 el motivo es siempre el mismo: esta versión aún no tiene la confirmación del sistema; con el factor del SO (d3) saldrán también sesión sin interfaz gráfica, demasiados intentos (espera N min), otro diálogo abierto o SO sin soporte. "Copiar" copia el comando en una sola línea, con cada argumento entre comillas simples y `--force-with-lease` en lugar de `--force` (si el servidor avanzó, el push se niega en vez de pisar commits ajenos); nunca lleva `--yes`. El botón de cierre se llama "Cerrar", no "Cancelar": cerrar el diálogo no cancela nada en el motor. Un rebase no tiene comando copiable: el motor no anota sus argumentos, así que se explica la forma `raptor guard exec -- git rebase …` sin botón "Copiar". Cuando el humano ejecuta el comando, el aviso cambia a "Excepción anunciada en una terminal: se ejecuta en N s" con cómo cancelarla allí (Ctrl-C o `raptor guard cancel`); la app no cancela en UI-1. La app no abre la Terminal ni escribe en ella (ADR-GRP-017 § 2).
 
 #### d5. Ventana cancelable (10 s)
 
@@ -669,11 +677,11 @@ El foco inicial está en "Cancelar" y `Enter` no confirma (P2). "Confirmar con T
 +--------------------------------------------------------------------------------------------+
 ```
 
-La ventana es la de D5: se anuncia en todos los clientes (app, TUI) y cualquiera la cancela. Al terminar: toast "✔ Hecho con excepción: push forzado de feat-x [Ver en el registro]" y, en el equipo local, "Deshacer" disponible para lo que sea recuperable.
+Esta pantalla es de la excepción con factor del SO (d3); en UI-1 la ventana se ve como el aviso de d4, sin barra ni botón. La ventana es la de D5: se anuncia en todos los clientes (app, TUI) y cualquiera la cancela. Al terminar: toast "✔ Hecho con excepción: push forzado de feat-x [Ver en el registro]" y, en el equipo local, "Deshacer" disponible para lo que sea recuperable.
 
 | Estado | Cuándo | Historia / regla | Comportamiento |
 |---|---|---|---|
-| default · bloqueo | El motor publica una denegación | US-CKP-019, US-GRD-005 | Aviso ⛔ en la vista Guardrails (fila del pie de la barra lateral, con su contador) y toast persistente hasta que se lee; la fila sube a la zona de atención mientras la denegación siga vigente |
+| default · bloqueo | El motor publica una denegación | US-CKP-019, US-GRD-005 | Aviso ⛔ en la vista Guardrails (fila del pie de la barra lateral, con su contador) y un toast persistente (`error`, `role="alert"`) hasta que se lee o se abre la vista; con varios bloqueos a la vez, un solo toast; la fila sube a la zona de atención mientras la denegación siga vigente |
 | lista de bloqueos | Vista Guardrails (pie de la barra lateral) | US-GRD-005 | Una línea por denegación (hora, actor, operación, regla); las entradas que no se pudieron verificar van en un grupo aparte; caducan a los 90 días |
 | vacío | Sin bloqueos | US-GRD-005 | "Nada bloqueado en shop. La protección está activa." (o, sin protección, "shop no está protegido. [Proteger]") |
 | fuera de alcance | La operación no admite excepción (p. ej. commit) | US-GRD-006 "La excepción no cubre…" | d1 sin "Lo haré yo…"; texto "La excepción solo sirve para push, borrar una rama local y rebase." |
@@ -687,7 +695,7 @@ La ventana es la de D5: se anuncia en todos los clientes (app, TUI) y cualquiera
 | cancelado | Cancelar en la ventana | US-CKP-019, US-GRD-006 | "Cancelado. No se ejecutó nada." Queda en el registro |
 | error de la operación | Git falla al ejecutar | — | "El push falló: {motivo de Git}. Tu equipo quedó como antes." |
 | motor parado | — | US-CKP-003 | "Lo haré yo…" desactivado con "El motor está parado" |
-| sin color / lector de pantalla | — | § 7 | El aviso ⛔ se anuncia con región `alert`; la cuenta atrás se anuncia cada 5 s, no cada segundo |
+| sin color / lector de pantalla | — | § 7 | El aviso ⛔ se anuncia con región `alert`; la cuenta atrás se pinta cada segundo y se anuncia a los 10 s, a los 5 s y al terminar, no cada segundo; sin barra de progreso |
 
 | Clave de copy | es | en |
 |---|---|---|
@@ -734,6 +742,8 @@ La ventana es la de D5: se anuncia en todos los clientes (app, TUI) y cualquiera
 
 **Contenido**: el par con el nombre de cada lado (agente y rama, o la base), la frescura, los ⚡ con archivo y rango de líneas por lado, los ⚠ con los archivos en común, la línea de límites y el texto completo de los 8 límites en `?` (US-CKP-006).
 
+**Dónde se abre**: en el centro, en lugar del grafo, con "Volver al grafo" y `Esc`; lo abren el botón "Ver" de una fila del panel, el toast de conflicto nuevo y la píldora de la barra de título. A 1000–1359 px el detalle derecho es un cajón cerrado, por eso el par no se abre ahí.
+
 **Acciones en UI-1**: "Copiar aviso para los agentes" (texto listo para pegar en el chat de cada agente: "claude-2 está cambiando fn create_order en src/api.rs (líneas 44-61); evita tocarla hasta que se integre feat-pagos"), "Ver en el grafo" y abrir el archivo en el editor. ⚠️ Ver hallazgo H-5 (§ 11): "Copiar aviso" es nuevo y lo valida el PO. Integrar y rebasar desde aquí llegan con UI-2.
 
 | Estado | Cuándo | Historia / regla | Comportamiento |
@@ -744,7 +754,7 @@ La ventana es la de D5: se anuncia en todos los clientes (app, TUI) y cualquiera
 | cargando detalle | Pidiendo los hunks | US-CKP-006 (`prediction.list`) | Esqueleto en la lista de archivos; la cabecera ya muestra el par |
 | desactualizado | Un lado commiteó | US-CKP-007 | Banda "desactualizado · hace 40 s · recalculando"; los rangos se atenúan |
 | calculando | Sin resultado aún | US-CKP-007 | "Calculando…"; nunca "sin conflictos" |
-| resuelto | El par deja de tener ⚡ | US-CKP-008 | "✔ Ya no se prevé conflicto entre claude-1 y claude-2 (hace 5 s)." + [Volver al Cockpit] |
+| resuelto | El par deja de tener ⚡ | US-CKP-008 | "✔ Ya no se prevé conflicto entre claude-1 y claude-2 (hace 5 s)." + [Volver al grafo] |
 | detalle desfasado | El `rev` del detalle no es el del resumen | US-CKP-006 (A2) | No se muestra el detalle viejo; se vuelve a pedir |
 | motor parado | — | US-CKP-003 | Atenuado con la hora del último cálculo |
 | sin color / lector de pantalla | — | § 7 | Los lados se leen "claude-1, líneas 40 a 58"; `↔` se lee "y" |
@@ -770,6 +780,8 @@ La ventana es la de D5: se anuncia en todos los clientes (app, TUI) y cualquiera
 | Global | `Cmd+Z` fuera de un campo de texto | Deshacer la última operación de la copia seleccionada | Abre la vista de Time Machine (c1) con la última operación reversible de la copia seleccionada ya seleccionada y su vista previa; **no** deshace sin vista previa. Dentro de un campo de texto, `Cmd+Z` es el deshacer del texto |
 | Global | `Cmd+Shift+Z` | Rehacer | Rehace si es válido; si no, tooltip con el motivo |
 | Global | `Cmd+B` / `Opt+Cmd+B` | Mostrar u ocultar la barra lateral / el detalle | Cambia el layout (§ 2.4); el foco no se pierde |
+| Global | `Opt+Cmd+T` | Alternar la vista del grafo y la de tabla | Anuncia la vista nueva y no mueve el foco. Coincide con "Mostrar barra de herramientas" de los menús estándar de macOS; la app no define ese menú |
+| Global | `Esc` | Cerrar una sola capa por pulsación | Orden: diálogo, popover abierto, toast con foco, cajón del detalle, vista del centro (par de conflicto, Guardrails). Un `Esc` nunca cierra dos capas (D-16) |
 | Global | `F6` | Saltar entre regiones | Barra de título y toolbar → barra lateral → centro → detalle |
 | Global | `?` | Ver atajos y leyenda de símbolos | Panel de ayuda (como la ayuda `?` de la TUI) |
 | b | Flechas en la lista de agentes o en los carriles | Moverse por agentes y commits | Selección y detalle a la derecha |
@@ -778,7 +790,10 @@ La ventana es la de D5: se anuncia en todos los clientes (app, TUI) y cualquiera
 | c | `Esc` | Volver al grafo | Cierra la vista y devuelve el foco a la fila de la barra lateral |
 | c2, d2 | `Esc` | Salir sin cambiar nada | Cierra el diálogo y devuelve el foco a quien lo abrió |
 | d2 | `Enter` | — | No confirma; el foco inicial está en Cancelar |
-| d5 | `Esc` | Cancelar la excepción | Cancela dentro de la ventana |
+| d4 | `Esc` | Cerrar el diálogo | No cancela nada en el motor; el foco vuelve a la fila que lo abrió |
+| d5 | `Esc` | Cancelar la excepción | Solo con el factor del SO (d3); en UI-1 no existe |
+| d (vista) | `Esc` | Volver al grafo | El foco va a la fila Guardrails de la barra lateral |
+| e | `Esc` | Volver al grafo | El foco vuelve al botón "Ver" que lo abrió, o al panel de conflictos |
 
 ---
 
@@ -838,9 +853,10 @@ UI-2 añade lo que un novato espera de un cliente Git completo. Solo esbozo; se 
 | 2.4.7 / 2.4.11 Foco visible y no tapado | Anillo de 2 px con `glass.accent` (≥ 3:1 sobre todas las superficies) más contorno por forma (como el borde grueso de la TUI). Los toasts y el cajón de detalle nunca tapan el elemento con foco |
 | 2.5.8 Tamaño del objetivo | Objetivos ≥ 24 × 24 px; los botones de acción, 32 px de alto |
 | 3.3.8 Autenticación accesible | La confirmación usa el diálogo del SO (Touch ID, Apple Watch o contraseña con gestor de contraseñas); la variante de terminal tiene botón "Copiar" y nunca obliga a teclear de memoria |
-| 4.1.3 Mensajes de estado | Avisos ⛔ con `role="alert"`; ⚡ nuevo, toasts y barra del motor con `aria-live="polite"`; la cuenta atrás de la ventana se anuncia cada 5 s |
+| 4.1.3 Mensajes de estado | Avisos ⛔ con `role="alert"` (toast `error`, persistente); ⚡ nuevo, toasts, frescura de la predicción y barra del motor con `role="status"` (polite); la cuenta atrás de la ventana se anuncia a los 10 s, a los 5 s y al terminar; el cambio de vista grafo/tabla se anuncia |
+| 1.1.1 / 2.5.3 Glifos y nombres | ⚡, ⚠ y ⛔ van en `aria-hidden` cuando el texto de al lado ya dice el nivel; los botones repetidos ("Ver") llevan un nombre accesible que empieza por el texto visible y nombra el par o el bloqueo |
 | Diálogos | Radix Dialog: foco atrapado, `Esc` cierra, el foco vuelve a quien abrió; título y descripción enlazados con `aria-labelledby` y `aria-describedby` |
-| Movimiento | `prefers-reduced-motion`: sin animación del grafo creciendo ni barras animadas; la cuenta atrás se muestra en número |
+| Movimiento | `prefers-reduced-motion`: sin animación del grafo creciendo ni barras animadas; la cuenta atrás se muestra en número (UI-1 no tiene barra). Lo atenuado usa `text-muted`, nunca `opacity` |
 | Lector de pantalla (VoiceOver) | Cada fila de agente, entrada del historial e insignia tiene una frase completa como nombre accesible ("claude-1, activo, rama feat-pagos, 3 por delante, 1 conflicto previsto") |
 | Idioma | `lang` del documento según el idioma de la app (en/es); el comando de Git se marca como código |
 
@@ -912,6 +928,13 @@ La app usa el tema «grafito glass» de [DSYS-GRP-002](../../../../design-system
 | D-9 | "Deshacer" de trabajo propio pide Touch ID una vez por sesión ("Activar cambios"), no en cada uso; la barra de estado dice si la app está en solo lectura | Pedir el factor en cada Deshacer acostumbra a aprobar por reflejo (ADR-GRP-017, alternativas) |
 | D-10 | La app nunca abre la Terminal ni escribe en ella; la variante degradada enseña el comando con "Copiar" y una pista para encontrar la Terminal | La app no puede lanzar procesos (ADR-GRP-017 § 2) y un clic de la app no debe ejecutar nada en nombre del humano |
 | D-8 | Los conflictos se pintan como banda entre carriles (⚡) e insignia en cada carril; el solape (⚠) solo como insignia | Diferencia visual entre "va a chocar" y "están tocando lo mismo" sin depender del color |
+| D-15 | **Decisión del orquestador (2026-11-09), validada por Diseñador UX**: el centro tiene un solo destino a la vez (grafo, detalle de un conflicto, Guardrails, Time Machine); abrir uno cierra el otro y todo "Volver" lleva al grafo (hoy a la flota), con el texto de la vista principal | Evita estados cruzados (un par abierto con Guardrails debajo) y un "Volver" que adivina de dónde vienes |
+| D-16 | **Decisión del orquestador (2026-11-09), validada por Diseñador UX**: `Esc` cierra una sola capa por pulsación, en este orden: diálogo, popover, toast con foco, cajón del detalle, vista del centro | Hoy `Esc` en `window` cierra el cajón; sin orden, un `Esc` cerraría el cajón y la vista a la vez |
+| D-17 | **Decisión del orquestador (2026-11-09), validada por Diseñador UX**: el panel "Conflictos previstos" vive en el centro, encima del grafo (hoy, encima de las tarjetas), no en la flota; con tope de 3 filas y "y N más"; el lienzo del grafo es decorativo para lectores de pantalla y el panel es su versión textual | La flota pasa al detalle, cerrado entre 1000 y 1359 px, y el ⚡ es la señal de mayor prioridad |
+| D-18 | **Decisión del orquestador (2026-11-09), validada por Diseñador UX**: la columna Author dice "Tú u otro (sin atribuir)" mientras el motor no publique el actor por commit (BR-CKP-CONS-003; sustituye a la persona de Git de § 4.b); las columnas se pliegan por ancho del centro en el orden Sha, Autor, Fecha, Rama; el nombre del agente va en texto normal y el color de carril en un punto (los colores de carril no llegan a 4.5:1 como texto) | A 1440 px con el detalle abierto las seis columnas no caben (764 px fijos + mensaje); Author repite el mismo texto en cada fila y Fecha es el dato útil |
+| D-19 | **Decisión del orquestador (2026-11-09), validada por Diseñador UX**: d1 y d4 se corrigen a lo que el motor sabe: actor "Claude Code · carpeta" (no "claude-4"), push con `--force-with-lease`, comando con comillas simples y la ruta de `raptor`, botón "Cerrar" en vez de "Cancelar" (no cancela nada), rebase sin comando copiable, sin comando en "Detalles técnicos"; la cuenta atrás se anuncia a los 10 s, a los 5 s y al terminar | El motor anota el tipo de agente, no la sesión, ni el argv; `--force-with-lease` protege commits ajenos (NFR-01); un "Cancelar" sugiere que cancela la excepción y no lo hace |
+| D-20 | **Decisión del orquestador (2026-11-09), validada por Diseñador UX**: ⚡ nuevo es un toast `info` de 5 s con "Ver" y 3 o más a la vez se agrupan en uno; ⛔ es un toast `error` persistente con `role="alert"`, uno solo aunque haya varios; sin notificaciones del sistema ni sonido en UI-1 (R-3 queda para una historia de Ajustes); el visor aguanta 3 toasts | Un bloqueo persistente no debe quedar tapado por una ráfaga de avisos de conflicto |
+| D-21 | **Decisión del orquestador (2026-11-09), validada por Diseñador UX**: el detalle de UI-1 es "Estado de Agentes" sin lista de pestañas hasta que exista "Cambios sin commit"; "Mostrar" commits plegados y "Elegir rama principal" no existen en UI-1 | Una lista de una sola pestaña estorba; los dos botones escriben o desplegan fuera del alcance de UI-1 |
 
 ### Decisiones de Rene (2026-11-08)
 
@@ -951,6 +974,10 @@ La app usa el tema «grafito glass» de [DSYS-GRP-002](../../../../design-system
 | H-11 | Supuesto | B1 no tiene tira inferior, así que la barra de estado del motor (§ 2.3) pasa a una píldora en la barra de título | Rene (prototipo) |
 | H-12 | Hueco | D-12 (push, pull y fetch como acción explícita del humano) no está en ninguna historia ni en ADR-GRD-007/008: falta la regla de Guardrails que decide y el texto de lo que ve el humano cuando se bloquea. El texto de c2 ("deshacer no envía nada al servidor") se ajustó para no afirmar que GitRaptor nunca empuja | PO y Arquitecto |
 | H-13 | Hueco | La vista de Time Machine (c1: filtros, línea de tiempo por actor con selección por arrastre, chip de reversibilidad, vista previa con los rechazos de NFR-01) agrupa más de lo que dicen US-CKP-021 y US-TMC-006/023 | PO |
+| H-14 | Riesgo | `⌥⌘T` (alternar grafo y tabla) coincide con "Mostrar u ocultar barra de herramientas" de macOS; hoy la app de Tauri no tiene ese menú. Si Rene añade un menú nativo, hay que elegir otro atajo | Rene / Arquitecto |
+| H-15 | Hueco | Ninguna Dev Spec registra la banda ⚡ en el lienzo del grafo: DS-US-DSK-005 y DS-US-DSK-008 se la dejan una a la otra (G11 y G9 de ellas) | Arquitecto y orquestador |
+| H-16 | Hueco | `CopyCommand` no anuncia que copió (WCAG 4.1.3); lo usan d4, el aviso de base pendiente y la base sin confirmar | Arquitecto (enmienda aditiva de TS-DSK-003) |
+| H-17 | Hueco | primitives-spec § 2.15 pliega las columnas bajo 1000 px de ventana y en otro orden; D-18 las pliega por ancho del centro. La spec de primitivas debe enmendarse | Arquitecto |
 
 ---
 
@@ -973,5 +1000,7 @@ La app usa el tema «grafito glass» de [DSYS-GRP-002](../../../../design-system
 | Punto seguro ⟲ | Estado guardado justo antes de una operación; puedes volver a él. | State saved right before an operation; you can go back to it. |
 | Protección | Reglas que frenan operaciones peligrosas de Git en este repo. | Rules that stop dangerous Git operations in this repo. |
 | Excepción consciente | Hacer tú, una sola vez y quedando anotado, algo que la protección frena. | Doing, once and on record, something the protection blocks. |
+| Sin atribuir | GitRaptor aún no sabe qué agente hizo este commit. | GitRaptor doesn't know yet which agent made this commit. |
+| Base sin confirmar | La rama base aún no la has confirmado en tu equipo; hasta entonces no se dibujan los carriles. | You haven't confirmed the base branch on your machine yet; lanes aren't drawn until then. |
 | Hooks | Pequeños programas que Git ejecuta antes de ciertas operaciones; así se frena lo peligroso. | Small programs Git runs before some operations; that's how risky ones are stopped. |
 | Motor | El proceso de GitRaptor que observa tus repos en segundo plano. | The GitRaptor process that watches your repos in the background. |
