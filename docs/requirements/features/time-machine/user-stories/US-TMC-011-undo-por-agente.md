@@ -2,7 +2,7 @@
 id: US-TMC-011
 title: "El desarrollador deshace solo lo que hizo un agente en un periodo"
 type: us
-status: partially-implemented
+status: implemented
 priority: high
 created: 2026-10-03
 updated: 2026-11-09
@@ -120,16 +120,16 @@ Entonces la petición se rechaza con el motivo
 - **Diseño (flujo/UX):** Pendiente de diseño.
 - **Dev Spec:** [DS-US-TMC-011](../dev-specs/US-TMC-011-undo-por-agente.md)
 
-## Estado de la implementación (2026-11-08)
+## Estado de la implementación (2026-11-09)
 
-Implementado en: PR #325 (parcial). El redo (levantar la barrera y rehacer los mismos ids) llegó con US-TMC-003 en el PR #335.
+Implementado en: PR #325, completado en el PR #PRNUM (TD-TMC-003). El redo (levantar la barrera y rehacer los mismos ids) llegó con US-TMC-003 en el PR #335.
 
 - **Hecho:** `raptor undo --agent <id> [--since <duración>] [--json]` (CLI) y `timemachine.undo` con `agent` en el canal del daemon. En el worktree del cwd y como un solo undo con su previo, deshace solo las operaciones del agente en el periodo (por defecto, la retención de 30 días). El agente se elige por id de sesión o por nombre, con la atribución vigente leída una vez al planificar. Cada ruta, rama y `HEAD` que esas operaciones cambiaron vuelve a su valor anterior al primer cambio (aplicador en modo selectivo); lo demás no se escribe. Se detiene con `overlap` si otro actor cambió después un sujeto (fases 1 y 2), y rechaza la petición entera con `not-selectable`, `attribution-unavailable` u `other-actor`. Un undo sin agente no baja por debajo de un undo por agente activo (`selective-undo-below`). Es el criterio 2 de M2 (`undo --agent --since`).
 - **Tests:** escenarios con daemon y Git reales en `crates/core/tests/us_tmc_011.rs` (arnés `us_tmc_011_common`, con agentes `raptor-fake-agent` independientes de la sesión de Claude Code); e2e en `apps/cli/tests/us_tmc_011_process.rs` (en/es) y la demo M2 en `apps/cli/tests/m2_demo_undo_agent.rs` (4 sesiones en 4 worktrees, confirmación en pty); unitarios en `agent_selector_tests.rs`, `undo_agent_tests.rs`, `undo_agent_more_tests.rs`, `overlap_selected_tests.rs`, `stack_barrier_tests.rs`, `tm_attribution_tests.rs`, `changed_paths_tree_diff_tests.rs`, `tm_apply_selective.rs`, `timemachine_agent_tests.rs` y `apps/cli/src/undo/agent_tests.rs`.
 - **Decisiones de la implementación:** ver [DS-US-TMC-011, Enmienda 2026-11-08](../dev-specs/US-TMC-011-undo-por-agente.md).
 - **Pendiente:**
-  - **Atribución fiable bajo carga ([TD-GRP-005](../../motor-local/technical-stories/TD-GRP-005-muestra-s3-fuera-de-ventana.md)): resuelta en el PR #333 (2026-11-09).** Cada aviso en cola recibe su propio avistamiento S3 (ADR-GRP-012, Enmienda 2026-11-09). Con el redo de US-TMC-003 ya no queda ninguno de los dos motivos originales del parcial. La historia sigue en `partially-implemented` hasta que se arregle TD-TMC-003 (decisión del coordinador, 2026-11-09).
-  - **Undo por agente tras un undo o redo en la misma rama ([TD-TMC-003](../technical-stories/TD-TMC-003-solape-agente-ecos-de-gitraptor.md)):** la regla de ramas del solape (`branch_mover`) cuenta el eco anclado de GitRaptor como un movimiento sin atribuir y rechaza de más (fail-closed). Lo descubrió el guard ⛔4.2 de US-TMC-003. Decisión del coordinador (2026-11-09): se encarga aparte.
+  - **Atribución fiable bajo carga ([TD-GRP-005](../../motor-local/technical-stories/TD-GRP-005-muestra-s3-fuera-de-ventana.md)): resuelta en el PR #333 (2026-11-09).** Cada aviso en cola recibe su propio avistamiento S3 (ADR-GRP-012, Enmienda 2026-11-09). Con el redo de US-TMC-003 ya no queda ninguno de los dos motivos originales del parcial. Con TD-TMC-003 ya no queda nada del parcial: la historia pasa a `implemented` (2026-11-09).
+  - **Undo por agente tras un undo o redo en la misma rama ([TD-TMC-003](../technical-stories/TD-TMC-003-solape-agente-ecos-de-gitraptor.md)):** la regla de ramas del solape (`branch_mover`) cuenta el eco anclado de GitRaptor como un movimiento sin atribuir y rechazaba de más (fail-closed). Lo descubrió el guard ⛔4.2 de US-TMC-003. **Resuelto en el PR #PRNUM (2026-11-09)**: solo el eco anclado de un undo o redo terminado del propio trabajo del agente deja de contar (ADR-TMC-005, Enmienda 2026-11-09).
   - Linux y Windows (XP-69, etapa de validación multiplataforma).
   - Revisión de seguridad (Low): un agente que pide `--agent claude-code` puede saber si otra sesión con su mismo nombre tiene trabajo en el worktree (el rechazo `other-actor` llega tras calcular el conjunto, como fija el paso 4 del Diseño). No escribe nada.
   - Sin certificar: la fase P3 de `/implement` corta la suite a los 15 min (nassa-core 0.6.291).
