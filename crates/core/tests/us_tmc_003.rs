@@ -47,6 +47,26 @@ fn redo_ok(r: &Running, c: &mut Client) -> Value {
     redo(r, c).unwrap_or_else(|e| panic!("TMC003: the redo must be served and done: {e:?}"))
 }
 
+/// Retries `call` only while the daemon answers `RATE_LIMITED` (the requester's write burst, S-03),
+/// within 30 s, as `apps/cli/tests/restore_process.rs` does; any other answer returns at once.
+/// Authorized amendment of TMC003-WALK (coordinator, 2026-11-09): its six writes as one requester
+/// pass the burst of 5.
+fn past_the_burst<T>(mut call: impl FnMut() -> Result<T, ClientError>) -> Result<T, ClientError> {
+    let start = std::time::Instant::now();
+    loop {
+        match call() {
+            Err(ClientError::Rpc(e)) if e.code == code::RATE_LIMITED => {
+                assert!(
+                    start.elapsed() < std::time::Duration::from_secs(30),
+                    "TMC003-WALK: still rate limited after 30 s"
+                );
+                std::thread::sleep(std::time::Duration::from_millis(250));
+            }
+            other => return other,
+        }
+    }
+}
+
 fn assert_same(before: &Snapshot, after: &Snapshot, why: &str) {
     let changes = diff(before, after);
     assert!(changes.is_empty(), "{why}: {changes:#?}");
@@ -341,26 +361,32 @@ fn consecutive_redos_walk_forward() {
     r.reset_hard();
     let end = state_of(&r);
     let mut c = r.client();
-    undo_ok(&r, &mut c);
-    undo_ok(&r, &mut c);
+    for _ in 0..2 {
+        let value =
+            past_the_burst(|| c.call::<_, Value>(methods::TM_UNDO, params(&r.worktree, None)))
+                .unwrap_or_else(|e| panic!("the undo failed: {e:?}"));
+        let _: UndoResult = serde_json::from_value(value).expect("an UndoResult");
+    }
     assert!(
         r.worktree.join("b.rs").exists(),
         "two undos brought b.rs back"
     );
 
-    redo_ok(&r, &mut c);
+    past_the_burst(|| redo(&r, &mut c))
+        .unwrap_or_else(|e| panic!("TMC003: the redo must be served and done: {e:?}"));
     assert_same_state(
         &middle,
         &state_of(&r),
         "TMC003-WALK: the first redo goes back to the state before the second undo",
     );
-    redo_ok(&r, &mut c);
+    past_the_burst(|| redo(&r, &mut c))
+        .unwrap_or_else(|e| panic!("TMC003: the redo must be served and done: {e:?}"));
     assert_same_state(
         &end,
         &state_of(&r),
         "TMC003-WALK: the second redo goes back to the end",
     );
-    let (error, data) = rejected(redo(&r, &mut c));
+    let (error, data) = rejected(past_the_burst(|| redo(&r, &mut c)));
     assert_eq!(error, code::OPERATION_REJECTED, "TMC003-WALK");
     assert_eq!(
         data.expect("data")["reason"],
