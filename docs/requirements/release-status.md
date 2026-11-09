@@ -170,7 +170,7 @@
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
-| [TD-GRP-005](features/motor-local/technical-stories/TD-GRP-005-muestra-s3-fuera-de-ventana.md) | La muestra S3 de un lote de avisos se sella con el aviso más antiguo y cae fuera de la ventana del evento | Implementado (`implemented`) | — | — |
+| [TD-GRP-005](features/motor-local/technical-stories/TD-GRP-005-muestra-s3-fuera-de-ventana.md) | La muestra S3 de un lote de avisos se sella con el aviso más antiguo y cae fuera de la ventana del evento | Implementado (`implemented`) | #333 | — |
 | [TS-GRP-003](features/motor-local/technical-stories/TS-GRP-003-proceso-motor.md) | Proceso del motor en segundo plano por usuario | Implementado (`implemented`) | #26 | — |
 | [TS-GRP-006](features/motor-local/technical-stories/TS-GRP-006-observacion-por-niveles.md) | Observación por niveles: activo, dormido con centinela y despertar | Implementado (`implemented`) | #164, #167, #173, #178 | — |
 | [TS-GRP-008](features/motor-local/technical-stories/TS-GRP-008-ambito-git-ajeno-s3.md) | S3 cuenta los `git` ajenos en el ámbito del evento, no en todo el repo | Implementado (`implemented`) | — | — |
