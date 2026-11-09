@@ -4,7 +4,7 @@ title: "Dev Spec — US-CKP-008: la TUI avisa cuando aparece un conflicto previs
 type: dev-spec
 status: draft
 created: 2026-10-27
-updated: 2026-10-27
+updated: 2026-11-09
 story: US-CKP-008
 feature: cockpit
 domain: GRP
@@ -43,9 +43,9 @@ lineage:
 constitution_gates: []
 validation:
   must_read_resolved: true
-  gaps_blocking: 1
-  ready_to_implement: false
-  gaps_release: 1
+  gaps_blocking: 0
+  ready_to_implement: true
+  gaps_release: 0
   ready_to_release: false
 tags: [cockpit, tui, prediccion-conflictos, alertas, toast, conflict-alert]
 ---
@@ -91,10 +91,9 @@ Esta DS solo **decide qué ⚡ es nuevo y lo presenta**. La recepción de `predi
 
 ## ⚠️ Gaps y violaciones de la constitución
 
-| ID | Gap | Bloquea | Dueño |
-|----|-----|---------|-------|
-| G1 | T009 del PR-B de TS-CKP-001 no está en `main`. Sin ella el daemon no publica `RepoView.prediction` ni `prediction.changed`. El PR-B espera a G5 (TS-GRP-005) | Implementar (bloqueante) | TS-CKP-001 |
-| G2 | El orden de la flota por atención (DS-US-CKP-002, `draft`) no está construido. Sin él, `conflict = true` marca la fila pero no la sube | Cerrar el escenario 1 (release) | US-CKP-002 |
+_No gaps. Ready to implement._ Cerrados el 2026-11-09. G1 (T009 del PR-B de TS-CKP-001): **cerrado por #314**. Los nombres que usa esta DS (`PairSummary`, `PairStateView`, `PairLevel`, `PredictionChanged`, `prediction.changed`) coinciden con `crates/api/src/prediction.rs` en `main`; no hizo falta ajustar nada.
+
+G2 (orden de la flota por atención, DS-US-CKP-002): **cerrado, lo cubre #284**. La fila con `conflict = true` (`view.rs`, `known_conflict`) entra en el grupo de atención de `fleet_order::group`, así que el escenario 1 se cumple en esta entrega y la historia puede quedar `implemented`.
 
 **Dependencia (no es gap):** [DS-US-CKP-006](./US-CKP-006-conflictos-previstos.md) está escrita y se implementa antes que esta DS ([Contratos § Lo que se toma de DS-US-CKP-006](#lo-que-se-toma-de-ds-us-ckp-006)).
 
@@ -306,6 +305,14 @@ impl Toasts {
     pub fn iter(&self) -> impl Iterator<Item = &Toast>;
 }
 ```
+
+### 6.2 Ciclos de vida (DI)
+
+_No aplica — la TUI no usa contenedor de dependencias: `ConflictAlerts` y `Toasts` son campos de `Model`, creados y destruidos con él en `update`._
+
+### 7.1 Forma del error
+
+_No aplica — la historia no añade errores ni códigos de salida; sin detalle del par, el toast sale sin archivo al segundo tick (E3)._
 
 ### Lo que se toma de DS-US-CKP-006
 
