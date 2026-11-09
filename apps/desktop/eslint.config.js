@@ -61,12 +61,12 @@ export default defineConfig(
     },
   },
   {
-    files: ["src/**"],
-    ignores: ["src/client/**", ...TESTS],
+    // Everything outside src/client: src, tests, configs and any new folder.
+    ignores: ["src/client/**", ...TESTS, "tests/**"],
     rules: restrictImports(BASE_IMPORTS, TAURI_IMPORTS),
   },
   {
-    files: TESTS.map((t) => `src/${t}`),
+    files: [...TESTS, "tests/**"],
     ignores: ["src/client/**"],
     rules: restrictImports(BASE_IMPORTS, TAURI_IMPORTS_IN_TESTS),
   },
