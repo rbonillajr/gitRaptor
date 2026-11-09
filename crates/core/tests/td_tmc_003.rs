@@ -10,6 +10,8 @@
 #![cfg(all(debug_assertions, any(target_os = "macos", target_os = "linux")))]
 
 mod common;
+// The shared world re-exports helpers (`rejected`) this file answers through `as_agent` instead.
+#[allow(unused_imports)]
 mod us_tmc_011_common;
 
 use gitraptor_api::methods;

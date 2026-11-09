@@ -1,32 +1,81 @@
 {
-  "rigor": "medio",
-  "source": { "kind": "brief", "ref": "docs/dev-briefs/td-tmc-003-agent-overlap-echoes.2-plan.md" },
+  "source": {
+    "kind": "brief",
+    "ref": "docs/dev-briefs/td-tmc-003-agent-overlap-echoes.2-plan.md"
+  },
   "goal": {
     "intent": "undo --agent no debe contar el eco de un undo o redo de GitRaptor como movimiento ajeno",
-    "endState": "Tras su propio undo y redo, un segundo undo --agent del mismo agente se completa; un movimiento de otro actor o un eco de GitRaptor de trabajo ajeno sigue dando overlap"
+    "endState": "Tras su propio undo y redo, un segundo undo --agent del mismo agente se completa; un movimiento de otro actor o un eco de GitRaptor de trabajo ajeno sigue dando overlap",
+    "nonGoals": [
+      "No cambia la base del solape (TS-TMC-005), la regla de rutas del undo por agente ni el undo simple",
+      "No relaja el solape: todo movimiento sin explicar o de otro actor sigue dando overlap",
+      "No lee eventos de otros worktrees en el undo por agente (hueco previo anotado aparte)"
+    ]
   },
-  "suite": { "command": "node tools/test/nextest-junit.mjs" },
+  "suite": {
+    "command": "node tools/test/nextest-junit.mjs"
+  },
   "layers": {
     "runtime": {
-      "commands": [{ "id": "suite", "cmd": "node tools/test/nextest-junit.mjs" }],
+      "commands": [
+        {
+          "id": "suite",
+          "cmd": "node tools/test/nextest-junit.mjs"
+        }
+      ],
       "report": "target/nextest/ci/junit-paths.xml"
     }
   },
-  "constraints": { "deny_paths": ["docs/ARTIFACTS.md", "crates/core/src/timemachine/overlap.rs"] },
+  "constraints": {
+    "deny_paths": [
+      "docs/ARTIFACTS.md",
+      "crates/core/src/timemachine/overlap.rs"
+    ]
+  },
   "criteria": [
     {
       "id": "C1",
       "statement": "Con el motor activo, claude-1 deshace su trabajo por agente, lo rehace y vuelve a deshacerlo por agente: el segundo undo se hace, toma los mismos undone_operation_ids que el primero y deja HEAD sin el trabajo",
       "verify": "cargo test -p gitraptor-core --test td_tmc_003 an_agent_undoes_its_work_again_after_redoing_it",
       "layer": "runtime",
-      "tests": ["crates/core/tests/td_tmc_003.rs"]
+      "tests": [
+        "crates/core/tests/td_tmc_003.rs"
+      ]
     },
     {
       "id": "C2",
       "statement": "La regla de ramas descarta solo el eco anclado de un undo o redo Finished que movió únicamente trabajo del conjunto; el eco de una operación sobre trabajo ajeno cuenta con el solicitante de esa operación como actor, y un eco sin ancla, no terminado, en ventana mixta o con actor crudo de otro agente cuenta como movimiento",
       "verify": "cargo test -p gitraptor-core --lib timemachine::undo_agent::echo_tests",
       "layer": "runtime",
-      "tests": ["crates/core/src/timemachine/undo_agent_echo_tests.rs"]
+      "tests": [
+        "crates/core/src/timemachine/undo_agent_echo_tests.rs"
+      ]
     }
-  ]
+  ],
+  "hops": {
+    "design": {
+      "agent": "main-loop",
+      "model": "opus"
+    },
+    "critic": {
+      "agent": "nassa-core:plan-critic",
+      "model": "opus"
+    },
+    "tester": {
+      "agent": "nassa-core:criterion-tester",
+      "model": "opus"
+    },
+    "build": {
+      "agent": "nassa-dev-rust:rust-expert",
+      "model": "opus"
+    },
+    "review": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "opus"
+    },
+    "conformance": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "opus"
+    }
+  }
 }

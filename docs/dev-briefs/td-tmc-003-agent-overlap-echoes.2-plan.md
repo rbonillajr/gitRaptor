@@ -1,6 +1,6 @@
 # TD-TMC-003 — El solape del undo por agente no cuenta el eco propio de GitRaptor
 
-Rigor medio. Fuente: [TD-TMC-003](../requirements/features/time-machine/technical-stories/TD-TMC-003-solape-agente-ecos-de-gitraptor.md). Regla: ADR-TMC-005, Enmienda (2026-11-09, TD-TMC-003), validada por el Arquitecto.
+Rigor alto (elegido por el coordinador). Fuente: [TD-TMC-003](../requirements/features/time-machine/technical-stories/TD-TMC-003-solape-agente-ecos-de-gitraptor.md). Regla: ADR-TMC-005, Enmienda (2026-11-09, TD-TMC-003), validada por el Arquitecto.
 
 ### T001 — Filtro de ecos para la regla de ramas
 
@@ -10,8 +10,9 @@ Rigor medio. Fuente: [TD-TMC-003](../requirements/features/time-machine/technica
 - todo lo demás pasa tal cual (sin ancla, `Applying`/`Interrupted`, fuera de ventana).
 `overlap.rs` no cambia.
 
-Ficheros: `crates/core/src/timemachine/undo_agent.rs`, `crates/core/src/timemachine/undo_agent_echo_tests.rs`
+Ficheros: `crates/core/src/timemachine/undo_agent.rs`
 Criterios: C2
+**Aceptación:** `crates/core/src/timemachine/undo_agent_echo_tests.rs`
 
 ### T002 — Cablear las dos fases
 
@@ -19,15 +20,17 @@ Criterios: C2
 - `SelectivePlan` guarda `own_sessions` (sesiones cuyo dueño actual elige el selector, leído una vez en el plan).
 - Fase 2 (`UndoStep::check_selected_tail`, `undo.rs`): mismo filtro sobre los eventos releídos con el repo tomado, con el oplog de `ctx` y el suelo del motor.
 
-Ficheros: `crates/core/src/timemachine/undo_agent.rs`, `crates/core/src/timemachine/undo.rs`, `crates/core/tests/td_tmc_003.rs`, `crates/core/tests/us_tmc_003.rs`
+Ficheros: `crates/core/src/timemachine/undo_agent.rs`, `crates/core/src/timemachine/undo.rs`
 Criterios: C1
+**Aceptación:** `crates/core/tests/td_tmc_003.rs`
 
 ### T003 — Documentos
 
-TD-TMC-003 → `implemented`; US-TMC-011 → `implemented` si no le falta nada; backlog; `release-status` regenerado; nota en el GUARD-4.2 de `us_tmc_003.rs` apuntando a `td_tmc_003.rs`.
+TD-TMC-003 → `implemented`; US-TMC-011 → `implemented` (su ficha dice que TD-TMC-003 es lo único que le falta: TD-GRP-005 se resolvió en #333 y el redo llegó en #335); backlog; `release-status` regenerado; nota en el GUARD-4.2 de `us_tmc_003.rs` apuntando a `td_tmc_003.rs`.
 
-Ficheros: TD-TMC-003, US-TMC-011 (+ su Dev Spec), `docs/requirements/backlog.md`, `docs/requirements/release-status.md`, ADR-TMC-005 (ya enmendado)
-Criterios: C1
+Ficheros: TD-TMC-003, US-TMC-011 (+ su Dev Spec), `crates/core/tests/us_tmc_003.rs` (solo el comentario del GUARD-4.2), `docs/requirements/backlog.md`, `docs/requirements/release-status.md`, ADR-TMC-005 (ya enmendado)
+Criterios: ninguno (documentos; los comprueba docs-lint en CI)
+**Aceptación:** `docs/requirements/release-status.md` regenerado con `node tools/status/release-status.mjs` (docs-lint en CI)
 
 ## Componentes
 
