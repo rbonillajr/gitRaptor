@@ -44,7 +44,7 @@ fn win1_everything_else_is_rejected() {
         "https://tauri.localhost/",
         "http://localhost:1421/",
         "http://localhost/",
-        "http://localhost:1420.evil.com/",
+        "http://localhost.evil.com:1420/",
         "http://tauri.localhost.evil.com/",
         "tauri://evil/",
         "file:///etc/passwd",
