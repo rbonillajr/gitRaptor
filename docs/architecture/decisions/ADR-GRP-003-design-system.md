@@ -5,11 +5,12 @@ type: adr
 status: accepted
 date: 2026-10-01
 created: 2026-10-01
-updated: 2026-10-28
+updated: 2026-11-08
 deciders: [Rene Bonilla]
 related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-004, ADR-GRP-017]
 changelog:
   - 2026-10-28: enmienda de alcance D7 (la UI web de la app de escritorio entra en el MVP); Storybook y el paquete del UI kit, con UI-2.
+  - 2026-11-08: enmienda de la salida CSS de «grafito glass» (DSYS-GRP-002 § 9 y § 10, TS-DSK-001). Decisión del orquestador (2026-11-08), validada por Arquitecto.
 tags: [design-system, ui-kit, react, radix, tailwind, cva, design-tokens, motion, animations, storybook, vscode-webview]
 ---
 
@@ -145,3 +146,17 @@ Objetivo: que la UI se sienta fluida y profesional sin costo de rendimiento.
 | **Grafo**: en UI-1 vive en `apps/desktop/src/graph` (Canvas/WebGL, fuera de React) con la regla de este ADR. Se extrae a `@gitraptor/graph` con el segundo consumidor | Catálogo inicial (nota del grafo) |
 | **Sin red**: fuentes e íconos embebidos en el build, sin CDN. Lo exige la CSP de ADR-GRP-017 § 2 (`font-src 'self'`) | Consecuencias (CSP) |
 | **Figma**: opcional en UI-1. Si la fase de diseño lo usa, sus variables llevan los nombres de los tokens | Decisión (Librería de diseño) |
+
+## Enmienda 2026-11-08 (salida CSS de «grafito glass»)
+
+Cierra las decisiones que [DSYS-GRP-002](../../design-system/tokens-web-grafito-glass.md) § 10 dejaba al Arquitecto. **Decisión del orquestador (2026-11-08), validada por Arquitecto.** Lo implementa [TS-DSK-001](../../requirements/features/desktop/technical-stories/TS-DSK-001-andamiaje-app-escritorio.md) (detalle en su Dev Spec, § 6).
+
+| Decisión | Por qué |
+|---|---|
+| **Archivo y prefijo**: `packages/design-tokens/tokens/glass.json` (DTCG, raíz `glass`) y variables CSS `--gr-*`, como propone DSYS-GRP-002 § 9. El valor oscuro va en `$value` y el claro en `$extensions["dev.gitraptor"].light`, la misma convención que `semantic.json` | Un solo sitio para los dos temas, sin un segundo juego de archivos |
+| **Salida**: `packages/design-tokens/css/glass.css`, **commiteada** y exportada como `@gitraptor/tokens/glass.css`. El `check` del paquete (workflow `tokens`) falla si no coincide con los tokens, como `crates/theme/src/generated.rs`. `crates/theme` no cambia: la plataforma Rust filtra la raíz `glass` | La app y su CI no dependen del orden de build de Nx, y un token editado sin regenerar rompe el CI |
+| **Selectores**: oscuro en `:root`; claro en `:root[data-theme="light"]` y en `@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) { … } }`. La preferencia `auto` no escribe `data-theme` | DSYS-GRP-002 § 9; `auto` sigue al SO sin JavaScript |
+| **Fondo `surface.wall`**: lo pinta el webview como fondo CSS del `body`, con la ventana opaca. Sin `transparent` ni efectos de ventana (*vibrancy*) de macOS | La transparencia de ventana en macOS exige `macOSPrivateApi` (API privada: NFR-08 y rechazo en la notarización futura). El aspecto del mock se consigue igual con el gradiente |
+| **Tipografía**: la del sistema (`--gr-font-ui`, `--gr-font-mono`), sin archivos de fuente en el bundle | Cumple `font-src 'self'` sin embeber nada; Inter o Geist se reabren solo con una petición de diseño |
+| **Tailwind v4** lee las variables `--gr-*` desde `@theme inline` en `apps/desktop/src/styles/app.css`; ningún componente usa valores literales | Punto 1 de la Decisión |
+

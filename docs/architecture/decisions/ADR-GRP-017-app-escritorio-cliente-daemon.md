@@ -146,6 +146,7 @@ El módulo de presencia de ADR-GRD-008 § 6 aún no existe en el código; lo gat
 - **La app incluye `raptor` y `raptor-mcp`** de su misma versión dentro del bundle (`bundle.externalBin`). Un usuario sin terminal obtiene todo con una sola instalación.
 - **Arranque del daemon**: lo hace la biblioteca cliente, con el arranque bajo demanda de ADR-GRP-005 § 3 (argv y entorno fijos, sin shell), sobre el `raptor` del bundle y sin el plugin `shell`.
   - Si ya hay un daemon en marcha, de cualquier instalación, la app se conecta a él tras verificarlo (B-3). **Nunca lo reemplaza**: `daemon.replace` solo lo acepta el daemon desde su propio binario actualizado (SEC-13).
+  - Cómo se arranca, qué binario se usa, la política de versiones y el autoarranque desde la app: [ADR-GRP-014, Enmienda 2026-11-08 (DEP-DSK-5)](./ADR-GRP-014-pipeline-release-distribucion.md#enmienda-2026-11-08-dep-dsk-5-arranque-del-motor-desde-la-app), que precisa "nunca lo reemplaza" como "nunca reemplaza un daemon de otra instalación". Decisión del orquestador (2026-11-08), validada por Arquitecto.
   - Si faltan capacidades, la app degrada y explica el motivo.
 - **Autoarranque desde la app** (`raptor daemon enable` del bundle): solo con la app en `/Applications` o `~/Applications` y sin traslocación, porque el artefacto guarda la ruta estable (Enmienda US-GRP-004 de ADR-GRP-005). SEC-14 se aplica a esa ruta.
 - **Alphas semanales** (v0.1.0-alpha.N, cada viernes desde `main`):
