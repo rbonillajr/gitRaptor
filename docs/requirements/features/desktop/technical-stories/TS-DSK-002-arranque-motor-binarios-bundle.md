@@ -18,7 +18,7 @@ related:
 ado:
   id: null
   url: null
-tags: [desktop, dep-dsk-5, arranque-bajo-demanda, externalbin, sidecar, dmg, alpha, autoarranque, sec-13, sec-14, b-3]
+tags: [desktop, dep-dsk-5, revision-seguridad, arranque-bajo-demanda, externalbin, sidecar, dmg, alpha, autoarranque, sec-13, sec-14, b-3]
 ---
 
 ## TS-DSK-002 — Arranque del motor desde la app y binarios del motor dentro del bundle
@@ -37,8 +37,12 @@ tags: [desktop, dep-dsk-5, arranque-bajo-demanda, externalbin, sidecar, dmg, alp
 
 - **Añadir** a la CLI el subcomando de diagnóstico del arranque para clientes sin terminal (`raptor daemon ensure`), que arranca el motor si no corre, solo reemplaza un daemon lanzado desde su misma ruta y devuelve en una línea JSON dónde está el canal, quién lo sirve y el estado del autoarranque.
 - **Implementar** en `apps/desktop/src-tauri` el lanzador de la app: localiza el `raptor` del bundle junto al ejecutable, lo verifica y lo ejecuta con argv y entorno fijos, sin plugin `shell`, como implementación del punto de arranque de la biblioteca cliente.
+  - entorno fijo también en debug: el perfil de prueba llega por el `Launch` inyectado en los tests, nunca por el entorno de la app (M-4, Ajuste tras la revisión de seguridad (2026-11-08), validado por security-expert)
 - **Implementar** la verificación del daemon antes del handshake (B-3 de ADR-GRP-017): mismo usuario y ejecutable `raptor` instalado.
+  - en la biblioteca cliente del canal y en el crate del SO con `unsafe` acotado, nunca en `gitraptor-desktop` (B-1, Ajuste tras la revisión de seguridad (2026-11-08), validado por security-expert)
+  - límite: reutilización del pid entre la lectura del par y la resolución de su ruta; la verificación por *audit token* la decide SPIKE-DSK-001
 - **Exponer** al webview el resultado del arranque y de la compatibilidad de versiones como estados tipados, con comandos de la lista cerrada (convención de TS-DSK-001) para "Arrancar motor" y para registrar el autoarranque con el `raptor` del bundle.
+  - el autoarranque se registra o se quita solo tras confirmarlo el humano en un diálogo nativo que abre el backend (B-2, Ajuste tras la revisión de seguridad (2026-11-08), validado por security-expert)
 - **Configurar** los binarios del motor como `externalBin` del bundle solo en el build de release, con el nombre por target triple que exige Tauri.
 - **Añadir** a `release.yml` el job que construye `GitRaptor-<versión>-aarch64-apple-darwin.dmg` con los binarios del archivo `aarch64-apple-darwin` de la misma corrida, y a `select-assets.sh` el `.dmg` de las alphas.
 - **Fuera de alcance**: las pantallas y textos de los estados (US-DSK-003); la firma Developer ID, la notarización, el cask y el updater (v0.1.0, ADR-GRP-014 Enmienda 2026-11-08); la clase de cliente `desktop` y la identidad de la app ante el daemon (DEP-DSK-2, spike de `SecCode`); Intel, Windows y Linux (**Pendiente: etapa de validación multiplataforma**).
@@ -50,7 +54,9 @@ tags: [desktop, dep-dsk-5, arranque-bajo-demanda, externalbin, sidecar, dmg, alp
 - **CLI**: tests de `raptor daemon ensure` sobre un perfil temporal: motor parado (lo arranca), motor en marcha (no lanza nada), motor antiguo de su misma ruta (lo reemplaza), motor antiguo de otra ruta (no lo reemplaza y lo informa), protocolo más nuevo (incompatible), y forma exacta de la línea JSON.
 - **Lanzador**: tests de `src-tauri` con un `raptor` falso: argv exacto, entorno vacío salvo la lista fija, binario ausente, binario escribible por otros o fuera de la carpeta del ejecutable (rechazado) y salida no JSON (error tipado).
 - **B-3**: canal servido por un ejecutable que no es `raptor`, o de otro usuario, rechazado sin handshake.
-- **V1 sigue verde**: el backend no enlaza `gitraptor-core` tras añadir el lanzador.
+- **V1 sigue verde**: el backend no enlaza `gitraptor-core` tras añadir el lanzador, y no contiene `unsafe` (B-1).
+- **Entorno**: el lanzador pasa el mismo entorno en debug y en release (M-4).
+- **Confirmación**: con el diálogo simulado en "No", el comando de autoarranque no ejecuta `raptor` (B-2).
 - **Release**: `select-assets.test.sh` cubre el `.dmg` de la alpha; el job comprueba que el `.dmg` contiene `raptor` y `raptor-mcp` con la versión del tag.
 
 #### Verificación Manual / Sandbox
