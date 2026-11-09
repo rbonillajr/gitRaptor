@@ -76,6 +76,8 @@ Las reglas de presentación son las de la TUI y no se reabren: la fila de DS-US-
 
 **Decisiones de esta Dev Spec**: todas son **Decisión del orquestador (2026-11-08), validada por Arquitecto**.
 
+**Decisión del orquestador (2026-11-09)**: el mensaje del `Channel` que lleva una sesión del repo abierto se llama `repoSession` (`{ type: "repoSession", repoId, session, perf }`), no `session`, porque `session` ya es el mensaje de US-DSK-003 (la sesión del ámbito global, sin `repoId`). Afecta a T002, T003, T006, § Contratos compartidos y § Lo que se consume del canal.
+
 | # | Decisión | Por qué | Alternativa descartada |
 |---|---|---|---|
 | D1 | Las tarjetas van en el **centro** mientras no exista el grafo; la barra lateral gana el árbol de repos con el grupo "Copias de trabajo". US-DSK-005 mueve las tarjetas a la pestaña "Estado de Agentes" del detalle, como dice DSF-DSK-001 § 4.b | A 1000–1359 px el detalle es un cajón cerrado: la flota no se vería al abrir la app | Ponerlas ya en el detalle: la historia no se podría usar sin abrir el cajón |
@@ -208,7 +210,7 @@ graph LR
 **Reglas**
 - `HubCmd::Open { repo_id }`: el supervisor guarda el repo abierto (uno a la vez). Si hay conexión y no es restringida: `events.unsubscribe` del anterior (D8), `scope.snapshot { scope: repo }` → `repo`; `scope.subscribe { from_seq: N + 1, run_id }`; `sessions.list { repo_id, include_ended: false }` → `sessions`. Tras cada reconexión, hueco o `scope.resync` del repo, repite los tres pasos. En vista restringida no abre nada.
 - Un `scope.snapshot` rechazado o un `scope.resync` con `scope-closed` mandan `repoClosed { repoId }` y olvidan el repo abierto.
-- Eventos del ámbito del repo abierto con `Apply`: `worktree.state` → `worktrees`; `session.state` → `session`; `prediction.changed` → `prediction`. Los demás tipos avanzan la secuencia y se ignoran. Un `scope.event` de otro ámbito se descarta sin tocar ninguna secuencia.
+- Eventos del ámbito del repo abierto con `Apply`: `worktree.state` → `worktrees`; `session.state` → `repoSession`; `prediction.changed` → `prediction`. Los demás tipos avanzan la secuencia y se ignoran. Un `scope.event` de otro ámbito se descarta sin tocar ninguna secuencia.
 - `ingest.rs`: `key(raw: &str) -> String` (FNV-1a 64, 16 dígitos hex en minúscula, sobre los bytes crudos); `repo`, `worktree`, `session`, `pair` (§ Contratos compartidos). Toda ruta y nombre pasa por `display::visible`; la carpeta es el último componente de la ruta cruda, saneado después de cortarlo. `detached_at` solo pasa si son 40 o 64 dígitos hex, y se manda entero (la UI corta a 7). `Actor::Agent { kind: claude-code }` → `{ kind: "claude-code" }`; `other` → `{ kind: "other", name }` saneado; `Actor::Unattributed` no aparece en `SessionView` (siempre es un agente) y, si llegara, la sesión se descarta.
 - `fleet_open` según [§ Contrato de API](#contrato-de-api); llama `EngineHub::open`. `commands.json` suma `"fleet_open"` y la capability `allow-fleet-open`.
 
@@ -231,7 +233,7 @@ graph LR
 - `apps/desktop/src/fleet/useFleet.ts` (**CREATE**)
 
 **Reglas**
-- `applyEngineBatch`: `repo` → `setQueryData(engineKeys.repo(id), { repo, sessions: new Map(), detection: null })` (reemplaza y vacía sesiones, D3); `worktrees` → reemplaza `repo.worktrees` y `repo.fetchedUtcMs`; `sessions` → fusiona la lista con la regla de D3 y fija `detection`; `session` → fusiona una; `prediction` → upsert por `pairId` y quita `removed`; `repoClosed` → `removeQueries(engineKeys.repo(id))` y `selectRepo(null)` si era el elegido. Nunca muta el objeto anterior.
+- `applyEngineBatch`: `repo` → `setQueryData(engineKeys.repo(id), { repo, sessions: new Map(), detection: null })` (reemplaza y vacía sesiones, D3); `worktrees` → reemplaza `repo.worktrees` y `repo.fetchedUtcMs`; `sessions` → fusiona la lista con la regla de D3 y fija `detection`; `repoSession` → fusiona una; `prediction` → upsert por `pairId` y quita `removed`; `repoClosed` → `removeQueries(engineKeys.repo(id))` y `selectRepo(null)` si era el elegido. Nunca muta el objeto anterior.
 - `ui-store.ts`: `selectedRepoId: string | null` y `selectRepo(id)`, **sin** persistir (`partialize` no cambia; el test de las cuatro claves sigue en verde).
 - `useFleet.ts`: elige el repo por defecto (D2) cuando llega `global` sin elegido o el elegido desaparece; en cada cambio de `selectedRepoId` llama `call("fleet_open", { repoId })`; expone `useQuery({ queryKey: engineKeys.repo(id), queryFn: skipToken })`.
 
@@ -304,7 +306,7 @@ graph LR
 - `apps/desktop/src/fleet/FleetView.test.tsx` (**MODIFY**)
 
 **Reglas**
-- Backend: `worktrees`, `session` y `prediction` llevan `perf: { backendNs }` = `monotonic_ns()` al enviar menos el `recv_ns` del `Link::next` (costura de DS-TS-DSK-002) que trajo el evento. Ajuste tras la revisión (2026-11-08), validado por Arquitecto / security-expert.
+- Backend: `worktrees`, `repoSession` y `prediction` llevan `perf: { backendNs }` = `monotonic_ns()` al enviar menos el `recv_ns` del `Link::next` (costura de DS-TS-DSK-002) que trajo el evento. Ajuste tras la revisión (2026-11-08), validado por Arquitecto / security-expert.
 - `engine-stream.ts`: cada lote lleva `receivedAt` = `performance.now()` del primer mensaje del lote.
 - `FleetView`: tras el commit de React que aplicó un lote con mensajes del repo, en el primer `requestAnimationFrame`, `performance.measure("gr:fleet-delta", { start: receivedAt })`, y `performance.mark("gr:fleet-delta-painted")`.
 
@@ -372,7 +374,7 @@ Mensajes nuevos del `Channel` (`EngineMessage`, `type`):
 | `repo` | `fleet: RepoFleetDto` | Cada instantánea del repo abierto (reemplaza) |
 | `worktrees` | `repoId`, `worktrees: WorktreeDto[]`, `fetchedUtcMs`, `perf` | `worktree.state` |
 | `sessions` | `repoId`, `detectionAvailable`, `sessions: SessionDto[]` | Respuesta de `sessions.list` |
-| `session` | `repoId`, `session: SessionDto`, `perf` | `session.state` |
+| `repoSession` | `repoId`, `session: SessionDto`, `perf` | `session.state` |
 | `prediction` | `repoId`, `pairs: PairDto[]`, `removed: string[]`, `perf` | `prediction.changed` |
 | `repoClosed` | `repoId` | Repo no observado o `scope-closed` |
 
@@ -469,7 +471,7 @@ Rust: `FleetOpenParams { repo_id: String }` con `#[serde(deny_unknown_fields, re
 | `scope.snapshot { scope: repo }` → `RepoSnapshot { run_id, scope_seq, repo: RepoView }` | `crates/api/src/scope.rs:70-76`; `messages.rs:144-180` | `repo` |
 | `WorktreeView` (`path`, `main`, `status`, `last_activity_utc_ms`, `last_activity_in_gap`, `detached_at`, `operation`) | `messages.rs:368-430` | `WorktreeDto` |
 | `RepoView.prediction` y `prediction.changed` (`prediction.pairs`) | `crates/api/src/prediction.rs`; `methods/prediction.rs` | `PairDto`, ⚡ conocido |
-| `worktree.state` (`WorktreeStateData`), `session.state` (`SessionView`) | `event.rs`; `messages.rs:497-510`, `:797-815` | `worktrees`, `session` |
+| `worktree.state` (`WorktreeStateData`), `session.state` (`SessionView`) | `event.rs`; `messages.rs:497-510`, `:797-815` | `worktrees`, `repoSession` |
 | `sessions.list { repo_id, include_ended: false }` → `{ detection_available, sessions }` | `messages.rs:819-850`; `methods/sessions.rs` | `sessions` |
 | `events.unsubscribe { subscription }` | `methods/events.rs`; `crates/core/src/channel/conn.rs:2860` | D8 |
 
