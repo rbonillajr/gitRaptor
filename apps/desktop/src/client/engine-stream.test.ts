@@ -56,8 +56,7 @@ describe("D3-STREAM watchEngine", () => {
 });
 
 // D4-FRESH (DS-US-DSK-004 T006): each batch carries `receivedAt`, the `performance.now()` of its first message.
-// Assumed shape (the plan says "cada lote lleva receivedAt" and no more): the batch array itself or a second argument
-// of `onBatch` has a `receivedAt` number; both are read.
+// `receivedAt` travels as the second argument of `onBatch(messages, { receivedAt })`.
 describe("D4-FRESH watchEngine receivedAt", () => {
   it("receivedAt: each batch carries the performance.now of its first message, not of the last", async () => {
     let now = 0;
@@ -69,8 +68,7 @@ describe("D4-FRESH watchEngine receivedAt", () => {
     });
     const delivered: unknown[][] = [];
     await (watchEngine as (onBatch: (...args: unknown[]) => void) => Promise<void>)((...args) => delivered.push(args));
-    const receivedAt = (args: unknown[] | undefined): unknown =>
-      (args?.[1] as { receivedAt?: unknown } | undefined)?.receivedAt ?? (args?.[0] as { receivedAt?: unknown } | undefined)?.receivedAt;
+    const receivedAt = (args: unknown[] | undefined): unknown => (args?.[1] as { receivedAt?: unknown } | undefined)?.receivedAt;
 
     now = 100;
     channel?.onmessage({ type: "repoRetired", repoId: "a" });

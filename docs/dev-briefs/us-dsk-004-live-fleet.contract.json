@@ -174,7 +174,7 @@
     {
       "id": "D4-CACHE",
       "statement": "applyEngineBatch guarda la flota solo por mensajes y sin mutar: repo vacía sesiones, worktrees reemplaza, sessions y repoSession fusionan con la regla de D3 (una terminada con el mismo stateSince gana), prediction hace upsert y quita removed, repoClosed quita la entrada y deselecciona. El criterion-tester SUSTITUYE la aserción de US-DSK-003 «D3-CACHE: the keys are the Dev Spec's and nothing writes engineKeys.repo» (engine-cache.test.ts) por la regla nueva: solo applyEngineBatch escribe engineKeys.repo y useFleet lo lee sin queryFn de red",
-      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/state/engine-cache.test.ts -t 'fleet cache' && pnpm --filter @gitraptor/desktop exec vitest run src/state/ui-store.test.ts -t 'selectedRepoId'",
+      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/state/engine-cache.test.ts -t 'fleet cache' && pnpm --filter @gitraptor/desktop exec vitest run src/state/engine-cache.test.ts -t 'only applyEngineBatch writes engineKeys.repo' && pnpm --filter @gitraptor/desktop exec vitest run src/state/ui-store.test.ts -t 'selectedRepoId'",
       "layer": "runtime",
       "origin": "story",
       "tests": [
