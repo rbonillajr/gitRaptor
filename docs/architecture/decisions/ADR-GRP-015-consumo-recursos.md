@@ -115,6 +115,7 @@ La fila HUELLA se divide en los NFRs RES-01 a RES-05 de [non-functional.md](../n
 
 1. **RES-06**: dentro de cada trabajo, la clase es la esperada (`qos_class_self()`, `/proc/<tid>/stat` e `ionice -p`, `GetThreadPriority`), y un `git` hijo de un trabajo `background` sale con nice 10 (`ps -o ni`).
 2. **RES-07** (bloquea el merge de TS-GRP-005): con todos los núcleos saturados por un proceso ajeno, el snapshot previo sigue por debajo de 200 ms p95, la espera del previo al escritor es ≤ 10 ms y el motor ≤ 300 ms p95.
+   RES-07 en reserva; la espera al escritor ≤ 10 ms depende de TD-TMC-002; el ADR sigue propuesto hasta medir en una Mac limpia (D19 de DS-TS-GRP-005, 2026-11-09).
 3. **RES-08**: con una fuente de energía simulada (un trait inyectable, sin batería real), en 60 min de tiempo simulado hay 4 reconciliaciones periódicas en vez de 12, el predictor no calcula ningún par y NFR-04 sigue en verde.
 4. **RES-01 y RES-02**: gate en INF-GRP-002.
 

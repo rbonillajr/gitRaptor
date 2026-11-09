@@ -57,7 +57,7 @@ tags: [motor-local, recursos, prioridad, qos, nice, ionice, ecoqos, bateria, dae
 #### Pruebas Automatizadas
 
 - **RES-06**: dentro de un trabajo de cada clase, la prioridad leída del SO es la esperada (`qos_class_self()`, `/proc/<tid>/stat` e `ionice -p`, `GetThreadPriority`). Un `git` hijo de un trabajo `Background` sale con nice 10 (`ps -o ni`).
-- **RES-07** (bloquea el merge): escenario de estrés en INF-GRP-002 con todos los núcleos saturados por un proceso ajeno. El snapshot previo sigue < 200 ms p95, la espera del previo al escritor es ≤ 10 ms y el motor ≤ 300 ms p95.
+- **RES-07** (bloqueaba el merge; en reserva desde D19, 2026-11-09): escenario de estrés en INF-GRP-002 con todos los núcleos saturados por un proceso ajeno. El snapshot previo sigue < 200 ms p95, la espera del previo al escritor es ≤ 10 ms y el motor ≤ 300 ms p95.
 - **Modo de ahorro**: con `PowerSource` simulado y reloj simulado, en 60 min hay 4 reconciliaciones periódicas con batería y 12 con corriente; el estado del motor cambia en ≤ 60 s tras el cambio de fuente; `on` y `off` mandan sobre la fuente.
 - **Repo intacto**: la suite de INF-GRP-001 sigue en verde con las clases aplicadas.
 - Tests con repos y perfiles temporales, nunca este repo ni el perfil real (NFR-01).
@@ -80,8 +80,8 @@ Implementado en: PR #298 (PR-A: T001 a T006) y PR #323 (PR-B: T007 a T014 de DS-
   - Un `git` lanzado por un hilo `Utility` o `Background` sale con nice 5 o 10, sin bajar nunca de un nice heredado mayor. El coste de perder `posix_spawn` es de 0,29 ms en el p95 (presupuesto 5 ms).
   - Test de la plist de launchd (`ProcessType=Standard`).
   - Escenario `--saturated` (RES-07) en los bancos `tm_snapshot` y `engine`.
-- **Decisión nueva:** D18. La captura continua hashea con el escritor tomado, así que sigue en `Default` (Enmienda 2026-11-08 de ADR-GRP-015).
+- **Decisiones nuevas:** D18 y D19 (RES-07 en reserva). La captura continua hashea con el escritor tomado, así que sigue en `Default` (Enmienda 2026-11-08 de ADR-GRP-015).
 - **Pendiente:**
   - **RES-06 del hashing de la captura continua:** espera a [TD-TMC-002](../../time-machine/technical-stories/TD-TMC-002-captura-blobs-fuera-del-escritor.md), que saca los blobs del escritor.
-  - **RES-07, la cifra en verde:** el escenario existe, pero en el Mac de desarrollo, con otros workers en marcha (carga 25–38 en 10 núcleos), la espera del previo al escritor ya supera los 10 ms sin carga añadida. La medición válida necesita una máquina tranquila. Las cifras están en el PR y en INF-GRP-002.
+  - **RES-07 en reserva (D19, 2026-11-09). Medido en una Mac con fseventsd saturado y carga entre 7 y 45: el punto previo pasa (p95 115/144 < 200 ms); la espera al escritor (p95 13,0/15,1 > 10 ms) y el motor (800-1600 > 300 ms) no pasan. La A/B de 5 rondas contra main muestra que la rama no es peor. La espera al escritor depende de TD-TMC-002 (D18). Antes de cerrar RES-06, RES-07 y TS-GRP-005 hay que medir en una Mac limpia (reiniciada) con A/B contra main.** worktree-create (y worktree-delete) es lo primero que hay que medir en la A/B de la Mac limpia; en esta Mac salió peor en 7 de 8 rondas sin mecanismo identificado: descartados el nice de los git hijos (el daemon no lanza git) y la QoS de la cola de FSEvents (subirla no lo mejora); el ruido entre rondas del mismo binario es de x2. Reabre el bloqueo: que en la Mac limpia la rama salga peor que main en el punto previo, la espera al escritor o el motor, o que el punto previo pase de 200 ms o el motor de 300 ms con main en verde.
 - **Linux y Windows:** degradación fail-closed. Las clases no se aplican, `pools` es `null` y la fuente es `Unknown`. Pendiente en la etapa de validación multiplataforma (XP-45).
