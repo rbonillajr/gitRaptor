@@ -268,7 +268,7 @@ Antigüedad en s (< 60), min (< 60), h (< 24), d (P4); negativa vale 0 (A4); tic
 
 **Contrato de `/implement` (2026-11-09).** Los escenarios se certifican con `apps/cli/tests/tui_freshness.rs` (API pública, sin daemon): S1 (escenario 1), S2 (2b), S3 (3b), S4 (4), S5 (pending/not-computable por motivo), S6 (línea «Sin conflictos previstos»), S7 (sin color y ASCII). Los tests `tui::*::tests::freshness_*` de abajo son unitarios de apoyo y los snapshots de T004.
 
-**Decisión del orquestador (2026-11-09), validada por el crítico del plan (PC-1, PC-3).** En ASCII el `·` se pliega a `|` (`Glyphs::fold`, `tui/style.rs`), no se cambia el plegado. Una fila `recalculating` sin ⚡ ni ⚠ no lleva símbolo de conflicto ni línea de archivos: `ConflictEntry` gana una marca opcional (p. ej. `conflict: Option<ConflictMark>` o un `stale_only: bool`) que el widget pinta con el estilo `Stale` y sin `⚡`/`⚠`; el experto elige la forma mínima.
+**Decisión del orquestador (2026-11-09), validada por el crítico del plan (PC-1, PC-3).** En ASCII el `·` se pliega a `|` (`Glyphs::fold`, `tui/style.rs`), no se cambia el plegado, y no pliega letras: en ASCII los acentos de textos anteriores a esta historia se quedan, así que S7 exige ASCII entero en en y, en es, solo en las líneas de la frescura. Un `current` sin `level` o un `pending` sin `reason` se presenta como `calculating` (no se inventa un motivo, E4). Una fila `recalculating` sin ⚡ ni ⚠ no lleva símbolo de conflicto ni línea de archivos: `ConflictEntry` gana una marca opcional (p. ej. `conflict: Option<ConflictMark>` o un `stale_only: bool`) que el widget pinta con el estilo `Stale` y sin `⚡`/`⚠`; el experto elige la forma mínima.
 
 ### Un test por criterio de aceptación
 
