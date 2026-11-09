@@ -73,7 +73,7 @@ impl ClientOptions {
             kind,
             protocol: PROTOCOL_VERSION,
             launcher: Launcher::installed(),
-            start_timeout: Duration::from_secs(5),
+            start_timeout: api::START_TIMEOUT,
             capabilities: gitraptor_api::capability::all().map(|c| c.name).collect(),
         }
     }
