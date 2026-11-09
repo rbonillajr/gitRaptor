@@ -217,7 +217,7 @@ Pruebas de `ts_ckp_011_base_refresh.rs`:
 | `install_confirming_the_base_replans` | Igual con `guard.install` que confirma la base (`journal.confirms_base`) |
 | `confirming_the_same_base_twice_publishes_once` | La segunda confirmación de la misma base no publica ningún `prediction.changed` del par contra la base |
 | `a_new_base_replans_against_it_and_drops_late_results` | Confirmar otra rama como base deja el par calculado contra la rama nueva; ningún lote posterior trae el nivel calculado contra la anterior |
-| `a_dormant_repo_replans_on_waking` | Con el repo dormido, la confirmación no publica cálculo; al volver a activo, el par sale `current` contra la base confirmada |
+| `a_dormant_repo_replans_on_waking` | Con el repo dormido antes de confirmar (`repo_dormant` en el log), la confirmación lo despierta (`Daemon::guard` llama a `wake_for_common_dir` antes de `refresh_base`) y el par contra la base sale `current` con conflicto contra la base confirmada |
 
 > **Nota técnica.** `guard.confirm` es un comando reservado: el cliente del desarrollador no puede ser descendiente del daemon. `crates/core/tests/us_grd_014_confirm_expired.rs` ya monta ese arnés (daemon en proceso hijo, cliente por `script`); se reutiliza su forma, no se inventa otra.
 
@@ -282,7 +282,7 @@ Pruebas de `ts_ckp_011_base_refresh.rs`:
 
 - **Depende:** T002, T003
 - **Refs:** ADR-CKP-001 (pares contra la base); DS-TS-CKP-001 § Contrato de API (estados `pending`, `calculating`, `current`)
-- **Aceptación:** las cinco pruebas de `ts_ckp_011_base_refresh.rs` y `a_worktree_against_the_confirmed_base_shows_the_conflict` en verde en macOS; `cargo clippy -p gitraptor-core` sin avisos.
+- **Aceptación:** las cinco pruebas de `ts_ckp_011_base_refresh.rs` y `a_worktree_against_the_confirmed_base_shows_the_conflict` en verde en macOS; prueba unitaria en `predict.rs` `base_changed_leaves_a_dormant_repo_alone` (un `Msg::BaseChanged` de un repo dormido no lo marca para recalcular ni lo despierta), regresión del build como las de N5; `cargo clippy -p gitraptor-core` sin avisos.
 
 ### T005 — Cerrar la historia y enlazar US-CKP-006
 
@@ -401,6 +401,7 @@ _No aplica — sin tablas ni claves nuevas._ La base confirmada sigue en las dos
 |---|---|---|
 | Unitaria | Misma base no publica ni avisa | `crates/core/src/daemon/base.rs` |
 | Unitaria | Orden del punto `base_changed` | `crates/core/src/daemon/modules/mod.rs` |
+| Unitaria | `Msg::BaseChanged` de un repo dormido no planifica ni despierta | `crates/core/src/daemon/modules/predict.rs` |
 | Integración (daemon real en proceso) | Las cinco pruebas de T001 | `crates/core/tests/ts_ckp_011_base_refresh.rs` |
 | Punta a punta (TUI real) | Escenario 3 de US-CKP-006 | `apps/cli/tests/tui_conflicts.rs` |
 
@@ -452,6 +453,7 @@ macOS en local y en CI de Linux para la integración (`#![cfg(any(target_os = "m
 | N2 | El punto se llama `base_changed` y no `base_confirmed`: lo dispara cualquier cambio de la base publicada, también la que se confirme otra vez con otra rama | Ninguna | — |
 | N3 | Que `RepoPairs::apply` encole el par que pasa de `pending(base_unconfirmed)` a calculable con el mismo tip de `main` se dedujo de `pairs.rs:79` y del triple ausente en estado pendiente; lo fija `confirm_turns_the_base_pair_from_pending_to_current` | Si falla, ajustar `apply` dentro de T004 | Implementador |
 | N4 | Decisión del orquestador (2026-11-08), validada por Arquitecto | Ninguna | — |
+| N5 | Las pruebas unitarias `same_base_publishes_nothing` (T002), `every_point_follows_the_registration_order` (T003) y `base_changed_leaves_a_dormant_repo_alone` (T004) viven en archivos de producción y son regresión del build, fuera del contrato de `/implement`: la idempotencia que fija la primera la cubre C3 (`confirming_the_same_base_twice_publishes_once`) | Ninguna | Implementador |
 
 ## Estado
 
