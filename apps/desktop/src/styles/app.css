@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@source not "../dev";
 @import "@gitraptor/tokens/glass.css";
 
 /* Tailwind utilities over the grafito glass tokens (DSYS-GRP-002): bg-surface-panel, text-text-main, rounded-lg… */
@@ -8,6 +9,7 @@
   --color-surface-control: var(--gr-surface-control);
   --color-surface-raised: var(--gr-surface-raised);
   --color-surface-hover: var(--gr-surface-hover);
+  --color-surface-scrim: var(--gr-surface-scrim);
   --color-border-subtle: var(--gr-border-subtle);
   --color-border-strong: var(--gr-border-strong);
   --color-text-main: var(--gr-text-main);
@@ -19,6 +21,7 @@
   --color-accent-text: var(--gr-accent-text);
   --color-accent-glow: var(--gr-accent-glow);
   --color-accent-border: var(--gr-accent-border);
+  --color-accent-hover: var(--gr-accent-hover);
   --color-success: var(--gr-success);
   --color-success-text: var(--gr-success-text);
   --color-success-bg: var(--gr-success-bg);
@@ -30,6 +33,7 @@
   --color-danger-bg: var(--gr-danger-bg);
   --color-live: var(--gr-live);
   --color-live-text: var(--gr-live-text);
+  --color-live-bg: var(--gr-live-bg);
   --color-agent-claude: var(--gr-agent-claude);
   --color-agent-claude-text: var(--gr-agent-claude-text);
   --color-lane-1: var(--gr-lane-1);
@@ -59,4 +63,46 @@ body {
   color: var(--gr-text-main);
   font-family: var(--gr-font-ui);
   margin: 0;
+}
+
+/* Shared states and motion of the UI primitives (DS-TS-DSK-003 D8, D9). Primitives never use hover:, active:,
+   focus-visible: nor transition-*; the catalog forces a state with data-force and gets the same CSS. */
+@custom-variant gr-hover (&:is(:hover, [data-force="hover"]):not([aria-disabled="true"]));
+@custom-variant gr-pressed (&:is(:active, [data-force="pressed"]):not([aria-disabled="true"]));
+
+@utility gr-ring {
+  &:focus {
+    outline: none;
+  }
+  &:is(:focus-visible, [data-force="focus"]) {
+    outline: var(--gr-size-ring) solid var(--gr-accent);
+    outline-offset: var(--gr-size-ring);
+  }
+}
+@utility gr-ring-inset {
+  &:focus {
+    outline: none;
+  }
+  &:is(:focus-visible, [data-force="focus"]) {
+    outline: var(--gr-size-ring) solid var(--gr-accent);
+    outline-offset: calc(-1 * var(--gr-size-ring));
+  }
+}
+@utility gr-motion {
+  transition:
+    background-color var(--gr-motion-fast),
+    color var(--gr-motion-fast),
+    border-color var(--gr-motion-fast),
+    opacity var(--gr-motion-fast);
+}
+@utility gr-motion-transform {
+  transition:
+    transform var(--gr-motion-fast),
+    background-color var(--gr-motion-fast),
+    border-color var(--gr-motion-fast);
+}
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --gr-motion-fast: 0s;
+  }
 }

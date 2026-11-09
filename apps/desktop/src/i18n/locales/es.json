@@ -20,5 +20,48 @@
       "empty": "Todavía no hay nada que mostrar.",
       "version": "GitRaptor {{version}}"
     }
+  },
+  "ui": {
+    "common": {
+      "close": "Cerrar",
+      "cancel": "Cancelar",
+      "loading": "Cargando…"
+    },
+    "button": {
+      "busy": "En curso"
+    },
+    "chip": {
+      "remove": "Quitar {{label}}"
+    },
+    "pill": {
+      "reversible": "Recuperable",
+      "confirm": "Pide confirmación",
+      "irreversible": "No se puede deshacer",
+      "live": "En vivo"
+    },
+    "status": {
+      "active": "Activo",
+      "inactive": "Inactivo",
+      "conflict": "Conflicto previsto",
+      "live": "En vivo"
+    },
+    "tree": {
+      "loading": "Cargando repositorios…"
+    },
+    "toast": {
+      "region": "Avisos",
+      "kind": {
+        "success": "Hecho",
+        "warning": "Aviso",
+        "error": "Error"
+      }
+    },
+    "tooltip": {
+      "shortcut": "Atajo: {{keys}}"
+    },
+    "table": {
+      "settings": "Ajustes de columnas",
+      "loading": "Cargando filas…"
+    }
   }
 }
