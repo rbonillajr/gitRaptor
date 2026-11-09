@@ -37,6 +37,14 @@ pub mod installed;
 pub mod peer;
 pub mod transport;
 
+/// How long a client waits, from launching the daemon to a completed handshake. A cold start
+/// is the first execution of the binary: on a loaded macOS runner the system's first-run
+/// checks and the profile creation took more than the 5 s this used to be, and the client
+/// reported "did not start in time" for a daemon that was only slow. A healthy start returns
+/// as soon as the socket answers, so the margin costs nothing; only a daemon that never
+/// comes up waits this long before the error.
+pub const START_TIMEOUT: Duration = Duration::from_secs(30);
+
 /// How long a call waits for its answer.
 #[cfg(any(unix, windows))]
 pub const CALL_TIMEOUT: Duration = Duration::from_secs(10);
@@ -166,7 +174,7 @@ impl Connect {
             runtime,
             kind,
             protocol: PROTOCOL_VERSION,
-            start_timeout: Duration::from_secs(5),
+            start_timeout: START_TIMEOUT,
             capabilities: crate::capability::all().map(|c| c.name).collect(),
         }
     }
