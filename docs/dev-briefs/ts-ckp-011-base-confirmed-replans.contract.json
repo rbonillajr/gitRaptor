@@ -1,0 +1,136 @@
+{
+  "version": 1,
+  "source": [
+    "docs/requirements/features/cockpit/dev-specs/TS-CKP-011-base-confirmada-replanifica.md"
+  ],
+  "rigor": "alto",
+  "goal": {
+    "intent": "Que confirmar la rama base con el daemon en marcha (raptor guard confirm o raptor guard install) refresque la base publicada y haga que el predictor replanifique los pares contra la base, sin reiniciar el daemon (TS-CKP-011, cierra G-B de US-CKP-006).",
+    "endState": "crates/core/src/daemon/base.rs con Daemon::refresh_base (publica divergence.base y RepoView.base solo si cambió, recuenta adelanto y retraso y llama a Modules::base_changed); guard() lo llama tras GuardRequest::Install y GuardRequest::Confirm; DaemonModule::base_changed con implementación vacía; Predict lo atiende con Msg::BaseChanged (salvo repo dormido). El escenario 3 de US-CKP-006 sin #[ignore] pasa. Sin métodos, eventos, capacidades ni mensajes nuevos en el canal; API del predictor sin cambios.",
+    "nonGoals": [
+      "Un evento del canal que lleve la base nueva",
+      "Desconfirmar la base",
+      "Cambiar publish_observed_views",
+      "Cambiar la API del predictor o los mensajes que consume la app de escritorio (US-DSK-004)",
+      "Linux y Windows para el e2e de la TUI (etapa de validación multiplataforma)"
+    ]
+  },
+  "suite": {
+    "command": "node tools/test/nextest-junit.mjs"
+  },
+  "layers": {
+    "runtime": {
+      "commands": [
+        {
+          "id": "suite",
+          "cmd": "node tools/test/nextest-junit.mjs"
+        }
+      ],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "criteria": [
+    {
+      "id": "C1",
+      "statement": "Con el daemon en marcha y el repo sin base confirmada, tras guard.confirm (Accept sin ventana) el par (wt-a, base) pasa de pending a calculating y a current con level y conflict_files, todo por prediction.changed",
+      "verify": "cargo test -p gitraptor-core --test ts_ckp_011_base_refresh confirm_turns_the_base_pair_from_pending_to_current -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/ts_ckp_011_base_refresh.rs"
+      ]
+    },
+    {
+      "id": "C2",
+      "statement": "Lo mismo cuando la base se confirma con guard.install (journal.confirms_base): el par contra la base sale current",
+      "verify": "cargo test -p gitraptor-core --test ts_ckp_011_base_refresh install_confirming_the_base_replans -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/ts_ckp_011_base_refresh.rs"
+      ]
+    },
+    {
+      "id": "C3",
+      "statement": "Tras la primera confirmación el par (wt-a, base) llega a current; después, confirmar otra vez la misma base no publica ningún prediction.changed de ese par",
+      "verify": "cargo test -p gitraptor-core --test ts_ckp_011_base_refresh confirming_the_same_base_twice_publishes_once -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/ts_ckp_011_base_refresh.rs"
+      ]
+    },
+    {
+      "id": "C4",
+      "statement": "Confirmar otra rama (develop) como base deja el par calculado contra develop; ningún lote posterior trae el nivel calculado contra la base anterior",
+      "verify": "cargo test -p gitraptor-core --test ts_ckp_011_base_refresh a_new_base_replans_against_it_and_drops_late_results -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/ts_ckp_011_base_refresh.rs"
+      ]
+    },
+    {
+      "id": "C5",
+      "statement": "Con el repo dormido antes de confirmar (repo_dormant en el log), la confirmación lo despierta y el par contra la base sale current con conflicto contra la base confirmada; mientras está dormido, base_changed no planifica (rama Msg::BaseChanged dormida, sin observador posible desde fuera porque suscribirse despierta el repo)",
+      "verify": "cargo test -p gitraptor-core --test ts_ckp_011_base_refresh a_dormant_repo_replans_on_waking -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/ts_ckp_011_base_refresh.rs"
+      ]
+    },
+    {
+      "id": "C6",
+      "statement": "Escenario 3 de US-CKP-006 sin #[ignore]: tras raptor guard install con la TUI, la TUI muestra ⚡ wt-pagos ↔ main con src/api.rs y el rango 10–12 ↔ 10–12",
+      "verify": "cargo test -p gitraptor-cli --test tui_conflicts a_worktree_against_the_confirmed_base_shows_the_conflict -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_conflicts.rs"
+      ]
+    }
+  ],
+  "constraints": {
+    "deny_paths": [
+      "docs/ARTIFACTS.md",
+      "docs/architecture/decisions/ADR-GRD-008*",
+      "crates/api/**",
+      "apps/desktop/**"
+    ],
+    "allow_dependency_changes": false,
+    "cargo_lock": "Sin cambios: la DS no añade dependencias"
+  },
+  "scope": {
+    "projects": [
+      "gitraptor-core",
+      "gitraptor-cli"
+    ]
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 900000,
+    "suiteTimeoutMs": 5400000,
+    "maxOutsidePlan": 3
+  },
+  "hops": {
+    "design": {
+      "agent": "main-loop",
+      "model": "opus"
+    },
+    "critic": {
+      "agent": "nassa-core:plan-critic",
+      "model": "opus"
+    },
+    "tester": {
+      "agent": "nassa-core:criterion-tester",
+      "model": "sonnet"
+    },
+    "build": {
+      "agent": "nassa-dev-rust:rust-expert",
+      "model": "opus"
+    },
+    "review": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "opus"
+    },
+    "conformance": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "sonnet"
+    }
+  }
+}
