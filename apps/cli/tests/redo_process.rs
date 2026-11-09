@@ -204,7 +204,29 @@ fn machine() -> Machine {
 
 impl Machine {
     /// `raptor <args>` in the worktree, in language `lang`, without a terminal.
+    /// `raptor <args>`. A `raptor redo` or `raptor undo` refused only for the requester's write
+    /// burst (S-03) is asked again within 30 s, as `restore_process.rs` does; any other answer
+    /// returns at once. Authorized amendment of TMC003-E2E (coordinator, 2026-11-09): the English
+    /// and Spanish runs share one unattributed requester (6 writes against a burst of 5).
     fn raptor(&self, args: &[&str], lang: &str) -> Output {
+        let start = std::time::Instant::now();
+        loop {
+            let out = self.raptor_once(args, lang);
+            let limited = ["too many requests", "demasiadas peticiones"]
+                .iter()
+                .any(|t| text(&out.stderr).contains(t) || text(&out.stdout).contains(t));
+            if !(limited && matches!(args.first(), Some(&"redo") | Some(&"undo"))) {
+                return out;
+            }
+            assert!(
+                start.elapsed() < std::time::Duration::from_secs(30),
+                "TMC003-E2E: raptor {args:?} still rate limited after 30 s"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(250));
+        }
+    }
+
+    fn raptor_once(&self, args: &[&str], lang: &str) -> Output {
         Command::new(RAPTOR)
             .args(args)
             .env_clear()
