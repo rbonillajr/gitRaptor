@@ -43,7 +43,7 @@ export interface PairDetailViewModel {
   basePending: BasePending | null;
 }
 
-const REASON_KEY = {
+export const REASON_KEY = {
   "base-unconfirmed": "conflicts.reason.baseUnconfirmed",
   "operation-in-progress": "conflicts.reason.operationInProgress",
   "power-saving": "conflicts.reason.powerSaving",
@@ -83,7 +83,7 @@ function freshness(p: PairDto, nowMs: number, t: TFunction): string {
 }
 
 /** D8: the label of the agent card, else the folder; the base says which branch it is. */
-function sideName(fleet: RepoFleet, cards: readonly CardModel[], key: string, t: TFunction): string {
+export function sideName(fleet: RepoFleet, cards: readonly CardModel[], key: string, t: TFunction): string {
   if (isBase(key)) return t("conflicts.side.base", { base: fleet.repo.base.name ?? "base" });
   return cards.find((c) => c.key === key)?.agent.label ?? fleet.repo.worktrees.find((w) => w.key === key)?.folder ?? key;
 }

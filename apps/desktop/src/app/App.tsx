@@ -2,6 +2,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import { watchEngine } from "@/client/engine-stream";
 import { engineKeys } from "@/client/queries";
+import { useConflictAlerts } from "@/conflicts/useConflictAlerts";
 import { engineView } from "@/engine/engine-view";
 import { defaultRepoId } from "@/fleet/useFleet";
 import "@/i18n";
@@ -24,6 +25,12 @@ function isFinal(): boolean {
   const target = useUiStore.getState().selectedRepoId ?? defaultRepoId(global?.repos ?? [], useEngineStore.getState().closedRepoIds);
   if (center.kind === "content" && target !== null && queryClient.getQueryData(engineKeys.repo(target)) === undefined) return false;
   return center.kind !== "content" || conn.kind === "live";
+}
+
+/** Mounts the in-app conflict notices once, under the toast provider (DS-US-DSK-008 D12-D15). */
+function ConflictAlerts() {
+  useConflictAlerts();
+  return null;
 }
 
 /**
@@ -52,6 +59,7 @@ export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
+        <ConflictAlerts />
         <AppShell />
       </ToastProvider>
     </QueryClientProvider>

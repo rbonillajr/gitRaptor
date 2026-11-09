@@ -338,6 +338,7 @@
     "toast": {
       "withFile_one": "⚡ Conflicto previsto: {{a}} ↔ {{b}} en {{file}}",
       "withFile_other": "⚡ Conflicto previsto: {{a}} ↔ {{b}} en {{file}} y {{count}} más",
+      "withFileMore": "⚡ Conflicto previsto: {{a}} ↔ {{b}} en {{file}} y {{extra}} más",
       "noFile": "⚡ Conflicto previsto: {{a}} ↔ {{b}}",
       "otherRepo": "⚡ Nuevo conflicto previsto en {{repo}}",
       "many": "⚡ {{count}} nuevos conflictos previstos",

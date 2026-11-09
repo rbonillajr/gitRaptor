@@ -1,8 +1,14 @@
-import type { ReactNode, Ref } from "react";
+import { skipToken, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSyncExternalStore, type ReactNode, type Ref } from "react";
+import { flushSync } from "react-dom";
 import { useTranslation } from "react-i18next";
-import type { Theme } from "@/state/ui-store";
+import type { RepoFleet } from "@/client/engine-types";
+import { engineKeys } from "@/client/queries";
+import { focusConflictPanel } from "@/conflicts/focus";
 import type { EngineView } from "@/engine/engine-view";
-import { IconButton, StatusPill } from "@/ui";
+import type { GlobalEntry } from "@/state/engine-cache";
+import { useUiStore, type Theme } from "@/state/ui-store";
+import { Button, IconButton, StatusPill } from "@/ui";
 
 export interface TitleBarProps {
   sidebarId: string;
@@ -47,6 +53,51 @@ const ThemeIcon = ({ theme }: { theme: Theme }) => (
   </Icon>
 );
 
+const COMPACT_QUERY = "(max-width: 999px)";
+const subscribeCompact = (onChange: () => void) => {
+  const list = window.matchMedia(COMPACT_QUERY);
+  list.addEventListener("change", onChange);
+  return () => list.removeEventListener("change", onChange);
+};
+const isCompact = () => window.matchMedia(COMPACT_QUERY).matches;
+
+/**
+ * The ⚡ pill (D16): the sum of the counted conflicts of every repo, only above zero. It opens the repo with the most
+ * (a tie: the open one, then by name) and, if that repo has a single ⚡ pair, its detail; else it focuses the panel.
+ */
+function ConflictPill() {
+  const { t } = useTranslation();
+  const client = useQueryClient();
+  const compact = useSyncExternalStore(subscribeCompact, isCompact);
+  const global = useQuery<GlobalEntry>({ queryKey: engineKeys.global, queryFn: skipToken }).data;
+  const counted = (global?.repos ?? []).flatMap((r) =>
+    r.attention.conflicts.state === "counted" ? [{ id: r.repoId, name: r.name, count: r.attention.conflicts.count }] : [],
+  );
+  const total = counted.reduce((n, r) => n + r.count, 0);
+  if (total <= 0) return null;
+
+  const open = () => {
+    const selected = useUiStore.getState().selectedRepoId;
+    const top = [...counted].sort(
+      (x, y) => y.count - x.count || Number(y.id === selected) - Number(x.id === selected) || x.name.localeCompare(y.name),
+    )[0];
+    if (top === undefined) return;
+    const bolts = client.getQueryData<RepoFleet>(engineKeys.repo(top.id))?.repo.pairs.filter((p) => p.level === "conflict") ?? [];
+    const only = bolts.length === 1 ? bolts[0] : undefined;
+    flushSync(() => {
+      useUiStore.getState().selectRepo(top.id);
+      if (only !== undefined) useUiStore.getState().openPairDetail({ repoId: top.id, pairId: only.pairId });
+    });
+    if (only === undefined) focusConflictPanel();
+  };
+  const text = t(compact ? "conflicts.pill.compact" : total === 1 ? "conflicts.pill_one" : "conflicts.pill_other", { count: total }).replace(/^⚡\s*/, "");
+  return (
+    <Button variant="danger" size="sm" aria-label={t("conflicts.pill.label", { count: total })} onClick={open}>
+      <span aria-hidden="true">⚡</span> {text}
+    </Button>
+  );
+}
+
 /**
  * The window title bar: draggable, leaves room for the macOS traffic lights and holds the left panel,
  * theme and right panel buttons (DSF-DSK-001 § 2.2).
@@ -74,6 +125,7 @@ export function TitleBar(props: TitleBarProps) {
         aria-controls={props.detailId}
         onClick={props.onToggleDetail}
       />
+      <ConflictPill />
     </header>
   );
 }
