@@ -100,7 +100,7 @@
     },
     {
       "id": "D3-LOST",
-      "statement": "Al perder la conexión marca los datos como viejos (staleSinceMs), reconecta sola con espera creciente observable en retryInMs (250 ms x 2^(n-1), tope 5 s) y llamando connect(false) (solo el primer intento y Retry start llaman connect(true), D5), pide scope.snapshot nuevo y scope.subscribe con from_seq N+1 del run_id nuevo, y vuelve a live con staleSinceMs null",
+      "statement": "Al perder la conexión marca los datos como viejos (staleSinceMs), reconecta sola con espera creciente observable en retryInMs (250 ms x 2^(n-1); el tope de 5 s lo cubre el test unitario de backoff en src) y llamando connect(false) (solo el primer intento y Retry start llaman connect(true), D5), pide scope.snapshot nuevo y scope.subscribe con from_seq N+1 del run_id nuevo, y vuelve a live con staleSinceMs null",
       "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test engine_supervisor -- --list 2>/dev/null | grep -q '^a_lost_connection_marks_data_stale_and_catches_up_alone: test' && cargo test -p gitraptor-desktop --test engine_supervisor a_lost_connection_marks_data_stale_and_catches_up_alone -- --exact",
       "layer": "runtime",
       "origin": "story",
