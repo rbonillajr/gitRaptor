@@ -458,7 +458,7 @@ fn s7_freshness_is_legible_without_color_and_in_ascii() {
         let (age, stale, calc) = match lang {
             Lang::Es => (
                 "hace 40 s",
-                "desactualizado - hace 40 s - recalculando",
+                "desactualizado | hace 40 s | recalculando",
                 "Calculando 1 de 3 pares",
             ),
             _ => ("", "", "Calculating 1 of 3 pairs"),
@@ -468,7 +468,14 @@ fn s7_freshness_is_legible_without_color_and_in_ascii() {
             assert!(s.contains(age), "missing the age:\n{s}");
             assert!(
                 s.contains(stale),
-                "the middle dot is not folded to '-':\n{s}"
+                "the middle dot is not folded to '|':\n{s}"
+            );
+        }
+        if lang != Lang::Es {
+            assert!(s.contains("40 s"), "the age is missing in en:\n{s}");
+            assert!(
+                s.to_lowercase().contains("recalculating"),
+                "the stale row is missing in en:\n{s}"
             );
         }
         assert!(
