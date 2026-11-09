@@ -48,6 +48,14 @@ const CLIENT_IMPORTS = {
   group: ["@/client", "@/client/*", "**/client/**"],
   message: "src/ui holds pure components: no client layer (V5).",
 };
+const UI_PURITY_IMPORTS = {
+  group: ["@/state", "@/state/*", "@/shell", "@/shell/*", "@/dev", "@/dev/*", "@/app/*"],
+  message: "src/ui holds pure components: no state, shell, app or dev imports (TS-DSK-003).",
+};
+const DEV_IMPORTS = {
+  group: ["@/dev", "@/dev/*"],
+  message: "The dev catalog is reachable only from main.tsx under import.meta.env.DEV (TS-DSK-003)",
+};
 
 const restrictImports = (...patterns) => ({ "no-restricted-imports": ["error", { patterns }] });
 const TESTS = ["**/*.test.ts", "**/*.test.tsx"];
@@ -78,6 +86,17 @@ export default defineConfig(
   },
   {
     files: ["src/ui/**"],
-    rules: restrictImports(BASE_IMPORTS, TAURI_IMPORTS, CLIENT_IMPORTS),
+    rules: restrictImports(BASE_IMPORTS, TAURI_IMPORTS, CLIENT_IMPORTS, UI_PURITY_IMPORTS),
+  },
+  {
+    // The dev catalog is imported only by main.tsx (and by itself).
+    files: ["src/**"],
+    ignores: ["src/main.tsx", "src/dev/**", "src/client/**", "src/ui/**", ...TESTS],
+    rules: restrictImports(BASE_IMPORTS, TAURI_IMPORTS, DEV_IMPORTS),
+  },
+  {
+    files: ["src/client/**"],
+    ignores: [...TESTS],
+    rules: restrictImports(BASE_IMPORTS, DEV_IMPORTS),
   },
 );
