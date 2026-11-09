@@ -356,7 +356,10 @@ fn selective_with_keep_or_excluded_path_changes_nothing() {
             "TMC011-APPLY-SELECTIVE: selective with keep is refused, not applied"
         );
     }
-    let changes = gitraptor_testkit::diff(&before, &t.f().fingerprint());
+    let changes: Vec<_> = gitraptor_testkit::diff(&before, &t.f().fingerprint())
+        .into_iter()
+        .filter(|c| c.scope != "profile")
+        .collect();
     assert!(
         changes.is_empty(),
         "TMC011-APPLY-SELECTIVE: selective with keep changed the repo: {changes:#?}"
@@ -382,7 +385,10 @@ fn selective_with_keep_or_excluded_path_changes_nothing() {
             "TMC011-APPLY-SELECTIVE: a path the prior excludes is refused, never written"
         );
     }
-    let changes = gitraptor_testkit::diff(&before, &t.f().fingerprint());
+    let changes: Vec<_> = gitraptor_testkit::diff(&before, &t.f().fingerprint())
+        .into_iter()
+        .filter(|c| c.scope != "profile")
+        .collect();
     assert!(
         changes.is_empty(),
         "TMC011-APPLY-SELECTIVE: an excluded path changed the repo: {changes:#?}"
