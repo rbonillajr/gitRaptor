@@ -1,0 +1,1 @@
+{"schema":1,"outcome":"incompatible","runtime":"/Users/example/Library/Application Support/dev.gitraptor/run","daemon_pid":4242,"daemon_path":"/opt/homebrew/bin/raptor","daemon_version":"0.0.9","daemon_protocol":8,"started":false,"replaced":false,"incompatible":{"which":"daemon-older","missing":[]},"unavailable":null,"autostart":{"registered":false,"binary":null}}

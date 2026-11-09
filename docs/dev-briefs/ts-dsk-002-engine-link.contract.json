@@ -1,0 +1,160 @@
+{
+  "version": 1,
+  "source": [
+    "docs/requirements/features/desktop/dev-specs/TS-DSK-002-arranque-motor-binarios-bundle.md",
+    "docs/dev-briefs/ts-dsk-002-engine-link.prep.md"
+  ],
+  "rigor": "alto",
+  "goal": {
+    "intent": "Que la app de escritorio encuentre y arranque el motor con el raptor de su propio bundle, sin leer el entorno ni enlazar gitraptor-core, y sin reemplazar nunca el daemon de otra instalación (ADR-GRP-014 Enmienda DEP-DSK-5, ADR-GRP-017, SEC-13, SEC-14, NFR-02), para desbloquear US-DSK-003.",
+    "endState": "gitraptor-api tiene EnsureReport con sus fixtures, la regla de raptor instalado, ensure_daemon_policy con ReplacePolicy (ensure_daemon_with sin cambio de comportamiento), Client::peer_pid y la comprobación B-3 (installed_raptor_peer) sobre process::executable_path de gitraptor-macsys; raptor daemon ensure --json [--no-start] [--require <cap>]… escribe una línea EnsureReport con su código de salida y nunca reemplaza un daemon de otra ruta; apps/desktop/src-tauri/src/engine tiene link.rs (Link, Connector, LinkError, ConnectFailure, Incompatibility, IncompatibilityKind, ClientLink, SocketConnector, map_client_error, REQUIRED_CAPABILITIES) y launcher.rs (BundleConnector), que ejecuta solo el raptor hermano del ejecutable con argv fijo, entorno vacío más PATH, sin shell y con salida limitada; V1, V2 y V7 siguen en verde.",
+    "nonGoals": [
+      "T007: diálogo nativo, tauri-plugin-dialog y comandos engine_autostart_offer / engine_autostart",
+      "T008: tauri.release.conf.json, stage-sidecars.sh y el job desktop-app del .dmg",
+      "T009: verificación manual con la app instalada",
+      "supervisor, EngineHub, engine_watch y engine_retry (US-DSK-003)",
+      "ningún comando IPC nuevo, plugin de Tauri ni permiso de capability",
+      "audit token / LOCAL_PEERTOKEN para B-3 (SPIKE-DSK-001)",
+      "Windows e Intel (etapa de validación multiplataforma)"
+    ]
+  },
+  "criteria": [
+    {
+      "id": "DSK002-REPORT",
+      "statement": "T001: cada fixture de crates/api/tests/fixtures/ensure/ se deserializa a EnsureReport y vuelve a serializar idéntica; un campo desconocido falla; is_installed_raptor acepta un raptor 0755 propio fuera de FIXED_TEMP y rechaza otro nombre, 0775 y un enlace simbólico, y rechaza archivos raptor 0755 reales del usuario bajo una carpeta node_modules, bajo _npx (ambas dentro de CARGO_TARGET_TMPDIR) y bajo /private/tmp",
+      "verify": "cargo test -p gitraptor-api --test ensure_report",
+      "layer": "runtime",
+      "tests": [
+        "crates/api/tests/ensure_report.rs"
+      ]
+    },
+    {
+      "id": "DSK002-POLICY",
+      "statement": "T002: con un servidor de protocolo anterior y OnlyIf(|_| false) no recibe daemon.replace y el resultado es Incompatible; con OnlyIf(|_| true) lo recibe; con el mismo protocolo, una capacidad que falta y OnlyIf(|_| false), devuelve el cliente sin reemplazar (started y replaced en false)",
+      "verify": "cargo test -p gitraptor-api --test client_policy",
+      "layer": "runtime",
+      "tests": [
+        "crates/api/tests/client_policy.rs"
+      ]
+    },
+    {
+      "id": "DSK002-PIDPATH",
+      "statement": "T003: en macOS, gitraptor_macsys::process::executable_path(std::process::id()) es std::env::current_exe() canonicalizado; un pid inexistente da None",
+      "verify": "cargo test -p gitraptor-macsys --test executable_path",
+      "layer": "runtime",
+      "tests": [
+        "crates/macsys/tests/executable_path.rs"
+      ]
+    },
+    {
+      "id": "DSK002-B3",
+      "statement": "T003 (B-3): peer::executable_of(std::process::id()) es el ejecutable de este proceso; installed_raptor_peer rechaza el pid de un ejecutable que no se llama raptor y acepta el pid de un proceso lanzado desde una copia 0755 llamada raptor en una carpeta de CARGO_TARGET_TMPDIR",
+      "verify": "cargo test -p gitraptor-api --test client_peer_installed",
+      "layer": "runtime",
+      "tests": [
+        "crates/api/tests/client_peer_installed.rs"
+      ]
+    },
+    {
+      "id": "DSK002-ENSURE-CLI",
+      "statement": "T004: con perfiles temporales, motor parado + --no-start da not-running y sale con 5; motor parado da ready con started true; motor en marcha da ready con started false; con un servidor de prueba de protocolo anterior en el runtime del perfil (otro ejecutable), da incompatible daemon-older, sale con 3 y el servidor nunca recibió daemon.replace; con un servidor de prueba del mismo protocolo al que le falta una capacidad pedida con --require, da incompatible missing-capabilities y nunca recibió daemon.replace; sin --json sale con 2; la línea tiene las mismas claves que la fixture correspondiente",
+      "verify": "cargo test -p gitraptor-cli --test daemon_ensure",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/daemon_ensure.rs"
+      ]
+    },
+    {
+      "id": "DSK002-LINK",
+      "statement": "T005: map_client_error lleva cada variante de ClientError a su ConnectFailure según la DS; REQUIRED_CAPABILITIES es [scope.activity, observation.tiers, prediction.pairs]",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test engine_link",
+      "layer": "runtime",
+      "tests": [
+        "apps/desktop/src-tauri/tests/engine_link.rs"
+      ]
+    },
+    {
+      "id": "DSK002-LAUNCHER",
+      "statement": "T006: BundleConnector ejecuta el raptor con argv exacto (daemon ensure --json, --no-start sin arrancar, y --require por cada REQUIRED_CAPABILITIES) y entorno = solo PATH (el registro del raptor falso ignora PWD, SHLVL, _ y OLDPWD, que crea el propio /bin/sh); con ready conecta; con daemon-older da Incompatible con el daemon_path de la fixture; con not-running, NotRunning; salida no JSON o un script que duerme 11 s dan LaunchFailed; sin raptor junto al ejecutable, LaunchFailed; una segunda conexión sin arrancar no ejecuta el script; for_tests( no aparece fuera de tests/",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test engine_launcher",
+      "layer": "runtime",
+      "tests": [
+        "apps/desktop/src-tauri/tests/engine_launcher.rs",
+        "apps/desktop/src-tauri/tests/support/fake_raptor.rs"
+      ]
+    },
+    {
+      "id": "DSK002-BOUNDARY",
+      "statement": "V1, V2 y V7 siguen en verde: gitraptor-desktop no alcanza gitraptor-core, -git ni -policy; la superficie de Tauri no gana plugins ni permisos; src/ no lee el entorno ni los argumentos",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test boundaries --test environment --test tauri_surface",
+      "layer": "runtime",
+      "tests": [
+        "apps/desktop/src-tauri/tests/boundaries.rs",
+        "apps/desktop/src-tauri/tests/environment.rs",
+        "apps/desktop/src-tauri/tests/tauri_surface.rs"
+      ]
+    }
+  ],
+  "suite": {
+    "command": "node tools/test/nextest-junit.mjs"
+  },
+  "layers": {
+    "runtime": {
+      "commands": [
+        {
+          "id": "suite",
+          "cmd": "node tools/test/nextest-junit.mjs"
+        }
+      ],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "constraints": {
+    "deny_paths": [
+      "docs/ARTIFACTS.md",
+      "docs/architecture/decisions/ADR-GRD-008*"
+    ],
+    "allow_dependency_changes": true
+  },
+  "scope": {
+    "projects": [
+      "gitraptor-api",
+      "gitraptor-macsys",
+      "gitraptor-core",
+      "gitraptor-cli",
+      "gitraptor-desktop"
+    ]
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 900000,
+    "suiteTimeoutMs": 5400000,
+    "maxOutsidePlan": 3
+  },
+  "hops": {
+    "design": {
+      "agent": "main-loop",
+      "model": "opus"
+    },
+    "critic": {
+      "agent": "nassa-core:plan-critic",
+      "model": "opus"
+    },
+    "tester": {
+      "agent": "nassa-core:criterion-tester",
+      "model": "opus"
+    },
+    "build": {
+      "agent": "nassa-dev-rust:rust-expert",
+      "model": "opus"
+    },
+    "review": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "opus"
+    },
+    "conformance": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "opus"
+    }
+  }
+}
