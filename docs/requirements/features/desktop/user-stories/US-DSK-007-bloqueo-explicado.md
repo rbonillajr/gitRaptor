@@ -2,7 +2,7 @@
 id: US-DSK-007
 title: "El usuario entiende por qué GitRaptor frenó una operación y cómo hacerla a conciencia"
 type: us
-status: ready
+status: implemented
 priority: high
 created: 2026-10-28
 updated: 2026-11-09
@@ -86,3 +86,5 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 
 - **Diseño:** [design-flow.md](../design/design-flow.md) (DSF-DSK-001), bloqueo explicado.
 - **Dev Spec:** [DS-US-DSK-007](../dev-specs/US-DSK-007-bloqueo-explicado.md) (`spec-ready`, 2026-11-09).
+
+Implementado en: PR #348 (T001 a T006 de la Dev Spec). Pendiente: la verificación manual en macOS con el motor real (T007: `writeText` en WKWebView, la excepción real anunciada y cancelada, el registro ilegible) y el glosario de D17 (el botón «?» con `Popover`; los textos `grd.gloss.*` ya están en el catálogo).

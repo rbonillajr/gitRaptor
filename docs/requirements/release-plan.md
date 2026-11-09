@@ -315,7 +315,7 @@ Lo que cambió respecto del 2026-10-08 (27 PR y 8,8 fichas equivalentes por día
 | US-DSK-004 | Flota en vivo | Must | Hecho (PR #341; falta la verificación manual en macOS) | US-DSK-003. DEP-DSK-2 ya no bloquea (perfil provisional `Cli`, TS-GRP-009) |
 | US-DSK-005 | Grafo de carriles | Must | Pend (`ready`) | Lo que falte de US-CKP-022 |
 | US-DSK-006 | Deshacer de un botón | Must | Pend (`ready`) | Factor del SO para confirmar trabajo ajeno |
-| US-DSK-007 | Bloqueo explicado | Must | Pend (`ready`) | La excepción consciente es el comando `raptor guard exec`, que la app muestra para copiar (Q-DSK-9) |
+| US-DSK-007 | Bloqueo explicado | Must | Hecho (PR #348; falta la verificación manual en macOS y el glosario) | La excepción consciente es el comando `raptor guard exec`, que la app muestra para copiar (Q-DSK-9) |
 | US-DSK-008 | Conflictos previstos | Must | Hecho (PR #345; falta la verificación manual en macOS) | Lo que falte de TS-CKP-001 |
 | SPIKE-GRD-002 | Factor del SO en macOS (Q-DSK-17) | Must | R (ready) | **Se ejecuta ya, dentro de UI-1.** Sigue contando en M2 (primer hito que lo lista); aquí se registra su papel |
 
