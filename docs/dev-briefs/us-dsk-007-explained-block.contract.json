@@ -74,6 +74,7 @@
       "tests": [
         "apps/desktop/src-tauri/tests/commands.rs",
         "apps/desktop/src-tauri/tests/engine_wire.rs",
+        "apps/desktop/tests/fixtures/engine-messages.json",
         "apps/desktop/src/client/commands.test.ts"
       ]
     },

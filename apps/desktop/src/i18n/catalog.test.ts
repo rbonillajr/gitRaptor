@@ -168,3 +168,147 @@ describe("D8-GATE predicted conflict keys", () => {
     }
   });
 });
+
+// D7-GATE (DS-US-DSK-007 § Textos del catálogo): the grd.* keys in en and es with the texts of the Dev Spec.
+const GRD_KEYS: Record<string, [string, string]> = {
+  "grd.nav.title": ["Guardrails", "Guardrails"],
+  "grd.nav.unseen_one": ["{{count}} new block", "{{count}} bloqueo nuevo"],
+  "grd.nav.unseen_other": ["{{count}} new blocks", "{{count}} bloqueos nuevos"],
+  "grd.nav.labelUnseen": ["Guardrails, {{unseen}}", "Guardrails, {{unseen}}"],
+  "grd.view.back": ["Back to the fleet", "Volver a la flota"],
+  "grd.summary": ["{{blocked}} blocked in the last {{days}} days · {{exceptions}} exceptions", "{{blocked}} bloqueadas en los últimos {{days}} días · {{exceptions}} excepciones"],
+  "grd.empty": ["Nothing blocked in {{repo}}. Protection is on.", "Nada bloqueado en {{repo}}. La protección está activa."],
+  "grd.empty.unprotected": ["{{repo}} isn't protected.", "{{repo}} no está protegido."],
+  "grd.unverified": ["Logged without detail (too many at once)", "Anotadas sin detalle (demasiadas a la vez)"],
+  "grd.unlogged": ["From {{from}} to {{to}} the engine wasn't running: what the hooks blocked then isn't logged", "De {{from}} a {{to}} el motor no estaba en marcha: lo que bloquearon los hooks entonces no está anotado"],
+  "grd.unavailable.active": ["The block list of {{repo}} isn't available right now. Protection is still on: the hooks decide without this list.", "La lista de bloqueos de {{repo}} no está disponible ahora. La protección sigue activa: los hooks deciden sin esta lista."],
+  "grd.unavailable.unknown": ["The block list of {{repo}} isn't available right now. Protection doesn't depend on this list: if {{repo}} is protected, the hooks keep stopping operations.", "La lista de bloqueos de {{repo}} no está disponible ahora. La protección no depende de esta lista: si {{repo}} está protegido, los hooks siguen frenando."],
+  "grd.unavailable.notObserved": ["GitRaptor isn't watching {{repo}} right now.", "GitRaptor no está observando {{repo}} ahora."],
+  "grd.stale": ["Last read {{age}} ago", "Última lectura hace {{age}}"],
+  "grd.block.title": ["Blocked: {{actor}} tried to {{operation}}", "Bloqueado: {{actor}} intentó {{operation}}"],
+  "grd.block.titleNoActor": ["Blocked: someone tried to {{operation}} (no agent identified)", "Bloqueado: se intentó {{operation}} (sin agente identificado)"],
+  "grd.agent.claudeCode": ["Claude Code", "Claude Code"],
+  "grd.agent.other": ["another agent", "otro agente"],
+  "grd.agent.none": ["an agent", "un agente"],
+  "grd.actor.claudeCode": ["Claude Code · {{worktree}}", "Claude Code · {{worktree}}"],
+  "grd.actor.other": ["another agent · {{worktree}}", "otro agente · {{worktree}}"],
+  "grd.op.forcePush": ["rewrite the history of {{ref}} on the server ({{remote}})", "reescribir el historial de {{ref}} en el servidor ({{remote}})"],
+  "grd.op.pushDelete": ["delete {{ref}} on the server ({{remote}})", "borrar {{ref}} en el servidor ({{remote}})"],
+  "grd.op.push": ["push to {{ref}} on the server ({{remote}})", "subir a {{ref}} en el servidor ({{remote}})"],
+  "grd.op.branchDelete": ["delete the branch {{ref}}", "borrar la rama {{ref}}"],
+  "grd.op.refMove": ["move the branch {{ref}}", "mover la rama {{ref}}"],
+  "grd.op.rebase": ["rebase {{branch}}", "rebasar {{branch}}"],
+  "grd.op.rebaseUnknown": ["a rebase", "un rebase"],
+  "grd.op.commit": ["make a commit on {{branch}}", "hacer un commit en {{branch}}"],
+  "grd.block.nothing": ["Nothing happened. {{ref}} is unchanged on your machine and on the server.", "No pasó nada. {{ref}} sigue igual en tu equipo y en el servidor."],
+  "grd.block.nothingLocal": ["Nothing happened. {{ref}} is unchanged on your machine.", "No pasó nada. {{ref}} sigue igual en tu equipo."],
+  "grd.block.attempted": ["What it tried", "Qué intentó"],
+  "grd.block.times": ["×{{count}}, the last at {{time}}", "×{{count}}, la última a las {{time}}"],
+  "grd.block.whyLabel": ["Why it's dangerous", "Por qué es peligroso"],
+  "grd.block.stoppedLabel": ["What stopped it", "Qué lo frenó"],
+  "grd.block.canDo": ["What you can do", "Qué puedes hacer"],
+  "grd.block.technical": ["Technical details", "Detalles técnicos"],
+  "grd.block.ok": ["Got it", "Entendido"],
+  "grd.block.seeLog": ["See in the log", "Ver en el registro"],
+  "grd.exc.cta": ["I'll do it myself…", "Lo haré yo…"],
+  "grd.exc.terminal.title": ["Confirm from your terminal", "Confirma desde tu terminal"],
+  "grd.exc.who": ["You do it, not {{agent}}. It runs once; the rule stays on afterwards.", "La harás tú, no {{agent}}. Se ejecuta una sola vez; la regla sigue activa después."],
+  "grd.exc.where": ["Where's the terminal? Press Cmd+Space and type \"Terminal\".", "¿Dónde está la terminal? Pulsa Cmd+Espacio y escribe \"Terminal\"."],
+  "grd.exc.mismatch": ["The announced exception isn't the one you copied: cancel it with Ctrl-C in that terminal.", "La excepción anunciada no es la que copiaste: cancélala con Ctrl-C en esa terminal."],
+  "grd.toast.kindLabel": ["Blocked", "Bloqueo"],
+  "grd.exc.cancelHow": ["Once you run it you have 10 seconds to cancel: press Ctrl-C in that terminal.", "Cuando lo ejecutes tendrás 10 segundos para cancelar: pulsa Ctrl-C en esa terminal."],
+  "grd.exc.cancelOr": ["Or run this in another terminal:", "O ejecuta esto en otra terminal:"],
+  "grd.exc.pendingNow": ["Running now…", "Ejecutándose ahora…"],
+  "grd.exc.close": ["Close", "Cerrar"],
+  "grd.exc.pending": ["Exception announced in a terminal: runs in {{n}} s", "Excepción anunciada en una terminal: se ejecuta en {{n}} s"],
+  "grd.exc.done": ["Done with an exception: {{operation}}; skipped {{rules}}", "Hecho con excepción: {{operation}}; se saltó {{rules}}"],
+  "grd.exc.cancelled": ["Cancelled: nothing ran. It's in the log.", "Cancelada: no se ejecutó nada. Queda en el registro."],
+  "grd.exc.cancelledBy": ["Cancelled by {{actor}}: nothing ran.", "La canceló {{actor}}: no se ejecutó nada."],
+  "grd.exc.rejected": ["Exception refused: {{operation}}", "Excepción rechazada: {{operation}}"],
+  "grd.exc.engineDown": ["The engine is stopped: the exception needs it.", "El motor está parado: la excepción lo necesita."],
+  "grd.exc.notOffered.commit": ["The exception only works for push, deleting a local branch and rebase.", "La excepción solo sirve para push, borrar una rama local y rebase."],
+  "grd.exc.notOffered.operation": ["The exception only works for push, deleting a local branch and rebase.", "La excepción solo sirve para push, borrar una rama local y rebase."],
+  "grd.exc.notOffered.rule": ["This rule can't be skipped with an exception.", "Esta regla no se puede saltar con una excepción."],
+  "grd.exc.notOffered.remote": ["The exception needs a remote by name, not a URL.", "La excepción necesita un remoto por su nombre, no una URL."],
+  "grd.exc.notOffered.whereUnknown": ["GitRaptor didn't log where it happened, so it can't write the command.", "GitRaptor no anotó dónde ocurrió, así que no puede escribir el comando."],
+  "grd.exc.notOffered.rateLimited": ["GitRaptor didn't log where it happened, so it can't write the command.", "GitRaptor no anotó dónde ocurrió, así que no puede escribir el comando."],
+  "grd.exc.notOffered.unsafeText": ["A name in this operation has characters that could act on your terminal, so we don't offer the command.", "Un nombre de esta operación tiene caracteres que podrían actuar sobre tu terminal, así que no ofrecemos el comando."],
+  "grd.exc.notOffered.raptorUnknown": ["GitRaptor can't find its own `raptor` to write the command.", "GitRaptor no encuentra su propio `raptor` para escribir el comando."],
+  "grd.toast.many": ["{{count}} operations were blocked", "Se bloquearon {{count}} operaciones"],
+  "grd.gloss.ask": ["What is {{term}}?", "¿Qué es {{term}}?"],
+  "grd.block.openLabel": ["View the block: {{title}}", "Ver el bloqueo: {{title}}"],
+};
+const GRD_LEVELS = ["minimum", "floor", "worktree", "profile", "local", "system"];
+const GRD_LEVEL_TEXT: Record<string, [string, string]> = {
+  floor: ["team configuration", "configuración del equipo"],
+  worktree: ["team configuration on this branch", "configuración del equipo en esta rama"],
+  profile: ["personal configuration", "configuración personal"],
+  local: ["local configuration", "configuración local"],
+  system: ["default value", "valor por defecto"],
+};
+const GRD_RULE_TEXT: Record<string, [string, string]> = {
+  "force-push": ["no force-push", "prohibir force-push"],
+  "base-branch-delete": ["base branch protection", "protección de la rama base"],
+  "protected-branch": ["protected branch", "rama protegida"],
+  "forbidden-path": ["forbidden path", "ruta prohibida"],
+  "human-author": ["commits are made by the person (human-author)", "los commits los hace la persona (human-author)"],
+};
+const NOT_OFFERED = ["commit", "operation", "rule", "remote", "whereUnknown", "rateLimited", "unsafeText", "raptorUnknown"];
+
+describe("D7-GATE guardrails keys", () => {
+  const entries = { en: new Map(flatten(en)), es: new Map(flatten(es)) };
+
+  it("D7-GATE: has the grd.* keys in en and es with the Dev Spec texts", () => {
+    for (const lang of ["en", "es"] as const) {
+      const index = lang === "en" ? 0 : 1;
+      for (const [key, texts] of Object.entries(GRD_KEYS)) {
+        expect(entries[lang].get(key), `${lang} lacks ${key} or its text differs from the Dev Spec`).toBe(texts[index]);
+      }
+    }
+  });
+
+  it("D7-GATE: every level has a text in en and es, the ones of guard.txt", () => {
+    for (const lang of ["en", "es"] as const) {
+      const index = lang === "en" ? 0 : 1;
+      for (const level of GRD_LEVELS) {
+        const value = entries[lang].get(`grd.level.${level}`);
+        expect(typeof value === "string" && value.trim().length > 0, `${lang} lacks grd.level.${level}`).toBe(true);
+        const expected = GRD_LEVEL_TEXT[level];
+        if (expected) expect(value, `${lang} grd.level.${level} copies guard.level.${level}`).toBe(expected[index]);
+      }
+    }
+  });
+
+  it("D7-GATE: every rule of the wire has a text in en and es, copied from guard.log.rule.*", () => {
+    for (const lang of ["en", "es"] as const) {
+      const index = lang === "en" ? 0 : 1;
+      const rules = [...entries[lang].entries()].filter(([k]) => k.startsWith("grd.rule."));
+      expect(rules.length, `${lang}: one text per rule of guard.log.rule.* (13)`).toBeGreaterThanOrEqual(13);
+      for (const [short, texts] of Object.entries(GRD_RULE_TEXT)) {
+        expect(
+          rules.some(([, v]) => v === texts[index]),
+          `${lang}: a grd.rule.* key must say "${texts[index]}" (guard.log.rule.${short})`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  it("D7-GATE: every reason of NotOffered that the app words has a text", () => {
+    for (const lang of ["en", "es"] as const) {
+      for (const reason of NOT_OFFERED) {
+        const value = entries[lang].get(`grd.exc.notOffered.${reason}`);
+        expect(typeof value === "string" && value.trim().length > 0, `${lang} lacks grd.exc.notOffered.${reason}`).toBe(true);
+      }
+    }
+  });
+
+  it("D7-GATE: the long texts of the Dev Spec exist in both languages", () => {
+    for (const lang of ["en", "es"] as const) {
+      for (const key of ["grd.exc.reason", "grd.exc.remote", "grd.exc.terminal", "grd.exc.review", "grd.exc.sourceInferred", "grd.exc.branchDeleteHint", "grd.exc.rebaseHint", "grd.block.why.forcepush", "grd.block.why.deletebase", "grd.block.do.nothing", "grd.block.do.exception", "grd.block.attemptedPush"]) {
+        const value = entries[lang].get(key);
+        expect(typeof value === "string" && value.trim().length > 0, `${lang} lacks ${key}`).toBe(true);
+      }
+      expect(entries[lang].get("grd.exc.sourceInferred"), `${lang}: grd.exc.sourceInferred takes {{branch}}`).toContain("{{branch}}");
+    }
+  });
+});

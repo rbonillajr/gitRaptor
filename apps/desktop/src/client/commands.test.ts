@@ -85,3 +85,21 @@ describe("D8-CMD (DS-US-DSK-008 D1)", () => {
     expect(about, "the predicted-conflict detail travels by the channel, not by a command").toEqual([]);
   });
 });
+
+describe("D7-WIRE guard_blocks (DS-US-DSK-007 T003)", () => {
+  it("D7-WIRE: guard_blocks joins the closed list of five commands", () => {
+    expect([...COMMANDS].sort(), "the closed list has exactly the five commands").toEqual(["app_info", "engine_retry", "engine_watch", "fleet_open", "guard_blocks"]);
+  });
+
+  it('D7-WIRE: call("guard_blocks", { repoId }) invokes guard_blocks with { params: { repoId } }', async () => {
+    expect(COMMANDS, "guard_blocks must be a declared command").toContain("guard_blocks");
+    const seen: { cmd: string; args: unknown }[] = [];
+    mockIPC((cmd, args) => {
+      seen.push({ cmd, args });
+      return {};
+    });
+    const result = await (call as (c: string, p: unknown) => Promise<unknown>)("guard_blocks", { repoId: "tienda" });
+    expect(seen).toEqual([{ cmd: "guard_blocks", args: { params: { repoId: "tienda" } } }]);
+    expect(result).toEqual({});
+  });
+});

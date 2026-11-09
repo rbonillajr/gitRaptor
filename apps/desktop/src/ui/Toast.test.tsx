@@ -177,3 +177,21 @@ describe("D18 consumed Esc (DS-US-DSK-008)", () => {
     expect(event.defaultPrevented, "the Esc it consumed is marked with preventDefault").toBe(true);
   });
 });
+
+describe("D7-DIALOG Toast srLabel (DS-US-DSK-007 D15)", () => {
+  it("srLabel replaces the hidden kind prefix", () => {
+    mount();
+    show({ kind: "error", message: "Boom", srLabel: "Blocked" } as ToastInput);
+    const toast = screen.getByText("Boom").closest('[role="alert"]')!;
+    expect(toast.querySelector(".sr-only")?.textContent, "the sr-only prefix is the srLabel").toBe("Blocked");
+    expect(toast.textContent, "and the generic kind prefix is gone").not.toContain("Error");
+  });
+
+  it("without srLabel the prefix is the kind", () => {
+    mount();
+    show({ kind: "error", message: "Boom" });
+    expect(screen.getByText("Boom").closest('[role="alert"]')!.querySelector(".sr-only")?.textContent, "the kind prefix").toBe("Error");
+    show({ kind: "warning", message: "Careful" });
+    expect(screen.getByText("Careful").closest('[role="status"]')!.querySelector(".sr-only")?.textContent).toBe("Warning");
+  });
+});
