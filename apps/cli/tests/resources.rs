@@ -230,8 +230,13 @@ fn the_developer_sees_the_engine_consumption() {
         );
         let demo = format!("  {}: ", folder(&m.f.repo));
         assert!(shown.lines().any(|l| l.starts_with(&demo)), "{shown}");
-        assert!(shown.contains("work classes: not available"), "{shown}");
-        assert!(shown.contains("power saving: not available"), "{shown}");
+        // macOS publishes both since TS-GRP-005 PR-B (T008). Whether saving is on depends on
+        // this machine's power source, so only "available" is asserted.
+        assert!(shown.contains("work classes: reported"), "{shown}");
+        assert!(
+            shown.contains("power saving: ") && !shown.contains("power saving: not available"),
+            "{shown}"
+        );
         assert!(!shown.contains("SECRET-CONTENT"), "{shown}");
         for wt in &m.worktrees {
             assert!(wt.exists());
@@ -324,7 +329,10 @@ fn json_output_has_fixed_units_and_no_presentation_text() {
     assert_eq!(e["open_fds"]["target"], 256);
     assert_eq!(e["watches"]["roots"], 3);
     assert!(e["watches"]["inotify"].is_null());
-    assert!(e["pools"].is_null() && e["power_saving"].is_null());
+    // TS-GRP-005 PR-B (T008): macOS publishes the live pools and the power-saving mode.
+    assert!(e["pools"].is_array(), "{v}");
+    assert_eq!(e["power_saving"]["setting"], "auto", "{v}");
+    assert!(e["power_saving"]["active"].is_boolean(), "{v}");
     let d = &v["disk"];
     assert_eq!(d["complete"], true);
     assert!(d["profile_bytes"]["value"].as_u64().unwrap() > 0);
@@ -341,7 +349,28 @@ fn json_output_has_fixed_units_and_no_presentation_text() {
     // The only strings: the repo's id and its Git directory.
     let mut found = Vec::new();
     strings(&v, "", &mut found);
-    let paths: Vec<&str> = found.iter().map(|(p, _)| p.as_str()).collect();
+    // Enums, not text: each pool and its class, and the power-saving setting (TS-GRP-005
+    // PR-B). They are codes, so they are checked as such and left out of the list below.
+    let is_enum = |p: &str| {
+        matches!(
+            p,
+            ".engine.pools[].pool" | ".engine.pools[].class" | ".engine.power_saving.setting"
+        )
+    };
+    for (p, value) in found.iter().filter(|(p, _)| is_enum(p)) {
+        assert!(
+            !value.is_empty()
+                && value
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() || c == '-' || c == '_'),
+            "{p} must be a code, got {value:?}"
+        );
+    }
+    let paths: Vec<&str> = found
+        .iter()
+        .map(|(p, _)| p.as_str())
+        .filter(|p| !is_enum(p))
+        .collect();
     assert_eq!(
         paths,
         [
