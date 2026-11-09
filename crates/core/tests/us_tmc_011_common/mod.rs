@@ -134,9 +134,19 @@ pub struct Agent {
 
 impl Agent {
     pub fn run(&mut self, command: &str) {
+        self.send(command);
+        self.done(command);
+    }
+
+    /// Starts `command` in the agent's shell without waiting for it.
+    fn send(&mut self, command: &str) {
         let stdin = self.stdin.as_mut().unwrap();
         writeln!(stdin, "({command}) 2>&1").unwrap();
         stdin.flush().unwrap();
+    }
+
+    /// Waits for the command [`Agent::send`] started; it must have succeeded.
+    fn done(&mut self, command: &str) {
         let mut output = String::new();
         let mut line = String::new();
         loop {
@@ -242,9 +252,17 @@ fn boot_world(engine: bool) -> World {
     std::fs::create_dir(&bin).unwrap();
     let hooks = tp.root.path().join("slow-hooks");
     std::fs::create_dir(&hooks).unwrap();
-    // A slow `post-commit`, so `git` is alive when the engine samples it and attributes the commit.
+    // A `post-commit` that keeps `git` alive until the test sees the engine record the commit (the
+    // file `$RAPTOR_HARNESS_RELEASE` appears), so the engine's sample finds it however late the
+    // file events come under load (TD-GRP-005). Bounded at 120 s; without the variable it is a no-op.
     let post_commit = hooks.join("post-commit");
-    std::fs::write(&post_commit, "#!/bin/sh\nsleep 2\n").unwrap();
+    std::fs::write(
+        &post_commit,
+        "#!/bin/sh\n[ -n \"$RAPTOR_HARNESS_RELEASE\" ] || exit 0\n\
+         i=0\nwhile [ ! -e \"$RAPTOR_HARNESS_RELEASE\" ] && [ $i -lt 2400 ]; do sleep 0.05; i=$((i+1)); done\n\
+         exit 0\n",
+    )
+    .unwrap();
     std::fs::set_permissions(&post_commit, std::fs::Permissions::from_mode(0o755)).unwrap();
     gitraptor_testkit::fixture::clone_binary(
         &std::env::current_exe().unwrap(),
@@ -607,22 +625,85 @@ impl World {
     /// A commit by `agent`: writes the files, stages them and commits, from the agent's process.
     /// Returns when the timeline shows one more event of an agent.
     pub fn agent_commit(&self, agent: &mut Agent, files: &[(&str, &str)], message: &str) -> String {
-        let before = self.event_count(true);
-        agent.run(&self.commit_script(files, message, true));
-        self.wait_events(true, before + 1);
+        let script = self.commit_script(files, message, true);
+        self.held_commit(agent, &script);
         self.head()
     }
 
     /// A commit by `agent` that takes `file` out of the index and keeps it in the worktree.
     pub fn agent_forget(&self, agent: &mut Agent, file: &str, message: &str) -> String {
         assert!(!message.contains('\'') && !file.contains('\''));
-        let before = self.event_count(true);
-        agent.run(&format!(
+        let script = format!(
             "git rm --cached -q -- '{file}' && git -c core.hooksPath={} commit -q -m '{message}'",
             self.hooks.display()
-        ));
-        self.wait_events(true, before + 1);
+        );
+        self.held_commit(agent, &script);
         self.head()
+    }
+
+    /// Runs `script` (a commit through the hooks dir) in `agent`'s shell and returns once the
+    /// timeline shows one more event of an agent. The commit's `git` is held by the hook until the
+    /// engine has recorded some new event (whoever its actor), then let go: the sample that
+    /// attributes the commit sees it alive whatever the load.
+    fn held_commit(&self, agent: &mut Agent, script: &str) {
+        let before_agent = self.event_count(true);
+        let before_all = before_agent + self.event_count(false);
+        let release = self.release_file();
+        agent.send(&format!(
+            "RAPTOR_HARNESS_RELEASE='{}'; export RAPTOR_HARNESS_RELEASE; {script}",
+            release.display()
+        ));
+        self.wait_total_events(before_all + 1);
+        std::fs::write(&release, "").unwrap();
+        agent.done(script);
+        self.wait_events(true, before_agent + 1);
+    }
+
+    fn release_file(&self) -> PathBuf {
+        let n = self.out_n.get();
+        self.out_n.set(n + 1);
+        self.tp.root.path().join(format!("release-{n}"))
+    }
+
+    /// The `s3_evidence` lines of the daemon's log, for a failure message.
+    fn s3_log(&self) -> String {
+        fn find(dir: &Path, out: &mut String) {
+            let Ok(rd) = std::fs::read_dir(dir) else {
+                return;
+            };
+            for e in rd.flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    find(&p, out);
+                } else if p.file_name().is_some_and(|n| n == "daemon.log") {
+                    for l in std::fs::read_to_string(&p).unwrap_or_default().lines() {
+                        if l.contains("s3_evidence") || l.contains("s3_") {
+                            out.push_str(l);
+                            out.push('\n');
+                        }
+                    }
+                }
+            }
+        }
+        let mut out = String::new();
+        find(self.tp.root.path(), &mut out);
+        out
+    }
+
+    fn wait_total_events(&self, at_least: usize) {
+        let start = Instant::now();
+        while self.event_count(true) + self.event_count(false) < at_least {
+            assert!(
+                start.elapsed() < DEADLINE * 3,
+                "the engine never recorded the held commit: {:#?}",
+                self.timeline(None, "1h")
+                    .entries
+                    .iter()
+                    .map(|e| (&e.id, &e.actor))
+                    .collect::<Vec<_>>()
+            );
+            std::thread::sleep(Duration::from_millis(50));
+        }
     }
 
     /// A commit by the test itself (no agent in its ancestry): an unattributed event.
@@ -732,12 +813,13 @@ impl World {
             }
             assert!(
                 start.elapsed() < DEADLINE,
-                "the timeline never showed {at_least} events (agent: {by_agent}), it shows {n}: {:#?}",
+                "the timeline never showed {at_least} events (agent: {by_agent}), it shows {n}: {:#?}\nS3 log:\n{}",
                 self.timeline(None, "1h")
                     .entries
                     .iter()
                     .map(|e| (&e.id, &e.actor))
-                    .collect::<Vec<_>>()
+                    .collect::<Vec<_>>(),
+                self.s3_log()
             );
             std::thread::sleep(Duration::from_millis(50));
         }
