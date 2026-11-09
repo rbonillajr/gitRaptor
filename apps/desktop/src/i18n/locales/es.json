@@ -64,6 +64,77 @@
       "loading": "Cargando filas…"
     }
   },
+  "fleet": {
+    "title": "Flota · ↑↓ respecto a {{base}} (copia local, fetch hace {{age}})",
+    "titleNeverFetched": "Flota · ↑↓ respecto a {{base}} (copia local, sin fetch)",
+    "titleBaseNotFound": "Flota · ↑↓ no calculable: {{base}} no encontrada",
+    "list": {
+      "label": "Copias de trabajo de {{repo}}"
+    },
+    "main": "copia principal",
+    "agent": {
+      "inWorktree": "{{agent}} · {{worktree}}",
+      "claudeCode": "Claude Code",
+      "more": "+{{count}}",
+      "shared": "compartido"
+    },
+    "noAgent": "Sin agente · {{worktree}}",
+    "agentNotAvailable": "agente no disponible",
+    "lastAgent": "último agente: {{agent}} (terminó hace {{age}})",
+    "state": {
+      "active": "activo",
+      "inactive": "inactivo",
+      "ended": "terminó hace {{age}}",
+      "endedUnobserved": "terminó sin observar; detectado hace {{age}}",
+      "endTimeUnknown": "hora de fin no disponible"
+    },
+    "branch": {
+      "unborn": "{{name}} (sin commits)",
+      "noBranch": "{{commit}} (sin rama)",
+      "noBranchUnknown": "(sin rama)"
+    },
+    "files_one": "{{count}} archivo cambiado",
+    "files_other": "{{count}} archivos cambiados",
+    "clean": "sin cambios",
+    "sync": {
+      "label": "{{ahead}} por delante y {{behind}} por detrás de {{base}}",
+      "baseMissing": "no calculable",
+      "noBase": "sin rama base",
+      "noCommits": "sin commits",
+      "unreadable": "ilegible ahora"
+    },
+    "activity": {
+      "ago": "hace {{age}}",
+      "unknown": "–"
+    },
+    "unavailable": {
+      "missing": "no disponible: falta la carpeta",
+      "untrusted": "no disponible: Git no confía en él",
+      "unreadable": "no disponible: ilegible ahora"
+    },
+    "attention": {
+      "conflict": "⚡ conflicto previsto con {{other}}",
+      "conflictBase": "⚡ conflicto previsto con {{base}}",
+      "conflictMany": "⚡ conflictos previstos con {{count}} copias",
+      "announce": "{{worktree}} pide atención: conflicto previsto"
+    },
+    "empty": {
+      "agents": "Aún no hay agentes trabajando en {{repo}}. Cuando abras Claude Code en una copia de trabajo, aparecerá aquí."
+    },
+    "loading": "Cargando la flota…"
+  },
+  "repos": {
+    "title": "Repos",
+    "worktrees": "Copias de trabajo",
+    "conflicts": "{{count}} conflictos previstos",
+    "unavailable": "no disponible"
+  },
+  "age": {
+    "seconds": "{{count}} s",
+    "minutes": "{{count}} min",
+    "hours": "{{count}} h",
+    "days": "{{count}} d"
+  },
   "engine": {
     "pill": {
       "live": "En vivo",

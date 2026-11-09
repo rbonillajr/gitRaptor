@@ -64,6 +64,77 @@
       "loading": "Loading rows…"
     }
   },
+  "fleet": {
+    "title": "Fleet · ↑↓ vs {{base}} (local copy, fetched {{age}} ago)",
+    "titleNeverFetched": "Fleet · ↑↓ vs {{base}} (local copy, never fetched)",
+    "titleBaseNotFound": "Fleet · ↑↓ not computable: {{base}} not found",
+    "list": {
+      "label": "Worktrees of {{repo}}"
+    },
+    "main": "main worktree",
+    "agent": {
+      "inWorktree": "{{agent}} · {{worktree}}",
+      "claudeCode": "Claude Code",
+      "more": "+{{count}}",
+      "shared": "shared"
+    },
+    "noAgent": "No agent · {{worktree}}",
+    "agentNotAvailable": "agent not available",
+    "lastAgent": "last agent: {{agent}} (ended {{age}} ago)",
+    "state": {
+      "active": "active",
+      "inactive": "inactive",
+      "ended": "ended {{age}} ago",
+      "endedUnobserved": "ended unobserved; detected {{age}} ago",
+      "endTimeUnknown": "end time not available"
+    },
+    "branch": {
+      "unborn": "{{name}} (no commits)",
+      "noBranch": "{{commit}} (no branch)",
+      "noBranchUnknown": "(no branch)"
+    },
+    "files_one": "{{count}} changed file",
+    "files_other": "{{count}} changed files",
+    "clean": "no changes",
+    "sync": {
+      "label": "{{ahead}} ahead and {{behind}} behind {{base}}",
+      "baseMissing": "not computable",
+      "noBase": "no base branch",
+      "noCommits": "no commits",
+      "unreadable": "unreadable now"
+    },
+    "activity": {
+      "ago": "{{age}} ago",
+      "unknown": "–"
+    },
+    "unavailable": {
+      "missing": "unavailable: folder missing",
+      "untrusted": "unavailable: Git does not trust it",
+      "unreadable": "unavailable: unreadable now"
+    },
+    "attention": {
+      "conflict": "⚡ predicted conflict with {{other}}",
+      "conflictBase": "⚡ predicted conflict with {{base}}",
+      "conflictMany": "⚡ predicted conflicts with {{count}} worktrees",
+      "announce": "{{worktree}} needs attention: predicted conflict"
+    },
+    "empty": {
+      "agents": "No agents are working in {{repo}} yet. Open Claude Code in a worktree and it shows up here."
+    },
+    "loading": "Loading the fleet…"
+  },
+  "repos": {
+    "title": "Repos",
+    "worktrees": "Worktrees",
+    "conflicts": "{{count}} predicted conflicts",
+    "unavailable": "unavailable"
+  },
+  "age": {
+    "seconds": "{{count}} s",
+    "minutes": "{{count}} min",
+    "hours": "{{count}} h",
+    "days": "{{count}} d"
+  },
   "engine": {
     "pill": {
       "live": "Live",
