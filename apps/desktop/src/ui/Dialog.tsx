@@ -118,8 +118,8 @@ function DialogLayer({ onOpenChange, dismissible, returnFocusRef, ...surface }: 
   const content = useRef<HTMLDivElement>(null);
   const shown = useFadeIn();
   const close = () => onOpenChange(false);
-  useFocusTrap(content, true, returnFocusRef ? { returnFocus: returnFocusRef } : undefined);
-
+  // Declared before the trap on purpose: cleanups run in declaration order, so `inert` is lifted first and the
+  // trap can give the focus back. WebKit ignores focus() inside an inert subtree and the focus would fall to body.
   useEffect(() => {
     const node = content.current?.closest("[data-gr-portal]");
     if (!node) return;
@@ -132,6 +132,8 @@ function DialogLayer({ onOpenChange, dismissible, returnFocusRef, ...surface }: 
       if (lockScroll) document.body.style.overflow = previous;
     };
   }, []);
+
+  useFocusTrap(content, true, returnFocusRef ? { returnFocus: returnFocusRef } : undefined);
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key === "Escape" && dismissible) {
