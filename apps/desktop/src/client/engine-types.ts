@@ -219,4 +219,62 @@ export type EngineMessage =
   | { type: "repoSession"; repoId: string; session: SessionDto; perf: FleetPerf }
   | { type: "prediction"; repoId: string; pairs: PairDto[]; removed: string[]; perf: FleetPerf }
   | { type: "pairDetails"; repoId: string; details: PairDetailDto[]; filled: boolean; perf: FleetPerf }
+  | { type: "guardBlocks"; blocks: GuardBlocksDto }
+  | { type: "guardBlocksUnavailable"; repoId: string; cause: GuardUnavailableCause; protection: ProtectionDto | null }
   | { type: "repoClosed"; repoId: string };
+
+export interface ProtectionDto {
+  state: "unprotected" | "hooks-only" | "mcp-only" | "full";
+}
+export type GuardUnavailableCause = "log-unavailable" | "not-observed" | "refused" | "not-open";
+export interface RefDto {
+  name: string;
+  change: "create" | "update" | "force" | "delete";
+}
+export type OperationDto =
+  | { kind: "push"; remote: string | null; refs: RefDto[] }
+  | { kind: "ref-transaction"; refs: RefDto[] }
+  | { kind: "rebase" }
+  | { kind: "commit" };
+export type NotOffered =
+  | "commit"
+  | "rebase"
+  | "operation"
+  | "rule"
+  | "remote"
+  | "where-unknown"
+  | "rate-limited"
+  | "unsafe-text"
+  | "raptor-unknown";
+export type ExceptionCommandDto = { state: "offered"; command: string } | { state: "not-offered"; reason: NotOffered };
+export interface BlockEntryDto {
+  decisionId: string;
+  kind: "denial" | "exception" | "exception-cancelled" | "exception-rejected";
+  atMs: number;
+  lastMs: number;
+  count: number;
+  actor: { kind: "claude-code" } | { kind: "other" } | null;
+  worktree: { folder: string; path: string } | null;
+  branch: string | null;
+  operation: OperationDto;
+  rules: { rule: string; level: string; cause: string | null }[];
+  layer: "hooks" | "mcp" | "cockpit";
+  detail: "full" | "rate-limited";
+  exception: ExceptionCommandDto | null;
+}
+export interface PendingExceptionDto {
+  appliesAtMs: number;
+  windowMs: number;
+  operation: OperationDto;
+  rules: string[];
+  cancelCommand: string | null;
+}
+export interface GuardBlocksDto {
+  repoId: string;
+  protection: ProtectionDto;
+  sinceMs: number;
+  summary: { blocked: number; exceptions: number; exceptionsRejected: number };
+  entries: BlockEntryDto[];
+  pending: PendingExceptionDto | null;
+  unlogged: { fromMs: number; toMs: number | null }[];
+}

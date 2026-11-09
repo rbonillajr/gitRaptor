@@ -1,0 +1,190 @@
+{
+  "source": [
+    "docs/requirements/features/desktop/dev-specs/US-DSK-007-bloqueo-explicado.md",
+    "docs/requirements/features/desktop/user-stories/US-DSK-007-bloqueo-explicado.md"
+  ],
+  "goal": {
+    "intent": "Que quien tiene un repo abierto en la app vea cada operación que GitRaptor frenó (quién, qué, qué regla, cuándo), entienda por qué en lenguaje llano y, si admite excepción, copie el comando exacto de la excepción consciente para pegarlo en su terminal; la app nunca la ejecuta.",
+    "endState": "Un comando IPC de solo lectura, guard_blocks, hace que el supervisor lea guard.status y guard.log del repo abierto (a petición, cada 10 s con la ventana visible y tras un reserved.audit de excepción, con ráfagas juntadas) y mande guardBlocks o guardBlocksUnavailable saneados; el backend construye el comando copiable (raptor guard exec -- git …, comillas POSIX, sin --yes) o el motivo por el que no se ofrece; la vista Guardrails, el diálogo de dos pasos, el toast de bloqueo y la excepción anunciada con cuenta atrás se pintan con las primitivas, en en/es, accesibles, claro y oscuro; ADR-GRP-017 enmendado (G7); la lista cerrada de comandos pasa a cinco con test de lista exacta.",
+    "nonGoals": [
+      "No ejecuta ni cancela ninguna excepción desde la app: ningún guard.exception*, guard.cancel, guard.install ni guard.uninstall",
+      "No lee el portapapeles ni añade plugins de Tauri",
+      "No llama audit.list ni añade métodos, eventos o capacidades al canal",
+      "No resuelve G1 y G3 (PO, el motor no anota sesión ni ref de origen), G12 (texto de la CLI sobre guard cancel, PO de Guardrails), G2 ni G4",
+      "La verificación manual en macOS con el motor real (writeText en WKWebView, excepción real anunciada y cancelada, T007) va en el PR y no está certificada",
+      "No corre la suite completa local (la corre el CI) ni valida Windows/Linux"
+    ]
+  },
+  "suite": {
+    "command": "pnpm -C apps/desktop run build && node tools/test/nextest-junit.mjs -p gitraptor-desktop && pnpm -C apps/desktop run test"
+  },
+  "layers": {
+    "runtime": {
+      "commands": [
+        {
+          "id": "suite",
+          "cmd": "pnpm -C apps/desktop run build && node tools/test/nextest-junit.mjs -p gitraptor-desktop && pnpm -C apps/desktop run test"
+        }
+      ],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "criteria": [
+    {
+      "id": "D7-CMD",
+      "statement": "exception_command: el comando copiable de un push (force, update, create, delete), de un borrado de rama (branch -d) y de cada operación sin excepción (commit, rebase, cambio de refs que mueve, URL, rate-limited, regla no saltable) sale o se rechaza según D7/D8; nunca lleva --yes; cada argumento va entre comillas simples POSIX; los nombres que el daemon rechazaría y el corpus hostil dan unsafe-text; sin raptor conocido no se ofrece; cancel cita la ruta; SKIPPABLE queda fijada",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test guard_command",
+      "layer": "runtime",
+      "tests": [
+        "apps/desktop/src-tauri/tests/guard_command.rs"
+      ]
+    },
+    {
+      "id": "D7-READ",
+      "statement": "El supervisor lee guard.status y guard.log del repo abierto y manda guardBlocks (denegaciones y excepciones con actor, operación, reglas, hora y comando); un registro ilegible manda guardBlocksUnavailable con el estado de protección (o desconocido); otro repo da not-open sin llamar al motor; el texto no confiable llega escapado; la excepción anunciada llega como pending con su operación y reglas; una vista restringida nunca lee el registro; notice y protection-state del registro no se listan",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test guard_blocks",
+      "layer": "runtime",
+      "tests": [
+        "apps/desktop/src-tauri/tests/guard_blocks.rs"
+      ]
+    },
+    {
+      "id": "D7-RATE",
+      "statement": "Dos lecturas en menos de 2 s llaman al registro una vez; un reserved.audit de una excepción del repo abierto relee el registro sin esa espera, y una ráfaga de ellos se junta en como mucho dos lecturas; el comando copiable usa el raptor del daemon del informe ready o el del bundle si cuelga de un worktree observado",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test guard_blocks",
+      "layer": "runtime",
+      "tests": [
+        "apps/desktop/src-tauri/tests/guard_blocks.rs"
+      ]
+    },
+    {
+      "id": "D7-ONLYREAD",
+      "statement": "Una corrida de guard_blocks nunca manda guard.exception, guard.exception-child, guard.exception-end, guard.cancel, guard.install ni guard.uninstall, ni métodos reservados o de escritura (assert_read_only)",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test guard_blocks",
+      "layer": "runtime",
+      "tests": [
+        "apps/desktop/src-tauri/tests/guard_blocks.rs"
+      ]
+    },
+    {
+      "id": "D7-WIRE",
+      "statement": "guard_blocks entra en la lista cerrada de comandos IPC (commands.json, capability allow-guard-blocks y el test de lista exacta con cinco comandos), valida su id como fleet_open y sin supervisor responde not-watching; el contrato Rust y TS coincide con la fixture congelada ampliada (guardBlocks y guardBlocksUnavailable)",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test commands && cargo test -p gitraptor-desktop --test engine_wire && pnpm --filter @gitraptor/desktop exec vitest run src/client/commands.test.ts",
+      "layer": "runtime",
+      "tests": [
+        "apps/desktop/src-tauri/tests/commands.rs",
+        "apps/desktop/src-tauri/tests/engine_wire.rs",
+        "apps/desktop/src/client/commands.test.ts"
+      ]
+    },
+    {
+      "id": "D7-CACHE",
+      "statement": "La caché aplica guardBlocks y guardBlocksUnavailable (un unavailable conserva las entradas), repoClosed la quita, un not-open de un repo ya no elegido se ignora; useGuardBlocks relee al montar, al cambiar de repo, al volver visible y cada 10 s solo con la ventana visible; ui-store abre la vista guardrails sin persistirla",
+      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/state/engine-cache.test.ts && pnpm --filter @gitraptor/desktop exec vitest run src/state/ui-store.test.ts && pnpm --filter @gitraptor/desktop exec vitest run src/guardrails/useGuardBlocks.test.tsx",
+      "layer": "runtime",
+      "tests": [
+        "apps/desktop/src/state/engine-cache.test.ts",
+        "apps/desktop/src/state/ui-store.test.ts",
+        "apps/desktop/src/guardrails/useGuardBlocks.test.tsx"
+      ]
+    },
+    {
+      "id": "D7-MODEL",
+      "statement": "blockRows y unseen: una fila por entrada con título en llano (agente y carpeta, o sin agente identificado, nunca humano), 'no pasó nada', por qué es peligroso, qué lo frenó, el desenlace de la excepción, las rate-limited aparte, lo histórico de la primera lectura no cuenta como nuevo; pendingMismatch avisa solo si hay copia y difiere",
+      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/guardrails/blocks-model.test.ts",
+      "layer": "runtime",
+      "tests": [
+        "apps/desktop/src/guardrails/blocks-model.test.ts"
+      ]
+    },
+    {
+      "id": "D7-VIEW",
+      "statement": "GuardrailsView, GuardrailsNavRow y PendingException pintan la lista, los estados (cargando, vacío con y sin protección, no disponible con 'la protección sigue activa' y nunca 'nada bloqueado', desactualizado, motor parado), el aviso de excepción distinta con role alert y la cuenta atrás (cifra aria-hidden, región status que anuncia a 10 s, 5 s y el desenlace); un bloqueo nuevo abre un solo toast de error persistente (role alert; varios, uno solo; abrir la vista lo retira); el desenlace de la excepción (hecha, cancelada con 'no se ejecutó nada', rechazada) se muestra desde el registro; Esc vuelve y devuelve el foco a la fila; sin axe violations en en y es y en tema claro y oscuro",
+      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/guardrails/GuardrailsView.test.tsx && pnpm --filter @gitraptor/desktop exec vitest run src/guardrails/GuardrailsNavRow.test.tsx && pnpm --filter @gitraptor/desktop exec vitest run src/guardrails/PendingException.test.tsx",
+      "layer": "runtime",
+      "tests": [
+        "apps/desktop/src/guardrails/GuardrailsView.test.tsx",
+        "apps/desktop/src/guardrails/GuardrailsNavRow.test.tsx",
+        "apps/desktop/src/guardrails/PendingException.test.tsx"
+      ]
+    },
+    {
+      "id": "D7-DIALOG",
+      "statement": "BlockDialog (kind info, pie con un solo botón 'Entendido', 'Lo haré yo…' en el cuerpo) explica quién, qué, por qué y la regla; el paso 2 muestra el comando exacto con Copiar (writeText simulado, onCopied), la rama de origen deducida o la pista de -d/-D, cómo cancelar en la terminal sin botón de cancelar, el foco pasa a 'Cerrar' y Esc cierra sin llamar al motor; un commit o rebase no lleva comando; el texto no confiable se pinta como texto; Toast gana la prop srLabel que sustituye al prefijo oculto; axe limpio en los dos pasos",
+      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/guardrails/BlockDialog.test.tsx && pnpm --filter @gitraptor/desktop exec vitest run src/ui/Toast.test.tsx",
+      "layer": "runtime",
+      "tests": [
+        "apps/desktop/src/guardrails/BlockDialog.test.tsx",
+        "apps/desktop/src/ui/Toast.test.tsx"
+      ]
+    },
+    {
+      "id": "D7-GATE",
+      "statement": "Ningún archivo de src (salvo tests) lee el portapapeles y writeText solo aparece en CopyCommand; las fronteras de Rust (boundaries, tauri_surface, environment) y el lint V5 siguen verdes; el catálogo en/es tiene todas las claves grd.* y cada regla, nivel y motivo de NotOffered tiene texto",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test boundaries --test environment --test tauri_surface && pnpm --filter @gitraptor/desktop exec vitest run src/guardrails/boundaries.test.ts && pnpm --filter @gitraptor/desktop exec vitest run tests/eslint-v5.test.ts && pnpm --filter @gitraptor/desktop exec vitest run src/i18n/catalog.test.ts",
+      "layer": "runtime",
+      "tests": [
+        "apps/desktop/src/guardrails/boundaries.test.ts",
+        "apps/desktop/src/i18n/catalog.test.ts",
+        "apps/desktop/src-tauri/tests/boundaries.rs"
+      ]
+    },
+    {
+      "id": "D7-ADR",
+      "statement": "G7: ADR-GRP-017 queda enmendado con la ruta de reserva del raptor (L-02) y el riesgo R-5b del portapapeles con su mitigación",
+      "verify": "grep -q 'R-5b' docs/architecture/decisions/ADR-GRP-017-app-escritorio-cliente-daemon.md && grep -q 'guard_blocks' docs/architecture/decisions/ADR-GRP-017-app-escritorio-cliente-daemon.md",
+      "layer": "static"
+    },
+    {
+      "id": "D7-STATUS",
+      "statement": "La ficha de la historia pasa a implemented con su línea 'Implementado en: PR'",
+      "verify": "grep -q '^status: implemented' docs/requirements/features/desktop/user-stories/US-DSK-007-bloqueo-explicado.md && grep -q '^status: implemented' docs/requirements/features/desktop/dev-specs/US-DSK-007-bloqueo-explicado.md && grep -q 'Implementado en: PR' docs/requirements/features/desktop/user-stories/US-DSK-007-bloqueo-explicado.md",
+      "layer": "static"
+    }
+  ],
+  "scope": {
+    "projects": [
+      "@gitraptor/desktop",
+      "gitraptor-desktop"
+    ]
+  },
+  "constraints": {
+    "deny_paths": [
+      "docs/ARTIFACTS.md",
+      "docs/architecture/decisions/ADR-GRD-008*"
+    ],
+    "allow_dependency_changes": false
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 900000,
+    "suiteTimeoutMs": 5400000,
+    "maxOutsidePlan": 6
+  },
+  "hops": {
+    "design": {
+      "agent": "main-loop",
+      "model": "sonnet"
+    },
+    "critic": {
+      "agent": "nassa-core:plan-critic",
+      "model": "opus"
+    },
+    "tester": {
+      "agent": "nassa-core:criterion-tester",
+      "model": "sonnet"
+    },
+    "build": {
+      "agent": "nassa-dev-web:web-expert",
+      "model": "sonnet"
+    },
+    "review": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "opus"
+    },
+    "conformance": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "sonnet"
+    }
+  }
+}

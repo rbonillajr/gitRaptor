@@ -83,6 +83,196 @@ pub enum EngineMessage {
     RepoClosed {
         repo_id: String,
     },
+    GuardBlocks {
+        blocks: GuardBlocksDto,
+    },
+    GuardBlocksUnavailable {
+        repo_id: String,
+        cause: GuardUnavailableCause,
+        protection: Option<ProtectionDto>,
+    },
+}
+
+/// Why the guard log could not be shown.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum GuardUnavailableCause {
+    LogUnavailable,
+    NotObserved,
+    Refused,
+    NotOpen,
+}
+
+/// The open repo's blocks, sanitized.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GuardBlocksDto {
+    pub repo_id: String,
+    pub protection: ProtectionDto,
+    pub since_ms: i64,
+    pub summary: GuardSummaryDto,
+    pub entries: Vec<BlockEntryDto>,
+    pub pending: Option<PendingExceptionDto>,
+    pub unlogged: Vec<UnloggedDto>,
+}
+
+/// Counters of the log window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GuardSummaryDto {
+    pub blocked: u64,
+    pub exceptions: u64,
+    pub exceptions_rejected: u64,
+}
+
+/// A period the log did not record.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UnloggedDto {
+    pub from_ms: i64,
+    pub to_ms: Option<i64>,
+}
+
+/// How protected the repo is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct ProtectionDto {
+    pub state: ProtectionKind,
+}
+
+/// The protection levels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ProtectionKind {
+    Unprotected,
+    HooksOnly,
+    McpOnly,
+    Full,
+}
+
+/// One row of the log.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BlockEntryDto {
+    pub decision_id: String,
+    pub kind: BlockKind,
+    pub at_ms: i64,
+    pub last_ms: i64,
+    pub count: u64,
+    pub actor: Option<BlockActorDto>,
+    pub worktree: Option<BlockWorktreeDto>,
+    pub branch: Option<String>,
+    pub operation: OperationDto,
+    pub rules: Vec<BlockRuleDto>,
+    pub layer: BlockLayer,
+    pub detail: BlockDetail,
+    pub exception: Option<ExceptionCommandDto>,
+}
+
+/// What the entry records.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum BlockKind {
+    Denial,
+    Exception,
+    ExceptionCancelled,
+    ExceptionRejected,
+}
+
+/// Who attempted it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+pub enum BlockActorDto {
+    ClaudeCode,
+    Other,
+}
+
+/// The worktree of an entry.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct BlockWorktreeDto {
+    pub folder: String,
+    pub path: String,
+}
+
+/// A rule that stopped the operation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct BlockRuleDto {
+    pub rule: String,
+    pub level: String,
+    pub cause: Option<String>,
+}
+
+/// The layer that caught it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum BlockLayer {
+    Hooks,
+    Mcp,
+    Cockpit,
+}
+
+/// How much the entry kept.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum BlockDetail {
+    Full,
+    RateLimited,
+}
+
+/// The attempted operation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "kebab-case",
+    rename_all_fields = "camelCase"
+)]
+pub enum OperationDto {
+    Push {
+        remote: Option<String>,
+        refs: Vec<RefDto>,
+    },
+    RefTransaction {
+        refs: Vec<RefDto>,
+    },
+    Rebase,
+    Commit,
+}
+
+/// A ref an operation touches.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct RefDto {
+    pub name: String,
+    pub change: RefChange,
+}
+
+/// What the operation does to a ref.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RefChange {
+    Create,
+    Update,
+    Force,
+    Delete,
+}
+
+/// The copyable exception command, or why there is none.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "state", rename_all = "kebab-case")]
+pub enum ExceptionCommandDto {
+    Offered { command: String },
+    NotOffered { reason: NotOffered },
+}
+
+pub use super::exception_command::NotOffered;
+
+/// An announced exception that has not applied yet.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingExceptionDto {
+    pub applies_at_ms: i64,
+    pub window_ms: u64,
+    pub operation: OperationDto,
+    pub rules: Vec<String>,
+    pub cancel_command: Option<String>,
 }
 
 /// Time the backend spent turning an engine event into a message.

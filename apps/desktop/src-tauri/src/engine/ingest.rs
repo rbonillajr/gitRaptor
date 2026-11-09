@@ -549,3 +549,29 @@ mod tests {
         assert_eq!(repo_name("/"), "");
     }
 }
+
+/// The guard log of a repo as a DTO (skeleton: neutral content).
+#[must_use]
+pub fn guard_blocks(
+    repo_id: &str,
+    _status: Option<&gitraptor_api::guard::GuardStatus>,
+    _log: &gitraptor_api::guard::GuardLogResult,
+    _raptor: Option<&Path>,
+) -> super::wire::GuardBlocksDto {
+    use super::wire::{GuardBlocksDto, GuardSummaryDto, ProtectionDto, ProtectionKind};
+    GuardBlocksDto {
+        repo_id: repo_id.to_owned(),
+        protection: ProtectionDto {
+            state: ProtectionKind::Unprotected,
+        },
+        since_ms: 0,
+        summary: GuardSummaryDto {
+            blocked: 0,
+            exceptions: 0,
+            exceptions_rejected: 0,
+        },
+        entries: Vec::new(),
+        pending: None,
+        unlogged: Vec::new(),
+    }
+}
