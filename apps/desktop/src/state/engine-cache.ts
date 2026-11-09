@@ -84,6 +84,8 @@ export function applyEngineBatch(client: QueryClient, batch: readonly EngineMess
           repo: message.fleet,
           sessions: new Map(),
           detection: null,
+          details: new Map(),
+          lastComputed: new Map(),
         });
         break;
       case "worktrees":
@@ -123,6 +125,7 @@ export function applyEngineBatch(client: QueryClient, batch: readonly EngineMess
         break;
       case "conn":
       case "session":
+      case "pairDetails":
         break;
     }
   }

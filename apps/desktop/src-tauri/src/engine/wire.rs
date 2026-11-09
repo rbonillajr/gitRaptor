@@ -74,6 +74,12 @@ pub enum EngineMessage {
         removed: Vec<String>,
         perf: FleetPerf,
     },
+    PairDetails {
+        repo_id: String,
+        details: Vec<PairDetailDto>,
+        filled: bool,
+        perf: FleetPerf,
+    },
     RepoClosed {
         repo_id: String,
     },
@@ -98,6 +104,8 @@ pub struct RepoFleetDto {
     pub worktrees: Vec<WorktreeDto>,
     pub pairs: Vec<PairDto>,
     pub pairs_truncated: bool,
+    pub limits: Vec<LimitCode>,
+    pub confirm_command: ConfirmCommandDto,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -234,10 +242,105 @@ pub enum EndCause {
 #[serde(rename_all = "camelCase")]
 pub struct PairDto {
     pub pair_id: String,
+    pub rev: u64,
     pub a: String,
     pub b: String,
     pub state: PairState,
+    pub reason: Option<PairReason>,
     pub level: Option<PairLevel>,
+    pub computed_at_utc_ms: Option<u64>,
+    pub overlap_files: u32,
+    pub overlap_partial: bool,
+    pub conflict_files: u32,
+    pub conflict_truncated: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PairReason {
+    BaseUnconfirmed,
+    OperationInProgress,
+    PowerSaving,
+    Dormant,
+    BaseMissing,
+    MissingObject,
+    Shallow,
+    LimitExceeded,
+    Error,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LimitCode {
+    OverlapIncludesUncommitted,
+    ConflictCommittedOnly,
+    NoMergeDriversOrAttributes,
+    RenameLimit,
+    InsertionsMayMerge,
+    JoinedHunks,
+    PairIgnoresBaseMoves,
+    LocalOnly,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ConflictKind {
+    Content,
+    AddAdd,
+    ModifyDelete,
+    Rename,
+    DirectoryFile,
+    Binary,
+    Submodule,
+}
+
+/// Lines `start..start + len` of one side, 1-based.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct LineRangeDto {
+    pub start: u32,
+    pub len: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConflictFileDto {
+    pub path: String,
+    pub kind: ConflictKind,
+    pub ours: Vec<LineRangeDto>,
+    pub theirs: Vec<LineRangeDto>,
+    pub hunks_truncated: bool,
+    pub has_merge_rule: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ConflictFilesDto {
+    pub files: Vec<ConflictFileDto>,
+    pub truncated: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct PairDetailDto {
+    pub pair: PairDto,
+    pub overlap: Vec<String>,
+    pub conflict: Option<ConflictFilesDto>,
+}
+
+/// The `raptor` command that confirms the base, when the app can name one safely.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(
+    tag = "state",
+    rename_all = "kebab-case",
+    rename_all_fields = "camelCase"
+)]
+pub enum ConfirmCommandDto {
+    Offered { command: String, with_path: bool },
+    NotOffered { reason: NotOfferedReason },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum NotOfferedReason {
+    RaptorUnknown,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]

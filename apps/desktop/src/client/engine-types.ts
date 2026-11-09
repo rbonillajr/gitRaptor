@@ -110,14 +110,60 @@ export interface SessionDto {
   endCause: EndCause | null;
 }
 
+export type PairReason =
+  | "base-unconfirmed"
+  | "operation-in-progress"
+  | "power-saving"
+  | "dormant"
+  | "base-missing"
+  | "missing-object"
+  | "shallow"
+  | "limit-exceeded"
+  | "error";
+
+/** The eight prediction limits of `crates/api/src/prediction.rs`, in kebab-case. */
+export type LimitCode = string;
+
+export type ConfirmCommandDto =
+  | { state: "offered"; command: string; withPath: boolean }
+  | { state: "not-offered"; reason: "raptor-unknown" };
+
+export interface LineRangeDto {
+  /** 1-based. */
+  start: number;
+  len: number;
+}
+
+export interface ConflictFileDto {
+  path: string;
+  kind: "content" | "add-add" | "modify-delete" | "rename" | "directory-file" | "binary" | "submodule";
+  ours: LineRangeDto[];
+  theirs: LineRangeDto[];
+  hunksTruncated: boolean;
+  hasMergeRule: boolean;
+}
+
 export interface PairDto {
   pairId: string;
+  rev: number;
   /** Worktree key. */
   a: string;
   /** Worktree key, or `"base"`. */
   b: string;
   state: "calculating" | "current" | "recalculating" | "pending" | "not-computable";
+  reason: PairReason | null;
   level: "none" | "overlap" | "conflict" | null;
+  computedAtUtcMs: number | null;
+  overlapFiles: number;
+  overlapPartial: boolean;
+  conflictFiles: number;
+  conflictTruncated: boolean;
+}
+
+export interface PairDetailDto {
+  pair: PairDto;
+  overlap: string[];
+  conflict: { files: ConflictFileDto[]; truncated: boolean } | null;
 }
 
 export interface RepoFleetDto {
@@ -129,6 +175,8 @@ export interface RepoFleetDto {
   worktrees: WorktreeDto[];
   pairs: PairDto[];
   pairsTruncated: boolean;
+  limits: LimitCode[];
+  confirmCommand: ConfirmCommandDto;
 }
 
 /** Backend time spent on a delta (DS-US-DSK-004 T006). */
@@ -142,6 +190,8 @@ export interface RepoFleet {
   sessions: Map<string, SessionDto>;
   /** `null` until `sessions.list` answers. */
   detection: boolean | null;
+  details: Map<string, PairDetailDto>;
+  lastComputed: Map<string, number>;
 }
 
 export type EngineMessage =
@@ -160,4 +210,5 @@ export type EngineMessage =
   | { type: "sessions"; repoId: string; detectionAvailable: boolean; sessions: SessionDto[] }
   | { type: "repoSession"; repoId: string; session: SessionDto; perf: FleetPerf }
   | { type: "prediction"; repoId: string; pairs: PairDto[]; removed: string[]; perf: FleetPerf }
+  | { type: "pairDetails"; repoId: string; details: PairDetailDto[]; filled: boolean; perf: FleetPerf }
   | { type: "repoClosed"; repoId: string };

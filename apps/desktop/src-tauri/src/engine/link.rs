@@ -2,7 +2,7 @@
 //! opens a [`Link`] to the daemon, and every failure is a [`ConnectFailure`] the supervisor can
 //! show. The app talks to the engine only through this channel, like the TUI (ADR-GRP-017).
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use gitraptor_api::PROTOCOL_VERSION;
@@ -31,6 +31,10 @@ pub trait Link: Send {
     /// The next notification with the monotonic reading of when it was read, waiting up to
     /// `timeout`; `None` when none arrived (an answer read meanwhile is dropped).
     fn next(&mut self, timeout: Duration) -> Result<Option<(u64, Notification)>, LinkError>;
+    /// The daemon's own executable, when the link knows it.
+    fn daemon_exe(&self) -> Option<&Path> {
+        None
+    }
 }
 
 /// Opens a [`Link`], starting the engine first when `start` is `true`.

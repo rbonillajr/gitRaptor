@@ -8,7 +8,9 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 pub mod ingest;
 pub mod launcher;
 pub mod link;
+mod prediction;
 pub mod seq;
+pub mod shell_command;
 pub mod supervisor;
 pub mod wire;
 

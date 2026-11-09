@@ -1,6 +1,7 @@
 export { Button, type ButtonProps, type ButtonSize, type ButtonVariant } from "./Button";
 export { CardSkeleton } from "./CardSkeleton";
 export { WorktreeCard, type WorktreeCardProps } from "./WorktreeCard";
+export { ConflictBand, type ConflictBandProps } from "./ConflictBand";
 export { Chip, type ChipProps } from "./Chip";
 export { CopyCommand, type CopyCommandProps } from "./CopyCommand";
 export { Dialog, DialogSurface, type DialogProps, type DialogSurfaceProps } from "./Dialog";

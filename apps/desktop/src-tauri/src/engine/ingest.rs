@@ -1,6 +1,8 @@
 //! Translation of the engine's contract types into the app's DTOs, sanitizing every text that
 //! comes from the file system or an agent before it reaches the webview.
 
+use std::path::Path;
+
 use gitraptor_api::actor::{Actor, AgentKind, AgentOrigin};
 use gitraptor_api::clock;
 use gitraptor_api::discovery::{CandidateView, RepoDiscoveredData};
@@ -14,7 +16,8 @@ use gitraptor_api::messages::{
 };
 use gitraptor_api::methods;
 use gitraptor_api::prediction::{
-    PairLevel as ApiPairLevel, PairSideView, PairStateView, PairSummary, PredictionChanged,
+    PairDetail, PairLevel as ApiPairLevel, PairReason as ApiPairReason, PairSideView,
+    PairStateView, PairSummary, PredictionChanged,
 };
 use gitraptor_api::scope::{
     AttentionCount, AttentionView, GlobalSnapshot, RepoAttentionData, RepoSnapshot, RepoSummaryView,
@@ -22,10 +25,11 @@ use gitraptor_api::scope::{
 
 use super::wire::{
     AgentDto, AttentionDto, Autostart, BaseDto, BaseStatus, BoundedCountDto, CandidateDto,
-    CountDto, CountsDto, DaemonDto, DivergenceDto, EndCause, EngineDto, EngineMessage,
-    EngineStateDto, FleetPerf, GlobalDto, HeadDto, PairDto, PairLevel, PairState, ReadyDto,
-    RepoFleetDto, RepoStateDto, RepoSummaryDto, SessionDto, SessionOrigin, SessionState, Tier,
-    UnavailableReason, WorktreeDto, WorktreeStatusDto,
+    ConfirmCommandDto, CountDto, CountsDto, DaemonDto, DivergenceDto, EndCause, EngineDto,
+    EngineMessage, EngineStateDto, FleetPerf, GlobalDto, HeadDto, NotOfferedReason, PairDetailDto,
+    PairDto, PairLevel, PairReason, PairState, ReadyDto, RepoFleetDto, RepoStateDto,
+    RepoSummaryDto, SessionDto, SessionOrigin, SessionState, Tier, UnavailableReason, WorktreeDto,
+    WorktreeStatusDto,
 };
 
 /// The global snapshot as a DTO.
@@ -88,6 +92,24 @@ pub fn repo(snapshot: &RepoSnapshot) -> RepoFleetDto {
         worktrees: view.worktrees.iter().map(worktree).collect(),
         pairs,
         pairs_truncated,
+        limits: Vec::new(),
+        confirm_command: confirm_command(view.path.raw(), None),
+    }
+}
+
+/// The command that confirms the base of the repo at `raw_repo_path`, when `raptor` is known.
+pub fn confirm_command(_raw_repo_path: &str, _raptor: Option<&Path>) -> ConfirmCommandDto {
+    ConfirmCommandDto::NotOffered {
+        reason: NotOfferedReason::RaptorUnknown,
+    }
+}
+
+/// One pair with its files as a DTO.
+pub fn pair_detail(detail: &PairDetail) -> PairDetailDto {
+    PairDetailDto {
+        pair: pair(&detail.summary),
+        overlap: Vec::new(),
+        conflict: None,
     }
 }
 
@@ -244,6 +266,23 @@ pub fn pair(summary: &PairSummary) -> PairDto {
             PairStateView::Pending => PairState::Pending,
             PairStateView::NotComputable => PairState::NotComputable,
         },
+        rev: summary.rev,
+        reason: summary.reason.map(|reason| match reason {
+            ApiPairReason::BaseUnconfirmed => PairReason::BaseUnconfirmed,
+            ApiPairReason::OperationInProgress => PairReason::OperationInProgress,
+            ApiPairReason::PowerSaving => PairReason::PowerSaving,
+            ApiPairReason::Dormant => PairReason::Dormant,
+            ApiPairReason::BaseMissing => PairReason::BaseMissing,
+            ApiPairReason::MissingObject => PairReason::MissingObject,
+            ApiPairReason::Shallow => PairReason::Shallow,
+            ApiPairReason::LimitExceeded => PairReason::LimitExceeded,
+            ApiPairReason::Error => PairReason::Error,
+        }),
+        computed_at_utc_ms: summary.computed_at_utc_ms.and_then(non_negative),
+        overlap_files: summary.overlap_files,
+        overlap_partial: summary.overlap_partial,
+        conflict_files: summary.conflict_files,
+        conflict_truncated: summary.conflict_truncated,
         level: summary.level.map(|level| match level {
             ApiPairLevel::Clean => PairLevel::None,
             ApiPairLevel::Overlap => PairLevel::Overlap,

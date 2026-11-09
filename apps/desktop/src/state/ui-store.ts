@@ -12,15 +12,22 @@ export interface UiState {
   detailOpen: boolean;
 }
 
+/** What the center shows; never persisted (DS-US-DSK-008 D7). */
+export type CenterView = { view: "main" } | { view: "pair"; repoId: string; pairId: string };
+
 /** The open repo of the fleet; never persisted (DS-US-DSK-004 T003). */
 export interface FleetSelection {
   selectedRepoId: string | null;
   /** The repo open before the current one: the fallback when the open one is closed. Not persisted. */
   previousRepoId: string | null;
+  center: CenterView;
 }
 
 export interface UiActions {
   selectRepo: (id: string | null) => void;
+  openPairDetail: (target: { repoId: string; pairId: string }) => void;
+  backToMain: () => void;
+  closePairDetail: () => void;
   toggleSidebar: () => void;
   toggleDetail: () => void;
   cycleTheme: () => void;
@@ -39,6 +46,10 @@ export const useUiStore = create<UiState & UiActions & FleetSelection>()(
       detailOpen: true,
       selectedRepoId: null,
       previousRepoId: null,
+      center: { view: "main" },
+      openPairDetail: () => {},
+      backToMain: () => {},
+      closePairDetail: () => {},
       selectRepo: (id) =>
         set((s) =>
           id === null || s.selectedRepoId === null || s.selectedRepoId === id
