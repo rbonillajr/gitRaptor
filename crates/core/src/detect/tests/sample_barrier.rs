@@ -200,8 +200,9 @@ fn evidence_does_not_wait_without_pending_notices() {
 fn a_read_notice_cuts_started_before_at_the_write() {
     let b = Barrier::new(WAIT);
     b.release();
-    // The session's `git` (31) started 1 ms ago; this write is half a second old.
-    b.hooks.git_dir_written("r", 1_000, wall_us() - 500_000);
+    // The session's `git` (31) started 1 ms ago; this write is 2 s old: past
+    // Linux's 1 s start tolerance, within `READ_WRITE_MAX_AGE`.
+    b.hooks.git_dir_written("r", 1_000, wall_us() - 2_000_000);
     assert_eq!(b.evidence(1_000), S3Outcome::NoSighting);
     // A write after the `git` started: it may have made it.
     b.hooks.git_dir_written("r", 900_000_000, wall_us());
