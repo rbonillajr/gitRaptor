@@ -134,3 +134,14 @@ No se puede probar en rojo de forma determinista: el fallo es intermitente y dep
 
 - `s3_cwd_unreadable` por evento.
 - Latencia de FSEvents (TD-GRP-006).
+
+## Ajustes durante la construcción (2026-11-09/10)
+
+- **T004, la ventana del ejecutor**: se abre en `StepCtx` (`timemachine/protected/mod.rs`, `spawn_registered`) en vez de en `run_git_with`, así cubre todo hijo de un paso. Decisión del orquestador, N2: el fixture del ejecutor no pasaba por `run_git_with`.
+- **T004, el margen**: el caso del coordinador (`td_tmc_003::another_actors_commit_after_an_own_echo_still_stops_the_undo`) seguía ambiguo con el margen fijo. Los cambios los validó el Arquitecto, los autorizó el coordinador como enmienda del contrato (GRP007-WINDOW y GRP007-ECHO) y los revisó `security-review`:
+  - la ventana del aplicador anota los pares `(ref, valor)`;
+  - el `old` lo decide la ventana más reciente de la ref;
+  - la cadena de movimientos que pasan el margen;
+  - el eco por valor en cualquier ref y durante los 120 s de retención.
+
+  Regla completa: ADR-GRP-012 § Enmienda 2026-11-09, sección 1.

@@ -417,7 +417,20 @@ Mientras un `git` del daemon que puede mover una ref o el `HEAD` del repo esté 
 
 Cada uno la abre con una guarda RAII sobre su repo, y la guarda la cierra también ante un pánico o un `?`. Ninguna operación de solo lectura ni ninguna captura abre ventana.
 
-La ventana se mide con el mismo reloj monotónico que las marcas del lote. Un evento cuenta como ajeno si su ventana S3, `[t_recv − s3_lead, t_flush]`, se solapa con una ventana de escritura abierta o cerrada hace poco. Se cuenta en su propio contador, `daemon_write_window`.
+La ventana se mide con el mismo reloj monotónico que las marcas del lote. Las marcas de las ventanas se toman bajo el lock de la lista y son estrictamente crecientes: en macOS el reloj solo resuelve microsegundos. Un evento cuenta como ajeno, y suma `daemon_write_window`, en estos casos:
+
+- **Su ventana S3, `[t_recv − s3_lead, t_flush]`, se solapa con una ventana abierta.** Siempre.
+- **Cae en el margen de 3 s (`WINDOW_TAIL`) tras cerrarse una ventana**, el tope del aviso de lectura, salvo que pase la regla del margen.
+
+**La regla del margen** (decisión del orquestador, 2026-11-09, validada por el Arquitecto en tres pasos con el caso `td_tmc_003::another_actors_commit_after_an_own_echo_still_stops_the_undo`: otro agente hace commit unos 100 ms después del eco de un redo). La ventana del aplicador anota los pares `(ref, valor)` que escribe, `HEAD` separado incluido. La del ejecutor no conoce oids. Un evento del margen pasa a S3 normal solo si se cumple todo esto:
+
+- tiene `branch_move` y su `old` se pudo leer;
+- su `new` no es ningún valor que escribió alguna ventana del aplicador, en cualquier ref y mientras la ventana se conserve (120 s), no solo en el margen: un eco tardío, o uno cuyo nombre de rama se reconstruya distinto, sigue siendo ajeno, y fuera del margen también suma `daemon_write_window` (condiciones 1 y 2 de `security-review` sobre el ajuste);
+- no hay ninguna ventana del ejecutor en el margen;
+- para su ref, **la ventana del aplicador más reciente que la escribió**, por `end_ns`, la dejó en el `old` del evento. Las ventanas del aplicador no se solapan porque toma el lock del repo, y dos que se solapan o comparten `end_ns` vuelven ajeno el evento. También vale que el `old` sea el `new` de la **cadena** de eventos que pasaron el margen después de esa ventana. La cadena se actualiza bajo el mismo lock que la lee y solo con eventos que pasaron; una ventana nueva la reinicia y muere con el margen. Un evento atribuido por S4 no la avanza (falla cerrado);
+- si ninguna ventana escribió esa ref, no se comprueba el `old`. Una rama a la que apunta un `HEAD` simbólico sin `RefUpdate` cuenta como no tocada: el aplicador no verifica su valor.
+
+Pasar el margen no atribuye nada: el evento sigue por S3 normal. Un evento fusionado que lleva dentro el movimiento del daemon (`old` anterior a la ventana) no pasa.
 
 Sin esta ventana, la regla siguiente quitaría una protección que hoy existe por casualidad. Un restore termina su `update-ref`, que mueve el `HEAD`, y deja vivos `git` inertes (la captura que dispara su propia escritura). Con un `git` de la sesión escribiendo en ese worktree, el restore se atribuiría al agente. La Time Machine corrige el eco **anclado** de sus operaciones (`branch_rule_events`), pero el actor crudo de `raptor events` y el eco sin ancla de TD-TMC-003 conservarían el actor de S3. Una regla que solo es segura si otra capa la corrige después no falla cerrado.
 
@@ -439,6 +452,7 @@ Un `git` del daemon deja de contar como ajeno solo con evidencia positiva de que
 
 ### 3. Diagnóstico, pruebas y límites
 
+- **Revisión de seguridad**: `security-review` (security-expert, opus) revisó la enmienda inicial y luego el ajuste del margen. Sus veredictos están en el PR.
 - **Lectura (SEC-04)**: la misma lectura acotada del argv da un booleano más, `inert`. `s3_evidence` gana dos contadores enteros, `daemon_inert` y `daemon_write_window`, sin rutas, nombres, pids ni argv.
 - **Fitness function**: `gitraptor_git::daemon_git_argvs()` da el argv real de cada `WriteSubcommand` y de cada `Subcommand`. Es inerte si y solo si no es `update-ref`, `worktree`, `config` ni `--exec-path`. Una variante nueva no compila sin entrar en esa lista (`match` exhaustivo).
 - **Entorno**: los hijos de las capas de lectura y escritura arrancan con `env_clear()` (`invoke.rs`), así que ni `GIT_EXEC_PATH` ni `GIT_CONFIG_*` del daemon llegan a ellos. Lo fija un test.
