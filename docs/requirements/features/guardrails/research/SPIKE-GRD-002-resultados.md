@@ -60,3 +60,11 @@ Lecturas:
 ## Pendiente
 
 Sesión desatendida (E7, E8, E9, E14/E10, E15) y guion manual (E1, H6, E2/E3 con aprobación, E13, E5 salvapantallas).
+
+### Nota de traspaso (2026-11-10, antes del reinicio del Mac)
+
+1. Hecho: prototipo `spikes/os-presence-factor/` (compila, clippy limpio, variantes en `variants/`, no versionadas: se regeneran con `scripts/build-variants.sh`), matriz con pantalla bloqueada, guion manual y este borrador.
+2. Bloqueado a la espera del coordinador ("desbloqueado"): no se ha abierto ningún diálogo todavía.
+3. Siguiente: con el Mac desbloqueado y sin tocar, `cd spikes/os-presence-factor && ./scripts/build-variants.sh` (si falta `variants/`) y `./scripts/dialog-suite.sh`; si un ataque da `verified`, escalar al coordinador al instante.
+4. Después: avisar al coordinador para que Rene haga el guion; leer `results/manual.jsonl`; completar tablas E1–E15 y H1–H14 y recomendaciones (ADR-GRD-008, DEP-DSK-1, H-01..H-07, enmienda ADR-GRP-014).
+5. Cierre: revisión Arquitecto + security-review (opus), ficha a `done`, backlog, `release-status.md`, PR con auto-merge rebase y `worker_done`.
