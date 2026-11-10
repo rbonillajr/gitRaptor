@@ -462,3 +462,55 @@ fn daemon_write_window_tail_the_chain_expires_with_the_margin() {
     let e = evaluate(&rig, t, t + FLUSH_NS);
     assert_attributed_uncounted(&e, "past the margin");
 }
+
+// ----- The late echo by value: any ref, and past the margin (retention) ----------------------------
+
+/// Evaluates the agent's commit with the S3 window starting `after_ns` after now.
+fn evaluate_later(rig: &Rig, after_ns: u64, moved: RefMove<'_>) -> S3Evidence {
+    let t = monotonic_ns() + after_ns;
+    rig.detector.sample_now("r", t);
+    rig.detector.evidence(
+        "r",
+        Path::new(WT),
+        S3Scope::Repo,
+        Some(moved),
+        t,
+        t + FLUSH_NS,
+    )
+}
+
+#[test]
+fn daemon_write_window_tail_a_new_equal_to_a_value_written_on_another_ref_is_foreign() {
+    // The window wrote `refs/heads/a`; the event moves `feat-login`, untouched by it.
+    let rig = rig();
+    closed_tracked(&rig, &[("refs/heads/a", OTHER)]);
+    let e = evaluate_in_the_tail(&rig, Some(feat_login(Some(OLD), OTHER)));
+    assert_ambiguous_by_window(&e, "tail, new equals a value written on another ref");
+
+    // The positive of the same setup: a new nobody wrote is attributed.
+    let rig = self::rig();
+    closed_tracked(&rig, &[("refs/heads/a", OTHER)]);
+    assert_tail_cleared(
+        &rig,
+        feat_login(Some(OLD), NEW),
+        "baseline: new nobody wrote",
+    );
+}
+
+#[test]
+fn daemon_write_window_the_late_echo_is_foreign_past_the_margin_while_the_window_is_kept() {
+    // Positive first: ten seconds after the window closed (past WINDOW_TAIL, within the
+    // retention) an event with a new nobody wrote is attributed.
+    let rig_ok = rig();
+    closed_tracked(&rig_ok, &[(BRANCH_REF, OTHER)]);
+    let ok = evaluate_later(&rig_ok, 10_000_000_000, feat_login(Some(OLD), NEW));
+    assert_attributed_uncounted(&ok, "baseline: past the margin, a new nobody wrote");
+
+    let rig = self::rig();
+    closed_tracked(&rig, &[(BRANCH_REF, OTHER)]);
+    let echo = evaluate_later(&rig, 10_000_000_000, feat_login(Some(OLD), OTHER));
+    assert_ambiguous_by_window(
+        &echo,
+        "past the margin, new equals a value the window wrote",
+    );
+}
