@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-08
+updated: 2026-11-10
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
@@ -628,3 +628,19 @@ Frescura de una escritura fuera de la carpeta excluida, con la exclusión activa
 - **Visibilidad**: `engine.resources` devuelve `watches.backend` y `raptor status --resources` lo muestra en la línea "observador de archivos".
 - **Pruebas**: las suites `watch` y `observe_tiers` corren con **los dos** backends en macOS (un módulo por backend), y `daemon_tiers` comprueba que la clave cambia el backend. Las pruebas de exclusión solo corren con `fsevents`; con `notify`, una prueba comprueba que ninguna carpeta sale del stream.
 - **Retirada**: el respaldo se mantiene en la release que incluya el PR #206 y en la siguiente (⚠️ **ASSUMPTION**: v0.1.0 y la posterior). Se retira, con la clave, cuando el dogfooding de M1 no haya mostrado huecos atribuibles al stream propio. La retirada es un cambio de este ADR.
+
+## Enmienda (2026-11-10, TD-GRP-006)
+
+**Decisión del orquestador (2026-11-10), validada por el Arquitecto.** No cambia ningún intervalo, y el `status` sigue en `accepted`.
+
+- **Lo medido**: con la Mac cargada, `fseventsd` pierde eventos **sin marcar ningún flag**. No llega `MustScanSubDirs`, ni `UserDropped`, ni `KernelDropped`. La sonda de un `Stream` crudo, con latencia 0, dio estos resultados con 30 escrituras:
+  - con carga ~14 llegaron 25 de 30 (p50 de 4,8 s);
+  - con carga ~47 llegaron 7 de 30;
+  - con carga ~70 llegaron 5 de 30.
+
+  Los que llegan pueden tardar de 0,5 a 10 s (TD-GRP-006).
+- **Consecuencia**: ninguna corrección puede depender de que llegue un evento. Que se vea una escritura lo garantizan la lectura por Wake (`poll_repo`: asentamiento de la Time Machine, `scope.snapshot`/`scope.subscribe` de un repo, guard, MCP) y el **sondeo de respaldo de 30 s, que es la cota de latencia**. Los eventos Git salen del reflog en esa lectura: un evento perdido se retrasa, pero no se pierde.
+- **El sondeo no cambia.** Un sondeo más rápido no recupera la muestra S3, porque el `git` de un commit real ya terminó cuando llega la lectura, y cuesta despertares de CPU.
+- **Cómo se gobierna**: con el campo `via=event|wake|backup` del log `s3_read_notice`, en `ObserverHooks::git_dir_written` (`ReadVia`). Si en el dogfooding la proporción de `via=backup` sale alta, esta decisión se reabre.
+- **Hueco conocido**: los eventos del worktree siguen sin medirse.
+- **Pendiente**: Linux y Windows, en la etapa de validación multiplataforma.

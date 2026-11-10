@@ -5,7 +5,7 @@ type: adr
 status: accepted
 accepted: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-28
+updated: 2026-11-10
 date: 2026-10-03
 domain: GRP
 feature: time-machine
@@ -183,3 +183,15 @@ Aplicada desde la [Dev Spec de US-TMC-004](../../requirements/features/time-mach
 | Cambio | Dónde | Fuente |
 |---|---|---|
 | **La captura registra `mid_operation`**: toda captura completa guarda si había una operación de Git en curso en alguno de sus worktrees al empezar o en el punto de validez (el mismo lector registrado de la puerta del `.git`, #223 I-03). Una observación o un punto manual a mitad de operación sigue en el timeline como punto propio. Solo deja de ser un punto "antes de un evento" o destino del undo de Git crudo cuando sigue a un previo sin un punto limpio en medio (sombra (b) de ADR-TMC-003). Sin previo, como el merge a medias antes de un `merge --abort`, sigue siendo el destino. El previo (`previo_hook`, `previo_garantizado`) nunca se excluye por ello (ADR-TMC-003, Enmienda 2026-10-21) | § 1, § 2 | D3, D4 |
+
+## Enmienda (2026-11-10, TD-GRP-006)
+
+**Decisión del orquestador (2026-11-10), validada por el Arquitecto.** Esta enmienda deja constancia de un límite medido y no cambia el comportamiento. El `status` sigue en `accepted`.
+
+- **Límite del nivel (b)**: con la máquina cargada, el SO puede perder todos los eventos del worktree sin avisar (ADR-GRP-010, Enmienda 2026-11-10). Las ediciones que no cambian nada en Git dejan entonces de capturarse con la cadencia Q=1 s / M=5 s. Esperan a la reconciliación completa del worktree, que corre cada 5 min (cada 15 min en ahorro). Los cambios en Git siguen llegando en 30 s como máximo, gracias al sondeo de respaldo o a la lectura por Wake.
+- **Qué no se ve afectado**:
+  - los estados ya capturados;
+  - la validez de cada captura, que sale de leer el estado y no de los eventos;
+  - el previo de las operaciones de raptor y del hook, que es síncrono.
+
+  Por eso NFR-01 se mantiene.
