@@ -331,3 +331,17 @@ fn summary(diff: &WorktreeDiff) -> (u32, &'static str) {
         .unwrap_or("none");
     (files, cut)
 }
+
+#[cfg(test)]
+mod unavailable_tests {
+    use super::*;
+
+    #[test]
+    fn diff_unavailable_carries_its_code_and_the_reason() {
+        let w = serde_json::to_value(unavailable(DiffUnavailable::WorktreeUnavailable)).unwrap();
+        assert_eq!(w["code"], DIFF_UNAVAILABLE.code);
+        assert_eq!(w["data"]["reason"], "worktree-unavailable");
+        let r = serde_json::to_value(unavailable(DiffUnavailable::RepoUnavailable)).unwrap();
+        assert_eq!(r["data"]["reason"], "repo-unavailable");
+    }
+}
