@@ -1115,6 +1115,10 @@ fn session_view(
 mod s3_tests;
 
 #[cfg(test)]
+#[path = "sessions_s3_inert_tests.rs"]
+mod s3_inert_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 

@@ -617,6 +617,11 @@ impl UserGitCommand {
             .collect()
     }
 
+    /// The folder the `git` runs in (the daemon's write window, TD-GRP-007).
+    pub fn cwd(&self) -> &Path {
+        &self.cwd
+    }
+
     /// Names of the variables the child receives (never their values).
     pub fn env_names(&self) -> Vec<String> {
         self.env

@@ -45,7 +45,7 @@ pub use committed::{BlobRead, CommittedFile, NotRegular};
 pub use guard_changes::{CommitChange, LineLimits, NewCommitChanges, message_facts};
 pub use guard_paths::{Hide, NewCommitPaths, NewCommits, PathLimits, RootEntry};
 pub use guard_read::{Ancestry, CommitShape, MAX_ANCESTRY_WALK, RefStorage};
-pub use invoke::{ArgvSink, Invoker, MemoryArgvLog};
+pub use invoke::{ArgvSink, Invoker, MemoryArgvLog, daemon_git_argvs, is_daemon_inert_argv};
 pub use reader::{
     Branch, Change, ChangeKind, CommitIdentity, Count, Head, InProgress, LinkedWorktree,
     ReaderOptions, ReflogEntry, RepoReader, Status,

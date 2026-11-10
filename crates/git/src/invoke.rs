@@ -190,6 +190,74 @@ impl WriteSubcommand {
     }
 }
 
+impl WriteSubcommand {
+    /// Every variant, for [`daemon_git_argvs`]; `every_write_subcommand_is_listed` keeps it whole.
+    pub(crate) const ALL: [Self; 7] = [
+        Self::UpdateRef,
+        Self::IndexInfo,
+        Self::SkipWorktree,
+        Self::PackObjects,
+        Self::IndexPack,
+        Self::Repack,
+        Self::Prune,
+    ];
+}
+
+impl Subcommand {
+    /// Every variant, for [`daemon_git_argvs`]; `every_read_subcommand_is_listed` keeps it whole.
+    pub(crate) const ALL: [Self; 9] = [
+        Self::Version,
+        Self::ExecPath,
+        Self::RevParse,
+        Self::ForEachRef,
+        Self::WorktreeList,
+        Self::RevList,
+        Self::MergeBase,
+        Self::Log,
+        Self::Config,
+    ];
+}
+
+/// The argv (program excluded) of every `git` the daemon launches through the read layer and the
+/// Time Machine write layer, each with the first word of its subcommand: the options are the
+/// real ones, the paths placeholders. For the engine's fitness check of the daemon's inert
+/// `git`s (ADR-GRP-012, amendment 2026-11-09), so a new subcommand cannot skip its
+/// classification. The read layer's arguments after the subcommand are not included.
+pub fn daemon_git_argvs() -> Vec<(&'static str, Vec<OsString>)> {
+    let root = if cfg!(windows) { "C:\\r" } else { "/r" };
+    let git_dir = Path::new(root).join(".git");
+    let work_tree = Path::new(root).to_path_buf();
+    let hooks = Path::new(root).join("hooks-empty");
+    let global = Path::new(root).join("global-empty");
+    let index = Path::new(root).join("index-tmp");
+    let target = WriteTarget {
+        git_dir: &git_dir,
+        work_tree: Some(&work_tree),
+        hooks_dir: &hooks,
+        global_config: &global,
+        index_file: Some(&index),
+    };
+    let mut out: Vec<(&'static str, Vec<OsString>)> = WriteSubcommand::ALL
+        .iter()
+        .map(|s| (s.words()[0], write_argv(&target, *s)))
+        .collect();
+    out.extend(Subcommand::ALL.iter().map(|s| {
+        let mut argv: Vec<OsString> = FIXED_OPTIONS.iter().map(OsString::from).collect();
+        argv.extend(s.words().iter().map(OsString::from));
+        (s.words()[0], argv)
+    }));
+    out
+}
+
+/// Whether `args` (program excluded) is exactly the argv the daemon gives one of its `git`s that
+/// cannot move a ref, `HEAD` or the list of worktrees (ADR-GRP-012, amendment 2026-11-09): a
+/// template of the Time Machine write layer other than `update-ref`, or of the read layer's
+/// `version`, `rev-parse`, `for-each-ref`, `rev-list`, `merge-base` or `log`. Fails closed.
+pub fn is_daemon_inert_argv(args: &[OsString]) -> bool {
+    let _ = args;
+    false
+}
+
 /// The closed list of the Guardrails write layer (ADR-GRD-001 § 7): only the activation key
 /// `core.hooksPath`, only in the common `config` named with `--file`. Adding one requires
 /// revising ADR-GRD-001 (checked by `tests/static_check.rs`).
@@ -728,8 +796,58 @@ fn lower_background_child(command: &mut Command) {
 }
 
 #[cfg(test)]
+#[path = "invoke_inert_tests.rs"]
+mod inert_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A new variant fails to compile here until it is placed in `ALL`.
+    #[test]
+    fn every_write_subcommand_is_listed() {
+        for s in WriteSubcommand::ALL {
+            let at = match s {
+                WriteSubcommand::UpdateRef => 0,
+                WriteSubcommand::IndexInfo => 1,
+                WriteSubcommand::SkipWorktree => 2,
+                WriteSubcommand::PackObjects => 3,
+                WriteSubcommand::IndexPack => 4,
+                WriteSubcommand::Repack => 5,
+                WriteSubcommand::Prune => 6,
+            };
+            assert_eq!(WriteSubcommand::ALL[at], s);
+        }
+    }
+
+    /// A new variant fails to compile here until it is placed in `ALL`.
+    #[test]
+    fn every_read_subcommand_is_listed() {
+        for s in Subcommand::ALL {
+            let at = match s {
+                Subcommand::Version => 0,
+                Subcommand::ExecPath => 1,
+                Subcommand::RevParse => 2,
+                Subcommand::ForEachRef => 3,
+                Subcommand::WorktreeList => 4,
+                Subcommand::RevList => 5,
+                Subcommand::MergeBase => 6,
+                Subcommand::Log => 7,
+                Subcommand::Config => 8,
+            };
+            assert_eq!(Subcommand::ALL[at], s);
+        }
+    }
+
+    #[test]
+    fn daemon_git_argvs_lists_every_subcommand_once() {
+        let all = daemon_git_argvs();
+        assert_eq!(
+            all.len(),
+            WriteSubcommand::ALL.len() + Subcommand::ALL.len()
+        );
+        assert!(all.iter().any(|(w, _)| *w == "update-ref"));
+    }
 
     fn names(env: &[(OsString, OsString)]) -> Vec<String> {
         env.iter()

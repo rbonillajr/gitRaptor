@@ -5,6 +5,8 @@ use std::sync::atomic::AtomicI64;
 
 use super::*;
 
+mod daemon_inert;
+mod daemon_write_window;
 mod queued_notices;
 mod s3_scope;
 mod sample_barrier;
@@ -118,6 +120,8 @@ impl ProcLister for Arc<Table> {
 
 struct Rig {
     table: Arc<Table>,
+    /// The daemon's write windows of this rig only (never the process-wide ones).
+    writes: Arc<daemon_writes::DaemonWrites>,
     now: Arc<AtomicI64>,
     changes: Arc<Mutex<Vec<SessionChange>>>,
     detector: Detector,
@@ -160,8 +164,11 @@ impl Rig {
             Vec::new(),
         );
         assert!(dead.is_empty());
+        let writes = Arc::new(daemon_writes::DaemonWrites::default());
+        detector.use_daemon_writes(Arc::clone(&writes));
         Self {
             table,
+            writes,
             now,
             changes,
             detector,
