@@ -14,9 +14,9 @@
 | Hecho (`done`) | 3 |
 | Implementado en parte (`partially-implemented`) | 27 |
 | Listo (`ready`) | 25 |
-| Borrador (`draft`) | 65 |
+| Borrador (`draft`) | 72 |
 | Bloqueado (`blocked`) | 1 |
-| **Total** | **202** |
+| **Total** | **209** |
 
 ## Por feature
 
@@ -25,7 +25,7 @@
 | [cockpit](#cockpit) | 14 | 0 | 5 | 2 | 17 | 1 | 39 |
 | [desktop](#desktop) | 6 | 0 | 1 | 16 | 0 | 0 | 23 |
 | [guardrails](#guardrails) | 14 | 0 | 7 | 1 | 3 | 0 | 25 |
-| [mcp](#mcp) | 7 | 0 | 4 | 0 | 9 | 0 | 20 |
+| [mcp](#mcp) | 7 | 0 | 4 | 0 | 16 | 0 | 27 |
 | [motor-local](#motor-local) | 21 | 2 | 9 | 2 | 15 | 0 | 49 |
 | [time-machine](#time-machine) | 19 | 1 | 1 | 0 | 13 | 0 | 34 |
 | [worktree-lifecycle](#worktree-lifecycle) | 0 | 0 | 0 | 4 | 8 | 0 | 12 |
@@ -140,7 +140,7 @@
 
 ### mcp
 
-20 fichas: 7 implementado, 4 implementado en parte, 9 borrador.
+27 fichas: 7 implementado, 4 implementado en parte, 16 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -164,6 +164,13 @@
 | [US-MCP-017](features/mcp/user-stories/US-MCP-017-explain-history.md) | Un agente entiende qué pasó en su repo sin ver mensajes ni contenido | Borrador (`draft`) | — | — |
 | [US-MCP-018](features/mcp/user-stories/US-MCP-018-safe-rebase-atomico.md) | Un agente se pone al día con la rama base y, si choca, su rama queda como estaba | Borrador (`draft`) | — | — |
 | [US-MCP-019](features/mcp/user-stories/US-MCP-019-create-worktree.md) | Un agente prepara un worktree nuevo desde la rama base para otro trabajo | Borrador (`draft`) | — | — |
+| [US-MCP-020](features/mcp/user-stories/US-MCP-020-guia-para-agentes.md) | Un agente de Claude Code sabe cómo trabajar con GitRaptor sin que el desarrollador se lo explique en cada sesión | Borrador (`draft`) | — | — |
+| [US-MCP-021](features/mcp/user-stories/US-MCP-021-configure-agents.md) | El desarrollador deja un repo listo para Claude Code con un comando que enseña antes lo que va a cambiar | Borrador (`draft`) | — | — |
+| [US-MCP-022](features/mcp/user-stories/US-MCP-022-archivos-del-usuario-y-reversion.md) | Configurar y retirar GitRaptor en un repo deja intacto lo que escribió el equipo | Borrador (`draft`) | — | — |
+| [US-MCP-023](features/mcp/user-stories/US-MCP-023-cli-json-estable.md) | Un agente que trabaja por Bash lee la salida de raptor con un contrato JSON estable y versionado | Borrador (`draft`) | — | — |
+| [US-MCP-024](features/mcp/user-stories/US-MCP-024-conflictos-por-cli.md) | Un agente que trabaja por Bash sabe con quién va a chocar antes de integrar | Borrador (`draft`) | — | — |
+| [US-MCP-025](features/mcp/user-stories/US-MCP-025-uso-por-canal.md) | El desarrollador ve cuánto usan sus agentes el MCP y cuánto la CLI | Borrador (`draft`) | — | — |
+| [US-MCP-026](features/mcp/user-stories/US-MCP-026-comparacion-mcp-cli.md) | El desarrollador compara, por tarea, cuánto cuesta y cuánto acierta un agente por el MCP y por la CLI | Borrador (`draft`) | — | — |
 
 ### motor-local
 
@@ -490,7 +497,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### Sin hito
 
-41 fichas sin hito asignado.
+48 fichas sin hito asignado.
 
 ## Implementadas en parte: lo que falta
 
