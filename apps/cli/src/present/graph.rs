@@ -137,7 +137,19 @@ pub fn ingest(lanes: &GraphLanes) -> Shown {
     }
 }
 
+/// The keys of the fleet's worktrees, in the order the fleet paints them.
+pub fn fleet_keys(model: &Model) -> Vec<u64> {
+    ordered_rows(model).into_iter().map(|w| w.key).collect()
+}
+
 impl Shown {
+    /// Puts the lanes in the order of the fleet (`keys`); lanes with no fleet row go last, in
+    /// the order the engine gave them.
+    pub fn order_by(&mut self, keys: &[u64]) {
+        self.lanes
+            .sort_by_key(|l| keys.iter().position(|k| *k == l.key).unwrap_or(usize::MAX));
+    }
+
     /// Where a scroll can stop, top to bottom: each lane's header and each of its commits.
     pub fn stops(&self) -> Vec<Anchor> {
         let mut stops = Vec::new();
@@ -216,7 +228,10 @@ pub(crate) fn rows(shown: &Shown, model: &Model, say: Say) -> Vec<GraphRow> {
         }
     };
     let mut rows = Vec::new();
-    for lane in &shown.lanes {
+    let keys = fleet_keys(model);
+    let mut lanes: Vec<&ShownLane> = shown.lanes.iter().collect();
+    lanes.sort_by_key(|l| keys.iter().position(|k| *k == l.key).unwrap_or(usize::MAX));
+    for lane in lanes {
         let agent = repo.and_then(|r| first_agent(model, r, lane.key, say));
         let color = agent.as_ref().map(|(index, _)| *index);
         let title = say.graph(GraphText::LaneTitle {

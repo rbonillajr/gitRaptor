@@ -16,6 +16,8 @@ mod sanitize;
 pub use sanitize::{NAME_MAX_CHARS, SafeText, TEXT_MAX_CHARS};
 
 #[cfg(test)]
+mod graph_order_tests;
+#[cfg(test)]
 mod graph_tests;
 #[cfg(test)]
 mod graph_text_tests;

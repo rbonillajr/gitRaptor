@@ -4,15 +4,15 @@ expression: view_screen
 ---
  shop · ✔ en vivo · motor observando · actúas como tú                ⚡ –  ⛔ –
 ┏━ › grafo de shop sobre main · a las 09:03:12 UTC ━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ ├─ feat-docs · sin agente  1 commit desde 0000000                            ┃
-┃ ─ • 0000000 Rewrite the README  sin atribuir  ahora                          ┃
-┃ ├─ feat-login · sin agente  sin merge-base con main                          ┃
 ┃ ├─ feat-pagos · claude-1  54 commits desde 0000000                           ┃
 ┃ ─ • 0000000 Add payment retry  sin atribuir  ahora                           ┃
 ┃ ─ • 0000000 Merge branch 'main' into feat-pagos (merge)  sin atribuir  ahora ┃
 ┃ ─ • 0000000 Fix the rounding of totals  sin atribuir  ahora                  ┃
 ┃ ─ • 0000000 Add the pay endpoint  sin atribuir  ahora                        ┃
 ┃ ─ 50 más                                                                     ┃
+┃ ├─ feat-docs · sin agente  1 commit desde 0000000                            ┃
+┃ ─ • 0000000 Rewrite the README  sin atribuir  ahora                          ┃
+┃ ├─ feat-login · sin agente  sin merge-base con main                          ┃
 ┃                                                                              ┃
 ┃                                                                              ┃
 ┃                                                                              ┃

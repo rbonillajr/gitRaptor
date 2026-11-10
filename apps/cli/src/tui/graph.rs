@@ -8,7 +8,7 @@ use gitraptor_api::graph::GraphLanes;
 
 use crate::model::{Cmd, GraphFailure, Model, Notice, WorktreeState};
 pub use crate::present::graph::Shown;
-use crate::present::graph::ingest;
+use crate::present::graph::{fleet_keys, ingest};
 
 /// The least time between two requests of an open view.
 pub const REFRESH_MIN: Duration = Duration::from_secs(1);
@@ -155,6 +155,7 @@ pub fn tick(model: &mut Model, now: Instant) -> Vec<Cmd> {
 /// The answer of ticket `ticket`. One that is not the request in flight (an older one, or one
 /// for a view that was closed) is dropped.
 pub fn apply_reply(model: &mut Model, ticket: u64, result: Result<Box<GraphLanes>, GraphFailure>) {
+    let keys = fleet_keys(model);
     let Some(state) = &mut model.ui.graph else {
         return;
     };
@@ -167,7 +168,8 @@ pub fn apply_reply(model: &mut Model, ticket: u64, result: Result<Box<GraphLanes
     });
     match result {
         Ok(lanes) => {
-            let shown = ingest(&lanes);
+            let mut shown = ingest(&lanes);
+            shown.order_by(&keys);
             state.anchor = reanchor(&state.anchor, &shown);
             state.shown = Some(shown);
             state.failure = None;
