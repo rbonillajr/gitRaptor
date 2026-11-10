@@ -235,6 +235,7 @@ graph LR
 > **Nota técnica.** `mcp = true` hace falta para que una conexión de la clase con perfil `mcp` pueda llamarlo: `offered()` filtra por `m.mcp` en ese perfil (`conn.rs:795-799`). El filtro por clase lo añade T007.
 
 - **Depende:** —
+- **Criterios:** GRP009-WIRE, GRP009-COMPAT (`docs/dev-briefs/ts-grp-009-desktop-class.contract.json`)
 - **Refs:** ADR-GRP-016 § 1 ("un método nuevo no necesita capacidad", "`hello` no cambia de forma"); D2
 - **Aceptación:** `cargo test -p gitraptor-api --test ts_grp_009_desktop_contract` en verde tras T003
 
@@ -298,6 +299,7 @@ graph LR
 3. No cambiar ningún valor de `Resolution`.
 
 - **Depende:** T003
+- **Criterios:** GRP009-DOUBT (`docs/dev-briefs/ts-grp-009-desktop-class.contract.json`)
 - **Refs:** D8; ADR-TMC-005 § 1
 - **Aceptación:** `cargo test -p gitraptor-core --lib channel::requester` sigue en verde sin tocar sus tests; `daemon_descendant_gets_mcp` y `ambiguous_ancestry_gets_mcp_even_with_path_identity` pasan a verde tras T006
 - **Guard ⛔2.1:** `executor_mark_gets_mcp_as_daemon_descendant`
@@ -320,6 +322,7 @@ graph LR
 > **Nota técnica.** En macOS `/Applications` es `root:admin 0775` (verificado en la máquina de desarrollo el 2026-11-09) y `~/Applications` suele ser `0700` del usuario. Exigir `0o022` en `<apps>` rechazaría siempre `/Applications`. `nix` ya está en las dependencias Unix de `gitraptor-core` con la feature `user`.
 
 - **Depende:** T003
+- **Criterios:** GRP009-PATH-ID, GRP009-FAIL-CLOSED (`docs/dev-briefs/ts-grp-009-desktop-class.contract.json`)
 - **Refs:** ADR-GRP-017 § 3 (identidad por ruta) y R-6; D4
 - **Aceptación:** `cargo test -p gitraptor-core --test ts_grp_009_path_identity` en verde
 - **Guard ⛔6.1:** `app_dirs_come_from_the_user_database` (macOS)
@@ -341,6 +344,7 @@ graph LR
 7. Devolver siempre `identity` como la recibió (`Verified` → `Path`, `Absent` → `None`, `Unverifiable` → `Unverifiable`), aunque una regla anterior haya decidido.
 
 - **Depende:** T004, T005
+- **Criterios:** GRP009-ROW1, GRP009-ROWS34, GRP009-FAIL-CLOSED, GRP009-DOUBT, GRP009-NO-ESCALATION (`docs/dev-briefs/ts-grp-009-desktop-class.contract.json`)
 - **Refs:** ADR-GRP-017 § 3 (filas 1, 3 y 4); ADR-MCP-001 § 2 y Enmienda 2026-11-08; D3, D6
 - **Aceptación:** `cargo test -p gitraptor-core --test ts_grp_009_desktop_profile` en verde
 - **Guard ⛔6.1:** `clean_ancestry_without_identity_or_terminal_gets_mcp`
@@ -365,6 +369,7 @@ graph LR
 > **Nota técnica.** `is_hook_client` (`limits.rs:133-138`) mira `client == Other` y el ejecutable instalado de `raptor`; el binario de la app nunca es ese ejecutable, así que la clase no afecta al cliente del hook ni a la clave de límites por solicitante.
 
 - **Depende:** T006
+- **Criterios:** GRP009-ROW1, GRP009-NO-ESCALATION, GRP009-COMPAT, GRP009-LOG (`docs/dev-briefs/ts-grp-009-desktop-class.contract.json`)
 - **Refs:** D1, D2, D5, D7; ADR-GRP-016; SEC-04
 - **Aceptación:** `cargo test -p gitraptor-core --test ts_grp_009_desktop_wire` en verde y las suites del canal (`channel`, `channel_capabilities`, `channel_scopes`, `profile_mcp_allowlist`, `us_grd_006_channel`) siguen en verde
 - **Guard ⛔2.1:** `declared_kind_does_not_change_the_decision`
@@ -386,6 +391,7 @@ graph LR
 4. Correr `cargo clippy --workspace --exclude gitraptor-desktop --all-targets -- -D warnings` y `cargo test --workspace --exclude gitraptor-desktop` (o `nx affected -t lint test`).
 
 - **Depende:** T007
+- **Criterios:** GRP009-COMPAT (`docs/dev-briefs/ts-grp-009-desktop-class.contract.json`)
 - **Refs:** `AGENTS.md` (reglas de calidad); ADR-GRP-016 § Validación
 - **Aceptación:** los dos comandos del paso 4 terminan con código 0, y `grep -n 'connection.desktop' docs/architecture/design/api-contract-ipc.md` encuentra la fila
 
