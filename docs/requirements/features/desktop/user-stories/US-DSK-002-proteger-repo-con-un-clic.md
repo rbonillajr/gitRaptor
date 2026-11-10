@@ -5,7 +5,7 @@ type: us
 status: ready
 priority: high
 created: 2026-10-28
-updated: 2026-11-09
+updated: 2026-11-10
 feature: desktop
 blocked_by: []
 source: inline
@@ -21,6 +21,8 @@ related:
     - US-GRD-020
   design:
     - DSF-DSK-001
+  specs:
+    - DS-US-DSK-002
 tags:
   - desktop
   - ui-1
@@ -87,4 +89,4 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 ## Diseño y Dev Spec
 
 - **Diseño:** [design-flow.md](../design/design-flow.md) (DSF-DSK-001), flujo de onboarding.
-- **Dev Spec:** pendiente.
+- **Dev Spec:** [DS-US-DSK-002](../dev-specs/US-DSK-002-proteger-repo-con-un-clic.md) (`spec-ready`, 2026-11-10). Decisiones de frontera P8 a P14 con veredicto del orquestador tras la revisión de seguridad 2026-11-10 (aprobada con comentarios, incorporados); T007 (factor del SO) espera a G1.
