@@ -6,11 +6,11 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-04
 created: 2026-10-04
-updated: 2026-10-28
+updated: 2026-11-10
 deciders: [Rene Bonilla]
 domain: GRP
 feature: guardrails
-related: [ADR-GRD-001, ADR-GRD-003, ADR-GRD-004, ADR-GRD-005, ADR-GRD-006, ADR-CKP-002, CTX-GRD-001, BR-GRD-001]
+related: [US-MCP-021, US-MCP-022, US-WTL-004, US-WTL-013, ADR-MCP-001, ADR-GRP-012, ADR-GRD-001, ADR-GRD-003, ADR-GRD-004, ADR-GRD-005, ADR-GRD-006, ADR-CKP-002, CTX-GRD-001, BR-GRD-001]
 tags: [guardrails, comandos-reservados, excepcion-consciente, token-un-solo-uso, br-auth-001, br-auth-002, r-grd-3, prompt-injection, ascendencia, d5, factor-fuera-de-banda]
 ---
 
@@ -279,3 +279,19 @@ Las menciones de `reserved-action-pending` en el § 1 y en la Enmienda (2026-10-
 - **Respuesta inválida**: se explican las válidas y se vuelve a preguntar, hasta 3 respuestas inválidas seguidas; la tercera cancela y lo dice. Enter solo equivale a **No** (ConfirmPrompt, design system v0 § 4).
 - **`--yes`** solo omite la pregunta: la ventana se cumple igual.
 - **Si el daemon no confirma la cancelación**, `exec` lo dice por stderr (no afirma que quedó auditada), sale con error y no lanza `git`.
+
+## Enmienda (2026-11-10, operaciones que escriben archivos del usuario: superficie para agentes y worktree-lifecycle)
+
+**Decisión del orquestador (2026-11-10), aprobada por Rene Bonilla; redactada por el Arquitecto.** El `status` sigue en `accepted`. Origen: [US-MCP-021](../../requirements/features/mcp/user-stories/US-MCP-021-configure-agents.md) y [US-MCP-022](../../requirements/features/mcp/user-stories/US-MCP-022-archivos-del-usuario-y-reversion.md) (P-MCP-35), [ADR-MCP-001, Enmienda 2026-11-10](./ADR-MCP-001-servidor-mcp-cliente-daemon.md#enmienda-2026-11-10-superficie-para-agentes) y la [Enmienda 2026-11-10 de ADR-GRP-012](./ADR-GRP-012-deteccion-sesiones-claude-code.md#enmienda-2026-11-10-hooks-worktreecreate-y-worktreeremove-worktree-lifecycle).
+
+Se añaden a la lista del § 1 tres operaciones que **escriben archivos del usuario** (fuera del perfil de GitRaptor). Ninguna relaja una política: no usan la ventana cancelable de D5 ni el factor fuera de banda de ADR-GRD-008, que son para las acciones que relajan. Lo que las hace reservadas es que un agente no puede reescribir su propia guía, su propia configuración ni sus propios hooks.
+
+| Comando (nombres provisionales) | Historia | ¿Relaja? | Controles |
+|---|---|---|---|
+| Dejar un repo listo para agentes (`raptor configure-agents`): registra el MCP, deja la guía en `.claude/skills/gitraptor/` y añade el bloque de instrucciones en `AGENTS.md` o `CLAUDE.md` | US-MCP-021 (y su retirada, US-MCP-022) | No | ADR-GRP-005 § 6, puntos 1 a 3, 5 y 6. **Un agente no puede lanzarla** (P-MCP-35): se rechaza y se audita. Plan visible con el estado de cada paso y confirmación (o `--yes`), sin ventana. **Reversible**: cada escritura lleva una marca de versión y hash, queda en la transacción de US-MCP-022 y se retira dejando el archivo como estaba (NFR-01). `--dry-run` no escribe. No habilita la allowlist del repo (sigue siendo US-MCP-002) |
+| Conectar, cambiar o quitar los hooks `WorktreeCreate` y `WorktreeRemove` de Claude Code | US-WTL-004 | No | Igual que la anterior, más el contenido fijado por la Enmienda 2026-11-10 de ADR-GRP-012: solo registran, hacen snapshot y aplican Guardrails; nunca conceden permisos; fail-closed en el borrado. Misma transacción reversible |
+| Crear un worktree y lanzar el agente (`raptor new … --agent claude`; botón «Nuevo agente») | US-WTL-013 | No | ADR-GRP-005 § 6, puntos 1 a 3 y 5: **un agente no puede lanzar otro agente** (BR-WTL-004, Pregunta 8) y el canal lo rechaza desde el MCP. Crear el worktree sin lanzar agente (US-WTL-001, US-CKP-018) no es reservado. La skill que instala se escribe con el mismo instalador y marca de US-MCP-021 y es reversible |
+
+- **Fuera del MCP**: `raptor-mcp` no expone ninguna de las tres y el canal rechaza esos métodos desde la conexión del MCP y desde un solicitante agente (perfil `mcp` por solicitante, S-01; ver [TS-GRP-010](../../requirements/features/motor-local/technical-stories/TS-GRP-010-perfil-mcp-por-solicitante.md)). Hasta que S-01 esté en `main`, el control es la ascendencia de los puntos 2 y 3 de ADR-GRP-005 § 6, con el riesgo residual que este ADR ya acepta.
+- **Qué no cambia**: `raptor mcp install` **no** es reservado (ADR-MCP-001 § 8); `configure-agents` lo reutiliza para el registro del MCP, pero la operación completa sí lo es.
+- **Validación (añade a las 14 anteriores)**: 15. `configure-agents`, la conexión de los hooks de worktree y `raptor new --agent` lanzados desde un agente simulado (CLI, JSON-RPC directo y pty) se rechazan y se auditan; el catálogo del MCP no los ofrece. 16. Tras `configure-agents` y su retirada, los archivos del usuario quedan byte a byte como estaban (US-MCP-022).

@@ -3,8 +3,8 @@ id: BRD-GRP-001
 title: GitRaptor — Documento de Negocio
 type: business-requirements
 status: draft
-version: 0.9
-date: 2026-10-28
+version: 0.10
+date: 2026-11-10
 author: Rene Bonilla
 tags: [git, ai-agents, worktrees, mcp, tui, cli, agent-cockpit, safety-net, guardrails, azure-devops, brd]
 changelog:
@@ -17,6 +17,7 @@ changelog:
   - 0.7 (2026-10-05): Research de mercado actualizado ([RES-GRP-COMP-2026-10](research/competitive-2026-10.md)). GitKraken Desktop (desde la 12.0, abr-2026) y GitLens 19 ya tienen vista de agentes con estado en vivo, así que "ver la flota" deja de ser diferencial. Se actualizan § 1, § 2 (P1 y P7), § 3, § 4, § 10 y los anexos. La propuesta de valor pone **"proteger y deshacer" por encima de "ver"** (hipótesis). No cambia ninguna prioridad de BR: los ajustes al backlog quedan como propuesta en el documento de research.
   - 0.8 (2026-10-06): D6 (decisión de Rene Bonilla): el autor de un commit es la persona y el agente va como trailer `Co-Authored-By`. Nueva **BR-26** (Should, Guardrails del MVP): política de autoría por repo (`agents-commit` por defecto, `human-author`, `flexible`), que separa quién ejecutó el commit de a nombre de quién entra. La pregunta abierta 5 anota que la auditoría local de autoría va en el núcleo y su exportación sigue a BR-24.
   - 0.9 (2026-10-28): D7 (decisión de Rene Bonilla): la **app de escritorio** (Tauri + React) entra en el MVP, en paralelo, porque hay muchos usuarios inexpertos; referencia de experiencia: GitKraken. BR-22 se parte: la app de escritorio pasa a la Fase 1 como **BR-27** (feature [desktop](../requirements/features/desktop/context.md)) y la extensión de VS Code/Cursor sigue en la Fase 3. La fecha de M2 no se mueve: el PO propone recortar Shoulds (pendiente de Rene).
+  - 0.10 (2026-11-10): enmienda de § 6.4 (feature worktree-lifecycle, BR-WTL-004): GitRaptor puede lanzar un agente una sola vez, a petición explícita del humano (`raptor new`, «Nuevo agente»); nunca a petición de un agente ni por el MCP. Orquestar sigue fuera de alcance.
 ---
 
 # GitRaptor — Documento de Negocio
@@ -261,7 +262,7 @@ Prioridad MoSCoW. Los IDs (`BR-xx`) se descomponen en historias de usuario en la
 
 ### 6.4 Fuera de alcance (por ahora)
 
-- Ejecutar o orquestar los agentes (lanzar prompts, gestionar modelos). GitRaptor **observa y protege**; no reemplaza a Claude Code, Cursor ni Codex.
+- Ejecutar o orquestar los agentes (lanzar prompts, gestionar modelos). GitRaptor **observa y protege**; no reemplaza a Claude Code, Cursor ni Codex. **Enmienda (2026-11-10, feature [worktree-lifecycle](../requirements/features/worktree-lifecycle/context.md), BR-WTL-004):** la exclusión sigue valiendo para orquestar. La única excepción es que GitRaptor puede **lanzar un agente una sola vez, al crear su worktree y a petición explícita del humano** (`raptor new`, botón «Nuevo agente» de la app): sin gestionar modelos, sin enviar más prompts después ni reintentar. **Nunca** lo lanza a petición de un agente ni por el MCP (NFR-02). Preparar un worktree sin lanzar ningún agente sigue disponible (US-CKP-018). Decisión del orquestador (2026-11-10), aprobada por Rene Bonilla al aprobar CTX-WTL-001.
 - Hosting de repositorios o una red Git propia (el terreno de Entire y GitHub).
 - Un modelo de ramas propio (virtual branches estilo GitButler).
 - VCS distintos de Git.

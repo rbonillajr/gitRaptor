@@ -2,7 +2,7 @@
 id: US-WTL-004
 title: "Los worktrees que Claude Code crea y borra por su cuenta quedan bajo la red de seguridad de GitRaptor"
 type: us
-status: draft
+status: ready
 priority: high
 milestone: M3
 blocked_by:
@@ -110,6 +110,6 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 ## Dependencias
 
 - **De User Stories**: Requiere US-WTL-001 (creación con rama y copia) y US-WTL-002 (descarte reversible y agente vivo protegido).
-- **Bloqueo**: enmienda de ADR-GRP-012 pendiente, a cargo del Arquitecto (usar los eventos de worktree de Claude Code para registrar, snapshot y Guardrails, con rechazo del borrado si el registro falla). Hasta tenerla, la historia no se diseña.
+- **Enmienda aplicada (2026-11-10)**: [ADR-GRP-012, Enmienda 2026-11-10](../../../../architecture/decisions/ADR-GRP-012-deteccion-sesiones-claude-code.md#enmienda-2026-11-10-hooks-worktreecreate-y-worktreeremove-worktree-lifecycle) (usar los eventos de worktree de Claude Code solo para registrar, snapshot y Guardrails; nunca conceder permisos; lo conecta el humano con una operación reservada de ADR-GRD-007; fail-closed en el borrado). Sin bloqueos. El contrato exacto de los eventos de Claude Code lo verifica la Dev Spec.
 - **Externas**: eventos `WorktreeCreate` y `WorktreeRemove` de Claude Code.
 - **Cross-cutting / transversales**: cómo se toca la configuración de Claude Code de forma reversible: transversal (lo define el Arquitecto).

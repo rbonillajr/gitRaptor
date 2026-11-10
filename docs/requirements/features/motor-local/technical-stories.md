@@ -2,11 +2,11 @@
 mode: draft
 status: expanded
 generated: 2026-10-03
-updated: 2026-10-09
+updated: 2026-11-10
 generator: architect
 domain: GRP
 feature: motor-local
-total_artifacts: 13
+total_artifacts: 14
 expanded: 13
 approved: 0
 related:
@@ -49,6 +49,7 @@ related:
 | [TD-GRP-010](./technical-stories/TD-GRP-010-los-tests-de-caja-blanca-del.md) | TD | Los tests de caja blanca del observador esperan un evento FS con cota de pared y fallan si FSEvents lo pierde bajo carga | Las suites del observador no fallan en una Mac cargada por un evento perdido | ADR-GRP-010 | TD-GRP-006 | — | Low | Draft (2026-11-10; origen: decisión 5 de TD-GRP-006) |
 | [TD-GRP-011](./technical-stories/TD-GRP-011-respaldo-adaptativo-del-observador-cuando-fsevents.md) | TD | Respaldo adaptativo del observador cuando FSEvents pierde eventos bajo carga | El RPO no se degrada cuando FSEvents pierde eventos con agentes trabajando | ADR-GRP-010, ADR-TMC-004, ADR-GRP-015 | TD-GRP-006 | — | Medium | Draft (2026-11-10; origen: firma de TD-GRP-006 por el coordinador) |
 | [TS-GRP-009](./technical-stories/TS-GRP-009-clase-desktop-perfil-lectura.md) | TS | Clase de cliente de la app de escritorio y perfil de lectura `mcp` con un agente en su ascendencia | El daemon, no la app, restringe a la vista del MCP una ventana abierta por un agente; identidad por ruta de las alphas (ADR-GRP-017 § 3, V4) | ADR-GRP-017, ADR-GRP-016, ADR-MCP-001 | US-DSK-003, US-DSK-004 | — (identidad firmada: SPIKE-DSK-001) | High | implemented (2026-11-09, PR #351) |
+| [TS-GRP-010](./technical-stories/TS-GRP-010-perfil-mcp-por-solicitante.md) | TS | Perfil `mcp` por solicitante: la CLI o la TUI que lanza un agente recibe el perfil `mcp` | Un agente no ve ni puede más por la CLI que por el MCP (S-01, SEC-MCP-01); reutiliza la ascendencia de TS-GRP-009 | ADR-GRP-005, ADR-MCP-001 § 2 | US-MCP-023, US-MCP-020 (parte CLI) | TS-GRP-009 | High | ready (2026-11-10; Must de M3) |
 | [INF-GRP-003](./technical-stories/INF-GRP-003-pipeline-release.md) | INF | Pipeline de release: 6 targets, firma, checksums, SBOM y borrador de GitHub Release | Un tag `v*` produce los binarios de NFR-06 verificables y un borrador; nada se publica sin un paso humano | ADR-GRP-014 | — (NFR-06, transversal) | — (release real en Windows: pendientes de TS-GRP-001 y TS-GRP-002) | Medium | partially-implemented (PR #51) |
 | [INF-GRP-004](./technical-stories/INF-GRP-004-canales-distribucion.md) | INF | Canales de distribución: Homebrew, winget, npm y scripts verificados | Canales generados y probados en cada release; publicar solo depende de secretos y un paso humano | ADR-GRP-014 | — (NFR-06; US de instalación pendiente para el PO) | INF-GRP-003 | Medium | partially-implemented (PR #51) |
 | [SPIKE-GRP-001](./technical-stories/SPIKE-GRP-001-precision-deteccion.md) | SPIKE | Precisión de la detección de Claude Code en dogfooding | Medir el 90% sin atribuir trabajo humano; S2a frente a S2b; TTY de la shell de Claude Code | ADR-GRP-012 (valida) | US-GRP-007, 008 | — (prototipo aislado) | Medium | partially-implemented (PR #80, #155, #169) |
