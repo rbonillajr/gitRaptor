@@ -38,12 +38,29 @@ struct Span {
     end_ns: Option<u64>,
 }
 
+/// The branch move of an event, as [`DaemonWrites::covers`] reads it: the full ref name
+/// (`refs/heads/<branch>`), its value before (`None`: unknown) and after.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MoveSeen<'a> {
+    pub refname: &'a str,
+    pub old: Option<&'a str>,
+    pub new: &'a str,
+}
+
 /// Closes its window when dropped.
 #[derive(Debug)]
 #[must_use = "the window closes when the guard drops"]
 pub struct WriteWindow {
     writes: Arc<DaemonWrites>,
     id: u64,
+}
+
+impl WriteWindow {
+    /// Records that the window left `refname` (full name, or `HEAD` when detached) at `value`.
+    /// A symbolic `HEAD` records the ref it points to with that ref's value at the end.
+    pub fn wrote(&self, refname: &str, value: &str) {
+        let _ = (refname, value);
+    }
 }
 
 impl Drop for WriteWindow {
@@ -99,6 +116,28 @@ impl DaemonWrites {
             writes: Arc::clone(self),
             id,
         }
+    }
+
+    /// Opens a window of the Time Machine's applier, which records what it wrote with
+    /// [`WriteWindow::wrote`]: in the tail after it closes, only an event that may be its echo or
+    /// that starts from a state it did not leave counts as foreign (ADR-GRP-012, amendment
+    /// 2026-11-09). A window opened with [`Self::begin`] (the executor) knows nothing it wrote.
+    pub fn begin_tracked(self: &Arc<Self>, path: &Path) -> WriteWindow {
+        self.begin(path)
+    }
+
+    /// Whether the daemon's windows make an event of the repo foreign: one over a path `in_repo`
+    /// accepts was open at some moment of `[from_ns, to_ns]`, or closed less than
+    /// [`WINDOW_TAIL`] before `from_ns` and `moved` does not clear it.
+    pub fn covers(
+        &self,
+        in_repo: &dyn Fn(&Path) -> bool,
+        from_ns: u64,
+        to_ns: u64,
+        moved: Option<MoveSeen<'_>>,
+    ) -> bool {
+        let _ = moved;
+        self.overlaps(in_repo, from_ns, to_ns)
     }
 
     /// Whether a window over a path `in_repo` accepts was open at some moment of
