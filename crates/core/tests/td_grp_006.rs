@@ -88,7 +88,9 @@ impl Watched {
     /// read notice) reaches the router as `git_dir_touched`. Written again per attempt, since the
     /// OS may lose its event; then every signal and notice so far is drained.
     fn wait_stream_live(&self) {
-        let probe = observe::locate(&self.f.repo).unwrap().join("raptor-td-grp-006-probe");
+        let probe = observe::locate(&self.f.repo)
+            .unwrap()
+            .join("raptor-td-grp-006-probe");
         let live = (0..EVENT_ATTEMPTS).any(|i| {
             std::fs::write(&probe, format!("{i}\n")).unwrap();
             self.touched.recv_timeout(READ_WAIT).is_ok()
