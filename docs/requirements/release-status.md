@@ -13,10 +13,10 @@
 | Implementado (`implemented`) | 81 |
 | Hecho (`done`) | 3 |
 | Implementado en parte (`partially-implemented`) | 27 |
-| Listo (`ready`) | 21 |
-| Borrador (`draft`) | 57 |
+| Listo (`ready`) | 25 |
+| Borrador (`draft`) | 65 |
 | Bloqueado (`blocked`) | 1 |
-| **Total** | **190** |
+| **Total** | **202** |
 
 ## Por feature
 
@@ -28,6 +28,7 @@
 | [mcp](#mcp) | 7 | 0 | 4 | 0 | 9 | 0 | 20 |
 | [motor-local](#motor-local) | 21 | 2 | 9 | 2 | 15 | 0 | 49 |
 | [time-machine](#time-machine) | 19 | 1 | 1 | 0 | 13 | 0 | 34 |
+| [worktree-lifecycle](#worktree-lifecycle) | 0 | 0 | 0 | 4 | 8 | 0 | 12 |
 
 ### cockpit
 
@@ -261,6 +262,25 @@
 | [US-TMC-022](features/time-machine/user-stories/US-TMC-022-tope-disco.md) | La Time Machine nunca pasa del tope de disco que fijé | Borrador (`draft`) | — | — |
 | [US-TMC-024](features/time-machine/user-stories/US-TMC-024-solape-restauracion.md) | Una restauración nunca retira trabajo de otro actor sin que el desarrollador lo vea y lo confirme | Borrador (`draft`) | — | — |
 
+### worktree-lifecycle
+
+12 fichas: 4 listo, 8 borrador.
+
+| Id | Título | Estado | Implementado en | Pendientes |
+|---|---|---|---|---|
+| [US-WTL-002](features/worktree-lifecycle/user-stories/US-WTL-002-descarte-reversible-disco.md) | El desarrollador descarta el worktree de un agente terminado, sabe cuánto disco ganó y lo puede restaurar | Listo (`ready`) | — | — |
+| [US-WTL-005](features/worktree-lifecycle/user-stories/US-WTL-005-convivencia-worktrees-ajenos.md) | El desarrollador ve los worktrees de wt, Codex, GitKraken y Orca con su origen sin que GitRaptor los toque | Listo (`ready`) | — | — |
+| [US-WTL-007](features/worktree-lifecycle/user-stories/US-WTL-007-traer-y-devolver.md) | El desarrollador prueba en su copia el trabajo de un agente y se lo devuelve sin perder nada de ninguno de los dos | Listo (`ready`) | — | — |
+| [US-WTL-008](features/worktree-lifecycle/user-stories/US-WTL-008-limpieza-por-politica.md) | El disco no se llena de artefactos viejos porque GitRaptor los limpia según la política del repo | Listo (`ready`) | — | — |
+| [US-WTL-001](features/worktree-lifecycle/user-stories/US-WTL-001-nuevo-agente-una-orden.md) | El desarrollador suma un agente de Claude Code a la flota con una sola orden | Borrador (`draft`) | — | — |
+| [US-WTL-003](features/worktree-lifecycle/user-stories/US-WTL-003-estado-real-del-agente.md) | El desarrollador ve qué agentes esperan su decisión, cuáles esperan el CI y cuáles se colgaron | Borrador (`draft`) | — | — |
+| [US-WTL-004](features/worktree-lifecycle/user-stories/US-WTL-004-worktrees-de-claude-code.md) | Los worktrees que Claude Code crea y borra por su cuenta quedan bajo la red de seguridad de GitRaptor | Borrador (`draft`) | — | — |
+| [US-WTL-006](features/worktree-lifecycle/user-stories/US-WTL-006-semilla-mantenida.md) | El desarrollador crea worktrees con artefactos al día sin tener que reconstruir la semilla | Borrador (`draft`) | — | — |
+| [US-WTL-009](features/worktree-lifecycle/user-stories/US-WTL-009-hooks-de-setup-aprobados.md) | El desarrollador prepara cada worktree nuevo con su propio setup sin que un agente pueda ejecutar nada por él | Borrador (`draft`) | — | — |
+| [US-WTL-010](features/worktree-lifecycle/user-stories/US-WTL-010-integrar-en-local.md) | El desarrollador integra en local el trabajo de un agente y cierra su worktree en un paso que puede deshacer | Borrador (`draft`) | — | — |
+| [US-WTL-011](features/worktree-lifecycle/user-stories/US-WTL-011-resumen-ci-pr-por-rama.md) | El desarrollador sabe en qué va el CI y el PR de la rama de cada agente sin salir del cockpit | Borrador (`draft`) | — | — |
+| [US-WTL-012](features/worktree-lifecycle/user-stories/US-WTL-012-puerto-por-worktree.md) | El desarrollador levanta a la vez el servidor de varios agentes sin que choquen sus puertos | Borrador (`draft`) | — | — |
+
 ## Por hito
 
 Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las fichas.
@@ -423,31 +443,50 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### M3
 
-6 fichas: 3 implementado en parte, 3 borrador.
+11 fichas: 3 implementado en parte, 2 listo, 6 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
 | [SPIKE-GRD-001](features/guardrails/technical-stories/SPIKE-GRD-001-interceptabilidad-hooks.md) | Interceptabilidad, coexistencia y coste de la capa de hooks en los tres SO | Implementado en parte (`partially-implemented`) | #22, #25, #121 | 2 |
 | [SPIKE-GRP-002](features/motor-local/technical-stories/SPIKE-GRP-002-viabilidad-observador.md) | Viabilidad del observador de cambios a escala en los tres SO | Implementado en parte (`partially-implemented`) | #17, #23 | 2 |
 | [TD-GRP-001](features/motor-local/technical-stories/TD-GRP-001-acl-windows.md) | Verificación de ACL en Windows: git.exe (SEC-10) y perfil (SEC-06) | Implementado en parte (`partially-implemented`) | #72 | 2 |
+| [US-WTL-002](features/worktree-lifecycle/user-stories/US-WTL-002-descarte-reversible-disco.md) | El desarrollador descarta el worktree de un agente terminado, sabe cuánto disco ganó y lo puede restaurar | Listo (`ready`) | — | — |
+| [US-WTL-005](features/worktree-lifecycle/user-stories/US-WTL-005-convivencia-worktrees-ajenos.md) | El desarrollador ve los worktrees de wt, Codex, GitKraken y Orca con su origen sin que GitRaptor los toque | Listo (`ready`) | — | — |
 | [US-GRD-013](features/guardrails/user-stories/US-GRD-013-comando-edicion-configuracion.md) | El desarrollador cambia la configuración con un comando sin perder lo que editó a mano | Borrador (`draft`) | — | — |
 | [US-GRP-016](features/motor-local/user-stories/US-GRP-016-rama-base-configuracion-equipo.md) | La rama base la define la configuración del equipo | Borrador (`draft`) | — | — |
 | [US-TMC-022](features/time-machine/user-stories/US-TMC-022-tope-disco.md) | La Time Machine nunca pasa del tope de disco que fijé | Borrador (`draft`) | — | — |
+| [US-WTL-001](features/worktree-lifecycle/user-stories/US-WTL-001-nuevo-agente-una-orden.md) | El desarrollador suma un agente de Claude Code a la flota con una sola orden | Borrador (`draft`) | — | — |
+| [US-WTL-003](features/worktree-lifecycle/user-stories/US-WTL-003-estado-real-del-agente.md) | El desarrollador ve qué agentes esperan su decisión, cuáles esperan el CI y cuáles se colgaron | Borrador (`draft`) | — | — |
+| [US-WTL-004](features/worktree-lifecycle/user-stories/US-WTL-004-worktrees-de-claude-code.md) | Los worktrees que Claude Code crea y borra por su cuenta quedan bajo la red de seguridad de GitRaptor | Borrador (`draft`) | — | — |
 
 ### M4
 
-8 fichas: 2 implementado en parte, 6 borrador.
+12 fichas: 2 implementado en parte, 2 listo, 8 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
 | [INF-GRP-003](features/motor-local/technical-stories/INF-GRP-003-pipeline-release.md) | Pipeline de release: 6 targets, firma, checksums, SBOM y borrador de GitHub Release | Implementado en parte (`partially-implemented`) | #51 | 3 |
 | [INF-GRP-004](features/motor-local/technical-stories/INF-GRP-004-canales-distribucion.md) | Canales de distribución: Homebrew, winget, npm y scripts de instalación verificados | Implementado en parte (`partially-implemented`) | #51 | 2 |
+| [US-WTL-007](features/worktree-lifecycle/user-stories/US-WTL-007-traer-y-devolver.md) | El desarrollador prueba en su copia el trabajo de un agente y se lo devuelve sin perder nada de ninguno de los dos | Listo (`ready`) | — | — |
+| [US-WTL-008](features/worktree-lifecycle/user-stories/US-WTL-008-limpieza-por-politica.md) | El disco no se llena de artefactos viejos porque GitRaptor los limpia según la política del repo | Listo (`ready`) | — | — |
 | [US-CKP-011](features/cockpit/user-stories/US-CKP-011-cli-solo-lectura.md) | El desarrollador consulta la flota y los conflictos desde la línea de comandos | Borrador (`draft`) | — | — |
 | [US-GRP-006](features/motor-local/user-stories/US-GRP-006-retirar-y-volver-a-anadir.md) | El desarrollador recupera el historial de un repo que retiró y volvió a añadir | Borrador (`draft`) | — | — |
 | [US-GRP-013](features/motor-local/user-stories/US-GRP-013-umbral-inactividad-por-repo.md) | El desarrollador ajusta para un repo cuándo una sesión pasa a inactiva | Borrador (`draft`) | — | — |
 | [US-GRP-014](features/motor-local/user-stories/US-GRP-014-git-ausente-o-antiguo.md) | El desarrollador sabe qué Git le falta y el motor empieza solo cuando lo instala | Borrador (`draft`) | — | — |
 | [US-GRP-015](features/motor-local/user-stories/US-GRP-015-primer-repo-maquina-nueva.md) | El desarrollador recién instalado sabe cómo añadir su primer repo | Borrador (`draft`) | — | — |
 | [US-TMC-008](features/time-machine/user-stories/US-TMC-008-timeline-atribucion-vigente.md) | El timeline refleja las correcciones de atribución sin reescribir quién deshizo qué | Borrador (`draft`) | — | — |
+| [US-WTL-006](features/worktree-lifecycle/user-stories/US-WTL-006-semilla-mantenida.md) | El desarrollador crea worktrees con artefactos al día sin tener que reconstruir la semilla | Borrador (`draft`) | — | — |
+| [US-WTL-009](features/worktree-lifecycle/user-stories/US-WTL-009-hooks-de-setup-aprobados.md) | El desarrollador prepara cada worktree nuevo con su propio setup sin que un agente pueda ejecutar nada por él | Borrador (`draft`) | — | — |
+
+### POST-V0.1.0
+
+3 fichas: 3 borrador.
+
+| Id | Título | Estado | Implementado en | Pendientes |
+|---|---|---|---|---|
+| [US-WTL-010](features/worktree-lifecycle/user-stories/US-WTL-010-integrar-en-local.md) | El desarrollador integra en local el trabajo de un agente y cierra su worktree en un paso que puede deshacer | Borrador (`draft`) | — | — |
+| [US-WTL-011](features/worktree-lifecycle/user-stories/US-WTL-011-resumen-ci-pr-por-rama.md) | El desarrollador sabe en qué va el CI y el PR de la rama de cada agente sin salir del cockpit | Borrador (`draft`) | — | — |
+| [US-WTL-012](features/worktree-lifecycle/user-stories/US-WTL-012-puerto-por-worktree.md) | El desarrollador levanta a la vez el servidor de varios agentes sin que choquen sus puertos | Borrador (`draft`) | — | — |
 
 ### Sin hito
 
