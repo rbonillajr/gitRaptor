@@ -13,7 +13,7 @@ frontend_surface: true
 stack: react
 profile: frontend-feature
 tooling: [cargo, pnpm, node, grep]
-blocked_by: [TS-GRP-009]
+blocked_by: []
 related:
   context: ../context.md
   story: ../user-stories/US-DSK-001-anadir-repo-sin-terminal.md
@@ -65,7 +65,7 @@ must_read:
   - ../../../../../apps/desktop/src/ui/CopyCommand.tsx
   - ../../../../../AGENTS.md
 evidence:
-  - grp009://docs/requirements/features/motor-local/dev-specs/TS-GRP-009-dev-spec.md
+  - ../../motor-local/dev-specs/TS-GRP-009-dev-spec.md
 lineage:
   supersedes: []
   superseded_by: []
@@ -181,7 +181,7 @@ Tras la revisión de seguridad 2026-11-10 (opus, CHANGES REQUIRED). Los cambios 
 
 Sin violaciones de la constitución: la app no lee repos ni lanza procesos (ADR-GRP-017 § 1, § 2), no añade plugins salvo `tauri-plugin-dialog`, que V2 ya admite (`tests/tauri_surface.rs:262-275`, `:320-330`), y la única escritura pasa por el daemon con su autorización.
 
-**Depende de**: TS-GRP-009 (`blocked_by`) y DEP-DSK-1 (ficha de motor del factor del SO, dueño Arquitecto, aún sin reservar; bloquea solo T006, ver G1). TS-GRP-009 hace que hace que `hello.profile` llegue `mcp` del daemon para una ventana abierta por un agente. T001 a T005 se escriben ya contra el `hello` que existe (`profile`, `requester`, `capabilities`); la verificación manual de la ventana abierta por un agente (T007) necesita TS-GRP-009 en `main`. Si DS-TS-DSK-002 T007 (registro de `tauri-plugin-dialog`) no está en `main` cuando empiece T003, T003 lo añade con la misma versión y forma (D7 de DS-TS-DSK-002) y la segunda historia que llegue se lo salta.
+**Depende de**: TS-GRP-009 (ya en `main`, PR #351; era el `blocked_by`) y DEP-DSK-1 (ficha de motor del factor del SO, dueño Arquitecto, aún sin reservar; bloquea solo T006, ver G1). TS-GRP-009 hace que `hello.profile` llegue `mcp` del daemon para una ventana abierta por un agente. T001 a T005 se escriben ya contra el `hello` que existe (`profile`, `requester`, `capabilities`); la verificación manual de la ventana abierta por un agente (T007) usa TS-GRP-009, ya en `main`. Si DS-TS-DSK-002 T007 (registro de `tauri-plugin-dialog`) no está en `main` cuando empiece T003, T003 lo añade con la misma versión y forma (D7 de DS-TS-DSK-002) y la segunda historia que llegue se lo salta.
 
 ---
 
@@ -484,7 +484,7 @@ graph LR
 1. Con un perfil limpio y un repo temporal `~/tmp/tienda` (nunca este repo, NFR-01), abrir la app desde el Finder: la vista vacía ofrece "Añadir mi primer repo"; elegirlo, copiar el comando, pegarlo en Terminal.app y comprobar que la app pasa a "observado" y abre el repo sin reiniciarse (escenarios 1 y 4).
 2. Declarar una raíz de descubrimiento con `raptor discovery root add` y un repo dentro; pulsar "Observar" en el candidato y repetir el paso 1 (escenario 2): el candidato deja de aparecer como descubierto.
 3. Elegir `~/Descargas`: con el comando copiado, la terminal dice que no es un repo y la app no observa nada (escenario 3, versión `copy-only`).
-4. Con TS-GRP-009 en `main`, abrir la app con `open -a GitRaptor` desde un proceso de Claude Code: vista restringida, sin botón de añadir; `repo_add` invocado desde las herramientas de desarrollo de una build de depuración responde `read-only`.
+4. Con TS-GRP-009 (ya en `main`), abrir la app con `open -a GitRaptor` desde un proceso de Claude Code: vista restringida, sin botón de añadir; `repo_add` invocado desde las herramientas de desarrollo de una build de depuración responde `read-only`.
 5. Cambiar el tema del sistema a claro y oscuro y el idioma a en y es en el paso 1.
 
 - **Depende:** T005
