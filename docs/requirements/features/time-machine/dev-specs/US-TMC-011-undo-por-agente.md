@@ -682,7 +682,7 @@ Corre `/security-review --scope devspec docs/requirements/features/time-machine/
 
 ## Enmienda (2026-11-08, implementación)
 
-Implementado en: PR #325 (parcial), completado en el PR #PRNUM (TD-TMC-003: regla de ramas sin los ecos propios, ADR-TMC-005 Enmienda 2026-11-09). Decisiones tomadas al implementar. Cada una es una **decisión del orquestador (2026-11-08)**, salvo donde se dice otra cosa. Brief de la corrida: [`docs/dev-briefs/us-tmc-011-undo-by-agent.2-plan.md`](../../../../dev-briefs/us-tmc-011-undo-by-agent.2-plan.md).
+Implementado en: PR #325 (parcial), completado en el PR #349 (TD-TMC-003: regla de ramas sin los ecos propios, ADR-TMC-005 Enmienda 2026-11-09). Decisiones tomadas al implementar. Cada una es una **decisión del orquestador (2026-11-08)**, salvo donde se dice otra cosa. Brief de la corrida: [`docs/dev-briefs/us-tmc-011-undo-by-agent.2-plan.md`](../../../../dev-briefs/us-tmc-011-undo-by-agent.2-plan.md).
 
 | # | Decisión | Motivo |
 |---|---|---|
