@@ -696,23 +696,52 @@ fn ca5_the_wait_holds_neither_the_oplog_lock_nor_the_store_writer() {
 
 // --- CA-6 ---
 
+/// How many times CA-6 starts over when the machine was too slow for the capture to seal inside
+/// `BASE_WAIT`. Counted in attempts, never in wall time.
+const CA6_ATTEMPTS: usize = 3;
+
 #[test]
 fn ca6_the_base_after_waiting_is_the_one_a_later_retry_gets() {
-    let r = rig();
-    let (first, second, before) = agent_history(&r);
-    let reset = r.reset(&first, agent());
-    let (layer, release) = holding(RESET_SEQ, HOLD, || {});
-    let deps = r.deps(vec![reset], Some(layer));
-    let capture = r.capture(&deps);
-    let git = system_git();
+    // CA-6 is about WHICH point the undo takes as B, not about how fast the capture seals. The
+    // wait is a fixed `BASE_WAIT` of wall time, so on a loaded runner (Windows: git processes,
+    // antivirus, a coarse timer) the held capture may not seal inside it and the undo is, by
+    // design (CA-2, D7), `overlap-unverified`. That case says nothing about B: the scenario starts
+    // over on a fresh repo, up to `CA6_ATTEMPTS` times. Any other failure, or an undo that
+    // expired with no attempt left, fails the test with the daemon log.
+    let mut slow = Vec::new();
+    for attempt in 1..=CA6_ATTEMPTS {
+        let r = rig();
+        let (first, second, before) = agent_history(&r);
+        let reset = r.reset(&first, agent());
+        let (layer, release) = holding(RESET_SEQ, HOLD, || {});
+        let deps = r.deps(vec![reset], Some(layer));
+        let capture = r.capture(&deps);
+        let git = system_git();
 
-    let out = r.undo(Some(&deps), &agent_who(), Selection::Last, &git);
+        let out = r.undo(Some(&deps), &agent_who(), Selection::Last, &git);
 
-    drop(release);
-    capture.stop();
-    let done = out.unwrap_or_else(|e| {
-        panic!("TMC005-CA6: the undo waits for its base and finishes, got {e:?}")
-    });
+        drop(release);
+        capture.stop();
+        let waits = r.base_waits();
+        let expired = waits.iter().any(|(_, result)| result == "expired");
+        let done = match out {
+            Ok(done) => done,
+            Err(_) if expired && attempt < CA6_ATTEMPTS => {
+                slow.push(waits);
+                continue;
+            }
+            Err(e) => panic!(
+                "TMC005-CA6: the undo waits for its base and finishes, got {e:?}; attempt \
+                 {attempt}/{CA6_ATTEMPTS}, tm_base_wait {waits:?}, slower attempts before: {slow:?}"
+            ),
+        };
+        ca6_assert_base(&r, &done, &second, &before);
+        return;
+    }
+    unreachable!("the last attempt returns or panics");
+}
+
+fn ca6_assert_base(r: &Rig, done: &UndoDone, second: &str, before: &str) {
     // A retry after the capture settled takes, by `base_point_of`, the capture the reset caused:
     // on this history there is exactly one.
     let caused = r.caused_by_reset();
