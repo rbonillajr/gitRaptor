@@ -27,6 +27,7 @@ use gitraptor_api::timemachine::PriorFailure;
 use crate::channel::marks::ExecutorMarks;
 use crate::channel::peer::ProcSource;
 use crate::channel::requester::Who;
+use crate::detect::daemon_writes::{DaemonWrites, WriteWindow};
 use crate::executor::PlanBinding;
 use crate::profile::ProfileDirs;
 use crate::timemachine::chaos;
@@ -310,6 +311,9 @@ pub trait ProtectedStep: Send {
 pub struct MarkedChild {
     pub child: Child,
     pub pid: u32,
+    /// The daemon's write window over the child's folder (ADR-GRP-012, amendment 2026-11-09):
+    /// open from before the launch until this is waited for or dropped.
+    _write_window: Option<WriteWindow>,
 }
 
 /// What a step may do besides its own work.
@@ -379,19 +383,26 @@ impl StepCtx<'_> {
             use std::os::unix::process::CommandExt;
             cmd.process_group(0);
         }
-        self.spawn_with(|| cmd.spawn())
+        // A child without its own folder runs in the daemon's.
+        let cwd = cmd
+            .get_current_dir()
+            .map(Path::to_path_buf)
+            .or_else(|| std::env::current_dir().ok());
+        let transitions = Arc::clone(&self.registered);
+        self.spawn_registered(|| cmd.spawn(), transitions, cwd.as_deref())
     }
 
     /// Like [`Self::spawn`] for a launch the caller builds (the opaque user
     /// operations of `crates/git`, which set their own process group). The
     /// start barrier is open while `launch` runs and until the child is
-    /// marked (I-02).
+    /// marked (I-02). `cwd` is the folder the child runs in, for the daemon's write window.
     pub fn spawn_with(
         &mut self,
         launch: impl FnOnce() -> std::io::Result<Child>,
+        cwd: &Path,
     ) -> std::io::Result<MarkedChild> {
         let transitions = Arc::clone(&self.registered);
-        self.spawn_registered(launch, transitions)
+        self.spawn_registered(launch, transitions, Some(cwd))
     }
 
     /// [`Self::spawn_with`] for a child that makes its own transitions besides the plan's (the
@@ -401,18 +412,25 @@ impl StepCtx<'_> {
         &mut self,
         launch: impl FnOnce() -> std::io::Result<Child>,
         transitions: &[Expected],
+        cwd: &Path,
     ) -> std::io::Result<MarkedChild> {
         let all: Vec<Expected> = self.registered.iter().chain(transitions).cloned().collect();
-        self.spawn_registered(launch, Arc::from(all))
+        self.spawn_registered(launch, Arc::from(all), Some(cwd))
     }
 
     /// The child is marked with its identity and its transitions in one critical section, before
     /// the start barrier drops: a hook that waited for it finds both.
+    ///
+    /// Every child of a step may move a ref or `HEAD`: a write window of the daemon over `cwd`
+    /// opens before the launch and lives in the [`MarkedChild`] (ADR-GRP-012, amendment
+    /// 2026-11-09). Without a known folder there is no repo to cover.
     fn spawn_registered(
         &mut self,
         launch: impl FnOnce() -> std::io::Result<Child>,
         transitions: Arc<[Expected]>,
+        cwd: Option<&Path>,
     ) -> std::io::Result<MarkedChild> {
+        let write_window = cwd.map(|c| DaemonWrites::global().begin(c));
         let pending = self.marks.begin_spawn();
         let mut child = launch()?;
         let pid = child.id();
@@ -441,7 +459,11 @@ impl StepCtx<'_> {
         };
         drop(pending);
         let _ = lock(self.oplog).record_child_started(self.operation_id, pid, start_us, now_ms());
-        Ok(MarkedChild { child, pid })
+        Ok(MarkedChild {
+            child,
+            pid,
+            _write_window: write_window,
+        })
     }
 
     /// Annotates the end of a marked child the caller waited for itself.
