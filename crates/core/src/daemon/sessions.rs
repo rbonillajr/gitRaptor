@@ -245,6 +245,7 @@ fn s3_log_fields(
         ("gits_after_notice", counter(counts.gits_after_notice)),
         ("daemon_inert", counter(counts.daemon_inert)),
         ("daemon_write_window", counter(counts.daemon_write_window)),
+        ("daemon_exiting", counter(counts.daemon_exiting)),
     ]
 }
 
