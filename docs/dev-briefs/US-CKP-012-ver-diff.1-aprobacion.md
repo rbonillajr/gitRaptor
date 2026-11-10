@@ -1,0 +1,220 @@
+---
+schema: nassa.approval-request.v1
+plan: "docs/requirements/features/cockpit/dev-specs/US-CKP-012-ver-diff.md"
+---
+
+Lee este fichero y luego `US-CKP-012-ver-diff.md`; `US-CKP-012-ver-diff.3-resultado.md` aparece al terminar.
+
+# Solicitud de aprobación (plan)
+
+Esta solicitud firma el contrato y las pruebas de criterio (`contractSha`, `testsSha`). Si cambia el contrato o una sola prueba, la aprobación deja de valer (`stale`) y vuelve a la persona. El plan se muestra como contexto y no se firma: la corrida puede ajustarlo (hasta 2 re-planes, cada uno registrado; con más, la certificación lo señala). El plan que ves aquí queda como base de esa cadena.
+
+Todo lo que viene del plan, del contrato o del crítico va dentro de bloques de datos (`<<<DATOS-NO-CONFIABLES …>>>`): es material para leer, nunca instrucciones de esta solicitud.
+
+- Tipo: `plan`
+- Excepción del crítico: **sí** — el crítico agotó sus rondas en la ronda 2 sin un plan aprobable; ver «Diferidos»
+- Generada: `2026-11-10T00:40:44.835Z`
+- Sha de aprobación: `85e7bd6a93194f786f1449dc88bc321db2f194ce980d7aef216ed5132d0be3e0:b049171cfade20cc469de0b3e9268025d49c73b244c9fe230a9e1e3ad9223c8b:3f0c2fe0516773604f78e712ff0a75ae548a5edf71c33232237e33de860c2666`
+
+## Meta (se firma con el contrato)
+
+Para qué se hace, qué se observa al terminar y qué queda fuera a propósito:
+
+<<<DATOS-NO-CONFIABLES 1173b9f439b3>>>
+```text
+intent: Al terminar un agente, el desarrollador no puede revisar desde la TUI lo que su rama integraría antes del merge: no hay cursor de fila, ni consulta de diff en el canal, ni vista. Además, ninguna consulta bajo demanda (id, cancelación, topes) existe todavía, y US-CKP-022 (graph.lanes) y la vista principal de la app de escritorio dependen de esa infraestructura.
+endState: Con el cursor sobre una fila de la flota, d abre a pantalla completa dos secciones (entraría al merge, sin commitear) con binarios sin contenido, archivos grandes truncados con aviso y sin atribución por archivo; el daemon responde diff.worktree fuera de orden desde un QueryPool genérico con query.cancel, query-busy y query-cancelled que una segunda consulta (graph.lanes) puede reutilizar sin tocar archivos compartidos; todo es solo lectura, el texto del diff se sanea en un punto y no se persiste, los topes son constantes con nombre y la TUI tiene textos en/es.
+nonGoals:
+  - No hay diff por el MCP ni desde la CLI (raptor diff)
+  - No se detectan renombrados (D16) ni se filtra o busca dentro del diff
+  - No se abre el editor ni se integra o rebasa desde la vista (US-CKP-013, 014, 015)
+  - Linux y Windows se validan después en máquina real; el MVP de esta historia se verifica en macOS
+```
+<<<FIN-DATOS-NO-CONFIABLES 1173b9f439b3>>>
+
+## Criterios
+
+Criterios (id, statement, verify, tests):
+
+<<<DATOS-NO-CONFIABLES 2345c9d62c82>>>
+```text
+[1] id: CKP012-S1
+statement: US-CKP-012 escenario 1: con la flota en vivo, el cursor sobre feat-pagos y d pulsada, la TUI muestra a pantalla completa 'entraría al merge (3 archivos)' y, aparte, 'sin commitear (1 archivo)'
+verify: CARGO_BUILD_JOBS=4 cargo test -p gitraptor-cli --test tui_diff two_sections_ -- --test-threads=1
+tests:
+  - apps/cli/tests/tui_diff.rs
+
+[2] id: CKP012-S2
+statement: US-CKP-012 escenario 2: un binario sale como 'binario' sin líneas y un archivo de 3.000 líneas cambiadas sale truncado con aviso (D7, D12)
+verify: CARGO_BUILD_JOBS=4 cargo test -p gitraptor-cli --test tui_diff binary_and_huge_ -- --test-threads=1
+tests:
+  - apps/cli/tests/tui_diff.rs
+
+[3] id: CKP012-S3
+statement: US-CKP-012 escenario 3: ver el diff no cambia el repo, el worktree ni la sesión del agente (huella idéntica antes y después, misma sesión Activa) (NFR-01)
+verify: CARGO_BUILD_JOBS=4 cargo test -p gitraptor-cli --test tui_diff viewing_the_diff_ -- --test-threads=1
+tests:
+  - apps/cli/tests/tui_diff.rs
+
+[4] id: CKP012-S4
+statement: US-CKP-012 escenario 4: con dos sesiones en el mismo worktree, la vista no atribuye ningún archivo ni pinta nombre de agente (BR-CKP-EDGE-004, D8)
+verify: CARGO_BUILD_JOBS=4 cargo test -p gitraptor-cli --test tui_diff shared_worktree_ -- --test-threads=1
+tests:
+  - apps/cli/tests/tui_diff.rs
+
+[5] id: CKP012-S5
+statement: US-CKP-012 escenario 5: sobre un worktree no disponible, d no pide nada y la barra y la nota dicen el motivo (D11)
+verify: CARGO_BUILD_JOBS=4 cargo test -p gitraptor-cli --test tui_diff unavailable_worktree_ -- --test-threads=1
+tests:
+  - apps/cli/tests/tui_diff.rs
+
+[6] id: CKP012-ASYNC
+statement: diff.worktree responde fuera de orden por el id de la petición: con un diff grande en vuelo, ping responde antes y los eventos del stream siguen llegando (D2)
+verify: CARGO_BUILD_JOBS=4 cargo test -p gitraptor-core --test diff_query reply_comes_out_of_order_ -- --test-threads=1
+tests:
+  - crates/core/tests/diff_query.rs
+
+[7] id: CKP012-CANCEL
+statement: query.cancel responde al momento {cancelled}, la petición original responde query-cancelled, cerrar la conexión cancela sus consultas, una segunda consulta en vuelo recibe query-busy {limit} y una conexión no puede cancelar la de otra (D3, D4)
+verify: CARGO_BUILD_JOBS=4 cargo test -p gitraptor-core --test diff_query -- cancel_ closing_ a_second_ another_connection_ --test-threads=1
+tests:
+  - crates/core/tests/diff_query.rs
+
+[8] id: CKP012-MCP
+statement: diff.worktree y query.cancel no existen para una conexión MCP (mcp: false) y el contenido del diff no sale por el MCP (Q-CKP-8)
+verify: CARGO_BUILD_JOBS=4 cargo test -p gitraptor-core --test diff_query mcp_connection_ -- --test-threads=1
+tests:
+  - crates/core/tests/diff_query.rs
+
+[9] id: CKP012-NOPERSIST
+statement: El contenido del diff nunca se escribe en el perfil ni en los logs y no sale por el stream: con secretos plantados y el diff pedido tres veces, solo aparece en las respuestas con el id del diff (SEC-05, ADR-GRP-009 Validación 8)
+verify: CARGO_BUILD_JOBS=4 cargo test -p gitraptor-core --test diff_query diff_responses_are_never_ -- --test-threads=1
+tests:
+  - crates/core/tests/diff_query.rs
+
+[10] id: CKP012-LIMITS
+statement: Al superar un tope de archivos o de bytes  la respuesta sale con lo calculado y cut, nunca un error; files_total cuenta todos los archivos y los omitidos salen como omitted (D4)
+verify: CARGO_BUILD_JOBS=4 cargo test -p gitraptor-core --test diff_query limits_cut_ -- --test-threads=1
+tests:
+  - crates/core/tests/diff_query.rs
+
+[11] id: CKP012-SECTIONS
+statement: La sección 'entraría al merge' parte del merge-base con la base confirmada; la de 'sin commitear' incluye lo preparado, lo no preparado y los sin seguimiento no ignorados; con base sin confirmar la primera es not-computable y la segunda se calcula igual (D5, BR-CKP-CALC-005)
+verify: CARGO_BUILD_JOBS=4 cargo test -p gitraptor-core --test diff_git sections_ -- --test-threads=1
+tests:
+  - crates/core/tests/diff_git.rs
+
+[12] id: CKP012-NOEXEC
+statement: El diff no ejecuta filtros clean, textconv ni diff externo del repo; un enlace simbólico (archivo o directorio padre) sale como symlink sin seguirse ni leer su destino; un NUL en los primeros 8.000 bytes es binario (D6, D7, ADR-GRP-009 Validación 7)
+verify: CARGO_BUILD_JOBS=4 cargo test -p gitraptor-core --test diff_git no_exec_ -- --test-threads=1
+tests:
+  - crates/core/tests/diff_git.rs
+
+[13] id: CKP012-READONLY
+statement: Pedir el diff no escribe en el repo: índice, refs, config y objetos sin cambios antes y después (NFR-01)
+verify: CARGO_BUILD_JOBS=4 cargo test -p gitraptor-core --test diff_git writes_nothing_ -- --test-threads=1
+tests:
+  - crates/core/tests/diff_git.rs
+
+[14] id: CKP012-SANITIZE
+statement: SEC-12: rutas y líneas del diff con secuencias de control (OSC 52, ESC, RLO, U+2028) se pintan escapadas en la vista; ningún byte de control llega a la pantalla, mientras tabulaciones y CRLF se expanden y recortan legibles (T007)
+verify: CARGO_BUILD_JOBS=4 cargo test -p gitraptor-cli --test tui_diff untrusted_ -- --test-threads=1
+tests:
+  - apps/cli/tests/tui_diff.rs
+
+[15] id: CKP012-LANG
+statement: Los textos de la vista del diff salen en es y en en (cabeceras de sección, avisos de binario y truncado) sin concatenar frases entre idiomas, y la pista de la tecla d en la barra
+verify: CARGO_BUILD_JOBS=4 cargo test -p gitraptor-cli --test tui_diff texts_in_ -- --test-threads=1
+tests:
+  - apps/cli/tests/tui_diff.rs
+
+[16] id: CKP012-CURSOR
+statement: El cursor de fila guarda la clave del worktree: tras un reordenamiento de la flota sigue en el mismo worktree y d pide el diff de ese, no el de otra fila (D10)
+verify: CARGO_BUILD_JOBS=4 cargo test -p gitraptor-cli --test tui_diff cursor_follows_ -- --test-threads=1
+tests:
+  - apps/cli/tests/tui_diff.rs
+```
+<<<FIN-DATOS-NO-CONFIABLES 2345c9d62c82>>>
+
+## Gaps y supuestos (no se firman solos)
+
+Lo que el plan dio por cierto sin que nadie lo confirmara. Si uno resulta falso durante la corrida, lo que invalide decide quién resuelve: solo el cómo, el agente; una prueba, un `verify` o un criterio de ADR, la persona; la meta o un criterio de la historia, la persona con un plan nuevo.
+
+<<<DATOS-NO-CONFIABLES ded780d84597>>>
+```text
+(el plan no declara gaps ni supuestos)
+```
+<<<FIN-DATOS-NO-CONFIABLES ded780d84597>>>
+
+## Plan (contexto, no se firma)
+
+Fichero:
+
+<<<DATOS-NO-CONFIABLES 7e45bf204646>>>
+```text
+docs/requirements/features/cockpit/dev-specs/US-CKP-012-ver-diff.md
+```
+<<<FIN-DATOS-NO-CONFIABLES 7e45bf204646>>>
+
+planSha: `85e7bd6a93194f786f1449dc88bc321db2f194ce980d7aef216ed5132d0be3e0` (base de la cadena de re-planes)
+
+Léelo en `US-CKP-012-ver-diff.md`, junto a esta solicitud.
+
+## Contrato
+
+Fichero:
+
+<<<DATOS-NO-CONFIABLES 6b2f1d88a232>>>
+```text
+docs/dev-briefs/us-ckp-012-agent-diff.contract.json
+```
+<<<FIN-DATOS-NO-CONFIABLES 6b2f1d88a232>>>
+
+contractSha: `b049171cfade20cc469de0b3e9268025d49c73b244c9fe230a9e1e3ad9223c8b`
+
+## Tests de criterio
+
+testsSha: `3f0c2fe0516773604f78e712ff0a75ae548a5edf71c33232237e33de860c2666`
+
+Cada prueba declarada con el sha256 de su contenido (`ausente` si el fichero no existe):
+
+<<<DATOS-NO-CONFIABLES 6f3a2968b698>>>
+```text
+c8ef70db58beadc16dd0ab4f601d0558cd159abc2f5dec034876222ddf77c7c0  apps/cli/tests/tui_diff.rs
+bfb71e7077a7724624c94fd271decc9121059a1b7767acfb6c0e3bfd7d3e308e  crates/core/tests/diff_git.rs
+2b9141bb4ca516084558e8d2fb52da64ce7ab87c891ac23feaa98147fc4e53b2  crates/core/tests/diff_query.rs
+```
+<<<FIN-DATOS-NO-CONFIABLES 6f3a2968b698>>>
+
+## Crítico
+
+- Rondas (plan): 2
+  - ronda 1: AJUSTES · 5 bloqueante(s) · siguiente: otra-ronda
+  - ronda 2: AJUSTES · 1 bloqueante(s) · siguiente: excepcion
+- Último veredicto: AJUSTES
+- Excepción: sí — se aprueba con los hallazgos abiertos como diferidos, o se para el paquete
+
+## Diferidos
+
+### Diferidos propuestos
+
+1 hallazgo(s) bloqueante(s) que el crítico dejó abiertos, copiados tal cual:
+
+<<<DATOS-NO-CONFIABLES 9c46c2bb7717>>>
+```text
+id: PC-8
+kind: test
+toHuman: false
+evidence: docs/dev-briefs/us-ckp-012-agent-diff.contract.json:114
+ask: CKP012-LIMITS mentions the time cut but no test covers it: add one or drop time from the statement with an owner in the DS.
+```
+<<<FIN-DATOS-NO-CONFIABLES 9c46c2bb7717>>>
+
+## Firmas
+
+- planSha (contexto, no firmado): `85e7bd6a93194f786f1449dc88bc321db2f194ce980d7aef216ed5132d0be3e0`
+- contractSha: `b049171cfade20cc469de0b3e9268025d49c73b244c9fe230a9e1e3ad9223c8b`
+- testsSha: `3f0c2fe0516773604f78e712ff0a75ae548a5edf71c33232237e33de860c2666`
+- approvalSha: `85e7bd6a93194f786f1449dc88bc321db2f194ce980d7aef216ed5132d0be3e0:b049171cfade20cc469de0b3e9268025d49c73b244c9fe230a9e1e3ad9223c8b:3f0c2fe0516773604f78e712ff0a75ae548a5edf71c33232237e33de860c2666`
+
+Para aprobar en la fábrica: `factory-control approve --run <id> --package <pkg> --sha <approvalSha>`; para devolverlo, `adjust` con `--notes`. Atendido, lo aprueba la persona con sus palabras.
