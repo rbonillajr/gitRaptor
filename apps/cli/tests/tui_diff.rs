@@ -24,7 +24,9 @@ use gitraptor_cli::tui::app::App;
 use gitraptor_cli::tui::gallery::buffer_text;
 use gitraptor_core::client::{ClientOptions, Launcher};
 use gitraptor_core::daemon::running_pid;
-use gitraptor_core::profile::ProfileDirs;
+use gitraptor_core::profile::{Profile, ProfileDirs};
+use gitraptor_git::RefName;
+use gitraptor_policy::team::{Confirmed, ConfirmedFloor};
 use gitraptor_testkit::Fixture;
 use gitraptor_testkit::fingerprint;
 use gitraptor_testkit::fixture::git_from_path;
@@ -68,6 +70,22 @@ const EVIL_PATH: &str = "evil\u{1b}]52;c;aGk=\u{7}\u{202e}gpj\u{2028}.txt";
 const EVIL_TEXT: &str =
     "col1\tcol2\r\n\u{1b}]52;c;aGk=\u{7}\nrlo \u{202e}abc\nsep\u{2028}end\nesc \u{1b}[2Jgone\n";
 
+/// `main` confirmed as the base of the repo, in the profile and before any daemon starts (the
+/// same pattern as `crates/core/tests/predict_publish.rs`): without it the committed section is
+/// "not computable: unconfirmed base" (D5). Harness fix approved by the coordinator.
+fn confirm_main_as_base(f: &Fixture) {
+    let (mut profile, _) = Profile::open(ProfileDirs::under_root(&f.profile)).unwrap();
+    let git_dir = std::fs::canonicalize(f.repo.join(".git")).unwrap();
+    let (entry, _) = profile.add_repo(&git_dir, None, 1).unwrap();
+    let (mut store, _) = profile.open_store(&entry.repo_id).unwrap();
+    store
+        .set_confirmed_team_baseline(&Confirmed {
+            base_branch: RefName::new("main").unwrap(),
+            floor: ConfirmedFloor::Absent,
+        })
+        .unwrap();
+}
+
 impl Shop {
     fn new(work: Work) -> Self {
         use std::os::unix::fs::PermissionsExt;
@@ -107,6 +125,7 @@ impl Shop {
         }
         commit("third");
         std::fs::write(pagos.join("README.md"), "shop, edited\n").unwrap();
+        confirm_main_as_base(&f);
         Self { f, pagos }
     }
 
