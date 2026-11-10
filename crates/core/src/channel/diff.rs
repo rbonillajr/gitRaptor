@@ -35,6 +35,7 @@ use super::validate;
 use crate::daemon::{Field, now_ms};
 
 pub(super) mod commit;
+mod fit;
 pub(super) mod index;
 
 /// Slack under [`MAX_DIFF_RESPONSE_BYTES`] for the envelope of the response.
@@ -269,56 +270,18 @@ fn file_of(file: GitFileDiff) -> FileDiff {
     }
 }
 
-fn sections(diff: &mut WorktreeDiff) -> [Option<&mut DiffSection>; 2] {
-    [
-        match &mut diff.committed {
-            CommittedDiff::Ready { section, .. } => Some(section),
-            CommittedDiff::NotComputable { .. } => None,
-        },
-        Some(&mut diff.uncommitted),
-    ]
-}
-
-/// Cuts `diff` so its serialization is at most `limit` bytes: the first files keep their
-/// content, the ones after the cut come out as omitted (and, if even that does not fit, are left
-/// out of the list), and the section says `bytes`. `files_total` is never touched.
+/// Cuts `diff` so its serialization is at most `limit` bytes, with the rule of
+/// [`fit::fit_sections`]: committed section first, then the uncommitted one.
 fn fit(diff: &mut WorktreeDiff, limit: usize) {
-    let size = |v: &FileDiff| serde_json::to_vec(v).map_or(0, |b| b.len() + 1);
     let Ok(whole) = serde_json::to_vec(diff) else {
         return;
     };
-    if whole.len() <= limit {
-        return;
+    let mut sections = Vec::with_capacity(2);
+    if let CommittedDiff::Ready { section, .. } = &mut diff.committed {
+        sections.push((&mut section.files, &mut section.cut));
     }
-    let files_size: usize = sections(diff)
-        .iter()
-        .flatten()
-        .flat_map(|s| s.files.iter())
-        .map(size)
-        .sum();
-    let mut used = whole.len().saturating_sub(files_size);
-    let mut over = false;
-    for section in sections(diff).into_iter().flatten() {
-        let mut kept = Vec::with_capacity(section.files.len());
-        for mut file in std::mem::take(&mut section.files) {
-            let mut sz = size(&file);
-            if !over && used + sz <= limit {
-                used += sz;
-                kept.push(file);
-                continue;
-            }
-            over = true;
-            section.cut = Some(DiffCut::Bytes);
-            file.body = FileBody::Omitted {};
-            (file.added, file.removed) = (0, 0);
-            sz = size(&file);
-            if used + sz <= limit {
-                used += sz;
-                kept.push(file);
-            }
-        }
-        section.files = kept;
-    }
+    sections.push((&mut diff.uncommitted.files, &mut diff.uncommitted.cut));
+    fit::fit_sections(whole.len(), sections, limit);
 }
 
 /// Files in the answer and the cut of the committed or uncommitted section, for the log.
