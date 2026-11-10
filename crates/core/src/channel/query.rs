@@ -103,7 +103,10 @@ impl QueryTable {
     /// [`Busy`] when the connection already has [`QUERIES_PER_CONNECTION`] in flight.
     pub fn register(&self, id: &Id) -> Result<QueryToken, Busy> {
         let mut table = self.lock();
-        if table.len() >= QUERIES_PER_CONNECTION as usize {
+        // A request that was cancelled while it waited in the queue no longer counts: its job
+        // will only answer `query-cancelled`, so the connection may ask again at once.
+        let live = table.iter().filter(|(_, t)| !t.is_cancelled()).count();
+        if live >= QUERIES_PER_CONNECTION as usize {
             return Err(Busy);
         }
         let token = QueryToken(Arc::new(AtomicBool::new(false)));
@@ -179,6 +182,15 @@ mod tests {
         assert_eq!(table.register(&b).err(), Some(Busy));
         table.finish(&a);
         assert!(table.register(&b).is_ok());
+    }
+
+    #[test]
+    fn a_cancelled_request_does_not_hold_the_slot() {
+        let table = QueryTable::default();
+        let a = Id::Num(1);
+        table.register(&a).unwrap();
+        table.cancel(&a);
+        assert!(table.register(&Id::Num(2)).is_ok());
     }
 
     #[test]
