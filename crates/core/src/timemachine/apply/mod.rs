@@ -429,6 +429,10 @@ impl<'a> Applier<'a> {
         plan: &ApplyPlan,
         held: Option<&repo_lock::RepoGuard>,
     ) -> Result<ApplyReport, ApplyError> {
+        // Every event of the repo while this runs, and just after, is the daemon's own write
+        // (ADR-GRP-012, amendment 2026-11-09); the guard closes the window on every return.
+        let _write_window =
+            crate::detect::daemon_writes::DaemonWrites::global().begin(&self.common_dir);
         let reject = |refusals: Vec<Refusal>| -> Result<ApplyReport, ApplyError> {
             let reason = refusals.first().map(Refusal::code).unwrap_or("rejected");
             self.oplog(|log, now| {

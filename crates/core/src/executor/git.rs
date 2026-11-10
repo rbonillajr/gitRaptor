@@ -192,6 +192,9 @@ pub fn run_git_with(
     cancel: &CancelToken,
     transitions: &[gitraptor_policy::guard::plan::Expected],
 ) -> std::io::Result<GitRun> {
+    // The user's `git` may move a ref or `HEAD`: a write window of the daemon over its folder
+    // from before the spawn until it was collected (ADR-GRP-012, amendment 2026-11-09).
+    let _write_window = crate::detect::daemon_writes::DaemonWrites::global().begin(cmd.cwd());
     let mut collector = None;
     let mut marked = ctx.spawn_with_transitions(
         || {
