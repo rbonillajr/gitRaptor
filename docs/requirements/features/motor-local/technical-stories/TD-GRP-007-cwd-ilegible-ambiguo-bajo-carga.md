@@ -71,5 +71,6 @@ El `git` del agente estaba vivo (el hook lo retiene), pero el detector no pudo l
 - **Unitario (ventana)**: una ventana abierta o cerrada que se solapa da `Ambiguous` y suma `daemon_write_window`; una de otro repo o anterior a la ventana S3 no cuenta; la guarda cierra la ventana al soltarse y ante un pánico.
 - **Integración**: un undo por agente abre una ventana de escritura en su repo.
 - **SEC-04**: `s3_evidence` solo lleva enteros, ahora también `daemon_inert` y `daemon_write_window`.
-- **Integración bajo carga**: `us_tmc_003`, `us_tmc_003_agents` y `us_tmc_011` pasan 10 de 10 con carga.
+- ~~**Integración bajo carga**: `us_tmc_003`, `us_tmc_003_agents` y `us_tmc_011` pasan 10 de 10 con carga.~~ **Enmendado (D1 = A, decisión del coordinador, 2026-11-09):** el job de macOS del PR sale verde 3 veces con los dos tests de `us_tmc_003` activos, y el PR recoge las cifras de las corridas con carga en local de `us_tmc_003`, `us_tmc_011` y `td_tmc_003`. Un fallo `no-sighting` (FSEvents no entrega, `daemon_write_window=0`) cuenta contra TD-GRP-006, no contra esta ficha. Un fallo de atribución sí cuenta contra esta.
+- **Caso del coordinador**: `td_tmc_003::another_actors_commit_after_an_own_echo_still_stops_the_undo` pasa, en ubuntu y bajo carga (GRP007-ECHO).
 - **NFR-01**: ningún commit ajeno se atribuye al agente (corpus de `git` del humano concurrente).
