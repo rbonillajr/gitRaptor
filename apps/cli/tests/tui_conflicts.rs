@@ -195,7 +195,8 @@ impl Tui {
         options.launcher = Launcher::Never;
         let (inbox, _input, engine) = queue::inbox();
         let size = Size {
-            width: 200,
+            // The limits line is 78 columns: at 120 it is cut in the 55 % of the fleet column.
+            width: 150,
             height: 40,
         };
         let mut app = App::new(

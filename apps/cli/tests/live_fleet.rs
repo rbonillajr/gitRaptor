@@ -66,11 +66,8 @@ impl Shop {
         f.git(&["commit", "-q", "-m", "shop"]);
         f.git(&["branch", "feat-pagos"]);
         f.git(&["branch", "feat-docs"]);
-        let pagos = f
-            .add_worktree("pagos", "feat-pagos")
-            .canonicalize()
-            .unwrap();
-        let docs = f.add_worktree("docs", "feat-docs").canonicalize().unwrap();
+        let pagos = f.add_worktree("pg", "feat-pagos").canonicalize().unwrap();
+        let docs = f.add_worktree("dc", "feat-docs").canonicalize().unwrap();
         for i in 1..=3 {
             std::fs::write(pagos.join(format!("pay-{i}.txt")), format!("{i}\n")).unwrap();
             f.git_in(&pagos, &["add", "."]);
@@ -164,9 +161,8 @@ impl Tui {
         let mut options = ClientOptions::new(dirs, ClientKind::Cli);
         options.launcher = Launcher::Never;
         let (inbox, _input, engine) = queue::inbox();
-        // Under the wide layout, where the graph panel sits beside the fleet and narrows it.
         let size = Size {
-            width: 100,
+            width: 120,
             height: 30,
         };
         let model = Model::new(Lang::En, size);
@@ -230,6 +226,16 @@ fn has(screen: &[String], branch: &str, parts: &[&str]) -> bool {
     row(screen, branch).is_some_and(|r| parts.iter().all(|p| r.contains(p)))
 }
 
+/// The fleet's part of a screen line: up to its right border, without the graph panel that sits
+/// beside it at the wide layout.
+fn fleet_part(line: &str) -> &str {
+    let mut borders = line.match_indices('┃').map(|(i, c)| i + c.len());
+    match (borders.next(), borders.next()) {
+        (Some(_), Some(end)) => &line[..end],
+        _ => line,
+    }
+}
+
 /// Rows of the fleet, in order: the lines between the column header and the bottom border.
 fn rows(screen: &[String]) -> Vec<&str> {
     screen
@@ -237,7 +243,7 @@ fn rows(screen: &[String]) -> Vec<&str> {
         .skip_while(|l| !l.contains("Agent"))
         .skip(1)
         .take_while(|l| !l.starts_with('┗') && !l.starts_with('└'))
-        .map(String::as_str)
+        .map(|l| fleet_part(l))
         .filter(|l| {
             !l.trim_matches(|c: char| c == '┃' || c == '│' || c == ' ')
                 .is_empty()
@@ -267,7 +273,7 @@ fn one_row_per_worktree_with_the_agent_first() {
     assert!(pagos.find('●').unwrap() < pagos.find("claude-1").unwrap());
     assert!(pagos.find("claude-1").unwrap() < pagos.find("feat-pagos").unwrap());
     // Each agent names the folder of its worktree (dogfooding 2026-10-06).
-    assert!(pagos.contains("claude-1 · wt-pagos"), "{pagos}");
+    assert!(pagos.contains("claude-1 · wt-pg"), "{pagos}");
     // ahead/behind names its reference and the age of the local copy: never fetched here.
     assert!(
         screen[1].contains("↑↓ vs main (local copy, never fetched)"),
@@ -312,7 +318,7 @@ fn a_commit_without_an_agent_shows_no_agent() {
     shop.f.git_in(&shop.docs, &["commit", "-q", "-m", "docs"]);
     let mut tui = Tui::open(shop.dirs(), &shop.f.repo);
     let screen = tui.until("feat-docs one commit ahead", |s| {
-        has(s, "feat-docs", &["No agent · wt-docs", "↑1 ↓1"])
+        has(s, "feat-docs", &["No agent · wt-dc", "↑1 ↓1"])
     });
     let all = screen.join("\n").to_lowercase();
     assert!(!all.contains("human"), "{all}");
@@ -535,18 +541,18 @@ fn an_ended_session_stays_until_a_new_one_replaces_it() {
     let pagos = shop.pagos.to_str().unwrap().to_owned();
     let mut tui = Tui::open(shop.dirs(), &shop.f.repo);
     tui.until("claude-1 Active in feat-pagos", |s| {
-        live(s) && has(s, "feat-pagos", &["●", "claude-1 · wt-pagos"])
+        live(s) && has(s, "feat-pagos", &["●", "claude-1 · wt-pg"])
     });
     shop.developer(&["agent", "withdraw", "claude-1", "--worktree", &pagos]);
     let screen = tui.until("claude-1 ended in feat-pagos", |s| {
-        has(s, "feat-pagos", &["○", "claude-1 · wt-pagos"]) && in_block(s, "feat-pagos", &["ended"])
+        has(s, "feat-pagos", &["○", "claude-1 · wt-pg"]) && in_block(s, "feat-pagos", &["ended"])
     });
     assert!(!has(&screen, "feat-pagos", &["●"]), "{screen:#?}");
     // The same agent registered again opens a new session: an ended one is never reopened.
     shop.developer(&["agent", "register", "claude-1", "--worktree", &pagos]);
     let screen = tui.until(
         "a new claude-1 session Active, without the ended one",
-        |s| has(s, "feat-pagos", &["●", "claude-1 · wt-pagos"]),
+        |s| has(s, "feat-pagos", &["●", "claude-1 · wt-pg"]),
     );
     assert!(!in_block(&screen, "feat-pagos", &["ended"]), "{screen:#?}");
 }
