@@ -70,3 +70,9 @@ harness = false
 [[bench]]
 name = "channel_flood"
 harness = false
+
+# p50/p95 of diff.commit and diff.index on the 100K-commit history of NFR-05
+# (TS-CKP-006 T006, INF-GRP-002).
+[[bench]]
+name = "diff_commit"
+harness = false
