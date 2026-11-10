@@ -2,7 +2,7 @@
 id: DS-TS-CKP-006
 title: "Dev Spec — Consultas del diff de un commit, entre dos commits y del índice de un worktree"
 type: dev-spec
-status: spec-ready
+status: implemented
 created: 2026-11-10
 updated: 2026-11-10
 story: TS-CKP-006
@@ -680,3 +680,5 @@ Corre `/security-review --scope devspec docs/requirements/features/cockpit/dev-s
 | N3 | Los commits que solo alcanza el `HEAD` separado de un worktree enlazado no son alcanzables por D5 (solo `HEAD` del repo). El grafo de TS-CKP-007 debe listar las mismas puntas para que la app nunca ofrezca un commit que el diff rechaza | Alinear la lista de puntas al escribir la DS de TS-CKP-007 | Arquitecto |
 | N4 | Riesgo de rebase con W147: `crates/api/src/diff.rs`, `crates/api/src/methods/diff.rs`, `crates/git/src/diff.rs`, `crates/core/src/channel/diff.rs`, `conn.rs` y `crates/core/tests/diff_git.rs` llegan con US-CKP-012. Mientras esa rama no esté en `main`, cualquier cambio suyo en esos archivos choca. Mitigación: T001 empieza tras la mezcla (⛔1.1) y las ediciones en esos archivos son de pocas líneas (`mod`, constantes, dos brazos, envoltorio de `fit`, una aserción) | Ninguna, salvo esperar la mezcla | Orquestador |
 | N5 | La ficha dice en Fuera de alcance «el diff entre ramas que aún no tienen commit común (se rechaza con motivo)». Tras M-02, `diff.between` compara árbol a árbol y no exige base común, así que ese rechazo no existe; la frase de la ficha queda sin efecto para esta DS | Ajustar esa línea de la ficha al cerrar (T007) | Arquitecto |
+
+Implementado en: PR #PRN. Sin certificar (modo rápido). Ajustes a la DS durante la corrida: `ChannelConfig::test_diff_deadline` para forzar el plazo, y las reglas «el objeto pedido no se lee antes del fin del recorrido» y «el índice se relee y se rehace una vez» las comprueba el revisor (sin punto de inyección); la comparación del índice usa además una huella de entradas porque `index.skipHash` deja el checksum en nulo.

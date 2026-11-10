@@ -109,7 +109,7 @@ Es una historia **de lectura**. No pasa por `commands/write/`, no pide `WriteTok
 - **Un comando IPC de lectura**: `diff_worktree { repoId, worktreeKey }` (P24). El webview nunca manda una ruta: la clave del worktree es la FNV-1a que ya usa la flota (`engine/ingest.rs:66`), y el backend la traduce a la raíz cruda del último estado del repo abierto.
 - **La consulta en el supervisor**: envía `diff.worktree` sin bloquear su bucle (`Link::submit`, la forma de DS-US-DSK-005 T008), cancela la anterior con `query.cancel`, sanea cada ruta y cada línea con `gitraptor_api::display` y manda el resultado por el `Channel`.
 - **La vista de cambios** (`apps/desktop/src/diff/`) con lista de archivos y panel de líneas virtualizados, unificado y dividido, navegable con teclado, en en/es, con axe en claro y oscuro, y con todos sus estados.
-- **El diff de un commit (escenario 2)** queda especificado y **bloqueado** (T007): el motor no tiene todavía ningún método para él (G2, DEP-DSK-3).
+- **El diff de un commit (escenario 2)** queda especificado y **desbloqueado** (T007): el motor ya sirve `diff.commit` (G2 resuelto, TS-CKP-006).
 
 | Término | Qué es aquí |
 |---|---|
@@ -197,7 +197,7 @@ Decisiones nuevas de frontera de esta historia, numeradas a continuación de las
 | ID | Qué falta | Severidad | Alcance | Acción | Owner |
 |----|-----------|-----------|---------|--------|-------|
 | G1 | **El diff del worktree no está en `main`**: `diff.worktree`, `query.cancel`, `query-busy`, `query-cancelled`, los tipos de `gitraptor_api::diff` y `Client::submit` viven en la rama `feat/US-CKP-012-agent-diff` (W147, `evidence[]`). Sin ellos no compila nada del backend de esta entrega | Bloqueante | T004, T005, T006, T008 | Mezclar US-CKP-012 (W147). Si al mezclar cambian nombres o tipos, T004 y T005 los siguen sin cambiar los DTO del webview | Orquestador (W147) |
-| G2 | **El diff de un commit no existe en el motor** (DEP-DSK-3). Ningún método lo sirve; TS-CKP-006 lo enumera (`ready`, con Dev Spec DS-TS-CKP-006, `blocked_by: [US-CKP-012]`). Requisitos de esta historia para esa ficha, en § [Requisitos para la ficha de motor](#requisitos-para-la-ficha-de-motor-del-diff-de-un-commit-g2) | Bloqueante | T007 | Escribir la Dev Spec de TS-CKP-006 con R1 a R8, reservarla y mezclarla | Arquitecto |
+| G2 | **Resuelto: el diff de un commit está en `main`** (PR #PRN de TS-CKP-006: `diff.commit`, `diff.between`, `diff.index`). Antes no existía en el motor (DEP-DSK-3). Requisitos de esta historia para esa ficha, en § [Requisitos para la ficha de motor](#requisitos-para-la-ficha-de-motor-del-diff-de-un-commit-g2) | Bloqueante | T007 | Escribir la Dev Spec de TS-CKP-006 con R1 a R8, reservarla y mezclarla | Arquitecto |
 Dos huecos que **no bloquean** y no entran en la cuenta (los dos los cierra UX y alcanzan solo a la composición y los colores de T003): **H-UX-1**, DSF-DSK-001 solo esboza el diff (§ 6.1, con staging y commit que no son de esta historia), así que esta spec fija la composición desde ese esbozo y UX la revisa antes de mezclar T003; un cambio de composición no cambia DTO ni comando. **H-UX-2**, los tokens web del diff (`git.added`, `git.removed`, `git.modified`, H-1 de DSF-DSK-001) no tienen valor: mientras, P28, y cuando existan se enmienda ADR-GRP-003 / DSYS-GRP-002.
 
 Sin violaciones de la constitución: la app no lee repos ni lanza procesos (ADR-GRP-017 § 1, § 2), no añade plugins ni permisos `dialog:*`, `fs:*` o `core:event:*`, y no escribe nada. Ningún método nuevo en el motor para las tareas no bloqueadas.

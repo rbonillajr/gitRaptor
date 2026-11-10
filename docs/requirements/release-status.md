@@ -10,10 +10,10 @@
 
 | Estado | Fichas |
 |---|---|
-| Implementado (`implemented`) | 81 |
+| Implementado (`implemented`) | 82 |
 | Hecho (`done`) | 3 |
 | Implementado en parte (`partially-implemented`) | 27 |
-| Listo (`ready`) | 29 |
+| Listo (`ready`) | 28 |
 | Borrador (`draft`) | 70 |
 | Bloqueado (`blocked`) | 1 |
 | **Total** | **211** |
@@ -22,7 +22,7 @@
 
 | Feature | Implementado | Hecho | Implementado en parte | Listo | Borrador | Bloqueado | Total |
 |---|---|---|---|---|---|---|---|
-| [cockpit](#cockpit) | 14 | 0 | 5 | 2 | 17 | 1 | 39 |
+| [cockpit](#cockpit) | 15 | 0 | 5 | 1 | 17 | 1 | 39 |
 | [desktop](#desktop) | 6 | 0 | 1 | 16 | 0 | 0 | 23 |
 | [guardrails](#guardrails) | 14 | 0 | 7 | 1 | 3 | 0 | 25 |
 | [mcp](#mcp) | 7 | 0 | 4 | 0 | 16 | 0 | 27 |
@@ -32,7 +32,7 @@
 
 ### cockpit
 
-39 fichas: 14 implementado, 5 implementado en parte, 2 listo, 17 borrador, 1 bloqueado.
+39 fichas: 15 implementado, 5 implementado en parte, 1 listo, 17 borrador, 1 bloqueado.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -42,6 +42,7 @@
 | [TS-CKP-003](features/cockpit/technical-stories/TS-CKP-003-capa-cockpit-guardrails.md) | Capa cockpit en la decisión de Guardrails, ligada al git del ejecutor y registrada una sola vez | Implementado (`implemented`) | #261 | — |
 | [TS-CKP-004](features/cockpit/technical-stories/TS-CKP-004-tokens-semanticos-simbolos.md) | Tokens semánticos y símbolos con fallback en el tema de la TUI | Implementado (`implemented`) | #50, #115 | — |
 | [TS-CKP-005](features/cockpit/technical-stories/TS-CKP-005-biblioteca-componentes-tui.md) | Biblioteca de componentes TUI v0: los 10 widgets del design system, con snapshots y galería | Implementado (`implemented`) | #111, #115 | — |
+| [TS-CKP-006](features/cockpit/technical-stories/TS-CKP-006-diff-de-commit.md) | Consultas del diff de un commit, entre dos commits y del índice de un worktree en el canal | Implementado (`implemented`) | — | — |
 | [TS-CKP-011](features/cockpit/technical-stories/TS-CKP-011-base-confirmada-replanifica.md) | Confirmar la base en runtime refresca la base publicada y replanifica los pares contra la base | Implementado (`implemented`) | — | — |
 | [US-CKP-001](features/cockpit/user-stories/US-CKP-001-flota-en-vivo.md) | El desarrollador ve en vivo qué agente trabaja en cada worktree de un repo | Implementado (`implemented`) | #118, #126, #129, #130, #131, #136, #175 | — |
 | [US-CKP-003](features/cockpit/user-stories/US-CKP-003-estados-motor-conexion.md) | La TUI dice en qué estado está el motor y qué hacer en cada caso | Implementado (`implemented`) | #282 | — |
@@ -55,7 +56,6 @@
 | [US-CKP-005](features/cockpit/user-stories/US-CKP-005-terminal-pequena-sin-color.md) | La TUI se puede usar en una terminal pequeña, sin color o en ASCII | Implementado en parte (`partially-implemented`) | #273 | 2 |
 | [US-CKP-020](features/cockpit/user-stories/US-CKP-020-trabajo-de-otro-actor.md) | Tocar el trabajo de otro actor exige confirmar el plan concreto | Implementado en parte (`partially-implemented`) | #220 | 3 |
 | [US-CKP-025](features/cockpit/user-stories/US-CKP-025-tui-repo-no-observado.md) | La TUI ofrece observar el repo en el que se abre y, fuera de un repo, lleva a los ya observados | Implementado en parte (`partially-implemented`) | #165, #170 | 2 |
-| [TS-CKP-006](features/cockpit/technical-stories/TS-CKP-006-diff-de-commit.md) | Consultas del diff de un commit, entre dos commits y del índice de un worktree en el canal | Listo (`ready`) | — | — |
 | [TS-CKP-010](features/cockpit/technical-stories/TS-CKP-010-agentes-en-vivo-por-repo.md) | Recuento de agentes en vivo por repo en el ámbito global | Listo (`ready`) | — | — |
 | [TS-CKP-007](features/cockpit/technical-stories/TS-CKP-007-ramas-y-commits-paginados.md) | Consulta de todas las ramas del repo y de los commits de cualquier rama, paginada y filtrable | Borrador (`draft`) | — | — |
 | [TS-CKP-008](features/cockpit/technical-stories/TS-CKP-008-preparar-y-quitar-del-indice.md) | Operaciones del catálogo para preparar y quitar del índice por archivo, fragmento y línea | Borrador (`draft`) | — | — |
