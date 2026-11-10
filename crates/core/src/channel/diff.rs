@@ -55,7 +55,7 @@ fn unavailable(reason: DiffUnavailable) -> ErrorObject {
         .with_data(DiffUnavailableData { reason })
 }
 
-fn valid_repo_id(id: &str) -> bool {
+pub(super) fn valid_repo_id(id: &str) -> bool {
     !id.is_empty() && id.len() <= 64 && id.chars().all(|c| c.is_ascii_hexdigit() || c == '-')
 }
 

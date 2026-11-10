@@ -112,6 +112,8 @@ pub(crate) struct ServerCtx {
     /// The one thread that answers on-demand queries (`diff.worktree`), shared by every
     /// connection.
     pub query: super::query::QueryPool,
+    /// The lanes `graph.lanes` already walked, per repo; dies with the channel.
+    pub graph_cache: Arc<super::graph::LaneCache>,
 }
 
 impl ServerCtx {
@@ -242,6 +244,7 @@ impl Server {
             requester_limits: Arc::default(),
             prediction: args.prediction,
             query: super::query::QueryPool::default(),
+            graph_cache: Arc::default(),
         });
         Self::listen(ctx, bound.listener)
     }
