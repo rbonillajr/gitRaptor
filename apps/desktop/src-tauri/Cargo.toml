@@ -17,9 +17,13 @@ path = "src/main.rs"
 
 [dependencies]
 tauri.workspace = true
+tauri-plugin-dialog.workspace = true
 gitraptor-api = { workspace = true, features = ["client"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+nix = { version = "=0.31.3", default-features = false, features = ["user"] }
 
 [build-dependencies]
 tauri-build.workspace = true

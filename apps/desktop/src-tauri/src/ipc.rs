@@ -16,6 +16,12 @@ pub enum CommandError {
     InvalidParams,
     /// `engine_retry` was asked before `engine_watch` started the supervisor.
     NotWatching,
+    /// `engine_autostart` asked for a change the current offer does not allow.
+    NotOffered,
+    /// The human answered "Cancel" in the native dialog.
+    Cancelled,
+    /// `raptor daemon enable|disable` failed, timed out or could not run.
+    Failed,
 }
 
 impl std::fmt::Display for CommandError {
@@ -23,6 +29,9 @@ impl std::fmt::Display for CommandError {
         match self {
             Self::InvalidParams => f.write_str("invalid-params"),
             Self::NotWatching => f.write_str("not-watching"),
+            Self::NotOffered => f.write_str("not-offered"),
+            Self::Cancelled => f.write_str("cancelled"),
+            Self::Failed => f.write_str("failed"),
         }
     }
 }

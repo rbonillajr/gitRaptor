@@ -5,6 +5,7 @@
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
+pub mod autostart;
 pub mod exception_command;
 pub mod ingest;
 pub mod launcher;

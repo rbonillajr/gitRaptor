@@ -42,6 +42,7 @@ libc = "0.2.190"
 # The desktop app backend (ADR-GRP-017): default features only, never `devtools`.
 tauri = "=2.12.5"
 tauri-build = "=2.7.4"
+tauri-plugin-dialog = "=2.8.3"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
