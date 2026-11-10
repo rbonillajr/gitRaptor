@@ -8,7 +8,7 @@ domain: GRP
 priority: high
 complexity: medium
 created: 2026-11-08
-updated: 2026-11-09
+updated: 2026-11-10
 related:
   context: [CTX-DSK-001]
   adrs: [ADR-GRP-014, ADR-GRP-017, ADR-GRP-005, ADR-CKP-003, ADR-GRP-016]
@@ -68,7 +68,7 @@ tags: [desktop, dep-dsk-5, revision-seguridad, arranque-bajo-demanda, externalbi
 
 ### Estado de implementación
 
-Implementado en: PR #334 (T001 a T006 de la Dev Spec): `EnsureReport`, `ReplacePolicy`, la comprobación B-3, `raptor daemon ensure --json` y la costura `engine::link` con `BundleConnector`.
+Implementado en: PR #334 (T001 a T006) y PR #358 (T007 y T008: autoarranque con diálogo nativo y `.dmg` de la alpha; falta T009, verificación manual en macOS, guion en `docs/dev-briefs/ts-dsk-002-t009-verificacion-macos.md`). PR #334: `EnsureReport`, `ReplacePolicy`, la comprobación B-3, `raptor daemon ensure --json` y la costura `engine::link` con `BundleConnector`.
 
 Estado: implementación parcial. Pendiente:
 
