@@ -271,8 +271,9 @@ pub struct S3Counts {
     pub sessions_not_writing: u32,
     /// `git`s that started after the write: not evidence and not foreign.
     pub gits_after_notice: u32,
-    /// The daemon's own `git`s in the repo that cannot make a Git event, with every `git` between
-    /// them and the daemon alike: not foreign (ADR-GRP-012, amendment 2026-11-09).
+    /// The daemon's own `git`s in the repo that cannot make a Git event: direct children of the
+    /// daemon running the engine's Git with an inert argv template. Not foreign (ADR-GRP-012,
+    /// amendment 2026-11-09).
     pub daemon_inert: u32,
     /// Evaluations whose window overlapped a write window of the daemon in the repo: foreign
     /// (ADR-GRP-012, amendment 2026-11-09).
@@ -491,8 +492,9 @@ struct GitSeen {
     /// For a foreign `git` placed in the repo: whether it cannot make a Git
     /// event (`None`: unreadable). `None` for every other `git`.
     harmless: Option<bool>,
-    /// For a `git` of the daemon with its own readable folder in the repo: it and every `git`
-    /// between it and the daemon are inert ([`procs::GitFacts::inert`]). `false` otherwise.
+    /// A direct child of the daemon running the engine's Git, with its own readable folder in the
+    /// repo and an inert argv template ([`procs::GitFacts::inert`]). `false` otherwise, a
+    /// grandchild included.
     daemon_inert: bool,
 }
 
@@ -917,6 +919,15 @@ impl Detector {
             .engine_git
             .lock()
             .unwrap_or_else(|e| e.into_inner()) = git;
+    }
+
+    /// The canonical path of the engine's Git the detector compares with (`None`: unset).
+    pub fn engine_git(&self) -> Option<PathBuf> {
+        self.inner
+            .engine_git
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// The write windows the detector reads (tests use their own; the daemon, the global ones).

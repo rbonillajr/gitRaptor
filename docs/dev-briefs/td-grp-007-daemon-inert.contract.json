@@ -48,7 +48,7 @@
     },
     {
       "id": "GRP007-CLASSIFY",
-      "statement": "Con la tabla sintética y engine_git fijado: un git hijo directo del daemon con el Git del motor, una plantilla inerte y cwd en el repo, junto a un git de la sesión que escribe, da Attributed con daemon_inert=1 y foreign_daemon=0; dan Ambiguous con foreign_daemon un exe distinto del Git del motor, engine_git sin fijar, un argv sin plantilla, (Daemon, None) con argv inerte, un nieto (daemon → commit → git inerte), un git por encima del tope de lecturas y un inerte junto a un update-ref del daemon en la misma muestra",
+      "statement": "Con la tabla sintética y engine_git fijado: un git hijo directo del daemon con el Git del motor, una plantilla inerte y cwd en el repo, junto a un git de la sesión que escribe, da Attributed con daemon_inert=1 y foreign_daemon=0; dan Ambiguous con foreign_daemon un exe distinto del Git del motor, engine_git sin fijar, un argv sin plantilla, (Daemon, None) con argv inerte, un nieto (daemon → commit → git inerte), un git por encima del tope de lecturas y un inerte junto a un update-ref del daemon en la misma muestra; un git ajeno que escribe en el worktree del evento, junto a un inerte del daemon y un git de la sesión, da Ambiguous (NFR-01)",
       "verify": "cargo test -p gitraptor-core --lib detect::tests::daemon_inert",
       "layer": "runtime",
       "tests": [
@@ -57,7 +57,7 @@
     },
     {
       "id": "GRP007-WINDOW",
-      "statement": "Con un git de la sesión que escribe y sin git del daemon: una ventana de escritura abierta sobre el repo durante la ventana S3, o cerrada dentro de ella, da Ambiguous con daemon_write_window=1; una ventana sobre otro repo o cerrada antes de la ventana S3 no cuenta (Attributed); soltar la guarda cierra la ventana y un pánico con la guarda viva también la cierra",
+      "statement": "Con un git de la sesión que escribe y sin git del daemon: una ventana de escritura abierta sobre el repo durante la ventana S3, o cerrada menos de WINDOW_TAIL (3 s) antes de su comienzo, da Ambiguous con daemon_write_window=1; una ventana sobre otro repo, o cerrada más de WINDOW_TAIL antes del comienzo de la ventana S3, no cuenta (Attributed); soltar la guarda cierra la ventana y un pánico con la guarda viva también la cierra",
       "verify": "cargo test -p gitraptor-core --lib detect::tests::daemon_write_window",
       "layer": "runtime",
       "tests": [
@@ -66,7 +66,7 @@
     },
     {
       "id": "GRP007-WIRE",
-      "statement": "Integración con el daemon real en un repo temporal: el undo del agente sobre su propio commit deja al menos una ventana de escritura del daemon sobre el repo en DaemonWrites::global()",
+      "statement": "Integración en repos temporales: un undo simple del desarrollador sobre una operación (como el escenario 1 de us_tmc_003) deja al menos una ventana de escritura del daemon sobre su repo en DaemonWrites::global(), y una operación de usuario del ejecutor que lanza git (run_git_with) deja otra sobre el suyo",
       "verify": "cargo test -p gitraptor-core --test td_grp_007",
       "layer": "runtime",
       "tests": [
@@ -76,10 +76,29 @@
     {
       "id": "GRP007-LOG",
       "statement": "SEC-04: s3_evidence lleva daemon_inert y daemon_write_window como enteros con el valor contado, y ningún valor de la línea es una ruta, un nombre, un pid ni un argv",
-      "verify": "cargo test -p gitraptor-core --lib daemon::sessions::s3_inert_tests",
+      "verify": "cargo test -p gitraptor-core --lib daemon::sessions::s3_",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/daemon/sessions_s3_inert_tests.rs",
+        "crates/core/src/daemon/sessions_s3_tests.rs"
+      ]
+    },
+    {
+      "id": "GRP007-ENGINE",
+      "statement": "Con el daemon real, el detector que arranca detector_hooks tiene como engine_git la ruta canónica del SystemGit que resolvió el daemon, y None cuando no hay Git resuelto",
+      "verify": "cargo test -p gitraptor-core --lib daemon::sessions::s3_inert_tests::engine_",
       "layer": "runtime",
       "tests": [
         "crates/core/src/daemon/sessions_s3_inert_tests.rs"
+      ]
+    },
+    {
+      "id": "GRP007-MACOS",
+      "statement": "Los dos tests de us_tmc_003 ignorados en macOS por el PR #347 (a_new_commit_invalidates_the_redo y a_redo_right_after_an_undo_is_not_invalidated_by_its_echo) ya no llevan cfg_attr ignore y pasan",
+      "verify": "cargo test -p gitraptor-core --test us_tmc_003 -- --exact a_new_commit_invalidates_the_redo a_redo_right_after_an_undo_is_not_invalidated_by_its_echo",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_tmc_003.rs"
       ]
     }
   ],

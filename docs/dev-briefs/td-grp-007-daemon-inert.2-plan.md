@@ -68,8 +68,8 @@ Criterios: GRP007-CALL.
 ### T003 — La regla del `git` inerte del daemon
 
 Ficheros: `crates/core/src/detect/mod.rs`, `crates/core/src/daemon/sessions.rs`.
-Criterios: GRP007-CLASSIFY.
-**Aceptación:** `crates/core/src/detect/tests/daemon_inert.rs`.
+Criterios: GRP007-CLASSIFY, GRP007-ENGINE.
+**Aceptación:** `crates/core/src/detect/tests/daemon_inert.rs`, `crates/core/src/daemon/sessions_s3_inert_tests.rs`.
 
 - En `sample_queued`, `daemon_inert` es verdadero solo si se cumplen las cinco condiciones:
   - `Owner::Daemon`;
@@ -78,7 +78,7 @@ Criterios: GRP007-CLASSIFY.
   - su propio cwd legible y en el repo;
   - `facts_of(git) == Some(f)` con `f.inert`.
 - En `classify`, antes del brazo `(Daemon, Some(cwd)) if repo.contains(cwd)`: con `daemon_inert`, da `(Ignored, daemon_inert)`.
-- `detector_hooks` llama a `set_engine_git` con la ruta de `SystemGit` del daemon, o con `None`.
+- `detector_hooks` llama a `set_engine_git` con la ruta de `SystemGit` del daemon, o con `None`. Lo observa GRP007-ENGINE.
 
 ### T004 — La ventana de escritura del daemon
 
@@ -87,29 +87,34 @@ Criterios: GRP007-WINDOW, GRP007-WIRE.
 **Aceptación:** `crates/core/src/detect/tests/daemon_write_window.rs`, `crates/core/tests/td_grp_007.rs`.
 
 - `begin(path)` guarda la ruta canónica y `start_ns`. El `Drop` de la guarda pone `end_ns`, también si hay un pánico.
-- `overlaps` es verdadero si existe una ventana cuyo `in_repo(path)` se cumple y con `start_ns <= to_ns` y `end_ns.unwrap_or(MAX) >= from_ns`.
+- `overlaps` es verdadero si existe una ventana cuyo `in_repo(path)` se cumple y con `start_ns <= to_ns` y `end_ns.map_or(MAX, |e| e + WINDOW_TAIL) >= from_ns`. `WINDOW_TAIL` = 3 s: el tope del aviso de lectura (ADR-GRP-012 § Enmienda 2026-11-09, «cerrada hace poco»).
 - Retención: las ventanas cerradas hace más de 120 s se descartan en cada `begin`.
 - En `evidence`, después de S4 y antes de la regla S3: si `overlaps(repo.contains, from, t_flush)`, el resultado es `Ambiguous` y suma `daemon_write_window`.
-- `Applier::apply_with` abre la ventana sobre `common_dir` al empezar. `run_git_with` la abre sobre `cmd.cwd()` alrededor del `spawn` y de la espera.
+- `Applier::apply_with` abre la ventana sobre `common_dir` al empezar. `run_git_with` la abre sobre `cmd.cwd()` alrededor del `spawn` y de la espera. GRP007-WIRE observa las dos: un undo simple y una operación de usuario del ejecutor dejan cada uno una ventana en `DaemonWrites::global()`.
 
 ### T005 — `s3_evidence`
 
 Ficheros: `crates/core/src/daemon/sessions.rs`, `crates/core/src/daemon/sessions_s3_tests.rs`.
 Criterios: GRP007-LOG.
-**Aceptación:** `crates/core/src/daemon/sessions_s3_inert_tests.rs`.
+**Aceptación:** `crates/core/src/daemon/sessions_s3_inert_tests.rs`, `crates/core/src/daemon/sessions_s3_tests.rs`.
 
-`daemon_inert` y `daemon_write_window` al final de la línea. El test SEC-04 existente pasa de 10 a 12 en `COUNTERS`.
+`daemon_inert` y `daemon_write_window` al final de la línea. El test SEC-04 existente pasa de 10 a 12 en `COUNTERS`: ese cambio lo hace el criterion-tester antes de la firma, no el constructor.
 
 ### T006 — Reactivar los dos tests en macOS
 
-Ficheros: `crates/core/tests/us_tmc_003.rs`.
-Criterios: ninguno (verificación bajo carga y CI de macOS, en el PR).
+Ficheros: `crates/core/tests/us_tmc_003.rs` (el criterion-tester quita los `cfg_attr` antes de la firma).
+Criterios: GRP007-MACOS.
+**Aceptación:** `crates/core/tests/us_tmc_003.rs`.
+
+No se puede probar en rojo de forma determinista: el fallo es intermitente y depende de la carga. La evidencia son las corridas con carga (cifras en el PR) y el CI de macOS.
 
 ## Gaps y supuestos
 
 - **Tests existentes que cambian a propósito**:
   - `daemon/sessions_s3_tests.rs::the_s3_log_line_carries_only_counters` pasa de 10 a 12 contadores. El literal de `S3Counts` ya está en T000. N2.
   - `detect/tests/s3_scope.rs::…counts_the_daemons_git_anywhere_in_the_repo` sigue valiendo, porque su argv por defecto es `commit`.
+- **NFR-01 con un `git` ajeno concurrente** (Plan de Verificación de la ficha): GRP007-CLASSIFY añade el caso de un `git` ajeno que escribe en el worktree, junto a un inerte del daemon y un `git` de la sesión, que da `Ambiguous`. Los casos de la Enmienda 2026-10-28 siguen en `detect/tests/s3_scope.rs`.
+- **Margen de la ventana**: 3 s después de cerrarse, igual que el tope del aviso de lectura. Un aviso que llega más tarde se descarta y el evento queda `no-sighting` (TD-GRP-006): sin atribuir y nunca al agente. El precio es que un commit del agente hasta 3 s después de un restore o de una operación del ejecutor en el mismo repo queda ambiguo, igual que hoy. N2.
 - **Un nieto no es inerte**: el Arquitecto había propuesto aceptar `repack` → `pack-objects`. Solo cuenta el hijo directo: `repack` y `prune` corren en el almacén, fuera del repo, y el `exe` de un hijo de Git es `libexec/git-core/git`, que no es el Git del motor. Es más estricto. N2.
 - **Ventana del ejecutor**: abarca cada `git` de usuario del ejecutor, no la operación entera. Entre dos `git` de una misma operación queda un hueco de milisegundos, y es la carrera de S3 que ya se acepta. N2.
 - **Retención de 120 s**: más que `s3_lead` y que el tope de 3 s del aviso de lectura. Un lote evaluado más tarde ya no ve la ventana, y con un `git` vivo del daemon sigue siendo ajeno si no es inerte. N2.
@@ -121,7 +126,9 @@ Criterios: ninguno (verificación bajo carga y CI de macOS, en el PR).
 
 ## Decisiones abiertas
 
-Ninguna. La regla quedó decidida con el Arquitecto y con `security-review`.
+- **D1. Umbral para reactivar en macOS los dos tests de `us_tmc_003`.** La ficha pide 10 de 10 con carga en `us_tmc_003`, `us_tmc_003_agents` y `us_tmc_011`. El modo FSEvents (TD-GRP-006, fuera de alcance) fallaba 2 de 14 en esta Mac con carga 18+.
+  - **A (recomendada)**: el CI de macOS en verde con los dos tests activos, más las cifras de carga local en el PR. Se enmienda el Plan de Verificación de la ficha para que un fallo `no-sighting` cuente contra TD-GRP-006 y no contra esta TD. Es lo que pidió el coordinador en la tarea.
+  - **B**: 5 corridas verdes seguidas del CI de macOS antes de reactivarlos, como prefería el Arquitecto. Hasta entonces siguen ignorados.
 
 ## Not Built (deferred)
 

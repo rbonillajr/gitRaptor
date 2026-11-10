@@ -71,7 +71,7 @@ fn s3_scope_follows_the_event_kind() {
     }
 }
 
-const COUNTERS: [&str; 10] = [
+const COUNTERS: [&str; 12] = [
     "sessions_wt",
     "foreign_wt",
     "foreign_other_wt",
@@ -82,6 +82,8 @@ const COUNTERS: [&str; 10] = [
     "foreign_harmless",
     "sessions_not_writing",
     "gits_after_notice",
+    "daemon_inert",
+    "daemon_write_window",
 ];
 
 /// SEC-04: the line carries the scope and integer counters, never a path,
