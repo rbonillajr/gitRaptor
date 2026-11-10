@@ -68,3 +68,4 @@
 {"v":1,"ts":"2026-11-09T04:20:21.522Z","event":"updated","session":"6f316a89-0c67-4417-9b02-a96ec3cde9f3","rel":"../../../architecture/decisions/ADR-CKP-002-catalogo-operaciones-ejecutor.md","id":"ADR-CKP-002","type":"adr","sha":"40e782bfab05a842"}
 {"v":1,"ts":"2026-11-09T04:20:23.589Z","event":"updated","session":"6f316a89-0c67-4417-9b02-a96ec3cde9f3","rel":"../../../architecture/decisions/ADR-CKP-002-catalogo-operaciones-ejecutor.md","id":"ADR-CKP-002","type":"adr","sha":"936079638a4ad372"}
 {"v":1,"ts":"2026-11-09T04:21:27.078Z","event":"updated","session":"6f316a89-0c67-4417-9b02-a96ec3cde9f3","rel":"../../../architecture/decisions/ADR-CKP-002-catalogo-operaciones-ejecutor.md","id":"ADR-CKP-002","type":"adr","sha":"a04ef50ad47b287c"}
+{"v":1,"ts":"2026-11-10T19:38:24.823Z","event":"updated","session":"726da47d-0840-4870-89e9-bfb8fba4a048","rel":"user-stories/US-CKP-022-grafo-carriles.md","id":"US-CKP-022","type":"us","sha":"7d4f93f77f874e3c"}
