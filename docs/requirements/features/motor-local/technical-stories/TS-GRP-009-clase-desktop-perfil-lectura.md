@@ -23,7 +23,7 @@ tags: [desktop, canal, perfil-mcp, ascendencia, identidad-por-ruta, dep-dsk-2, s
 
 **Valor**: una ventana de la app que abrió un agente ve lo mismo que ese agente por el MCP, y lo decide el daemon, no la app.
 
-> Implementado en: PR #PRNUM (2026-11-09). Entrega SIN CERTIFICAR (modo rápido).
+> Implementado en: PR #351 (2026-11-09). Entrega SIN CERTIFICAR (modo rápido).
 
 > Dev Spec: [DS-TS-GRP-009](../dev-specs/TS-GRP-009-dev-spec.md). Precisa la clase (la deduce el daemon del ejecutable, sin cambiar `hello`), el contrato (método `connection.desktop` en lugar de una capacidad, ADR-GRP-016) y la fila 4 (completo solo con los controles 1 a 3). Decisión del orquestador (2026-11-09), validada por Arquitecto.
 
