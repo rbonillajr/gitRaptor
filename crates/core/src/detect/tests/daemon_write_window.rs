@@ -154,3 +154,153 @@ fn daemon_write_window_a_panic_with_the_guard_alive_closes_it() {
     let t = monotonic_ns() + beyond_the_tail();
     assert_attributed_uncounted(&evaluate(&rig, t, t + FLUSH_NS), "after the panic");
 }
+
+// ----- The tail of the applier's window: what it wrote clears or keeps the event --------------------
+
+const OTHER: &str = "3333333333333333333333333333333333333333";
+const BRANCH_REF: &str = "refs/heads/feat-login";
+
+/// Evaluates the agent's commit one second after a window closed (inside `WINDOW_TAIL`), with the
+/// branch move of the event.
+fn evaluate_in_the_tail(rig: &Rig, moved: Option<RefMove<'_>>) -> S3Evidence {
+    let t = monotonic_ns() + 1_000_000_000;
+    rig.detector.sample_now("r", t);
+    rig.detector
+        .evidence("r", Path::new(WT), S3Scope::Repo, moved, t, t + FLUSH_NS)
+}
+
+fn feat_login(old: Option<&'static str>, new: &'static str) -> RefMove<'static> {
+    RefMove {
+        branch: "feat-login",
+        old,
+        new,
+    }
+}
+
+/// The applier's window over `/r` that wrote these pairs and closed.
+fn closed_tracked(rig: &Rig, pairs: &[(&str, &str)]) {
+    let window = rig.writes.begin_tracked(Path::new("/r"));
+    for (refname, value) in pairs {
+        window.wrote(refname, value);
+    }
+    drop(window);
+}
+
+/// The positive every Attributed case is measured against: the same tail, with the event
+/// clearing the window, is attributed; without a branch move it is not.
+fn assert_tail_cleared(rig: &Rig, moved: RefMove<'_>, label: &str) {
+    let e = evaluate_in_the_tail(rig, Some(moved));
+    assert_attributed_uncounted(&e, label);
+}
+
+#[test]
+fn daemon_write_window_tail_an_event_without_a_branch_move_is_foreign() {
+    let rig = rig();
+    closed_tracked(&rig, &[(BRANCH_REF, OLD)]);
+    let e = evaluate_in_the_tail(&rig, None);
+    assert_ambiguous_by_window(&e, "tail, no branch_move");
+}
+
+#[test]
+fn daemon_write_window_tail_a_ref_the_window_did_not_touch_goes_to_s3() {
+    let rig = rig();
+    closed_tracked(&rig, &[("refs/heads/other", OLD)]);
+    assert_tail_cleared(
+        &rig,
+        feat_login(Some(OLD), NEW),
+        "ref untouched by the window",
+    );
+}
+
+#[test]
+fn daemon_write_window_tail_a_ref_touched_from_the_value_the_daemon_left_goes_to_s3() {
+    let rig = rig();
+    closed_tracked(&rig, &[(BRANCH_REF, OLD)]);
+    assert_tail_cleared(
+        &rig,
+        feat_login(Some(OLD), NEW),
+        "old equals what the daemon left",
+    );
+}
+
+#[test]
+fn daemon_write_window_tail_a_different_or_unreadable_old_is_foreign() {
+    // The positive first: the same window, an old that matches.
+    let rig_ok = rig();
+    closed_tracked(&rig_ok, &[(BRANCH_REF, OLD)]);
+    assert_tail_cleared(&rig_ok, feat_login(Some(OLD), NEW), "baseline: old equals");
+
+    for old in [Some(OTHER), None] {
+        let rig = rig();
+        closed_tracked(&rig, &[(BRANCH_REF, OLD)]);
+        let e = evaluate_in_the_tail(&rig, Some(feat_login(old, NEW)));
+        assert_ambiguous_by_window(&e, &format!("tail, old {old:?}"));
+    }
+}
+
+#[test]
+fn daemon_write_window_tail_a_new_equal_to_what_the_applier_wrote_is_a_late_echo() {
+    let rig_ok = rig();
+    closed_tracked(&rig_ok, &[(BRANCH_REF, OLD)]);
+    assert_tail_cleared(&rig_ok, feat_login(Some(OLD), NEW), "baseline: new differs");
+
+    let rig = rig();
+    closed_tracked(&rig, &[(BRANCH_REF, NEW)]);
+    let e = evaluate_in_the_tail(&rig, Some(feat_login(Some(OLD), NEW)));
+    assert_ambiguous_by_window(&e, "tail, new equals what the applier wrote");
+}
+
+#[test]
+fn daemon_write_window_tail_the_executors_window_covers_any_event() {
+    let rig_ok = rig();
+    closed_tracked(&rig_ok, &[(BRANCH_REF, OLD)]);
+    assert_tail_cleared(
+        &rig_ok,
+        feat_login(Some(OLD), NEW),
+        "baseline: tracked window",
+    );
+
+    let rig = rig();
+    // The executor's window knows no oids.
+    drop(rig.writes.begin(Path::new("/r")));
+    for moved in [None, Some(feat_login(Some(OLD), NEW))] {
+        let e = evaluate_in_the_tail(&rig, moved);
+        assert_ambiguous_by_window(&e, &format!("tail, executor window, {moved:?}"));
+    }
+}
+
+#[test]
+fn daemon_write_window_tail_a_commit_on_a_detached_head_is_foreign() {
+    let rig = rig();
+    // The restore detached HEAD at an oid; the agent's commit there has no branch move.
+    closed_tracked(&rig, &[("HEAD", OLD)]);
+    let e = evaluate_in_the_tail(&rig, None);
+    assert_ambiguous_by_window(&e, "tail, detached HEAD");
+}
+
+#[test]
+fn daemon_write_window_tail_a_commit_on_the_target_of_a_changed_symbolic_head_goes_to_s3() {
+    let rig = rig();
+    // The restore pointed HEAD to `dest`, recorded as that ref at its value on closing.
+    closed_tracked(&rig, &[("refs/heads/dest", OLD)]);
+    let moved = RefMove {
+        branch: "dest",
+        old: Some(OLD),
+        new: NEW,
+    };
+    assert_tail_cleared(&rig, moved, "commit on the symbolic HEAD's target");
+}
+
+#[test]
+fn daemon_write_window_tail_an_event_must_clear_every_window_of_its_margin() {
+    let rig_ok = rig();
+    closed_tracked(&rig_ok, &[(BRANCH_REF, OLD)]);
+    assert_tail_cleared(&rig_ok, feat_login(Some(OLD), NEW), "baseline: one window");
+
+    let rig = rig();
+    closed_tracked(&rig, &[(BRANCH_REF, OLD)]);
+    // A second window left the branch at another value: the event starts from OLD, not from it.
+    closed_tracked(&rig, &[(BRANCH_REF, OTHER)]);
+    let e = evaluate_in_the_tail(&rig, Some(feat_login(Some(OLD), NEW)));
+    assert_ambiguous_by_window(&e, "tail, two windows, one not cleared");
+}
