@@ -541,6 +541,9 @@ impl<'a> Applier<'a> {
         );
         match result {
             Ok(()) => {
+                // Every write returned successfully: the window knows the state it left. On an
+                // error, a refusal or a panic it closes without this and never clears an event.
+                write_window.complete();
                 chaos::crash_point(chaos::OPERATION_APPLIED);
                 // ---- 8. close ------------------------------------------------------------
                 self.release_all(operation_id, locks)?;
