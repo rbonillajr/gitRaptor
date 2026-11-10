@@ -17,8 +17,8 @@ use gitraptor_git::diff::{DiffLimits, GitContentIds, GitIndexSection};
 use super::super::ServerCtx;
 use super::super::bus::Outbox;
 use super::super::query::QueryTable;
-use super::commit::{Answer, cut_name, queue};
 use super::fit::fit_sections;
+use super::pool::{Answer, cut_name, queue};
 use super::{ENVELOPE_MARGIN, Resolved, file_of, resolve, section_of, unavailable};
 use crate::daemon::now_ms;
 
