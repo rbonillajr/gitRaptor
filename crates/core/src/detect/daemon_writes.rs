@@ -36,6 +36,34 @@ struct Span {
     start_ns: u64,
     /// `None` while the guard lives.
     end_ns: Option<u64>,
+    /// Opened by the applier, which records what it wrote; the executor's window knows nothing.
+    tracked: bool,
+    /// `(refname, value)` the window left, in the order written. Only oids and ref names of the
+    /// repo, in memory (SEC-04).
+    wrote: Vec<(String, String)>,
+}
+
+impl Span {
+    /// Whether an event in the tail of this closed window cannot be its late echo and does not
+    /// start from a state it did not leave: only for a tracked window and a branch move whose
+    /// new value the window never wrote to that ref and whose old value is the one it left
+    /// there (or a ref it never wrote). Anything unknown fails closed.
+    fn cleared_by(&self, moved: Option<MoveSeen<'_>>) -> bool {
+        let Some(m) = moved else {
+            return false;
+        };
+        if !self.tracked {
+            return false;
+        }
+        let mut written = self.wrote.iter().filter(|(r, _)| r == m.refname);
+        if written.clone().any(|(_, v)| v == m.new) {
+            return false;
+        }
+        match written.next_back() {
+            None => true,
+            Some((_, left)) => m.old == Some(left.as_str()),
+        }
+    }
 }
 
 /// The branch move of an event, as [`DaemonWrites::covers`] reads it: the full ref name
@@ -59,7 +87,9 @@ impl WriteWindow {
     /// Records that the window left `refname` (full name, or `HEAD` when detached) at `value`.
     /// A symbolic `HEAD` records the ref it points to with that ref's value at the end.
     pub fn wrote(&self, refname: &str, value: &str) {
-        let _ = (refname, value);
+        if let Some(span) = self.writes.spans().iter_mut().find(|s| s.id == self.id) {
+            span.wrote.push((refname.to_owned(), value.to_owned()));
+        }
     }
 }
 
@@ -101,6 +131,10 @@ impl DaemonWrites {
     /// kept canonical when it can be resolved, as given otherwise; windows closed longer than
     /// the retention ago are dropped here.
     pub fn begin(self: &Arc<Self>, path: &Path) -> WriteWindow {
+        self.open(path, false)
+    }
+
+    fn open(self: &Arc<Self>, path: &Path, tracked: bool) -> WriteWindow {
         let path = crate::observe::canonical(path);
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let start_ns = monotonic_ns();
@@ -111,6 +145,8 @@ impl DaemonWrites {
             path,
             start_ns,
             end_ns: None,
+            tracked,
+            wrote: Vec::new(),
         });
         WriteWindow {
             writes: Arc::clone(self),
@@ -123,7 +159,7 @@ impl DaemonWrites {
     /// that starts from a state it did not leave counts as foreign (ADR-GRP-012, amendment
     /// 2026-11-09). A window opened with [`Self::begin`] (the executor) knows nothing it wrote.
     pub fn begin_tracked(self: &Arc<Self>, path: &Path) -> WriteWindow {
-        self.begin(path)
+        self.open(path, true)
     }
 
     /// Whether the daemon's windows make an event of the repo foreign: one over a path `in_repo`
@@ -136,8 +172,21 @@ impl DaemonWrites {
         to_ns: u64,
         moved: Option<MoveSeen<'_>>,
     ) -> bool {
-        let _ = moved;
-        self.overlaps(in_repo, from_ns, to_ns)
+        let tail = ns(WINDOW_TAIL);
+        self.spans().iter().filter(|s| in_repo(&s.path)).any(|s| {
+            if s.start_ns > to_ns {
+                return false;
+            }
+            match s.end_ns {
+                // Open, or closed inside the window: foreign always.
+                None => true,
+                Some(end) if end >= from_ns => true,
+                // In its tail: foreign unless the move clears it. Every window of the margin
+                // must be cleared, so one that is not decides.
+                Some(end) if end.saturating_add(tail) >= from_ns => !s.cleared_by(moved),
+                Some(_) => false,
+            }
+        })
     }
 
     /// Whether a window over a path `in_repo` accepts was open at some moment of
@@ -168,6 +217,8 @@ mod tests {
             path: PathBuf::from("/r"),
             start_ns: 1,
             end_ns,
+            tracked: false,
+            wrote: Vec::new(),
         };
         let now = 10 * ns(RETENTION);
         let mut spans = vec![

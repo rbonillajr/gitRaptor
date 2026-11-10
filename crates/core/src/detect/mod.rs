@@ -897,7 +897,15 @@ impl Detector {
                 .lock()
                 .unwrap_or_else(|e| e.into_inner()),
         );
-        if writes.overlaps(&|p| repo.contains(p), from, t_flush) {
+        let refname = moved.map(|m| format!("refs/heads/{}", m.branch));
+        let seen = moved
+            .zip(refname.as_deref())
+            .map(|(m, refname)| daemon_writes::MoveSeen {
+                refname,
+                old: m.old,
+                new: m.new,
+            });
+        if writes.covers(&|p| repo.contains(p), from, t_flush, seen) {
             return S3Evidence {
                 outcome: S3Outcome::Ambiguous,
                 counts: S3Counts {

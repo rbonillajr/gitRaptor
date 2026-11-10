@@ -42,6 +42,7 @@ use super::chaos;
 use super::oplog::{OperationTransition, Oplog, file_identity};
 use super::repo_lock;
 use super::store::SnapshotStore;
+use crate::detect::daemon_writes::WriteWindow;
 use crate::profile::ProfileError;
 use plan::{Loaded, LoadedWorktree};
 
@@ -429,10 +430,11 @@ impl<'a> Applier<'a> {
         plan: &ApplyPlan,
         held: Option<&repo_lock::RepoGuard>,
     ) -> Result<ApplyReport, ApplyError> {
-        // Every event of the repo while this runs, and just after, is the daemon's own write
-        // (ADR-GRP-012, amendment 2026-11-09); the guard closes the window on every return.
-        let _write_window =
-            crate::detect::daemon_writes::DaemonWrites::global().begin(&self.common_dir);
+        // Every event of the repo while this runs is the daemon's own write, and just after only
+        // one its writes cannot explain (ADR-GRP-012, amendment 2026-11-09); the guard closes the
+        // window on every return.
+        let write_window =
+            crate::detect::daemon_writes::DaemonWrites::global().begin_tracked(&self.common_dir);
         let reject = |refusals: Vec<Refusal>| -> Result<ApplyReport, ApplyError> {
             let reason = refusals.first().map(Refusal::code).unwrap_or("rejected");
             self.oplog(|log, now| {
@@ -529,7 +531,14 @@ impl<'a> Applier<'a> {
         }
 
         let mut report = ApplyReport::default();
-        let result = self.run_steps(operation_id, &main, &mut loaded, &mut locks, &mut report);
+        let result = self.run_steps(
+            operation_id,
+            &main,
+            &mut loaded,
+            &mut locks,
+            &mut report,
+            &write_window,
+        );
         match result {
             Ok(()) => {
                 chaos::crash_point(chaos::OPERATION_APPLIED);
@@ -746,6 +755,7 @@ impl<'a> Applier<'a> {
         loaded: &mut Loaded,
         locks: &mut Vec<(usize, GitLock)>,
         report: &mut ApplyReport,
+        write_window: &WriteWindow,
     ) -> Result<(), (u32, StepError)> {
         let at = |step: u32| move |e: StepError| (step, e);
 
@@ -769,6 +779,7 @@ impl<'a> Applier<'a> {
 
         // ---- 5. refs -------------------------------------------------------------------
         self.step(operation_id, 5)?;
+        record_writes(write_window, loaded);
         refs::apply_updates(self.write, main, &loaded.ref_updates)
             .map_err(|e| StepError {
                 reason: e.to_string(),
@@ -1074,4 +1085,26 @@ fn check_tree(w: &LoadedWorktree, probe_root: &Path) -> Result<(), Refusal> {
         .map(String::as_bytes)
         .chain(w.index.iter().map(|e| e.path.as_slice()));
     tree_path::check_tree(paths, folding).map_err(|r| hostile(r.to_string()))
+}
+
+/// What step 5 leaves in the repo, for the tail of the daemon's write window (ADR-GRP-012,
+/// amendment 2026-11-09). Recorded before writing: a write that then fails leaves values the
+/// repo does not hold, and an event judged against them stays foreign (fails closed).
+///
+/// - each ref update with its new value (Git's null id for a deleted ref);
+/// - a `HEAD` left detached, at its id: the target written, or the prior already verified;
+/// - a `HEAD` left on a branch: that branch's value comes from its own ref update, recorded
+///   above. A branch with no update was not checked against the repo, so nothing is recorded
+///   for it: the window did not write it.
+fn record_writes(window: &WriteWindow, loaded: &Loaded) {
+    const NULL_ID: &str = "0000000000000000000000000000000000000000";
+    for u in &loaded.ref_updates {
+        let value = u.new.map_or_else(|| NULL_ID.to_owned(), |id| id.to_hex());
+        window.wrote(u.name.as_str(), &value);
+    }
+    for w in &loaded.worktrees {
+        if let Some(HeadValue::Detached(id)) = &w.target_head {
+            window.wrote("HEAD", &id.to_hex());
+        }
+    }
 }
