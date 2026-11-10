@@ -308,7 +308,7 @@ Lo que cambió respecto del 2026-10-08 (27 PR y 8,8 fichas equivalentes por día
 |---|---|---|---|---|
 | TS-DSK-001 | Andamiaje de `apps/desktop`: proyecto Tauri del monorepo, frontera de seguridad y ventana vacía | Must | Hecho (PR #327) | Nada: es el primer eslabón |
 | TS-DSK-002 | Arranque del motor desde la app y binarios del motor dentro del bundle | Must | Pend (`ready`) | TS-DSK-001. Dev Spec lista |
-| TS-GRP-009 | Clase de cliente `desktop` y perfil de lectura `mcp` cuando un agente abre la app | Must | Hecho (PR #PRNUM; SIN CERTIFICAR, falta la verificación manual con la alpha en macOS) | Desbloquea la primera escritura de la app (US-DSK-001, 002 y 006): el daemon deduce la clase `desktop` y da `mcp` con un agente en la ascendencia |
+| TS-GRP-009 | Clase de cliente `desktop` y perfil de lectura `mcp` cuando un agente abre la app | Must | Hecho (PR #351; SIN CERTIFICAR, falta la verificación manual con la alpha en macOS) | Desbloquea la primera escritura de la app (US-DSK-001, 002 y 006): el daemon deduce la clase `desktop` y da `mcp` con un agente en la ascendencia |
 | US-DSK-001 | Añadir un repo sin terminal | Must | Pend (`ready`) | Factor del SO (SPIKE-GRD-002); mientras tanto, comando para copiar |
 | US-DSK-002 | Proteger un repo con un clic | Must | Pend (`ready`) | Factor del SO; mientras tanto, comando para copiar |
 | US-DSK-003 | Estado del motor | Must | Hecho (PR #336; falta la verificación manual en macOS) | DEP-DSK-5 |

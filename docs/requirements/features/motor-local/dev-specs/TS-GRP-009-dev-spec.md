@@ -57,7 +57,7 @@ tags: [motor-local, desktop, canal, perfil-mcp, ascendencia, identidad-por-ruta,
 
 # DS-TS-GRP-009 · Clase de cliente de la app de escritorio y su perfil de lectura en el daemon
 
-> Implementado en: PR #PRNUM (2026-11-09).
+> Implementado en: PR #351 (2026-11-09).
 
 ## Contexto rápido
 
