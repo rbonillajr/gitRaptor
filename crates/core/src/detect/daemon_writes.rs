@@ -113,6 +113,11 @@ impl WriteWindow {
             span.wrote.push((refname.to_owned(), value.to_owned()));
         }
     }
+
+    /// Marks that every write of the window returned successfully. A window dropped without it
+    /// (an error, a refusal, a panic) is a failed one: its final state is unknown, so it never
+    /// clears an event (ADR-GRP-012, amendment 2026-11-09).
+    pub fn complete(&self) {}
 }
 
 impl Drop for WriteWindow {
