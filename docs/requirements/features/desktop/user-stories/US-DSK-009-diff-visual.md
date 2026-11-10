@@ -5,7 +5,7 @@ type: us
 status: ready
 priority: high
 created: 2026-10-28
-updated: 2026-11-08
+updated: 2026-11-10
 feature: desktop
 source: inline
 decision: "Decisión de Rene del 2026-11-08 (aceptación de las recomendaciones, Q-DSK-7 a Q-DSK-20), ver CTX-DSK-001 § 11"
@@ -18,6 +18,8 @@ related:
     - US-DSK-005
   design:
     - DSF-DSK-001
+  specs:
+    - DS-US-DSK-009
 tags:
   - desktop
   - ui-2
@@ -71,4 +73,4 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 ## Diseño y Dev Spec
 
 - **Diseño:** pendiente (UI-2 no está en DSF-DSK-001).
-- **Dev Spec:** pendiente.
+- **Dev Spec:** [DS-US-DSK-009](../dev-specs/US-DSK-009-diff-visual.md) (`spec-ready`, 2026-11-10). Revisión de seguridad 2026-11-10 (aprobada con comentarios) incorporada; veredicto del orquestador sobre P24 a P29 pendiente de OK del coordinador. T004 a T006 y T008 esperan a G1 (US-CKP-012 en `main`); T007 (diff de un commit, escenario 2) espera a G2 (Dev Spec de TS-CKP-006, DEP-DSK-3).
