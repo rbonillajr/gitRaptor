@@ -278,6 +278,10 @@ pub struct S3Counts {
     /// Evaluations whose window overlapped a write window of the daemon in the repo: foreign
     /// (ADR-GRP-012, amendment 2026-11-09).
     pub daemon_write_window: u32,
+    /// The daemon's own direct `git` children that were exiting (folder unreadable) when the
+    /// event fell in no write window of the daemon: not foreign, since every writer of the
+    /// daemon opens one (ADR-GRP-012, amendment 2026-11-09).
+    pub daemon_exiting: u32,
 }
 
 /// The S3 (or S4) outcome of one event and what it counted.
