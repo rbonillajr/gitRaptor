@@ -4,6 +4,7 @@ title: "Un agente que trabaja por Bash lee la salida de raptor con un contrato J
 type: us
 status: draft
 priority: high
+milestone: M3
 created: 2026-11-10
 updated: 2026-11-10
 domain: GRP
@@ -24,7 +25,8 @@ ado:
   id: null
   url: null
 covers: [BR-MCP-CONS-008]
-blocked_by: []
+blocked_by:
+  - TS-GRP-010
 tags: [mcp, agentes, cli, json, contrato, superficie-agentes, hito-m3]
 ---
 
@@ -114,7 +116,7 @@ Arquitecto, 2026-11-10: [ADR-MCP-001, Enmienda (2026-11-10, superficie para agen
 - **Versión**: una sola versión para todo el contrato de la CLI, declarada como constante en `crates/api` junto a los códigos de § 5. Empieza en `1.0`.
 - **Esquemas**: se generan de los tipos de `crates/api`, con instantánea y prueba de compatibilidad en CI (cambio incompatible sin subir el mayor, o campo nuevo sin subir el menor, falla). La referencia para agentes se genera de esos esquemas.
 - **Códigos**: el catálogo estable de § 5. Los códigos solo de la CLI entran en el mismo catálogo.
-- **Condición de entrada (C1)**: el escenario "por la CLI un agente no ve más que por el MCP" exige SEC-MCP-01 (perfil `mcp` por solicitante) en `main`. Hoy no está implementado.
+- **Condición de entrada (C1)**: el escenario "por la CLI un agente no ve más que por el MCP" exige SEC-MCP-01 (perfil `mcp` por solicitante) en `main`. La implementa [TS-GRP-010](../../motor-local/technical-stories/TS-GRP-010-perfil-mcp-por-solicitante.md), que bloquea el escenario y se mezcla antes que esta historia (decisión del orquestador, 2026-11-10: S-01 pasa a M3).
 - **`guard exec` (C3)**: sigue reservado. Un agente con `--json` recibe el rechazo de comando reservado en JSON.
 - **Para la Dev Spec**: JSON compacto o con formato; errores de `clap` en JSON; códigos de salida por familia.
 

@@ -398,7 +398,7 @@ Decisión del orquestador (2026-10-07), validada por Arquitecto y PO. Origen: [D
 - **Riesgos residuales** (security-expert, condición C4; ambos caducan con S-01 en M4, v0.1.0):
   - **Medio**: sin S-01, un agente que habla directo con el socket o usa la CLI esquiva el cubo de escrituras de la conexión `mcp`. Cotas: los descartes contados (C1), la cuota durable de 5 por minuto y 20 en 24 h por (sesión, worktree), los techos de 60 en 24 h por worktree y de 200 en 24 h por repo, y el suelo de espacio libre; el daemon las aplica a cualquier cliente.
   - **Bajo**: `raptor timeline --json` emite la etiqueta sin el envoltorio `{"untrusted": …}` a un agente con perfil completo. El agente ya puede leer el perfil con su shell (§ 9, I-01).
-- **DEP-MCP-8**: S-03 completo y S-01 entran en la puerta de M4 (v0.1.0); ver [release-plan.md](../../requirements/release-plan.md).
+- **DEP-MCP-8**: S-03 completo y S-01 entran en la puerta de M4 (v0.1.0); ver [release-plan.md](../../requirements/release-plan.md). **Actualización (2026-11-10)**: S-01 se adelanta a M3 (TS-GRP-010); S-03 completo sigue en la puerta de M4. Los riesgos residuales de arriba caducan con TS-GRP-010 en `main`, no en M4.
 
 ## Enmienda (2026-10-08, US-MCP-004)
 
@@ -527,7 +527,7 @@ Ejecutar código del agente en un entorno propio añade superficie de ataque (MC
 **C1. La CLI que usa un agente recibe el perfil `mcp` por ascendencia** (§ 2, S-01; ADR-GRP-012). Así, la guía puede enseñar `raptor … --json` sin abrir una puerta que el MCP cierra: allowlist, vista con allowlist de campos y `repo-not-enabled` sin datos.
 
 - **Estado en `main` (2026-11-10)**: no está implementado. El canal decide el perfil por el ejecutable del par (`raptor-mcp`) o por lo que declara el cliente (`crates/core/src/channel/conn.rs`, `hello`). La CLI lanzada por un agente recibe hoy el perfil completo. SEC-MCP-01 figura con dueña US-MCP-003 (`technical-stories.md`) y como puerta de M4 (plan de releases, criterio 12), pero no se entregó.
-- **Consecuencia**: SEC-MCP-01 es **condición de entrada** de US-MCP-023 (su escenario "por la CLI un agente no ve más que por el MCP") y de la parte CLI de la guía de US-MCP-020, las dos en M3. Mientras no esté en `main`, la guía no enseña la CLI como camino del agente. Mover S-01 de M4 a M3 y darle historia dueña lo decide el coordinador (ver "Dudas").
+- **Consecuencia**: SEC-MCP-01 es **condición de entrada** de US-MCP-023 (su escenario "por la CLI un agente no ve más que por el MCP") y de la parte CLI de la guía de US-MCP-020, las dos en M3. Mientras no esté en `main`, la guía no enseña la CLI como camino del agente. **Decidido (2026-11-10, orquestador, por delegación de Rene): S-01 pasa a M3 con dueña [TS-GRP-010](../../requirements/features/motor-local/technical-stories/TS-GRP-010-perfil-mcp-por-solicitante.md).**
 
 **C2. `configure-agents` no es lanzable por un agente** (P-MCP-35): la aplicación es un **comando reservado** con el mecanismo de ADR-GRP-005 § 6 (controles 1 a 3, `daemon-descendant`, auditoría append-only, fuera del MCP). Entra en la lista de ADR-GRD-007 § 1 como acción que **no relaja**, sin ventana D5, igual que `raptor guard install`. Esa fila de ADR-GRD-007 se aplica cuando se acepte esta enmienda.
 
@@ -630,6 +630,6 @@ Cada punto es una prueba que corre en CI en cada PR.
 
 ### Dudas para el coordinador
 
-1. **S-01 sin dueña**: ¿se adelanta SEC-MCP-01 de la puerta de M4 a M3, con historia o TS propia? Recomendación del Arquitecto: sí, porque M3 enseña la CLI a los agentes.
-2. **Fila nueva en ADR-GRD-007 § 1** (`configure-agents`, no relaja): se aplica al aceptar esta enmienda.
+1. **S-01 sin dueña** — **resuelta (2026-11-10)**: sí, SEC-MCP-01 pasa de la puerta de M4 a M3 como TS-GRP-010 (`motor-local`), Must de M3, bloqueo de US-MCP-023 y de la parte CLI de US-MCP-020. Puede reutilizar la detección de ascendencia de TS-GRP-009 (`crates/core/src/channel/desktop.rs`).
+2. **Fila nueva en ADR-GRD-007 § 1** (`configure-agents`, no relaja) — **aplicada (2026-11-10)**: Enmienda 2026-11-10 de ADR-GRD-007.
 3. **US-MCP-023**: el PO corrige el escenario de `guard exec` (C3).

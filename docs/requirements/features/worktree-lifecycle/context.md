@@ -186,7 +186,7 @@ Sin la feature, GitRaptor queda por detrás de worktrunk, Codex y GitKraken en l
 - Compatibilidad con `.worktreeinclude`, el formato que ya usan worktrunk y la app de Codex, para convivir con ellos.
 - Toda herramienta MCP nueva entra solo si necesita el estado vivo del daemon o es una acción protegida; el resto va a la CLI con salida JSON estable y a la skill (decisión del 2026-11-10).
 - GitRaptor no escribe fuera de su perfil sin permiso del humano (Q17 y Q22 de motor-local, recogidas en ADR-GRP-012). Interceptar los eventos de worktree de Claude Code toca su configuración: lo activa el humano, solo registra, guarda el snapshot y aplica Guardrails, y nunca concede permisos (decisión del 2026-11-10). Cómo se hace de forma reversible es transversal (lo define el Arquitecto, como enmienda de ADR-GRP-012).
-- GitRaptor lanza un agente solo a petición explícita del humano, nunca por el MCP ni a petición de otro agente (decisión del 2026-11-10; enmienda de BRD § 6.4 pendiente de aplicar).
+- GitRaptor lanza un agente solo a petición explícita del humano, nunca por el MCP ni a petición de otro agente (decisión del 2026-11-10; enmienda de BRD § 6.4 aplicada el 2026-11-10).
 - Plataforma: macOS verificado primero. Linux y Windows, y el comportamiento sin copy-on-write, quedan para la etapa de validación multiplataforma.
 
 ---
@@ -211,7 +211,7 @@ Sin la feature, GitRaptor queda por detrás de worktrunk, Codex y GitKraken en l
 | Sistema | Para qué (negocio) | Fuente |
 |---------|--------------------|--------|
 | Claude Code | Lanzarlo con la tarea en el worktree nuevo, registrar los worktrees que crea y borra, y conocer su estado | D2; decisión del coordinador, 2026-11-10 |
-| Skill de GitRaptor para agentes (feature mcp, W160) | Que el agente lanzado sepa trabajar con GitRaptor desde el primer momento | Decisión del 2026-11-10 (superficie lean) |
+| Skill de GitRaptor para agentes (feature mcp, US-MCP-020) | Que el agente lanzado sepa trabajar con GitRaptor desde el primer momento | Decisión del 2026-11-10 (superficie lean) |
 | Time Machine | Snapshot antes de descartar, traer o devolver, y restauración | NFR-01; CTX-TMC-001 |
 | Guardrails | Aplicar las políticas del repo a los worktrees del agente | BR-11; CTX-GRD-001 |
 | GitHub Actions (solo lectura) | Saber si un agente espera el resultado del CI; en M3 no se lee otro CI | Decisión del coordinador, 2026-11-10 |
@@ -334,9 +334,9 @@ Cada fila cita las fuentes del Panorama con su fecha de consulta. ✔ sí · ≈
 |-------------|------------|--------|
 | US-CKP-018 y US-MCP-019 | Crear worktree sobre la base confirmada | Existen; US-CKP-018 se mantiene para preparar sin lanzar ningún agente |
 | US-CKP-017 | Descartar con Deshacer | Existe; esta feature añade la protección del agente vivo, el informe de disco y los worktrees del agente |
-| ADR-GRP-012 | Detección de sesiones de Claude Code: activo, inactivo, terminado | Aceptado; los estados nuevos de BR-WTL-009 y la interceptación de BR-WTL-010 lo amplían. Enmienda pendiente, a cargo del Arquitecto |
-| BRD-GRP-001 § 6.4 | Fuera de alcance «lanzar prompts» | Enmienda pendiente de aplicar: GitRaptor puede lanzar un agente una vez, a petición explícita del humano |
-| Superficie para agentes (feature mcp, W160) | Skill de GitRaptor y `raptor configure-agents` | En backlog, sin historia con id |
+| ADR-GRP-012 | Detección de sesiones de Claude Code: activo, inactivo, terminado | Aceptado; los estados nuevos de BR-WTL-009 y la interceptación de BR-WTL-010 lo amplían. **Enmienda aplicada (2026-11-10)** |
+| BRD-GRP-001 § 6.4 | Fuera de alcance «lanzar prompts» | **Enmienda aplicada (2026-11-10, BRD v0.10)**: GitRaptor puede lanzar un agente una vez, a petición explícita del humano |
+| Superficie para agentes (feature mcp) | Skill de GitRaptor (US-MCP-020, Must M3; la usa US-WTL-013) y `raptor configure-agents` (US-MCP-021, M4) | Con historias desde el 2026-11-10; P-MCP-39 decidida (copia documentada) |
 | Time Machine (ADR-TMC-001, ADR-TMC-007) | Snapshot, retención de 30 días, ignorados fuera | Aceptados |
 
 ---
@@ -354,17 +354,20 @@ Cada fila cita las fuentes del Panorama con su fecha de consulta. ✔ sí · ≈
 | 5 | En M3, antes de que el daemon mantenga la semilla (M4), ¿quién la crea y la reconstruye? | Coordinador | Resuelta 2026-11-10: la crea `raptor new` la primera vez desde `main`; se reconstruye con `raptor seed refresh` (BR-WTL-003) | no |
 | 5b | Si la semilla existe pero no es del toolchain o el perfil actuales (por ejemplo, tras cambiar de versión del compilador), ¿`raptor new` la reconstruye, crea el worktree sin copia o pide `raptor seed refresh`? | Rene | [POR VERIFICAR] Crea el worktree sin copia y avisa de que hace falta `raptor seed refresh` | no |
 | 6 | ¿Qué es un «momento tranquilo» para reconstruir la semilla (sin agentes activos, cierre del día, carga baja)? | Rene + Arquitecto | [POR VERIFICAR] `sin dato` | no (M4) |
-| 7 | ¿Se enmienda BRD § 6.4 para que GitRaptor pueda lanzar el agente? | Coordinador | Resuelta 2026-11-10: sí, una vez y a petición explícita del humano; US-CKP-018 se mantiene sin lanzar. Enmienda del BRD pendiente de aplicar | no |
+| 7 | ¿Se enmienda BRD § 6.4 para que GitRaptor pueda lanzar el agente? | Coordinador | Resuelta 2026-11-10: sí, una vez y a petición explícita del humano; US-CKP-018 se mantiene sin lanzar. Enmienda del BRD aplicada el 2026-11-10 (v0.10) | no |
 | 8 | ¿Puede un agente lanzar otro por el MCP? | Coordinador | Resuelta 2026-11-10: no (NFR-02); se puede revisar más adelante | no |
 | 9 | ¿Dónde vive la semilla por toolchain y perfil (perfil de GitRaptor, junto al repo, carpeta de worktrees) y cuánto disco puede ocupar? | Arquitecto, con el visto bueno de Rene | [POR VERIFICAR] `sin dato` | no |
 | 10 | ¿Hay un límite de worktrees retenidos o descartados restaurables (la app de Codex guarda 15), aparte de los 30 días de la Time Machine? | Rene | [POR VERIFICAR] Solo la retención de 30 días de la Time Machine | no |
 | 11 | Copy-on-write en APFS (macOS) está medido. ¿Cómo se comporta en btrfs y XFS (Linux), en ReFS (Windows) y sin reflink (ext4, NTFS)? ¿Sin reflink se copia, se omite o se pregunta? Pendiente: etapa de validación multiplataforma | Arquitecto; validación en máquinas reales | [POR VERIFICAR] Sin reflink, no se copia y se avisa | no (M3 macOS) |
-| 12 | ¿Se aceptan los hooks de Claude Code para interceptar `WorktreeCreate` y `WorktreeRemove`, que ADR-GRP-012 descartó para detectar sesiones? | Coordinador | Resuelta 2026-11-10: sí, con otro uso que la detección: solo registrar, snapshot y Guardrails, nunca conceder permisos; los configura el humano; si fallan, el borrado se rechaza. Enmienda de ADR-GRP-012 pendiente, a cargo del Arquitecto | no |
+| 12 | ¿Se aceptan los hooks de Claude Code para interceptar `WorktreeCreate` y `WorktreeRemove`, que ADR-GRP-012 descartó para detectar sesiones? | Coordinador | Resuelta 2026-11-10: sí, con otro uso que la detección: solo registrar, snapshot y Guardrails, nunca conceder permisos; los configura el humano; si fallan, el borrado se rechaza. Enmienda de ADR-GRP-012 aplicada el 2026-11-10 (hooks de worktree) | no |
 | 13 | ¿Se permite descartar un worktree con agente vivo si el humano lo fuerza, o siempre hay que terminar antes el agente? | Rene | [POR VERIFICAR] Siempre hay que terminarlo antes (BR-WTL-007, sin excepción) | no |
 | 14 | ¿Se reutiliza una rama que ya existe y no está sacada en ningún worktree, o `raptor new` exige rama nueva? | Rene | [POR VERIFICAR] Se reutiliza, como `wt switch` | no |
 | 15 | Un ignorado copiado por `.worktreeinclude` (por ejemplo `.env`) no entra en el snapshot (D-TMC-16). ¿Basta con que la confirmación lo avise, o algún ignorado debe guardarse? | Rene | [POR VERIFICAR] Basta el aviso: el original sigue en la semilla o en el repo principal | no |
 | 16 | ¿Hay ignorados que nunca se copian aunque el repo los liste (estado de otros agentes como `.claude/runs`)? | Rene + Arquitecto | [POR VERIFICAR] Sí, una lista fija de exclusiones | no |
 | 17 | ¿Un hook de setup aprobado vuelve a pedir aprobación cuando cambia su contenido? | Rene | [POR VERIFICAR] Sí | no (M4) |
+| 18 | ¿Se puede traer o devolver el trabajo de un agente que sigue vivo (US-WTL-007), o aplica la misma protección que al descartar (BR-WTL-007)? | Rene | **Propuesta**: aplica la misma protección: con el agente vivo se rechaza hasta terminarlo, porque traer o devolver mueve archivos bajo sus pies. [POR VERIFICAR] | no (M4) |
+| 19 | Si el hook de setup falla (US-WTL-009), ¿se lanza igual el agente? | Rene | **Propuesta**: no. El worktree queda creado, el agente no se lanza y se muestra el error con la orden para repetir el setup; así un agente no trabaja sobre un entorno a medio preparar. [POR VERIFICAR] | no (M4) |
+| 20 | Mientras la semilla se reconstruye (US-WTL-006), ¿`raptor new` espera o crea el worktree sin copia? | Rene | **Propuesta**: crea el worktree sin copia y avisa de que la semilla se está reconstruyendo (coherente con la Pregunta 5b); `--wait` opcional para esperar. [POR VERIFICAR] | no (M4) |
 
 ---
 
@@ -381,8 +384,9 @@ Cada fila cita las fuentes del Panorama con su fecha de consulta. ✔ sí · ≈
 | No copiar | HEAD separado por defecto; hooks con shell libre que un agente pueda disparar | Rene (diario del 2026-11-08) | 2026-11-08 |
 | Superficie para agentes | MCP para estado vivo y seguridad; CLI con salida JSON y skill para el resto; sin code mode | Rene | 2026-11-10 |
 | Copiar desde semilla quieta | La función gestiona una semilla quieta por toolchain y perfil; nunca copia desde worktrees vivos | Hallazgo de la prueba 3, adoptado por el coordinador | 2026-11-09 |
-| Lanzar el agente (Pregunta 7) | Se enmienda BRD § 6.4: GitRaptor puede lanzar un agente una vez, a petición explícita del humano (`raptor new`, botón «Nuevo agente»); nunca a petición de un agente ni por el MCP. US-CKP-018 se mantiene para preparar sin lanzar. La enmienda del BRD queda pendiente de aplicar | Coordinador, por delegación de Rene | 2026-11-10 |
-| Interceptar eventos de worktree de Claude Code (Pregunta 12) | Es un uso distinto de la detección que ADR-GRP-012 descartó: solo registrar el worktree, snapshot y Guardrails, nunca conceder permisos; lo configura el humano; si el hook falla, el agente no queda sin protección y el borrado se rechaza. Va como enmienda de ADR-GRP-012, a cargo del Arquitecto, pendiente | Coordinador, por delegación de Rene | 2026-11-10 |
+| Preguntas 18 a 20 | Surgidas al escribir las historias; con propuesta de respuesta, a confirmar por Rene (todas de M4) | Coordinador | 2026-11-10 |
+| Lanzar el agente (Pregunta 7) | Se enmienda BRD § 6.4: GitRaptor puede lanzar un agente una vez, a petición explícita del humano (`raptor new`, botón «Nuevo agente»); nunca a petición de un agente ni por el MCP. US-CKP-018 se mantiene para preparar sin lanzar. La enmienda del BRD se aplicó el 2026-11-10 (v0.10) | Coordinador, por delegación de Rene | 2026-11-10 |
+| Interceptar eventos de worktree de Claude Code (Pregunta 12) | Es un uso distinto de la detección que ADR-GRP-012 descartó: solo registrar el worktree, snapshot y Guardrails, nunca conceder permisos; lo configura el humano; si el hook falla, el agente no queda sin protección y el borrado se rechaza. Va como enmienda de ADR-GRP-012, aplicada el 2026-11-10 | Coordinador, por delegación de Rene | 2026-11-10 |
 | CI en M3 (Pregunta 3) | Solo GitHub Actions, leído con `gh`, en solo lectura | Coordinador, por delegación de Rene | 2026-11-10 |
 | Umbral de «colgado» (Pregunta 4) | Sin actividad del agente ni del repo durante 15 min y sin CI en curso; configurable | Coordinador, por delegación de Rene | 2026-11-10 |
 | Semilla en M3 (Pregunta 5) | La crea `raptor new` la primera vez desde `main`; se reconstruye con `raptor seed refresh` explícito; en M4 la mantiene el daemon | Coordinador, por delegación de Rene | 2026-11-10 |
@@ -395,9 +399,9 @@ Cada fila cita las fuentes del Panorama con su fecha de consulta. ✔ sí · ≈
 
 | # | Sección | Riesgo | Impacto | Aceptado por |
 |---|---------|--------|---------|--------------|
-| 1 | Alcance | Lanzar el agente queda decidido, pero la enmienda de BRD § 6.4 sigue sin aplicar | Hasta aplicarla, el BRD y esta feature dicen cosas distintas | Coordinador, 2026-11-10 (enmienda pendiente) |
+| 1 | Alcance | Lanzar el agente queda decidido y la enmienda de BRD § 6.4 se aplicó el 2026-11-10 | Resuelto: el BRD y esta feature coinciden | Coordinador, 2026-11-10 |
 | 2 | Reglas | «Esperando el CI» lee GitHub Actions en M3 aunque el resumen de CI por rama sea Could | Una parte pequeña de BR-19 (solo lectura del estado del CI) entra en M3; los repos con otro CI no ven ese estado | Coordinador, 2026-11-10 |
-| 3 | Restricciones | Interceptar los eventos de Claude Code necesita la enmienda de ADR-GRP-012, a cargo del Arquitecto y aún pendiente | BR-WTL-010 no se puede diseñar hasta que exista la enmienda | Coordinador, 2026-11-10 (enmienda pendiente) |
+| 3 | Restricciones | Interceptar los eventos de Claude Code necesitaba la enmienda de ADR-GRP-012, aplicada el 2026-11-10 | Queda por verificar el contrato exacto de los eventos de Claude Code (lo hace la Dev Spec de US-WTL-004) | Coordinador, 2026-11-10 |
 | 4 | Valor | El ahorro es de disco y depende del perfil de compilación: con #328 lo compartible baja a ~10 GiB por worker; un repo con dependencias ligeras apenas ahorra | El argumento de venta pierde fuerza fuera de repos con compilación pesada | Pendiente de Rene |
 | 5 | Expectativas | Copy-on-write solo está medido en APFS; en Linux y Windows sin reflink la copia ocupa el tamaño completo (Pregunta 11) | La promesa de disco no vale en todas las plataformas de M3 | Pendiente: etapa de validación multiplataforma |
 | 6 | Competencia | GitKraken publica cada mes y podría añadir snapshot al descartar o políticas | El diferencial de descarte reversible se reduce | Vigilancia trimestral (BRD § 10) |

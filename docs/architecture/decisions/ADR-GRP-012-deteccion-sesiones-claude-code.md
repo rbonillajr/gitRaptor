@@ -6,11 +6,11 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-03
 created: 2026-10-03
-updated: 2026-11-09
+updated: 2026-11-10
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
-related: [TS-GRP-008, ADR-GRP-005, ADR-GRP-006, ADR-GRP-007, ADR-GRP-009, ADR-GRP-010, ADR-GRP-013, ADR-GRD-001, ADR-GRD-002, ADR-GRD-003, ADR-GRD-004, SPIKE-GRP-001, US-GRD-018, US-GRD-019, US-GRP-008, TD-GRP-004]
+related: [US-WTL-004, ADR-GRD-007, ADR-GRP-016, TS-GRP-008, ADR-GRP-005, ADR-GRP-006, ADR-GRP-007, ADR-GRP-009, ADR-GRP-010, ADR-GRP-013, ADR-GRD-001, ADR-GRD-002, ADR-GRD-003, ADR-GRD-004, SPIKE-GRP-001, US-GRD-018, US-GRD-019, US-GRP-008, TD-GRP-004]
 tags: [deteccion, atribucion, claude-code, sesiones, procesos, transcripts, privacidad, nfr-08, seguridad, autoria, co-authored-by, br-26]
 ---
 
@@ -486,3 +486,31 @@ Decisión del orquestador (2026-11-10), validada por el Arquitecto con condicion
 **Fuera de esta enmienda**:
 - **El otro modo de fallo bajo carga**: FSEvents no entrega la escritura, solo el sondeo de respaldo de 30 s la ve, y el aviso de lectura se descarta por el tope de 3 s (`no-sighting`). Pertenece a [TD-GRP-006](../../requirements/features/motor-local/technical-stories/TD-GRP-006-bajo-carga-los-eventos-de-fsevents.md). El tope no se relaja.
 - **`s3_cwd_unreadable` en la línea de `s3_evidence`**: es un contador global y confunde. Sacarlo de la línea o pasarlo a un contador por evento cambia el test SEC-04 que fija sus campos, así que queda pendiente.
+
+## Enmienda (2026-11-10, hooks `WorktreeCreate` y `WorktreeRemove`: worktree-lifecycle)
+
+**Decisión del orquestador (2026-11-10), aprobada por Rene Bonilla al aprobar [CTX-WTL-001](../../requirements/features/worktree-lifecycle/context.md) (Pregunta 12, BR-WTL-010); redactada por el Arquitecto.** El `status` sigue en `accepted`. Origen: [US-WTL-004](../../requirements/features/worktree-lifecycle/user-stories/US-WTL-004-worktrees-de-claude-code.md).
+
+**Qué no cambia.** La alternativa 1 («Hooks de Claude Code») sigue **descartada para detectar sesiones**: las señales S1 a S4, la regla de combinación, la atribución y la tabla de Privacidad quedan como están. Esta enmienda no añade ninguna señal ni ningún modo de atribuir un evento a una sesión.
+
+**Qué se admite: otro uso, con otro fin.** Se aceptan los hooks `WorktreeCreate` y `WorktreeRemove` de Claude Code **solo para proteger los worktrees que el propio agente crea o borra**. Lo que la alternativa 1 descartó (escribir en `~/.claude` para saber qué sesión hace qué) y lo que se admite aquí (que el humano conecte dos hooks de protección) no comparten propósito ni riesgo.
+
+### Reglas
+
+1. **Solo registra, hace snapshot y aplica Guardrails.** Ante `WorktreeCreate`, el hook registra el worktree nuevo en el motor (queda observado y visible en la flota, con la rama y el origen «creado por el agente»). Ante `WorktreeRemove`, antes de que Claude Code lo borre, el motor hace el snapshot de la Time Machine (ADR-TMC-002) y evalúa la política de Guardrails (BR-WTL-006 y BR-WTL-007: un agente vivo en ese worktree lo protege). Nada más: no copia ignorados, no lanza ni detiene agentes y no atribuye eventos.
+2. **Nunca concede permisos.** El hook no devuelve nunca una decisión de «permitir» que se salte el sistema de permisos de Claude Code ni una política del repo; solo puede **no oponerse** o **rechazar**. Un campo de la respuesta que active una concesión no se escribe, y la prueba de contrato lo comprueba.
+3. **Lo configura el humano.** Conectar los dos hooks escribe en la configuración de Claude Code del usuario o del repo, es decir, **fuera del perfil**. Es una operación reservada de ADR-GRD-007 (fila «Conectar los hooks de worktree de Claude Code», sin relajar la política: confirmación con qué se escribe, dónde, por qué y cómo se revierte, y reversible por la transacción de US-MCP-022). **Un agente no puede conectarlos, cambiarlos ni quitarlos**; el canal rechaza el método desde un solicitante agente. Sin conexión, la historia no corre y los worktrees del agente se siguen descubriendo por el observador (ADR-GRP-010), sin snapshot previo al borrado.
+4. **Si el hook falla, el borrado se rechaza (fail-closed).** En `WorktreeRemove`: daemon inalcanzable, tiempo agotado, snapshot no confirmado, entrada no validable o política que lo prohíbe → el hook sale con error y el borrado no ocurre; el motivo queda en el registro de decisiones (ADR-GRD-006). Un worktree con el agente vivo se rechaza siempre. En `WorktreeCreate` un fallo **no impide** crear el worktree (no hay datos en riesgo), pero lo deja marcado «sin registrar»: mientras no se registre, su borrado queda rechazado.
+5. **Canal.** El hook usa el cliente de hooks que ya existe (ADR-GRD-001), con métodos nuevos que son un cambio aditivo del contrato (ADR-GRP-016) y que **no aparecen en el perfil `mcp`**. Ningún método devuelve más que «registrado» o «rechazado» con un motivo; no hay ruta de escritura nueva para un agente.
+6. **Entrada no confiable.** La ruta y el nombre del worktree que llegan en el evento los controla el agente: se canonicalizan, se exigen dentro de un repo de la allowlist y de su carpeta de worktrees, y el texto se sanea (SEC-GRD-06) antes de registrarlo o mostrarlo.
+
+### Por qué no se rechaza como la alternativa 1
+
+El motivo de Q17 y Q22 era no depender de un formato ni de una configuración de un tercero para **saber** algo; aquí el motor ya lo sabe por el observador, y el hook solo añade el **momento previo al borrado**, el único en que un snapshot evita la pérdida. Falla cerrado, no concede nada y lo conecta el humano: no abre una vía a un agente (NFR-02) ni a la detección.
+
+### Consecuencias y puntos para la Dev Spec de US-WTL-004
+
+- El contrato exacto de los eventos de Claude Code (qué recibe cada hook, qué efecto tiene su código de salida y cómo se comporta cuando el hook de `WorktreeCreate` crea el worktree él mismo) **no está verificado en este repo**: ⚠️ **ASSUMPTION**, que fija la Dev Spec con la versión soportada de Claude Code. Si una versión no respeta el rechazo del borrado, la garantía baja a Guardrails sobre `WorktreeDelete` (ADR-GRD-002) y a la restauración desde el último snapshot, y la historia lo dice.
+- El método de conexión y su retirada comparten el instalador y la marca de US-MCP-021 y 022.
+- **Pendiente, fuera de esta enmienda**: los estados nuevos del agente de BR-WTL-009 (esperando una decisión humana, esperando el CI, colgado) amplían la detección y necesitan **otra** enmienda de este ADR; US-WTL-003 sigue `draft` por eso.
+- **Validación**: (a) un hook de `WorktreeRemove` con el daemon parado rechaza el borrado; (b) con el daemon vivo, el snapshot existe antes de que el worktree desaparezca; (c) un agente simulado no puede conectar, cambiar ni quitar los hooks; (d) la respuesta del hook nunca contiene una concesión; (e) una ruta fuera de la allowlist se rechaza.

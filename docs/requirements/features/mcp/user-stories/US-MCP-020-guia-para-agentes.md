@@ -4,6 +4,7 @@ title: "Un agente de Claude Code sabe cómo trabajar con GitRaptor sin que el de
 type: us
 status: draft
 priority: high
+milestone: M3
 created: 2026-11-10
 updated: 2026-11-10
 domain: GRP
@@ -28,7 +29,8 @@ ado:
   id: null
   url: null
 covers: [BR-MCP-CONS-009]
-blocked_by: []
+blocked_by:
+  - TS-GRP-010
 tags: [mcp, agentes, skill, guia, superficie-agentes, hito-m3]
 ---
 
@@ -53,7 +55,8 @@ BR-MCP-CONS-009 (guía coherente con el contrato: cuatro temas, un código = una
 - **Historias**: US-MCP-005 (códigos de rechazo estables, que la guía explica), US-MCP-016 (`check_conflicts`, para "antes de integrar"), US-MCP-012 (undo de lo propio por MCP), US-TMC-011 (`raptor undo --agent` por la CLI) y US-MCP-023 (salida `--json` estable que la guía enseña a usar por Bash; mismo hito).
 - **Relación**: US-MCP-021 y US-MCP-022 instalan la guía y el bloque en el repo (M4); US-MCP-024 añade el camino por CLI de "¿voy a chocar?" (después de v0.1.0).
 - **Relación con una feature en preparación (sin id todavía)**: "Ciclo de vida del worktree" tendrá un comando `raptor new` que instalará esta guía en el worktree que cree. Esa feature consume la guía tal como la deja esta historia; cuando tenga contexto e ids, se enlaza aquí.
-- **Cómo llega la guía al repo en M3**, antes de que exista US-MCP-021: sin dato (P-MCP-39 en el contexto).
+- **Cómo llega la guía al repo en M3**, antes de que exista US-MCP-021: **decidido (P-MCP-39, 2026-11-10)**, copia documentada. La historia añade un subcomando de solo lectura, sin reserva, que imprime la guía embebida con su marca de versión y hash, y la receta para dejarla en `.claude/skills/gitraptor/SKILL.md`; GitRaptor la deja así en su propio repo. En M4, `configure-agents` reconoce esa copia por la marca.
+- **Bloqueo (parte CLI)**: TS-GRP-010 (perfil `mcp` por solicitante, S-01). La guía solo enseña la CLI como camino del agente cuando TS-GRP-010 está en `main`; hasta entonces enseña solo el MCP, y esa parte no espera.
 - **Transversal (lo define el Arquitecto)**: dónde vive la guía (plugin de Claude Code o carpeta de skills del repo) y cómo se comprueba que sus códigos coinciden con el contrato.
 
 ## Criterios de Aceptación
@@ -115,7 +118,7 @@ Arquitecto, 2026-11-10: [ADR-MCP-001, Enmienda (2026-11-10, superficie para agen
 - **Destino**: skill de proyecto `.claude/skills/gitraptor/SKILL.md` y bloque en `AGENTS.md`/`CLAUDE.md` (P-MCP-34). Cada pieza lleva una marca con la versión y el hash del contenido, formato compartido con US-MCP-021/022.
 - **Condición de entrada (C1)**: la guía solo enseña la CLI como camino del agente cuando SEC-MCP-01 (perfil `mcp` por solicitante) esté en `main`; hasta entonces enseña el MCP.
 - **El MCP no cambia**: `instructions` sigue constante y `tools/list` es el mismo con guía y sin ella.
-- **Cómo llega al repo en M3**: P-MCP-39, con la recomendación del Arquitecto en [context.md](../context.md).
+- **Cómo llega al repo en M3**: copia documentada con un comando de solo lectura que imprime la guía (P-MCP-39, decidida el 2026-11-10; ver [context.md](../context.md)).
 
 ## Diseño y Dev Spec
 
