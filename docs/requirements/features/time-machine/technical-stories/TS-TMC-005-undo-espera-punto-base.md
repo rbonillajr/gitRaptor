@@ -30,7 +30,7 @@ tags: [time-machine, undo, solape, overlap-unverified, punto-base, captura-conti
 **Quiero** que, cuando falta el punto base B de un cambio de agente pero su captura ya está en camino, el undo espere esa captura con un plazo propio y una señal explícita
 **Para** que `overlap-unverified` (D7 de DS-US-TMC-012) quede para los casos en que B de verdad no se puede obtener, y no para una carrera con la captura continua
 
-> Implementado en: PR #<n> (2026-11-09, sin certificar). Plan: [`ts-tmc-005.2-plan.md`](../../../../dev-briefs/ts-tmc-005.2-plan.md).
+> Implementado en: PR #350 (2026-11-09, sin certificar). Plan: [`ts-tmc-005.2-plan.md`](../../../../dev-briefs/ts-tmc-005.2-plan.md).
 >
 > Dev Spec: no hace falta una propia. El cambio entra en los Requisitos Técnicos de US-TMC-012 y lo implementa `/implement` desde su Brief, con esta TS como contrato.
 >
