@@ -12,17 +12,17 @@ expression: text
 #                                                                              #
 #                                                                              #
 #                                                                              #
-#                                                                              #
-#                                                                              #
-#                                                                              #
-#                                                                              #
-#                                                                              #
-#                                                                              #
 #               | [c] Predicted conflict: claude-1 <-> claude-2 in src/api.rs  #
 #==============================================================================#
++- Graph ----------------------------------------------------------------------+
+| o main                                                                       |
+| |- shop | no agent +0 -0                                                     |
+| |- claude-1 | no agent +0 -0                                                 |
+| ` +2 lanes                                                                   |
++------------------------------------------------------------------------------+
 +- [c] Predicted conflicts ----------------------------------------------------+
 | [c] [new] claude-1 <-> claude-2  0 s ago                                     |
 |  - src/api.rs 12-18 <-> 14-20                                                |
 | [!] uncommitted | [c] commits only | no merge drivers or .gitattributes      |
 +------------------------------------------------------------------------------+
- q quit  r retry  d view diff (the worktree is not available)            ? help
+ q quit  r retry  d view diff (the worktree is not available)  g graph   ? help

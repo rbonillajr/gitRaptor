@@ -16,13 +16,13 @@ expression: text
 #                                                                              #
 #                                                                              #
 #                                                                              #
-#                                                                              #
-#                                                                              #
-#                                                                              #
-#                                                                              #
-#                                                                              #
-#                                                                              #
-#                                                                              #
-#                                                                              #
 #==============================================================================#
- q salir  r reintentar  f ver terminadas (1)  d ver diff                ? ayuda
++- Grafo ----------------------------------------------------------------------+
+| o main                                                                       |
+| |- claude-1 | wt-pagos +0 -0                                                 |
+| `- wt-old | sin agente +0 -0                                                 |
+|                                                                              |
+|                                                                              |
+|                                                                              |
++------------------------------------------------------------------------------+
+ q salir  r reintentar  f ver terminadas (1)  d ver diff  g grafo       ? ayuda

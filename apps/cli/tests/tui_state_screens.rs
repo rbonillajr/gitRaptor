@@ -552,9 +552,9 @@ fn a_missing_base_names_the_published_base_and_never_counts() {
             ),
             SymbolSet::Unicode,
         );
-        let screen = flat(&model, 120, 40);
+        let screen = flat(&model, 200, 40);
         assert!(screen.contains(title), "{lang:?}\n{screen}");
-        let shown = lines(&model, 120, 40);
+        let shown = lines(&model, 200, 40);
         for branch in ["trunk", "feat-a", "feat-b"] {
             let row = shown
                 .iter()

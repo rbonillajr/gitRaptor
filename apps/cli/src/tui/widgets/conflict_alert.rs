@@ -195,6 +195,13 @@ pub struct ConflictPanelModel {
     pub limits: [SafeText; 3],
 }
 
+impl ConflictPanelModel {
+    /// Rows the panel wants at `width` ([`Component::height`]), callable without the trait.
+    pub fn height(&self, width: u16) -> u16 {
+        Component::height(self, width)
+    }
+}
+
 impl Component for ConflictPanelModel {
     fn render(&self, area: Rect, buf: &mut Buffer, styles: &Styles) {
         let warn = styles.fg(ColorToken::StatusWarning);

@@ -13,16 +13,16 @@ expression: text
 ┃  ⚠  agent not available  unavailable: folder missing                         ┃
 ┃  ⚠  agent not available  unavailable: folder missing                         ┃
 ┃  ⚠  agent not available  unavailable: folder missing                         ┃
-┃  ⚠  agent not available  unavailable: folder missing                         ┃
-┃  ⚠  agent not available  unavailable: folder missing                         ┃
-┃                                                                              ┃
-┃                                                                              ┃
-┃                                                                              ┃
-┃                                                                              ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+┌─ Graph ──────────────────────────────────────────────────────────────────────┐
+│ • main                                                                       │
+│ ├─ shop · no agent ↑0 ↓0                                                     │
+│ ├─ claude-1 · no agent ↑0 ↓0                                                 │
+│ └ +8 lanes                                                                   │
+└──────────────────────────────────────────────────────────────────────────────┘
 ┌─ ⚡ Predicted conflicts ─────────────────────────────────────────────────────┐
 │ ⚡ claude-1 ↔ claude-2  3 min ago                                            │
 │  • 1 file                                                                    │
 │ ⚠ uncommitted · ⚡ commits only · no merge drivers or .gitattributes         │
 └──────────────────────────────────────────────────────────────────────────────┘
- q quit  r retry  d view diff (the worktree is not available)            ? help
+ q quit  r retry  d view diff (the worktree is not available)  g graph   ? help

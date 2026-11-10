@@ -20,6 +20,7 @@ use crate::model::{
 };
 use crate::present::conflict_alert_text::ConflictAlertText;
 use crate::present::diff_text::DiffText;
+use crate::present::graph_text::GraphText;
 use crate::present::i18n::{Fetched, Lang, Legend, Text};
 use crate::present::prediction_text::PredictionText;
 use crate::tui::engine_state::{self, HeaderNotice};
@@ -78,6 +79,11 @@ impl Say {
         SafeText::text(&self.glyphs.fold(&DiffText::render(text, self.lang)))
     }
 
+    /// A text of the graph catalog, folded the same way as [`Say::text`].
+    pub(crate) fn graph(self, text: GraphText<'_>) -> SafeText {
+        SafeText::text(&self.glyphs.fold(&GraphText::render(text, self.lang)))
+    }
+
     /// A text of the prediction catalog, with ⚡ and ⚠ as the set draws them and folded the same
     /// way as [`Say::text`].
     pub(crate) fn prediction(self, text: PredictionText) -> SafeText {
@@ -97,8 +103,12 @@ pub fn view(model: &Model, frame: &mut Frame) {
     let panel = fleet_shown(model)
         .then(|| conflict_panel::build(model, say, layout::ALERTS_MAX))
         .flatten();
+    let graph_panel = fleet_shown(model)
+        .then(|| crate::present::graph::panel(model, say))
+        .flatten();
     let plan = BodyPlan {
         alerts: panel.as_ref().map_or(0, |p| p.height(area.width)),
+        graph: graph_panel.is_some(),
         ..BodyPlan::default()
     };
     let Some(regions) = layout::layout(area, plan) else {
@@ -126,6 +136,13 @@ pub fn view(model: &Model, frame: &mut Frame) {
     }
     if let Some(prompt) = observe_prompt(model, say) {
         frame.render_widget(themed(&prompt, &styles), regions.list);
+        paint_help(model, say, &styles, frame, regions.header, regions.hints);
+        frame.render_widget(themed(&hints, &styles), regions.hints);
+        return;
+    }
+    // The graph view takes the whole body too; it and the diff exclude each other (D20).
+    if let Some(state) = &model.ui.graph {
+        graph_panel::paint(state, model, say, &styles, frame, regions.list);
         paint_help(model, say, &styles, frame, regions.header, regions.hints);
         frame.render_widget(themed(&hints, &styles), regions.hints);
         return;
@@ -161,6 +178,9 @@ pub fn view(model: &Model, frame: &mut Frame) {
                 None => paint_body(frame, regions.list),
             }
         }
+    }
+    if let (Some(graph), Some(area)) = (&graph_panel, regions.graph) {
+        frame.render_widget(themed(graph, &styles), area);
     }
     if let (Some(panel), Some(area)) = (panel, regions.alerts) {
         // The region can be smaller than the panel wanted: build it again for the room it has.
@@ -230,6 +250,7 @@ fn toast_stack(model: &Model, say: Say) -> Option<ToastStackModel> {
 /// Whether the body is the fleet: no engine state, question or picker takes its place.
 fn fleet_shown(model: &Model) -> bool {
     model.ui.diff.is_none()
+        && model.ui.graph.is_none()
         && model.ui.pick == Pick::None
         && engine_state::blocking_panel(model).is_none()
         && observe_prompt(model, Say::new(model, &Styles::new(model.ui.theme))).is_none()
@@ -544,7 +565,7 @@ fn rows(repo: &RepoView, model: &Model, styles: &Styles) -> Vec<AgentRowModel> {
     rows.into_iter().map(|(_, _, row)| row).collect()
 }
 
-fn agent_name(session: &SessionRow, say: Say) -> String {
+pub(crate) fn agent_name(session: &SessionRow, say: Say) -> String {
     match (&session.name, session.kind) {
         (Some(name), _) => name.as_str().to_owned(),
         (None, kind) => kind_name(kind, say),
@@ -811,12 +832,16 @@ fn hint(model: &Model, action: Action, say: Say) -> Option<KeyHint> {
 
 mod conflict_panel;
 mod diff_panel;
+mod graph_panel;
 
 #[cfg(test)]
 mod a11y_tests;
 
 #[cfg(test)]
 mod conflicts_tests;
+
+#[cfg(test)]
+mod graph_tests;
 
 // The screens the help tests of `tui::help` build on.
 #[cfg(test)]
@@ -1128,8 +1153,9 @@ mod tests {
                 "○ sin agente: cambios tuyos o de otra herramienta",
             ),
         ] {
-            let all = screen(&shop_model(lang), 100, 30);
-            let screen = lines(&render(&shop_model(lang), 100, 30));
+            // Wide enough for the key bar with `g` and the legend in both languages.
+            let all = screen(&shop_model(lang), 110, 30);
+            let screen = lines(&render(&shop_model(lang), 110, 30));
             assert!(row(&screen, "feat-docs").contains(text), "{all}");
             assert!(screen[29].contains(legend), "{all}");
             assert!(!all.to_lowercase().contains("human"), "{all}");
@@ -1872,11 +1898,13 @@ mod tests {
         );
         let all = screen(&model, 80, 24);
         assert!(!all.contains("commit by"), "{all}");
-        for i in 0..12 {
+        // The graph panel takes what the list does not need to keep its minimum: the first
+        // rows are there, the last ones wait for room.
+        for i in 0..8 {
             assert!(all.contains(&format!("wt-{i:02}")), "{all}");
         }
         // With room for both, the lines are back.
-        assert!(screen(&model, 80, 40).contains("commit by Ana"));
+        assert!(screen(&model, 80, 60).contains("commit by Ana"));
     }
 
     /// "notes" not observed, asked as the developer (US-CKP-025), with "shop" observed.

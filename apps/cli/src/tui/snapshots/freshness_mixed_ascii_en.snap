@@ -25,4 +25,4 @@ expression: text
 | [i] Calculating 1 of 3 pairs                                                 |
 | [!] uncommitted | [c] commits only | no merge drivers or .gitattributes      |
 +------------------------------------------------------------------------------+
- q quit  r retry  d view diff (the worktree is not available)            ? help
+ q quit  r retry  d view diff (the worktree is not available)  g graph   ? help

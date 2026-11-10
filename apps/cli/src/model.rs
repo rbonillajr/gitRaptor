@@ -64,6 +64,7 @@ impl Model {
                 cursor: None,
                 cursor_at: 0,
                 diff: None,
+                graph: None,
                 next_ticket: 1,
             },
             conn: ConnState::Connecting,
@@ -123,6 +124,8 @@ pub struct Ui {
     pub cursor_at: usize,
     /// The diff view while it is open (`d`). Not kept between runs.
     pub diff: Option<crate::tui::diff::DiffState>,
+    /// The graph view while it is open (`g`). Not kept between runs.
+    pub graph: Option<crate::tui::graph::GraphState>,
     /// The ticket of the next on-demand query: tells an answer apart from a stale one.
     pub next_ticket: u64,
 }
@@ -229,6 +232,8 @@ pub enum Notice {
     RowActionDisabled(UnavailableReason),
     /// `d` on an engine that does not offer `diff.worktree`.
     DiffUnsupported,
+    /// `g` on an engine that does not offer `graph.lanes`.
+    GraphUnsupported,
 }
 
 /// Why a diff did not arrive, from the engine's typed answer or the link; never its text.
@@ -240,6 +245,20 @@ pub enum DiffFailure {
     Cancelled,
     /// The engine cannot read that worktree or repo (`diff-unavailable`).
     Unavailable(gitraptor_api::diff::DiffUnavailable),
+    /// The connection dropped before the answer.
+    Lost,
+    /// The engine refused the request.
+    Refused,
+}
+
+/// Why the graph did not arrive, from the engine's typed answer or the link; never its text.
+/// `graph.lanes` has no error code of its own: what cannot be computed comes in the result.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GraphFailure {
+    /// Another query is still running (`query-busy`).
+    Busy,
+    /// The query was cancelled: the view had already been closed.
+    Cancelled,
     /// The connection dropped before the answer.
     Lost,
     /// The engine refused the request.
@@ -264,6 +283,8 @@ pub struct EngineReplica {
     pub prediction: bool,
     /// The connection offers `diff.worktree` (US-CKP-012).
     pub diff: bool,
+    /// The connection offers `graph.lanes` (US-CKP-022).
+    pub graph: bool,
 }
 
 impl EngineReplica {
@@ -351,6 +372,8 @@ pub struct RepoView {
     pub name: SafeText,
     /// The base branch ahead/behind is counted against; `None` without one.
     pub base: Option<SafeText>,
+    /// The base is the team's confirmed one: lanes are drawn against it and no other.
+    pub base_confirmed: bool,
     /// As the engine published them, in its order.
     pub worktrees: Vec<WorktreeRow>,
     /// Agent sessions of the repo, from `sessions.list` and then `session.state`.
@@ -606,6 +629,11 @@ pub enum EngineMsg {
         ticket: u64,
         result: Result<Box<gitraptor_api::diff::WorktreeDiff>, DiffFailure>,
     },
+    /// The answer to the `graph.lanes` asked with `ticket`, or why there is none.
+    Graph {
+        ticket: u64,
+        result: Result<Box<gitraptor_api::graph::GraphLanes>, GraphFailure>,
+    },
 }
 
 /// What the channel thread says about the connection.
@@ -631,6 +659,8 @@ pub enum ConnEvent {
     Prediction(bool),
     /// Whether the connection offers `diff.worktree` (US-CKP-012).
     Diff(bool),
+    /// Whether the connection offers `graph.lanes` (US-CKP-022).
+    Graph(bool),
 }
 
 /// Effects that `update` asks for; they run outside it.
@@ -672,6 +702,11 @@ pub enum Cmd {
         ticket: u64,
         repo_id: String,
         root: std::path::PathBuf,
+    },
+    /// `graph.lanes` of the repo; the answer comes back with `ticket`.
+    Graph {
+        ticket: u64,
+        repo_id: String,
     },
     /// Cancel the query asked with `ticket` (`query.cancel`), if it is still running.
     CancelQuery {

@@ -129,6 +129,7 @@ pub(crate) mod tests {
                 path: SafeText::text("/w"),
                 name: SafeText::name("w"),
                 base: None,
+                base_confirmed: false,
                 worktrees,
                 sessions: Vec::new(),
                 fetched_ms: None,

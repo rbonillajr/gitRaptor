@@ -31,6 +31,8 @@ pub enum Action {
     ShowEnded,
     /// See what the agent of the selected row would integrate (`d`).
     Diff,
+    /// Open or close the graph of the agents' branches over the base (`g`).
+    Graph,
 }
 
 /// A key as the table names it.
@@ -141,6 +143,11 @@ pub const BINDINGS: &[Binding] = &[
         action: Action::Diff,
         keys: &[Key::Char('d')],
         hint: Text::KeyDiff,
+    },
+    Binding {
+        action: Action::Graph,
+        keys: &[Key::Char('g')],
+        hint: Text::KeyGraph,
     },
 ];
 
@@ -258,6 +265,7 @@ mod tests {
             Action::Help,
             Action::ShowEnded,
             Action::Diff,
+            Action::Graph,
         ];
         for action in actions {
             // No wildcard: a new action does not compile until it is listed here.
@@ -273,7 +281,8 @@ mod tests {
                 | Action::Later
                 | Action::Help
                 | Action::ShowEnded
-                | Action::Diff => {}
+                | Action::Diff
+                | Action::Graph => {}
             }
             let binding = BINDINGS.iter().find(|b| b.action == action);
             assert!(

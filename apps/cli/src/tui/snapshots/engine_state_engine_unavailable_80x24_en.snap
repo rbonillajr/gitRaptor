@@ -25,4 +25,4 @@ expression: "screen(&model, 80, 24)"
 │                                                                              │
 │                                                                              │
 └──────────────────────────────────────────────────────────────────────────────┘
- q quit  r retry  d view diff                                            ? help
+ q quit  r retry  d view diff  g graph                                   ? help

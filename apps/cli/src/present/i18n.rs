@@ -204,6 +204,8 @@ pub enum Text<'a> {
     KeyLater,
     /// The hint of `d`: see what the selected worktree would integrate.
     KeyDiff,
+    /// The hint of `g`: the graph of the branches over the base.
+    KeyGraph,
     /// The hint of `d` on a worktree that cannot be read: why it does nothing.
     KeyDiffDisabled,
     /// "Observe this repo?" (US-CKP-025): the panel's title, what it means and the question
@@ -313,10 +315,17 @@ pub enum HelpPanel {
     Picker,
     Question,
     Diff,
+    Graph,
 }
 
 impl HelpPanel {
-    pub const ALL: [Self; 4] = [Self::Fleet, Self::Picker, Self::Question, Self::Diff];
+    pub const ALL: [Self; 5] = [
+        Self::Fleet,
+        Self::Picker,
+        Self::Question,
+        Self::Diff,
+        Self::Graph,
+    ];
 }
 
 /// A state symbol and what it means.
@@ -479,9 +488,13 @@ fn en(text: Text<'_>) -> String {
         Text::KeyNo => "no".into(),
         Text::KeyLater => "later".into(),
         Text::KeyDiff => "view diff".into(),
+        Text::KeyGraph => "graph".into(),
         Text::KeyDiffDisabled => "the worktree is not available".into(),
         Text::Notice(Notice::DiffUnsupported) => {
             "the engine does not offer the diff; restart it".into()
+        }
+        Text::Notice(Notice::GraphUnsupported) => {
+            "the engine does not offer the graph; restart it".into()
         }
         Text::Notice(Notice::RowActionDisabled(UnavailableReason::Missing)) => {
             "no action on this worktree: its folder is missing".into()
@@ -581,6 +594,7 @@ fn en(text: Text<'_>) -> String {
         Text::HelpPanel(HelpPanel::Picker) => "Choosing a repo".into(),
         Text::HelpPanel(HelpPanel::Question) => "In the question".into(),
         Text::HelpPanel(HelpPanel::Diff) => "In the diff".into(),
+        Text::HelpPanel(HelpPanel::Graph) => "In the graph".into(),
         Text::HelpAlways => "Always".into(),
         Text::HelpSymbols => "Symbols".into(),
         Text::Legend(Legend::Active) => "active agent".into(),
@@ -765,9 +779,13 @@ fn es(text: Text<'_>) -> String {
         Text::KeyNo => "no".into(),
         Text::KeyLater => "luego".into(),
         Text::KeyDiff => "ver diff".into(),
+        Text::KeyGraph => "grafo".into(),
         Text::KeyDiffDisabled => "el worktree no está disponible".into(),
         Text::Notice(Notice::DiffUnsupported) => {
             "el motor no ofrece el diff; reinícialo".into()
+        }
+        Text::Notice(Notice::GraphUnsupported) => {
+            "el motor no ofrece el grafo; reinícialo".into()
         }
         Text::Notice(Notice::RowActionDisabled(UnavailableReason::Missing)) => {
             "ninguna acción sobre este worktree: falta su carpeta".into()
@@ -867,6 +885,7 @@ fn es(text: Text<'_>) -> String {
         Text::HelpPanel(HelpPanel::Picker) => "Al elegir repo".into(),
         Text::HelpPanel(HelpPanel::Question) => "En la pregunta".into(),
         Text::HelpPanel(HelpPanel::Diff) => "En el diff".into(),
+        Text::HelpPanel(HelpPanel::Graph) => "En el grafo".into(),
         Text::HelpAlways => "Siempre".into(),
         Text::HelpSymbols => "Símbolos".into(),
         Text::Legend(Legend::Active) => "agente activo".into(),
@@ -1184,6 +1203,7 @@ pub(crate) fn every_text() -> Vec<Text<'static>> {
         Text::KeyNo,
         Text::KeyLater,
         Text::KeyDiff,
+        Text::KeyGraph,
         Text::KeyDiffDisabled,
         Text::ObserveTitle,
         Text::ObserveWhy,
@@ -1291,6 +1311,7 @@ pub(crate) fn every_text() -> Vec<Text<'static>> {
         Notice::Starting,
         Notice::SuspendUnsupported,
         Notice::DiffUnsupported,
+        Notice::GraphUnsupported,
         Notice::RowActionDisabled(UnavailableReason::Missing),
         Notice::RowActionDisabled(UnavailableReason::Untrusted),
         Notice::RowActionDisabled(UnavailableReason::Unreadable),
@@ -1379,6 +1400,7 @@ fn sampled(text: &Text<'_>) {
         | Text::KeyNo
         | Text::KeyLater
         | Text::KeyDiff
+        | Text::KeyGraph
         | Text::KeyDiffDisabled
         | Text::ObserveTitle
         | Text::ObserveWhy

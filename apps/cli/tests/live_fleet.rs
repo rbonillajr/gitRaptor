@@ -164,8 +164,9 @@ impl Tui {
         let mut options = ClientOptions::new(dirs, ClientKind::Cli);
         options.launcher = Launcher::Never;
         let (inbox, _input, engine) = queue::inbox();
+        // Under the wide layout, where the graph panel sits beside the fleet and narrows it.
         let size = Size {
-            width: 120,
+            width: 100,
             height: 30,
         };
         let model = Model::new(Lang::En, size);

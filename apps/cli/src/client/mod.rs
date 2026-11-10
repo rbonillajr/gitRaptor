@@ -21,6 +21,7 @@ use std::time::Duration;
 use gitraptor_api::clock::monotonic_ns;
 use gitraptor_api::diff::{DiffParams, DiffUnavailableData, WorktreeDiff};
 use gitraptor_api::discovery::{CandidatesResult, PathParams};
+use gitraptor_api::graph::{GraphLanes, GraphParams};
 use gitraptor_api::guard::{GuardRepoParams, GuardStatus};
 use gitraptor_api::messages::{
     EventsHistoryParams, EventsHistoryResult, MAX_HISTORY_PAGE, RepoAddParams, RepoAddResult,
@@ -36,7 +37,8 @@ use gitraptor_api::scope::{
 use serde_json::Value;
 
 use crate::model::{
-    Candidate, ConnEvent, ConnState, DiffFailure, EngineMsg, Msg, ObserveFailure, Stamped,
+    Candidate, ConnEvent, ConnState, DiffFailure, EngineMsg, GraphFailure, Msg, ObserveFailure,
+    Stamped,
 };
 use crate::present;
 use crate::present::SafeText;
@@ -177,6 +179,11 @@ pub enum LinkCmd {
         repo_id: String,
         root: PathBuf,
     },
+    /// `graph.lanes` of the repo, answered as [`EngineMsg::Graph`] for `ticket`.
+    Graph {
+        ticket: u64,
+        repo_id: String,
+    },
     /// `query.cancel` of the query asked with `ticket`, if it is still in flight.
     CancelQuery {
         ticket: u64,
@@ -313,6 +320,12 @@ fn run(
                     return;
                 }
             }
+            Ok(LinkCmd::Graph { ticket, .. }) => {
+                let msg = graph_msg(ticket, Err(GraphFailure::Lost));
+                if out.send(Msg::Engine(msg)).is_err() {
+                    return;
+                }
+            }
             Ok(
                 LinkCmd::Resync { .. }
                 | LinkCmd::PredictionList { .. }
@@ -351,6 +364,7 @@ struct Inflight {
 #[derive(Clone, Copy)]
 enum Query {
     Diff,
+    Graph,
 }
 
 impl Queries {
@@ -374,6 +388,16 @@ impl Query {
                 };
                 EngineMsg::Diff { ticket, result }
             }
+            Self::Graph => {
+                let result = match (response.result, response.error) {
+                    (_, Some(error)) => Err(graph_failure(error.code)),
+                    (Some(value), None) => serde_json::from_value::<GraphLanes>(value)
+                        .map(Box::new)
+                        .map_err(|_| GraphFailure::Refused),
+                    (None, None) => Err(GraphFailure::Refused),
+                };
+                EngineMsg::Graph { ticket, result }
+            }
         }
     }
 
@@ -382,6 +406,10 @@ impl Query {
             Self::Diff => EngineMsg::Diff {
                 ticket,
                 result: Err(DiffFailure::Lost),
+            },
+            Self::Graph => EngineMsg::Graph {
+                ticket,
+                result: Err(GraphFailure::Lost),
             },
         }
     }
@@ -398,6 +426,26 @@ fn diff_failure(error: i64, data: Option<Value>) -> DiffFailure {
             .map_or(DiffFailure::Refused, |d| DiffFailure::Unavailable(d.reason))
     } else {
         DiffFailure::Refused
+    }
+}
+
+/// The typed reason of a refused `graph.lanes`; the engine's message is never shown.
+fn graph_failure(error: i64) -> GraphFailure {
+    if error == methods::QUERY_BUSY.code {
+        GraphFailure::Busy
+    } else if error == methods::QUERY_CANCELLED.code {
+        GraphFailure::Cancelled
+    } else {
+        GraphFailure::Refused
+    }
+}
+
+fn graph_msg(ticket: u64, result: Result<Box<GraphLanes>, GraphFailure>) -> Stamped<EngineMsg> {
+    let now = monotonic_ns();
+    Stamped {
+        recv_ns: now,
+        decoded_ns: now,
+        msg: EngineMsg::Graph { ticket, result },
     }
 }
 
@@ -502,6 +550,9 @@ fn session_inner(
     )))?;
     out.send(Msg::Conn(ConnEvent::Diff(
         link.offers(methods::DIFF_WORKTREE),
+    )))?;
+    out.send(Msg::Conn(ConnEvent::Graph(
+        link.offers(methods::GRAPH_LANES),
     )))?;
     send_state(out, ConnState::Syncing)?;
     if sync(link, &Scope::Global, true, out)?.is_err() {
@@ -622,6 +673,27 @@ fn session_inner(
                                 DiffFailure::Refused
                             };
                             out.send(Msg::Engine(diff_msg(ticket, Err(failure))))?;
+                            if lost {
+                                return Ok(End::dropped(lagged));
+                            }
+                        }
+                    }
+                }
+                LinkCmd::Graph { ticket, repo_id } => {
+                    match link.submit(methods::GRAPH_LANES, to_value(&GraphParams { repo_id })) {
+                        Ok(id) => queries.inflight.push(Inflight {
+                            ticket,
+                            id,
+                            query: Query::Graph,
+                        }),
+                        Err(err) => {
+                            let lost = err == LinkError::Lost;
+                            let failure = if lost {
+                                GraphFailure::Lost
+                            } else {
+                                GraphFailure::Refused
+                            };
+                            out.send(Msg::Engine(graph_msg(ticket, Err(failure))))?;
                             if lost {
                                 return Ok(End::dropped(lagged));
                             }
@@ -1042,6 +1114,7 @@ mod tests {
     use super::*;
 
     mod diff;
+    mod graph;
 
     #[test]
     fn a_link_closed_after_the_resync_notice_keeps_the_streak() {

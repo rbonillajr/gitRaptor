@@ -16,13 +16,13 @@ expression: "screen.join(\"\\n\")"
 ┃                                                                              ┃
 ┃                                                                              ┃
 ┃                                                                              ┃
-┃                                                                              ┃
-┃                                                                              ┃
-┃                                                                              ┃
-┃                                                                              ┃
-┃                                                                              ┃
-┃                                                                              ┃
-┃                                                                              ┃
-┃                                                                              ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
- q quit  r retry  d view diff                                            ? help
+┌─ Graph ──────────────────────────────────────────────────────────────────────┐
+│ • main                                                                       │
+│ ├─ agente-con-un-nombre-muy-largo-que-tampoco-cabe · un-worktree-con-un-nomb…│
+│ ├──• feat-docs · no agent ↑1 ↓0                                              │
+│ └──•─•─• feat-pagos · no agent ↑3 ↓1                                         │
+│                                                                              │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+ q quit  r retry  d view diff  g graph                                   ? help

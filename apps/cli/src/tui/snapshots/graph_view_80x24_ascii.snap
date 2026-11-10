@@ -1,0 +1,28 @@
+---
+source: apps/cli/src/tui/view/graph_tests.rs
+expression: view_screen
+---
+ shop | [ok] live | engine observing | acting as you         [c] -  [blocked] -
+#= > graph of shop over main | at 09:03:12 UTC ================================#
+# |- feat-docs | no agent  1 commit since 0000000                              #
+# - o 0000000 Rewrite the README  unattributed  just now                       #
+# |- feat-login | no agent  no merge-base with main                            #
+# |- feat-pagos | claude-1  54 commits since 0000000                           #
+# - o 0000000 Add payment retry  unattributed  just now                        #
+# - o 0000000 Merge branch 'main' into feat-pagos (merge)  unattributed  jus...#
+# - o 0000000 Fix the rounding of totals  unattributed  just now               #
+# - o 0000000 Add the pay endpoint  unattributed  just now                     #
+# - 50 more                                                                    #
+#                                                                              #
+#                                                                              #
+#                                                                              #
+#                                                                              #
+#                                                                              #
+#                                                                              #
+#                                                                              #
+#                                                                              #
+#                                                                              #
+#                                                                              #
+#                                                                              #
+#==============================================================================#
+ q quit  k up  j down  Esc close  g graph                                ? help
