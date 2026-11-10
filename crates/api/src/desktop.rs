@@ -32,8 +32,16 @@ pub enum DesktopReason {
 impl DesktopReason {
     /// The wire word, also used by the daemon's log.
     pub fn as_str(self) -> &'static str {
-        // Stub (TS-GRP-009 T001): filled by the build.
-        ""
+        match self {
+            Self::PathIdentity => "path-identity",
+            Self::NoIdentity => "no-identity",
+            Self::AgentInAncestry => "agent-in-ancestry",
+            Self::AmbiguousAncestry => "ambiguous-ancestry",
+            Self::DaemonDescendant => "daemon-descendant",
+            Self::RequesterUnverified => "requester-unverified",
+            Self::IdentityUnverifiable => "identity-unverifiable",
+            Self::DeclaredMcp => "declared-mcp",
+        }
     }
 }
 
@@ -49,8 +57,11 @@ pub enum DesktopIdentity {
 impl DesktopIdentity {
     /// The wire word, also used by the daemon's log.
     pub fn as_str(self) -> &'static str {
-        // Stub (TS-GRP-009 T001): filled by the build.
-        ""
+        match self {
+            Self::Path => "path",
+            Self::None => "none",
+            Self::Unverifiable => "unverifiable",
+        }
     }
 }
 
