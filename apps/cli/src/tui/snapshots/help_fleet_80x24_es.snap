@@ -3,10 +3,10 @@ source: apps/cli/src/tui/view/a11y_tests.rs
 expression: snap
 ---
  shop · ✔ en vivo · motor observando · actúas como tú                ⚡ –  ⛔ –
-┏━ › Flota · ↑↓ respecto a main (copia local, antigüedad no disponible) ━━━━━━━┓
-┃     Ag┏━ › Teclas ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓ad     ┃
-┃  ○  Si┃ En la flota                                                  ┃onible ┃
-┃  ●  cl┃   f         ver terminadas (0)                               ┃onible ┃
+┏━ › Flo┏━ › Teclas ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓━━━━━━━┓
+┃     Ag┃ En la flota                                                  ┃ad     ┃
+┃› ○  Si┃   f         ver terminadas (0)                               ┃onible ┃
+┃  ●  cl┃   d         ver diff                                         ┃onible ┃
 ┃  ○  Si┃                                                              ┃onible ┃
 ┃       ┃ Siempre                                                      ┃       ┃
 ┃       ┃   q Ctrl-C  salir                                            ┃       ┃
@@ -25,7 +25,7 @@ expression: snap
 ┃       ┃                                                   Esc cerrar ┃       ┃
 ┃       ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛       ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
- q salir  r reintentar                                                  ? ayuda
+ q salir  r reintentar  d ver diff                                      ? ayuda
 === styles ===
 0:0-0 bg=#3a3a3a
 0:1-4 bg=#3a3a3a BOLD
@@ -44,22 +44,28 @@ expression: snap
 0:78-78 fg=#f85149 bg=#3a3a3a BOLD
 0:79-79 bg=#3a3a3a
 1:0-4 fg=#ffe066
-1:5-70 fg=#ffe066 BOLD
-1:71-79 fg=#ffe066
+1:5-7 fg=#ffe066 BOLD
+1:8-12 fg=#ffe066
+1:13-18 fg=#ffe066 BOLD
+1:19-79 fg=#ffe066
 2:0-0 fg=#ffe066
 2:6-7 fg=#949494 BOLD
-2:8-12 fg=#ffe066
-2:13-18 fg=#ffe066 BOLD
-2:19-71 fg=#ffe066
+2:8-8 fg=#ffe066
+2:10-20 BOLD
+2:71-71 fg=#ffe066
 2:72-73 fg=#949494 BOLD
 2:79-79 fg=#ffe066
 3:0-0 fg=#ffe066
-3:3-3 fg=#949494
-3:6-7 fg=#949494
+3:1-1 fg=#ffe066 bg=#303030
+3:2-2 bg=#303030
+3:3-3 fg=#949494 bg=#303030
+3:4-5 bg=#303030
+3:6-7 fg=#949494 bg=#303030
 3:8-8 fg=#ffe066
-3:10-20 BOLD
+3:12-12 fg=#2dc2ad BOLD
 3:71-71 fg=#ffe066
-3:72-77 fg=#949494
+3:72-77 fg=#949494 bg=#303030
+3:78-78 bg=#303030
 3:79-79 fg=#ffe066
 4:0-0 fg=#ffe066
 4:3-3 fg=#3fb950
@@ -155,4 +161,5 @@ expression: snap
 22:0-79 fg=#ffe066
 23:1-1 fg=#2dc2ad BOLD
 23:10-10 fg=#2dc2ad BOLD
+23:24-24 fg=#2dc2ad BOLD
 23:72-72 fg=#2dc2ad BOLD

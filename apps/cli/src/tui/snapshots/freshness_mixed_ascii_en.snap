@@ -5,7 +5,7 @@ expression: text
  shop | [ok] live | engine - | -                             [c] -  [blocked] -
 #= > Fleet | +- vs main (local copy, fetch age not available) =================#
 #      Agent            Branch      Files +-          Activity                 #
-#  [!] agent not av...  unavailable: folder missing                            #
+#> [!] agent not av...  unavailable: folder missing                            #
 #  [!] agent not av...  unavailable: folder missing              [c]           #
 #  [!] agent not av...  unavailable: folder missing              [c]           #
 #  [!] agent not av...  unavailable: folder missing                            #
@@ -25,4 +25,4 @@ expression: text
 | [i] Calculating 1 of 3 pairs                                                 |
 | [!] uncommitted | [c] commits only | no merge drivers or .gitattributes      |
 +------------------------------------------------------------------------------+
- q quit  r retry   [!] warning: the text beside it says why              ? help
+ q quit  r retry  d view diff (the worktree is not available)            ? help

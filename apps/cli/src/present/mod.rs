@@ -2,6 +2,8 @@
 //! where contract text becomes [`SafeText`], and the typed i18n catalog.
 
 pub mod conflict_alert_text;
+pub mod diff;
+pub mod diff_text;
 pub mod freshness_text;
 pub mod i18n;
 pub mod ingest;

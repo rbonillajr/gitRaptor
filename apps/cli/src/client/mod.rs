@@ -19,6 +19,7 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 use gitraptor_api::clock::monotonic_ns;
+use gitraptor_api::diff::{DiffParams, DiffUnavailableData, WorktreeDiff};
 use gitraptor_api::discovery::{CandidatesResult, PathParams};
 use gitraptor_api::guard::{GuardRepoParams, GuardStatus};
 use gitraptor_api::messages::{
@@ -27,14 +28,16 @@ use gitraptor_api::messages::{
 };
 use gitraptor_api::methods;
 use gitraptor_api::prediction::{ListPredictionParams, PredictionPage};
-use gitraptor_api::rpc::{Notification, ServerMessage, code};
+use gitraptor_api::rpc::{Id, Notification, Response, ServerMessage, code};
 use gitraptor_api::scope::{
     ConnectionRequester, RepoLocateParams, RepoLocateResult, Scope, ScopeEventNotification,
     ScopeResyncNotification, ScopeSnapshot, ScopeSnapshotParams, ScopeSubscribeParams,
 };
 use serde_json::Value;
 
-use crate::model::{Candidate, ConnEvent, ConnState, EngineMsg, Msg, ObserveFailure, Stamped};
+use crate::model::{
+    Candidate, ConnEvent, ConnState, DiffFailure, EngineMsg, Msg, ObserveFailure, Stamped,
+};
 use crate::present;
 use crate::present::SafeText;
 use crate::queue::{Closed, Outlet};
@@ -81,6 +84,19 @@ pub trait Link: Send {
             other => Refusal::Link(other),
         })
     }
+    /// Sends a request without waiting for its answer and returns its id: the answer comes
+    /// back as [`Incoming::Reply`] or as a [`Incoming::Frame`] (D13). A link that cannot do
+    /// it says so.
+    fn submit(&mut self, _method: &str, _params: Value) -> Result<u64, LinkError> {
+        Err(LinkError::Unsupported)
+    }
+    /// The answer to `id` was read from a frame and decoded by the caller.
+    fn settle(&mut self, _id: u64) {}
+    /// Whether the engine serves `method` on this connection (`hello.methods`); `has` tells
+    /// capabilities, not methods.
+    fn offers(&self, _method: &str) -> bool {
+        false
+    }
     /// The next message, waiting up to `timeout`; `None` on timeout.
     fn next(&mut self, timeout: Duration) -> Result<Option<Incoming>, LinkError>;
 }
@@ -95,6 +111,8 @@ pub enum Incoming {
     },
     /// A complete frame, not decoded yet.
     Frame { recv_ns: u64, bytes: Vec<u8> },
+    /// The answer to a [`Link::submit`] that a call read while it waited, already decoded.
+    Reply { recv_ns: u64, response: Response },
 }
 
 /// Why a connection failed or ended.
@@ -152,6 +170,16 @@ pub enum LinkCmd {
         repo_id: String,
         pair_ids: Vec<String>,
         cursor: Option<String>,
+    },
+    /// `diff.worktree` of the worktree at `root`, answered as [`EngineMsg::Diff`] for `ticket`.
+    Diff {
+        ticket: u64,
+        repo_id: String,
+        root: PathBuf,
+    },
+    /// `query.cancel` of the query asked with `ticket`, if it is still in flight.
+    CancelQuery {
+        ticket: u64,
     },
     Reconnect,
     Shutdown,
@@ -279,7 +307,17 @@ fn run(
                     return;
                 }
             }
-            Ok(LinkCmd::Resync { .. } | LinkCmd::PredictionList { .. })
+            Ok(LinkCmd::Diff { ticket, .. }) => {
+                let msg = diff_msg(ticket, Err(DiffFailure::Lost));
+                if out.send(Msg::Engine(msg)).is_err() {
+                    return;
+                }
+            }
+            Ok(
+                LinkCmd::Resync { .. }
+                | LinkCmd::PredictionList { .. }
+                | LinkCmd::CancelQuery { .. },
+            )
             | Err(RecvTimeoutError::Timeout) => {}
         }
     }
@@ -297,13 +335,162 @@ fn send_state(out: &Outlet, state: ConnState) -> Result<(), Closed> {
     out.send(Msg::Conn(ConnEvent::State(state)))
 }
 
-/// One connection: initial snapshots, then the stream until it drops.
+/// The queries submitted on one connection and not answered yet: `ticket -> (id, query)`.
+/// The `Query` says which message the answer goes to, so a second kind of query fits here.
+#[derive(Default)]
+struct Queries {
+    inflight: Vec<Inflight>,
+}
+
+struct Inflight {
+    ticket: u64,
+    id: u64,
+    query: Query,
+}
+
+#[derive(Clone, Copy)]
+enum Query {
+    Diff,
+}
+
+impl Queries {
+    fn take(&mut self, id: &Id) -> Option<Inflight> {
+        let Id::Num(id) = id else { return None };
+        let at = self.inflight.iter().position(|q| q.id == *id)?;
+        Some(self.inflight.remove(at))
+    }
+}
+
+impl Query {
+    fn answer(self, ticket: u64, response: Response) -> EngineMsg {
+        match self {
+            Self::Diff => {
+                let result = match (response.result, response.error) {
+                    (_, Some(error)) => Err(diff_failure(error.code, error.data)),
+                    (Some(value), None) => serde_json::from_value::<WorktreeDiff>(value)
+                        .map(Box::new)
+                        .map_err(|_| DiffFailure::Refused),
+                    (None, None) => Err(DiffFailure::Refused),
+                };
+                EngineMsg::Diff { ticket, result }
+            }
+        }
+    }
+
+    fn lost(self, ticket: u64) -> EngineMsg {
+        match self {
+            Self::Diff => EngineMsg::Diff {
+                ticket,
+                result: Err(DiffFailure::Lost),
+            },
+        }
+    }
+}
+
+/// The typed reason of a refused `diff.worktree`; the engine's message is never shown.
+fn diff_failure(error: i64, data: Option<Value>) -> DiffFailure {
+    if error == methods::QUERY_BUSY.code {
+        DiffFailure::Busy
+    } else if error == methods::QUERY_CANCELLED.code {
+        DiffFailure::Cancelled
+    } else if error == methods::DIFF_UNAVAILABLE.code {
+        data.and_then(|d| serde_json::from_value::<DiffUnavailableData>(d).ok())
+            .map_or(DiffFailure::Refused, |d| DiffFailure::Unavailable(d.reason))
+    } else {
+        DiffFailure::Refused
+    }
+}
+
+fn diff_msg(ticket: u64, result: Result<Box<WorktreeDiff>, DiffFailure>) -> Stamped<EngineMsg> {
+    let now = monotonic_ns();
+    Stamped {
+        recv_ns: now,
+        decoded_ns: now,
+        msg: EngineMsg::Diff { ticket, result },
+    }
+}
+
+/// Sends the answer of an in-flight query, if `id` is one: the frame was decoded here, so the
+/// library forgets the id.
+fn deliver(
+    link: &mut dyn Link,
+    queries: &mut Queries,
+    recv_ns: u64,
+    response: Response,
+    out: &Outlet,
+) -> Result<(), Closed> {
+    let Some(inflight) = response.id.as_ref().and_then(|id| queries.take(id)) else {
+        return Ok(());
+    };
+    link.settle(inflight.id);
+    out.send(Msg::Engine(Stamped {
+        recv_ns,
+        decoded_ns: monotonic_ns(),
+        msg: inflight.query.answer(inflight.ticket, response),
+    }))
+}
+
+/// Takes the answers of in-flight queries out of what the stream delivers, before `decode`
+/// (which drops every response). With nothing in flight the frame is not parsed twice.
+fn route(
+    link: &mut dyn Link,
+    queries: &mut Queries,
+    incoming: Incoming,
+    out: &Outlet,
+) -> Result<Option<Incoming>, Closed> {
+    match incoming {
+        Incoming::Reply { recv_ns, response } => {
+            deliver(link, queries, recv_ns, response, out)?;
+            Ok(None)
+        }
+        Incoming::Frame { recv_ns, bytes } if !queries.inflight.is_empty() => {
+            match serde_json::from_slice(&bytes) {
+                Ok(ServerMessage::Response(response)) => {
+                    deliver(link, queries, recv_ns, response, out)?;
+                    Ok(None)
+                }
+                Ok(ServerMessage::Notification(notification)) => Ok(Some(Incoming::Decoded {
+                    recv_ns,
+                    notification,
+                })),
+                Err(_) => Ok(None),
+            }
+        }
+        other => Ok(Some(other)),
+    }
+}
+
+/// One connection: [`session_inner`], and every query it left in flight is lost when the
+/// connection ends without shutting down.
 fn session(
     link: &mut dyn Link,
     cwd: Option<&PathBuf>,
     chosen: &mut Option<String>,
     out: &Outlet,
     cmds: &Receiver<LinkCmd>,
+) -> Result<End, Closed> {
+    let mut queries = Queries::default();
+    let ended = session_inner(link, cwd, chosen, out, cmds, &mut queries);
+    if matches!(ended, Ok(End::Reconnect | End::Lagged)) {
+        for q in queries.inflight.drain(..) {
+            out.send(Msg::Engine(Stamped {
+                recv_ns: monotonic_ns(),
+                decoded_ns: monotonic_ns(),
+                msg: q.query.lost(q.ticket),
+            }))?;
+        }
+    }
+    ended
+}
+
+/// One connection: initial snapshots, then the stream until it drops.
+fn session_inner(
+    link: &mut dyn Link,
+    cwd: Option<&PathBuf>,
+    chosen: &mut Option<String>,
+    out: &Outlet,
+    cmds: &Receiver<LinkCmd>,
+    queries: &mut Queries,
 ) -> Result<End, Closed> {
     let requester = link.requester().map(|r| present::ingest::requester(&r));
     out.send(Msg::Conn(ConnEvent::Requester(requester)))?;
@@ -312,6 +499,9 @@ fn session(
     )))?;
     out.send(Msg::Conn(ConnEvent::Prediction(
         link.has(methods::CAP_PREDICTION_PAIRS.name),
+    )))?;
+    out.send(Msg::Conn(ConnEvent::Diff(
+        link.offers(methods::DIFF_WORKTREE),
     )))?;
     send_state(out, ConnState::Syncing)?;
     if sync(link, &Scope::Global, true, out)?.is_err() {
@@ -409,6 +599,51 @@ fn session(
                         }
                     }
                 }
+                LinkCmd::Diff {
+                    ticket,
+                    repo_id,
+                    root,
+                } => {
+                    let params = DiffParams {
+                        repo_id,
+                        worktree: root.to_string_lossy().into_owned(),
+                    };
+                    match link.submit(methods::DIFF_WORKTREE, to_value(&params)) {
+                        Ok(id) => queries.inflight.push(Inflight {
+                            ticket,
+                            id,
+                            query: Query::Diff,
+                        }),
+                        Err(err) => {
+                            let lost = err == LinkError::Lost;
+                            let failure = if lost {
+                                DiffFailure::Lost
+                            } else {
+                                DiffFailure::Refused
+                            };
+                            out.send(Msg::Engine(diff_msg(ticket, Err(failure))))?;
+                            if lost {
+                                return Ok(End::dropped(lagged));
+                            }
+                        }
+                    }
+                }
+                LinkCmd::CancelQuery { ticket } => {
+                    // The query stays in the table until its answer (`query-cancelled`) comes:
+                    // that is what lets the library forget the id.
+                    if let Some(id) = queries
+                        .inflight
+                        .iter()
+                        .find(|q| q.ticket == ticket)
+                        .map(|q| q.id)
+                    {
+                        let params = serde_json::json!({ "request": id });
+                        match link.call(methods::QUERY_CANCEL, params) {
+                            Ok(_) | Err(LinkError::Refused) => {}
+                            Err(_) => return Ok(End::dropped(lagged)),
+                        }
+                    }
+                }
                 LinkCmd::Observe { root } => match observe(link, &root) {
                     Ok(repo_id) => {
                         *chosen = Some(repo_id.clone());
@@ -431,6 +666,9 @@ fn session(
         match link.next(READ_SLICE) {
             Ok(None) => {}
             Ok(Some(incoming)) => {
+                let Some(incoming) = route(link, queries, incoming, out)? else {
+                    continue;
+                };
                 if let Some(msg) = decode(incoming) {
                     lagged |= matches!(msg.msg, EngineMsg::Lagged { .. });
                     out.send(Msg::Engine(msg))?;
@@ -764,6 +1002,8 @@ pub fn decode(incoming: Incoming) -> Option<Stamped<EngineMsg>> {
             Ok(ServerMessage::Notification(n)) => (recv_ns, n),
             Ok(ServerMessage::Response(_)) | Err(_) => return None,
         },
+        // Answers of in-flight queries are taken before `decode`; any other is late.
+        Incoming::Reply { .. } => return None,
     };
     let msg = match notification.method.as_str() {
         methods::NOTIFY_SCOPE_EVENT => {
@@ -800,6 +1040,8 @@ mod prediction_tests;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    mod diff;
 
     #[test]
     fn a_link_closed_after_the_resync_notice_keeps_the_streak() {

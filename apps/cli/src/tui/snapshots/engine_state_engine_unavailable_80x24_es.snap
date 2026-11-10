@@ -25,4 +25,4 @@ expression: "screen(&model, 80, 24)"
 │                                                                              │
 │                                                                              │
 └──────────────────────────────────────────────────────────────────────────────┘
- q salir  r reintentar                                                  ? ayuda
+ q salir  r reintentar  d ver diff                                      ? ayuda

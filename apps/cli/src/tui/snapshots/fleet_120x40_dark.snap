@@ -5,7 +5,7 @@ expression: snap
  shop · ✔ live · engine observing · acting as you                                                            ⚡ –  ⛔ –
 ┏━ › Fleet · ↑↓ vs main (local copy, fetched 3 h ago) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
 ┃     Agent                  Branch                                                       Files ↑↓          Activity   ┃
-┃  ○  No agent · shop        main                                                         ~0    ↑0 ↓0       –          ┃
+┃› ○  No agent · shop        main                                                         ~0    ↑0 ↓0       –          ┃
 ┃  ●  claude-1 · feat-pagos  feat-pagos                                                   ~2    ↑3 ↓1       2 min ago  ┃
 ┃  ○  No agent · feat-docs   feat-docs                                                    ~0    ↑1 ↓0       –          ┃
 ┃                                                                                                                      ┃
@@ -41,7 +41,7 @@ expression: snap
 ┃                                                                                                                      ┃
 ┃                                                                                                                      ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
- q quit  r retry   ○ no agent: changes by you or another tool   ● active agent                                   ? help
+ q quit  r retry  d view diff   ○ no agent: changes by you or another tool   ● active agent                      ? help
 === styles (dark) ===
 0:0-0 bg=#3a3a3a
 0:1-4 bg=#3a3a3a BOLD
@@ -70,12 +70,20 @@ expression: snap
 2:108-115 fg=#949494 BOLD
 2:119-119 fg=#ffe066
 3:0-0 fg=#ffe066
-3:3-3 fg=#949494
-3:6-20 fg=#949494
-3:29-32 fg=#949494
-3:90-91 fg=#949494
-3:96-100 fg=#949494
-3:108-108 fg=#949494
+3:1-1 fg=#ffe066 bg=#303030
+3:2-2 bg=#303030
+3:3-3 fg=#949494 bg=#303030
+3:4-5 bg=#303030
+3:6-20 fg=#949494 bg=#303030
+3:21-28 bg=#303030
+3:29-32 fg=#949494 bg=#303030
+3:33-89 bg=#303030
+3:90-91 fg=#949494 bg=#303030
+3:92-95 bg=#303030
+3:96-100 fg=#949494 bg=#303030
+3:101-107 bg=#303030
+3:108-108 fg=#949494 bg=#303030
+3:109-118 bg=#303030
 3:119-119 fg=#ffe066
 4:0-0 fg=#ffe066
 4:3-3 fg=#3fb950
@@ -158,8 +166,9 @@ expression: snap
 38:0-119 fg=#ffe066
 39:1-1 fg=#2dc2ad BOLD
 39:9-9 fg=#2dc2ad BOLD
-39:19-19 fg=#949494
-39:21-60 fg=#949494
-39:64-64 fg=#3fb950
-39:66-77 fg=#949494
+39:18-18 fg=#2dc2ad BOLD
+39:32-32 fg=#949494
+39:34-73 fg=#949494
+39:77-77 fg=#3fb950
+39:79-90 fg=#949494
 39:113-113 fg=#2dc2ad BOLD

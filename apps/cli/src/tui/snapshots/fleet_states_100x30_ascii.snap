@@ -5,7 +5,7 @@ expression: snap
  shop | [ok] live | engine observing | acting as you                             [c] -  [blocked] -
 #= > Fleet | +- vs main (local copy, fetch age not available) =====================================#
 #      Agent                  Branch                               Files +-          Activity      #
-#  o   No agent | shop        main                                 ~0    +0 -0       not available #
+#> o   No agent | shop        main                                 ~0    +0 -0       not available #
 #  *   claude-1 | feat-pagos  feat-pagos                           ~2    +3 -1       not available #
 #  ~   claude-2 | feat-idle   feat-idle                            ~0    +0 -0       not available #
 #  o   No agent | feat-docs   feat-docs                            ~0    +1 -0       not available #
@@ -31,7 +31,7 @@ expression: snap
 #                                                                                                  #
 #                                                                                                  #
 #==================================================================================================#
- q quit  r retry   o no agent: changes by you or another tool   * active agent               ? help
+ q quit  r retry  d view diff   o no agent: changes by you or another tool   * active agent  ? help
 === styles ===
 0:0-4 BOLD
 0:5-7 BOLD | DIM
@@ -46,13 +46,20 @@ expression: snap
 2:73-74 BOLD | DIM
 2:85-92 BOLD | DIM
 2:99-99 BOLD | REVERSED
-3:0-0 BOLD | REVERSED
-3:3-3 DIM
-3:7-21 DIM
-3:30-33 DIM
-3:67-68 DIM
-3:73-77 DIM
-3:85-97 DIM
+3:0-1 BOLD | REVERSED
+3:2-2 REVERSED
+3:3-3 DIM | REVERSED
+3:4-6 REVERSED
+3:7-21 DIM | REVERSED
+3:22-29 REVERSED
+3:30-33 DIM | REVERSED
+3:34-66 REVERSED
+3:67-68 DIM | REVERSED
+3:69-72 REVERSED
+3:73-77 DIM | REVERSED
+3:78-84 REVERSED
+3:85-97 DIM | REVERSED
+3:98-98 REVERSED
 3:99-99 BOLD | REVERSED
 4:0-0 BOLD | REVERSED
 4:7-27 BOLD
@@ -120,7 +127,8 @@ expression: snap
 28:0-99 BOLD | REVERSED
 29:1-1 BOLD
 29:9-9 BOLD
-29:19-19 DIM
-29:21-60 DIM
-29:66-77 DIM
+29:18-18 BOLD
+29:32-32 DIM
+29:34-73 DIM
+29:79-90 DIM
 29:93-93 BOLD

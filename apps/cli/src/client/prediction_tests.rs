@@ -98,7 +98,7 @@ impl Link for Fake {
     }
 }
 
-fn global() -> ScopeSnapshot {
+pub(super) fn global() -> ScopeSnapshot {
     ScopeSnapshot::Global(GlobalSnapshot {
         run_id: "run".into(),
         scope_seq: 0,
@@ -117,7 +117,7 @@ fn global() -> ScopeSnapshot {
     })
 }
 
-fn repo() -> ScopeSnapshot {
+pub(super) fn repo() -> ScopeSnapshot {
     ScopeSnapshot::Repo(RepoSnapshot {
         run_id: "run".into(),
         scope_seq: 0,

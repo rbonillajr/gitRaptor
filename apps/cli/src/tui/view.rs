@@ -19,12 +19,14 @@ use crate::model::{
     WorktreeRow, WorktreeState,
 };
 use crate::present::conflict_alert_text::ConflictAlertText;
+use crate::present::diff_text::DiffText;
 use crate::present::i18n::{Fetched, Lang, Legend, Text};
 use crate::present::prediction_text::PredictionText;
 use crate::tui::engine_state::{self, HeaderNotice};
 use crate::tui::fleet_order::{self, Group, Shown};
 use crate::tui::help;
 use crate::tui::keymap::{Action, BINDINGS, Key};
+use crate::tui::selection;
 use crate::tui::style::{Glyphs, Styles, fill, follow, modal_area};
 use crate::tui::toasts::ToastBody;
 use crate::tui::widgets::Component;
@@ -69,6 +71,11 @@ impl Say {
 
     pub(crate) fn safe(self, text: Text<'_>) -> SafeText {
         SafeText::text(&self.text(text))
+    }
+
+    /// A text of the diff view's catalog, folded the same way as [`Say::text`].
+    pub(crate) fn diff(self, text: DiffText<'_>) -> SafeText {
+        SafeText::text(&self.glyphs.fold(&DiffText::render(text, self.lang)))
     }
 
     /// A text of the prediction catalog, with ⚡ and ⚠ as the set draws them and folded the same
@@ -119,6 +126,13 @@ pub fn view(model: &Model, frame: &mut Frame) {
     }
     if let Some(prompt) = observe_prompt(model, say) {
         frame.render_widget(themed(&prompt, &styles), regions.list);
+        paint_help(model, say, &styles, frame, regions.header, regions.hints);
+        frame.render_widget(themed(&hints, &styles), regions.hints);
+        return;
+    }
+    // The diff takes the whole body, as ADR-CKP-003 § 7 says of the detail.
+    if let Some(state) = &model.ui.diff {
+        diff_panel::paint(state, say, &styles, frame, regions.list);
         paint_help(model, say, &styles, frame, regions.header, regions.hints);
         frame.render_widget(themed(&hints, &styles), regions.hints);
         return;
@@ -215,7 +229,8 @@ fn toast_stack(model: &Model, say: Say) -> Option<ToastStackModel> {
 
 /// Whether the body is the fleet: no engine state, question or picker takes its place.
 fn fleet_shown(model: &Model) -> bool {
-    model.ui.pick == Pick::None
+    model.ui.diff.is_none()
+        && model.ui.pick == Pick::None
         && engine_state::blocking_panel(model).is_none()
         && observe_prompt(model, Say::new(model, &Styles::new(model.ui.theme))).is_none()
         && engine_state::fleet_panel(model).is_none()
@@ -411,11 +426,22 @@ pub fn fleet(model: &Model, styles: &Styles) -> AgentListModel {
             activity: say.safe(Text::ColActivity),
         },
         rows,
-        selected: None,
+        selected: cursor(model),
         offset: 0,
         focused: true,
         empty: say.safe(empty),
     }
+}
+
+/// The row under the cursor (D10), while the fleet is what takes the arrows.
+fn cursor(model: &Model) -> Option<usize> {
+    if model.ui.pick != Pick::None || model.discovery_prompt().is_some() {
+        return None;
+    }
+    let at = selection::selected_row(model)?.key;
+    selection::ordered_rows(model)
+        .iter()
+        .position(|w| w.key == at)
 }
 
 /// "Observe this repo? [y/N]" while it is asked, and "Observing notes…" once answered yes
@@ -767,13 +793,24 @@ fn hint(model: &Model, action: Action, say: Say) -> Option<KeyHint> {
             .or(binding.keys.first())?,
         _ => binding.keys.first()?,
     };
-    Some(KeyHint::new(
+    let hint = KeyHint::new(
         SafeText::text(&key.label(say.set)),
         say.safe(help::hint_text(model, binding)),
-    ))
+    );
+    // `d` on a worktree that cannot be read asks nothing, and the bar says why (D11).
+    let unavailable = action == Action::Diff
+        && model.ui.diff.is_none()
+        && selection::selected_row(model)
+            .is_some_and(|row| matches!(row.state, WorktreeState::Unavailable(_)));
+    Some(if unavailable {
+        hint.disabled(say.safe(Text::KeyDiffDisabled))
+    } else {
+        hint
+    })
 }
 
 mod conflict_panel;
+mod diff_panel;
 
 #[cfg(test)]
 mod a11y_tests;
@@ -808,6 +845,8 @@ mod tests {
     use ratatui::backend::TestBackend;
     use ratatui::buffer::Buffer;
     use unicode_width::UnicodeWidthStr;
+
+    mod diff_tests;
 
     pub(crate) fn render(model: &Model, width: u16, height: u16) -> Buffer {
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();

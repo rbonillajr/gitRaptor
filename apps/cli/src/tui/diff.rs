@@ -2,10 +2,11 @@
 //! engine once (a photo, D9) and closed with `Esc` or `d`. Pure: the asking and the answer
 //! travel as [`Cmd`] and [`EngineMsg::Diff`].
 
-use gitraptor_api::diff::{CommittedDiff, WorktreeDiff};
+use gitraptor_api::diff::WorktreeDiff;
 
 use crate::model::{Cmd, DiffFailure, Model, Notice, WorktreeState};
 use crate::present::SafeText;
+use crate::present::diff::{DiffRow, rows};
 use crate::tui::selection;
 
 /// What the full-screen view holds while it is open.
@@ -13,10 +14,12 @@ use crate::tui::selection;
 pub enum DiffState {
     /// Asked, no answer yet.
     Loading { ticket: u64, worktree: SafeText },
-    /// The engine's answer, scrolled to `offset` rows.
+    /// The engine's answer as rows of sanitized text (the response itself is not kept),
+    /// scrolled to `offset` rows. `at_utc_ms` is when the engine computed it.
     Ready {
         worktree: SafeText,
-        diff: Box<WorktreeDiff>,
+        at_utc_ms: i64,
+        lines: Vec<DiffRow>,
         offset: usize,
     },
     /// The answer did not come: the view says why.
@@ -94,7 +97,8 @@ pub fn apply_reply(
     model.ui.diff = match result {
         Ok(diff) => Some(DiffState::Ready {
             worktree,
-            diff,
+            at_utc_ms: diff.computed_at_utc_ms,
+            lines: rows(&diff),
             offset: 0,
         }),
         Err(DiffFailure::Cancelled) => None,
@@ -103,10 +107,10 @@ pub fn apply_reply(
     model.dirty = true;
 }
 
-/// Scrolls the open view one row. The extent is [`row_count`].
+/// Scrolls the open view one row, never past its last row.
 pub fn scroll(model: &mut Model, down: bool) {
-    if let Some(DiffState::Ready { diff, offset, .. }) = &mut model.ui.diff {
-        let last = row_count(diff).saturating_sub(1);
+    if let Some(DiffState::Ready { lines, offset, .. }) = &mut model.ui.diff {
+        let last = lines.len().saturating_sub(1);
         *offset = if down {
             (*offset + 1).min(last)
         } else {
@@ -115,32 +119,9 @@ pub fn scroll(model: &mut Model, down: bool) {
     }
 }
 
-/// How many rows the view lists: a header per section, a header per file and the lines of
-/// its hunks. Painting must list exactly these rows, or the scroll stops short or runs past.
-pub fn row_count(diff: &WorktreeDiff) -> usize {
-    use gitraptor_api::diff::FileBody;
-    let files = |section: &gitraptor_api::diff::DiffSection| {
-        section
-            .files
-            .iter()
-            .map(|f| match &f.body {
-                FileBody::Text { hunks, .. } => {
-                    1 + hunks.iter().map(|h| 1 + h.lines.len()).sum::<usize>()
-                }
-                _ => 1,
-            })
-            .sum::<usize>()
-    };
-    let committed = match &diff.committed {
-        CommittedDiff::Ready { section, .. } => files(section),
-        CommittedDiff::NotComputable { .. } => 0,
-    };
-    2 + committed + files(&diff.uncommitted)
-}
-
 #[cfg(test)]
 mod tests {
-    use gitraptor_api::diff::{CommittedGap, DiffSection};
+    use gitraptor_api::diff::{CommittedDiff, CommittedGap, DiffSection};
 
     use super::*;
     use crate::model::{Head, WorktreeState};

@@ -5,7 +5,7 @@ expression: text
  shop · ✔ live · engine – · –                                        ⚡ –  ⛔ –
 ┏━ › Fleet · ↑↓ vs main (local copy, fetch age not available) ━━━━━━━━━━━━━━━━━┓
 ┃     Agent                Branch              Files ↑↓          Activity      ┃
-┃  ⚠  agent not available  unavailable: folder missing                         ┃
+┃› ⚠  agent not available  unavailable: folder missing                         ┃
 ┃  ⚠  agent not available  unavailable: folder missing                         ┃
 ┃  ⚠  agent not available  unavailable: folder missing                         ┃
 ┃  ⚠  agent not available  unavailable: folder missing                         ┃
@@ -25,4 +25,4 @@ expression: text
 │ ℹ  Calculating 10 of 10 pairs                                                │
 │ ⚠ uncommitted · ⚡ commits only · no merge drivers or .gitattributes         │
 └──────────────────────────────────────────────────────────────────────────────┘
- q quit  r retry   ⚠  warning: the text beside it says why               ? help
+ q quit  r retry  d view diff (the worktree is not available)            ? help

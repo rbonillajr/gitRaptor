@@ -5,7 +5,7 @@ expression: text
  shop | [ok] en vivo | motor observando | actúas como tú                                             [c] -  [blocked] -
 #= > Flota | +- respecto a main (copia local, antigüedad no disponible) ===============================================#
 #      Agente               Rama                                                       Arch. +-          Actividad     #
-#  o   Sin agente | shop    main                                                       ~0    +0 -0       no disponible #
+#> o   Sin agente | shop    main                                                       ~0    +0 -0       no disponible #
 #  *   claude-1 | d-act     br-d                                                       ~0    +0 -0       no disponible #
 #  *   claude-2 | m-act     br-m                                                       ~0    +0 -0       no disponible #
 #  ~   claude-3 | c-idle    br-idle                                                    ~0    +0 -0       no disponible #
@@ -41,4 +41,4 @@ expression: text
 #                                                                                                                      #
 #                                                                                                                      #
 #======================================================================================================================#
- q salir  r reintentar   o sin agente: cambios tuyos o de otra herramienta   * agente activo                    ? ayuda
+ q salir  r reintentar  d ver diff   o sin agente: cambios tuyos o de otra herramienta   * agente activo        ? ayuda
