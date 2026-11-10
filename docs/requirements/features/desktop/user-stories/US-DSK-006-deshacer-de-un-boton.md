@@ -5,9 +5,9 @@ type: us
 status: ready
 priority: high
 created: 2026-10-28
-updated: 2026-11-08
+updated: 2026-11-09
 feature: desktop
-blocked_by: [TS-GRP-009]
+blocked_by: []
 source: inline
 decision: "Decisión de Rene del 2026-11-08 (aceptación de las recomendaciones, Q-DSK-7 a Q-DSK-20), ver CTX-DSK-001 § 11"
 related:
