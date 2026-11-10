@@ -261,6 +261,7 @@ Aplicada desde DEP-CKP-2, 3, 7, 9, 10 y 11 de [CTX-CKP-001](../../requirements/f
 - **SEC-08 se mantiene**: rate limit, tope de consultas en curso por conexión, cancelación al cerrarse la conexión, y respuestas fuera del orden del stream que nunca lo bloquean.
 - **Para quién**: el contenido del diff solo va a la conexión CLI/TUI que lo pide. Nunca va al stream de difusión ni al MCP (Q-CKP-8), y nunca se persiste ni se registra (SEC-05, nota en `non-functional.md`).
 - **Forma del contrato** (métodos, id de petición, cancelación, topes y campos): **pendiente, dueño: worker del canal (TS-GRP-004)** (necesidad N8 de ADR-CKP-003 § 4). No se fija aquí.
+- **Consulta de commits base..rama** (grafo): forma fijada en DS-US-CKP-022 § Contrato de API (`graph.lanes`, `mcp: false`, sobre el pool de consultas de DS-US-CKP-012).
 - **Actor por commit en el grafo** (relación commit → evento de ADR-GRP-013): opcional y no se decide aquí; sin ella, el grafo muestra "sin atribuir" (Q-CKP-4).
 
 **Frontera de módulo** (ADR-CKP-003 § 5): el binario `raptor` contiene el motor porque `raptor daemon` es un subcomando (§ 1). Solo el módulo `daemon` de `apps/cli` importa `crates/core`. Los módulos de la TUI y de la CLI no importan `crates/core`, `crates/git` ni `crates/policy`, y una comprobación estática en CI lo hace cumplir (ADR-CKP-003, Validación V5).

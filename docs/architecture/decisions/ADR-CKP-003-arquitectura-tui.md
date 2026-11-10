@@ -112,7 +112,7 @@ La TUI y la CLI usan la biblioteca cliente de `crates/api` (TS-GRP-004). Encima 
 | N5 | Solicitante y capa resueltos de la conexión en el handshake, para que la vista diga "actúas como X" y desactive lo que la capa no permite. Main ya expone `requester.resolve` (Dev Spec de TS-TMC-004 § 2), que puede cubrirla; es solo UX, porque el daemon re-resuelve en cada petición (ADR-CKP-002 § 3) | Q-CKP-16, ADR-TMC-005 § 1, M-03 |
 | N6 | Texto no confiable con un **tipo propio** en el contrato (envoltorio), con longitud máxima por campo, para imponer el saneado por tipo (§ 8) | SEC-12, ADR-GRP-005 § 5 |
 | N7 | Estados, diagnósticos y motivos como códigos tipados con parámetros, sin cadenas de presentación | NFR-10 |
-| N8 | Consultas bajo demanda (diff, grafo, timeline) con id de petición, cancelación y topes, respondidas fuera del orden del stream sin bloquearlo | DEP-CKP-2, DEP-CKP-3, DEP-CKP-5 |
+| N8 | Consultas bajo demanda (diff, grafo, timeline) con id de petición, cancelación y topes, respondidas fuera del orden del stream sin bloquearlo | DEP-CKP-2, DEP-CKP-3, DEP-CKP-5. DEP-CKP-2 aplicado por DS-US-CKP-022 (`graph.lanes`), con la forma de DS-US-CKP-012 |
 | N9 | Lectura y escritura de las preferencias de la TUI, como documento acotado y versionado. **La escritura solo se acepta de un "sin atribuir" que pasa los controles 1 a 3** de ADR-GRP-005 § 6; el esquema excluye `cockpit.editor`, `cockpit.editorKind` y `cockpit.worktreePathTemplate` | DEP-CKP-11, L-05 |
 | N10 | Resolución del editor: el daemon devuelve el argv validado de la configuración y la ruta destino absoluta y validada (§ 9) | Q-CKP-9, DEP-CKP-13, I-03 |
 | N11 | Peticiones de operación con el estado esperado para revalidar | BR-CKP-CONS-004, ADR-CKP-002 |
