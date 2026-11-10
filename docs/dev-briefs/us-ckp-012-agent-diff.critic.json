@@ -1,0 +1,3 @@
+{"schema":"nassa.plan-critic.v1","round":2,"planSha":"","contractSha":"","verdict":"AJUSTES","findings":[
+{"id":"PC-8","kind":"test","blocking":true,"evidence":"docs/dev-briefs/us-ckp-012-agent-diff.contract.json:114","ask":"CKP012-LIMITS mentions the time cut but no test covers it: add one or drop time from the statement with an owner in the DS.","toHuman":false},
+{"id":"PC-9","kind":"contradiccion","blocking":false,"evidence":"docs/requirements/features/cockpit/dev-specs/US-CKP-012-ver-diff.md:581","ask":"Put the real test names of diff_git.rs and diff_query.rs in the DS; mark the deadline test as a T002 unit.","toHuman":false}]}

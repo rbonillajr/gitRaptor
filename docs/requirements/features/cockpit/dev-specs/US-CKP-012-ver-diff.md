@@ -2,9 +2,9 @@
 id: DS-US-CKP-012
 title: "Dev Spec — US-CKP-012: revisar lo que un agente integraría antes del merge"
 type: dev-spec
-status: draft
+status: spec-ready
 created: 2026-10-27
-updated: 2026-10-28
+updated: 2026-11-09
 story: US-CKP-012
 feature: cockpit
 domain: GRP
@@ -74,7 +74,7 @@ tags: [cockpit, tui, diff, consultas-bajo-demanda, n8, acciones-por-agente, solo
 
 ## Contexto rápido
 
-Al terminar, el desarrollador selecciona la fila de un agente en la TUI, pulsa `d` y ve en pantalla completa dos secciones: lo que entraría al merge (la rama frente a su merge-base con la base confirmada) y, aparte, lo que el worktree tiene sin commitear. Los binarios salen como "binario" sin contenido, los archivos grandes truncados con aviso, y el agente, su sesión y el repo no cambian. Hoy no puede: la flota no tiene cursor de fila (las flechas solo mueven el selector de repo, `tui/update.rs:145`), ninguna tecla actúa sobre una fila (`tests/tui_engine_states.rs:620`), el canal no tiene consulta de diff y `DiffView` (`tui/widgets/diff_view.rs`) no tiene quien lo alimente.
+Al terminar, el desarrollador selecciona la fila de un agente en la TUI, pulsa `d` y ve en pantalla completa dos secciones: lo que entraría al merge (la rama frente a su merge-base con la base confirmada) y, aparte, lo que el worktree tiene sin commitear. Los binarios salen como "binario" sin contenido, los archivos grandes truncados con aviso, y el agente, su sesión y el repo no cambian. Hoy no puede: la flota no tiene cursor de fila (las flechas solo mueven el selector de repo, `tui/update.rs:160`), ninguna tecla actúa sobre una fila (`tests/tui_engine_states.rs:620`), el canal no tiene consulta de diff y `DiffView` (`tui/widgets/diff_view.rs`: el componente es `DiffModel`, con `DiffLine` y `DiffLineKind`) no tiene quien lo alimente.
 
 La historia fija además el contrato de las **consultas bajo demanda** (N8 de ADR-CKP-003 § 4): id de petición, cancelación y topes, con la respuesta fuera de orden y sin bloquear el stream. ADR-GRP-005 (Enmienda 2026-10-04, Cockpit) fijó el qué (gix sin filtros, pool propio, solo a la conexión que pide) y dejó la forma pendiente; ADR-GRP-009 Validación 8 la necesita para excluir esas respuestas del escaneo de secretos. US-CKP-021 (timeline) y US-CKP-022 (grafo) reutilizan esta forma.
 
@@ -92,15 +92,15 @@ Cada decisión es **Decisión del orquestador (2026-10-27), validada por Arquite
 | D2 | **Respuesta asíncrona en el daemon.** El brazo de `diff.worktree` en `conn.rs` valida, resuelve el worktree en el estado del motor y encola el trabajo en `QueryPool`; no responde. Un hilo del pool calcula y empuja la respuesta con el `id` de la petición al `Outbox` de la conexión (`Arc`, ya compartido con el escritor). Mientras, el lector sigue atendiendo peticiones y el bus sigue empujando eventos | Responder dentro del brazo: el lector de la conexión no podría leer `query.cancel` mientras calcula, y una TUI con varias peticiones esperaría al diff |
 | D3 | **Cancelación.** `query.cancel {request}` marca el token de esa petición de la misma conexión y responde al momento `{cancelled}`. El trabajo mira el token entre archivos y responde a la petición original con `query-cancelled`. Al cerrarse la conexión se cancelan todos sus tokens. Una conexión no puede cancelar peticiones de otra | Cancelar sin responder la original: el cliente se quedaría esperando una respuesta que no llega |
 | D4 | **Topes** (⚠️ **ASSUMPTION**, ver § Valores numéricos): 1 consulta en vuelo por conexión, pool de 1 hilo con cola global de 4 (más → `query-busy`), plazo de 2 s, respuesta ≤ 768 KiB serializada, ≤ 1.000 archivos, ≤ 2.000 líneas de diff por archivo, blobs ≤ 8 MiB. Al superar un tope la respuesta sale con lo calculado y `cut: files | bytes | time`; nunca un error. Validada por PO (2026-10-27, cierra Q-CKP-32) como valores iniciales del MVP, con dos condiciones que no se negocian al ajustarlos: la cabecera de sección cuenta todos los archivos (`files_total`) y lista las rutas de los omitidos mientras quepan, y una vista truncada nunca se presenta como completa. Bajarlos tras medir (N4) no pide otra validación si se cumplen las dos | Error al pasar el tope: el desarrollador no vería nada justo en el diff grande, que es el que más necesita revisar |
-| D5 | **Qué compara cada sección** (BR-CKP-CALC-005). *Entraría al merge*: el primer merge-base (`RepoReader::merge_bases`, `reader.rs:530`) entre la punta de la base confirmada y `HEAD` del worktree, contra `HEAD`; con `HEAD` separado también vale. *Sin commitear*: `HEAD` contra el working tree, con lo preparado y lo no preparado juntos, más los archivos sin seguimiento no ignorados como añadidos. Base sin confirmar, sin base, rama base sin ref o sin merge-base: la sección dice "no calculable" con su motivo, y la de sin commitear se calcula igual | Excluir los sin seguimiento: el escenario 1 cuenta "sin commitear (1 archivo)" y un archivo nuevo de un agente es lo primero que hay que revisar |
-| D6 | **Cómo se lee** (ADR-GRP-009 § 1). `crates/git/src/diff.rs` con `gix` en solo lectura. *Entraría al merge*: las rutas con `changed_paths(merge_base, HEAD, max_files, deadline)` (`changed_paths.rs:66`: solo rutas y `total`, sin ids ni renombrados; falla entero si pasa el plazo, nunca da un total parcial) y el contenido de cada lado con `committed_file(commit, componentes, max_blob_bytes)` (`committed.rs:60`: `Absent`, `NotRegular`, `TooLarge` por la cabecera antes de cargar, o `Blob`), que también da el tipo de cambio. *Sin commitear*: las rutas con `RepoReader::status` (`reader.rs:605`), el lado `HEAD` con `committed_file` y el lado del working tree abriendo cada componente sin seguir enlaces (`O_NOFOLLOW` con `rustix`, ya dependencia de `crates/git`) y midiendo con `fstat` antes de leer. Un enlace simbólico, en cualquier lado, es `symlink` sin contenido: ni se sigue ni se lee su destino. Las líneas se comparan con `gix::diff::blob::{Diff, InternedInput}` sobre los bytes crudos, como ya hace `dry_merge/hunks.rs:8`, sin `Platform` ni pipeline de conversión: ni filtros, ni `textconv`, ni diff externo. Ningún `git` hijo | `git diff` del CLI: ejecuta filtros `clean` y `textconv` que un agente puede configurar (H2 de ADR-GRP-009) |
+| D5 | **Qué compara cada sección** (BR-CKP-CALC-005). *Entraría al merge*: el primer merge-base (`RepoReader::merge_bases`, `reader.rs:571`) entre la punta de la base confirmada y `HEAD` del worktree, contra `HEAD`; con `HEAD` separado también vale. *Sin commitear*: `HEAD` contra el working tree, con lo preparado y lo no preparado juntos, más los archivos sin seguimiento no ignorados como añadidos. Base sin confirmar, sin base, rama base sin ref o sin merge-base: la sección dice "no calculable" con su motivo, y la de sin commitear se calcula igual | Excluir los sin seguimiento: el escenario 1 cuenta "sin commitear (1 archivo)" y un archivo nuevo de un agente es lo primero que hay que revisar |
+| D6 | **Cómo se lee** (ADR-GRP-009 § 1). `crates/git/src/diff.rs` con `gix` en solo lectura. *Entraría al merge*: las rutas con `changed_paths(merge_base, HEAD, max_files, deadline)` (`changed_paths.rs:65`: solo rutas y `total`, sin ids ni renombrados; falla entero si pasa el plazo, nunca da un total parcial) y el contenido de cada lado con `committed_file(commit, componentes, max_blob_bytes)` (`committed.rs:60`: `Absent`, `NotRegular`, `TooLarge` por la cabecera antes de cargar, o `Blob`), que también da el tipo de cambio. *Sin commitear*: las rutas con `RepoReader::status` (`reader.rs:646`), el lado `HEAD` con `committed_file` y el lado del working tree abriendo cada componente sin seguir enlaces (`O_NOFOLLOW` con `rustix`, ya dependencia de `crates/git` solo bajo `cfg(unix)`, como en `guard_write/unix.rs`; Windows, ver § Revisión 2026-11-09) y midiendo con `fstat` antes de leer. Un enlace simbólico, en cualquier lado, es `symlink` sin contenido: ni se sigue ni se lee su destino. Las líneas se comparan con `gix::diff::blob::{Diff, InternedInput}` sobre los bytes crudos, como ya hace `dry_merge/hunks.rs:8`, sin `Platform` ni pipeline de conversión: ni filtros, ni `textconv`, ni diff externo. Ningún `git` hijo | `git diff` del CLI: ejecuta filtros `clean` y `textconv` que un agente puede configurar (H2 de ADR-GRP-009) |
 | D7 | **Binario**: un byte NUL en los primeros 8.000 bytes de cualquiera de los dos lados, la heurística de Git. Un blob de más de 8 MiB es `too-large`. Ninguno lleva contenido | Respetar `.gitattributes` (`-diff`): lo escribe el agente, y la lectura no aplica atributos |
 | D8 | **Sin atribución por archivo** (BR-CKP-EDGE-004). La respuesta no tiene campo de actor ni de sesión, y la vista no pinta nombres de agente dentro del diff. El título nombra el worktree por su carpeta | Atribuir por sesión activa: con dos sesiones no hay forma fiable de saber quién tocó cada archivo (Q7 de motor-local) |
 | D9 | **El diff es una foto**: se pide al pulsar `d` y no se actualiza con los eventos. La cabecera dice "a las 14:03:12". Para refrescar, se cierra (`Esc` o `d`) y se vuelve a abrir | Recalcular con cada evento del worktree: un agente activo cambia archivos cada segundo y la vista saltaría mientras se lee |
 | D10 | **Cursor de fila en la flota.** `↑`/`↓` (`k`/`j`) mueven el cursor cuando no hay selector de repo ni pregunta en pantalla. El cursor guarda la clave del worktree (`WorktreeRow.key`), no el índice: sobrevive a los reordenamientos de DS-US-CKP-002. Si su fila desaparece, pasa a la siguiente en el orden. Arranca en la primera fila. Se pinta con el marcador de foco que ya tiene `AgentListModel.selected` | Cursor por índice: con el orden por atención, la fila seleccionada cambiaría sola al subir otra |
 | D11 | **Tecla `d` "ver diff"**, la primera acción por fila (D7 de DS-US-CKP-003). Sobre un worktree no disponible, `d` no pide nada: la barra muestra la pista desactivada con el motivo "el worktree no está disponible" (`KeyHints::disabled`) y la nota dice lo mismo (BR-CKP-ELIG-006, BR-CKP-EDGE-003). En cualquier estado de sesión, incluido Activo, `d` funciona | `Enter`: ya abre el repo en el selector; el editor es `e` (DS-US-CKP-013 K13) |
 | D12 | **Vista a pantalla completa** (ADR-CKP-003 § 7: el detalle pasa a pantalla completa bajo demanda). Una lista desplazable: cabecera de sección "entraría al merge (3 archivos)" / "sin commitear (1 archivo)", una cabecera por archivo con su cambio y `+a −r`, y sus líneas con `DiffView`. `↑`/`↓` desplazan una línea; `Esc` o `d` cierran. Los avisos van en la cabecera del archivo: "binario", "truncado: más de 2.000 líneas", "demasiado grande: más de 8 MiB" y, por sección, "truncado: …" según `cut` | Panel lateral: a 80×24 no cabe una línea de diff legible junto a la flota |
-| D13 | **Cliente sin bloqueo.** La biblioteca cliente gana `Client::submit` (envía sin esperar y apunta el id). `next_incoming` sigue entregando tramas sin decodificar (`Incoming::Frame`, `client/mod.rs:486`; decodificar cuenta en el presupuesto del cliente, ADR-CKP-003 § 6), así que la respuesta a un `submit` leída ahí llega como una trama más y la decodifica `apps/cli/src/client::decode`, que hoy descarta toda respuesta (`client/mod.rs:697`). Solo cambia `call`: hoy descarta una respuesta de otro id (`crates/api/src/client/mod.rs:431`); con el id apuntado, la guarda ya decodificada y `next_incoming` la entrega como `Incoming::Reply`, igual que hoy entrega como `Buffered` las notificaciones que `call` leyó. El hilo del canal de la TUI envía el diff con `submit` y sigue leyendo el stream | Una segunda conexión solo para consultas: la cancelación tendría que cruzar conexiones (D3 lo prohíbe) |
+| D13 | **Cliente sin bloqueo.** La biblioteca cliente gana `Client::submit` (envía sin esperar y apunta el id). `next_incoming` sigue entregando tramas sin decodificar (`Incoming::Frame`, `client/mod.rs:239`; decodificar cuenta en el presupuesto del cliente, ADR-CKP-003 § 6), así que la respuesta a un `submit` leída ahí llega como una trama más y la decodifica `apps/cli/src/client::decode`, que hoy descarta toda respuesta (`client/mod.rs:757`, el descarte en `:767`). Solo cambia `call`: hoy descarta una respuesta de otro id (`crates/api/src/client/mod.rs:455`); con el id apuntado, la guarda ya decodificada y `next_incoming` la entrega como `Incoming::Reply`, igual que hoy entrega como `Buffered` las notificaciones que `call` leyó. El hilo del canal de la TUI envía el diff con `submit` y sigue leyendo el stream | Una segunda conexión solo para consultas: la cancelación tendría que cruzar conexiones (D3 lo prohíbe) |
 | D14 | **La raíz cruda del worktree en el modelo.** `WorktreeRow` gana `root: PathBuf`, rellenado en la ingesta y usado solo como identificador en `Cmd::Diff`; nunca se pinta. Es el mismo patrón que `Cmd::Observe { root: PathBuf }` | Pedir el diff por `key`: el daemon no conoce el hash del cliente; por `path` (`SafeText`): el saneado puede cambiar la ruta |
 | D15 | **El pool del diff usa la clase de trabajo de las peticiones IPC** (`UserInitiated`, ADR-GRP-015 § 1) cuando TS-GRP-005 exponga `WorkClass`. Hasta entonces, un hilo con nombre `raptor-query` sin prioridad explícita | Esperar a TS-GRP-005: la clase no cambia el contrato ni el comportamiento visible |
 | D16 | **Sin detección de renombrados en el MVP** (cierra Q-CKP-33). Un `git mv` sale como un borrado y un añadido, cada uno con su ruta, que es lo que muestra `changed_paths` (D6). Ni la historia ni BR-CKP-CALC-005 lo piden | Detectarlos: obliga a leer y comparar los blobs borrados y añadidos, gasta el plazo de 2 s justo en las refactorizaciones grandes y no cambia la decisión de integrar |
@@ -122,6 +122,7 @@ Cada decisión es **Decisión del orquestador (2026-10-27), validada por Arquite
 | [Gate de seguridad](#gate-de-seguridad) | Contenido confidencial, texto no confiable, solo lectura |
 | [Cómo extender](#cómo-extender) | Otra consulta bajo demanda, otra acción por fila |
 | [Fuera de alcance](#fuera-de-alcance) | Lo diferido y su dueño |
+| [Revisión 2026-11-09](#revisión-2026-11-09) | Contraste con `main` y preguntas R1 a R3 |
 | [Notas del autor](#notas-del-autor) _(ref)_ | Lo que no bloquea |
 
 ---
@@ -130,9 +131,9 @@ Cada decisión es **Decisión del orquestador (2026-10-27), validada por Arquite
 
 | ID | Qué falta | Severidad | Acción | Owner |
 |----|-----------|-----------|--------|-------|
-| G1 | Perfil `mcp` por solicitante (S-01, ADR-GRP-005 Enmienda MCP): hoy el perfil sale del ejecutable del par (`conn.rs:506-517`) y una TUI lanzada por un agente ve el diff. **Decisión del orquestador (2026-10-27), validada por Arquitecto (revisión)**: se acepta como residuo conocido del MVP, porque el diff solo expone contenido de worktrees que el agente ya puede leer en disco (no amplía su acceso) y Q-CKP-8 solo prohíbe el MCP | No bloqueante | Se cierra al implementar S-01 en el canal; `mcp: false` cierra entonces `diff.worktree` sin cambiar esta DS | Worker del canal (TS-GRP-004) |
+| G1 | Perfil `mcp` por solicitante (S-01, ADR-GRP-005 Enmienda MCP): hoy el perfil sale del ejecutable del par (`conn.rs:540-551`) y una TUI lanzada por un agente ve el diff. **Decisión del orquestador (2026-10-27), validada por Arquitecto (revisión)**: se acepta como residuo conocido del MVP, porque el diff solo expone contenido de worktrees que el agente ya puede leer en disco (no amplía su acceso) y Q-CKP-8 solo prohíbe el MCP | Informativo | Se cierra al implementar S-01 en el canal; `mcp: false` cierra entonces `diff.worktree` sin cambiar esta DS | Worker del canal (TS-GRP-004) |
 
-Fuera de G1, todo lo que esta DS consume existe en `main`: lector `gix`, `changed_paths`, `committed_file`, `merge_bases`, `status`, `gix::diff::blob` (`dry_merge/hunks.rs`), `Outbox`, `DiffView`, `KeyHints::disabled` y `AgentListModel.selected`. La clase de trabajo de TS-GRP-005 es opcional (D15).
+Fuera de G1, todo lo que esta DS consume existe en `main`: lector `gix`, `changed_paths`, `committed_file`, `merge_bases`, `status`, `gix::diff::blob` (`dry_merge/hunks.rs`), `Outbox` (`channel/bus.rs:35`), `DiffView` (`DiffModel`), `KeyHints::disabled` (`widgets/key_hints.rs:33`) y `AgentListModel.selected` (`widgets/agent_list.rs:118`). La clase de trabajo de TS-GRP-005 ya existe en `main` (`work_class::spawn_unpooled`, `WorkClass::UserInitiated`): D15 se aplica (T003).
 
 ---
 
@@ -171,7 +172,7 @@ sequenceDiagram
 
 | # | Tarea | Depende | Aterriza en |
 |---|---|---|---|
-| T001 | Escribir en rojo las pruebas de la historia y los stubs del contrato | — | `crates/api/src/{query,diff}.rs`, `methods/{query,diff}.rs`, `apps/cli/tests/tui_diff.rs`, `crates/core/tests/diff_query.rs` |
+| T001 | Escribir en rojo las pruebas de la historia y los stubs del contrato | — | `crates/api/src/{query,diff}.rs`, `methods/{query,diff}.rs`, `apps/cli/tests/tui_diff.rs`, `crates/core/tests/{diff_query,diff_git}.rs` |
 | T002 | Calcular el diff de un worktree con `gix`, sin filtros y con topes | T001 | `crates/git/src/diff.rs` |
 | T003 | Servir `diff.worktree` y `query.cancel` desde un pool, con respuesta fuera de orden | T001, T002 | `crates/core/src/channel/{query,diff}.rs`, `conn.rs`, `server.rs` |
 | T004 | Enviar sin esperar y recibir respuestas en la biblioteca cliente | T001 | `crates/api/src/client/mod.rs` |
@@ -194,11 +195,11 @@ T001 → {T002, T004, T006} → T003 (tras T002), T005 (tras T004), T007 (tras T
 - `crates/api/src/methods/mod.rs` (**MODIFY**): por módulo, `mod`, `pub use` y su `&GROUP` en `GROUPS` (3 líneas cada uno, ADR-GRP-016)
 - `crates/api/src/lib.rs` (**MODIFY**): `pub mod query; pub mod diff;`
 - `apps/cli/i18n/{en,es}/contract.txt` (**MODIFY**): `error.query-busy`, `error.query-cancelled`, `error.diff-unavailable` (V8, `codes.rs`)
-- `apps/cli/tests/tui_diff.rs` y `crates/core/tests/diff_query.rs` (**CREATE**)
+- `apps/cli/tests/tui_diff.rs`, `crates/core/tests/diff_query.rs` y `crates/core/tests/diff_git.rs` (**CREATE**). `diff_git.rs` prueba la semántica de Git (secciones, filtros, enlaces, binario, repo intacto) pidiendo `diff.worktree` al daemon real: en T001 `worktree_diff` aún no existe como API. Las pruebas unitarias del lector en `crates/git` (T002) las escribe el experto con TDD
 
 **Reglas**
-- Bloques de error: los dos siguientes libres al implementar. Hoy están tomados `-33020` a `-33080` en `main` y `-33100` reservado por DS-US-MCP-006 (`registration-unregister-refused`); serían `-33120` (`query`) y `-33140` (`diff`). Si al rebasar otro módulo tomó uno, el test de bloques disjuntos falla: tomar el siguiente.
-- Los métodos se declaran `method(NAME, false, false)` sin `.since(...)`: existen para toda conexión de protocolo 9 y el cliente los busca en `hello.methods`.
+- Bloques de error: `-33120` (`query`, `FIRST_ERROR_BLOCK - 6 * ERROR_BLOCK_LEN`) y `-33140` (`diff`, `- 7 *`). En `main` (2026-11-09) están tomados `-33020` a `-33080` (`discovery`, `guard`, `operation`, `mcp`) y `-33160` (`attribution`, que saltó `-33100` a `-33140` a propósito: `crates/api/src/attribution_tests.rs:26`); `-33100` sigue reservado por DS-US-MCP-006. Si al rebasar otro módulo tomó uno, el test de bloques disjuntos falla: tomar el siguiente libre (`-33180`).
+- Los métodos se declaran `method(NAME, false, false).since(CAPABILITIES_PROTOCOL)`, como `prediction.list`: existen solo desde el protocolo 9 (el cliente los busca en `hello.methods`) y se añaden a `AFTER_FREEZE_FULL` de `crates/api/tests/legacy_protocols.rs`. Corregido al implementar (2026-11-09): la DS decía «sin `.since`», que rompe `legacy_protocols`.
 - El arnés de `apps/cli/tests/live_fleet.rs` (`#![cfg(all(target_os = "macos", debug_assertions))]`, `gitraptor_testkit::Fixture`, `raptor-fake-agent`, la `App` real sobre `TestBackend`). Nunca este repo ni el perfil real (NFR-01).
 - Repo `shop`; worktree `feat-pagos` con 3 commits desde su merge-base con `main` confirmada (uno cambia `logo.png`, otro un `big.txt` de 3.000 líneas cambiadas) y 1 archivo modificado sin commitear.
 
@@ -219,7 +220,7 @@ T001 → {T002, T004, T006} → T003 (tras T002), T005 (tras T004), T007 (tras T
 - Cada archivo: `change` (`added`, `modified`, `deleted`, `type-changed`), `added`/`removed` y un `body`: `text` con hunks (3 líneas de contexto), `binary` (D7), `too-large`, `submodule`, `symlink` o `omitted` (cuando ya se pasó un tope de la sección). `CommittedFile::NotRegular(Submodule)` → `submodule`; `NotRegular(Symlink)` → `symlink`; un cambio entre blob y no-blob es `type-changed`.
 - Topes de D4 con `DiffLimits`; al pasar el de líneas, el archivo queda `truncated: true` con lo que cupo. El plazo y el token se miran entre archivos (`stop: &dyn Fn() -> bool`).
 - `changed_paths` recibe el plazo de la consulta y `max_files`: `total` da `files_total` y, si supera `max_files`, `cut: files`. Si `changed_paths` falla por el plazo, la sección es `not-computable {reason: too-slow}`: nunca una lista vacía con total cero. `status` no tiene plazo propio (lo comparte con el observador) y no se interrumpe; su coste se mide en N4.
-- Working tree: la ruta de `status` se resuelve bajo la raíz del worktree componente a componente, sin `..` y sin seguir enlaces; un componente que es enlace da `symlink`. El tamaño sale de `fstat` del descriptor abierto, antes de leer.
+- Working tree: la ruta de `status` se resuelve bajo la raíz del worktree componente a componente, sin `..` y sin seguir enlaces; un componente que es enlace da `symlink`. El tamaño sale de `fstat` del descriptor abierto, antes de leer. Es código `cfg(unix)` (`rustix` solo está ahí, `crates/git/Cargo.toml`); fuera de `cfg(unix)` se usa `symlink_metadata` por componente y luego abrir (decisión R1 de § Revisión 2026-11-09), y la etapa multiplataforma lo marca como residuo en `xplat-pendientes.md`.
 - Texto de cada línea como bytes crudos convertidos con `from_utf8_lossy`; el corte a 4.096 bytes lo hace la capa del API al envolverlo en `Untrusted`.
 - Orden: por ruta, en bytes, dentro de cada sección.
 
@@ -236,7 +237,7 @@ T001 → {T002, T004, T006} → T003 (tras T002), T005 (tras T004), T007 (tras T
 - `crates/core/src/channel/diff.rs` (**CREATE**): resolver el worktree y la base en el estado del motor, llamar a `worktree_diff` y mapear a `gitraptor_api::diff`
 - `crates/core/src/channel/mod.rs` (**MODIFY**): `mod query; mod diff;`
 - `crates/core/src/channel/server.rs` (**MODIFY**): campo `query: QueryPool` en `ServerCtx` (`:70`) y su construcción
-- `crates/core/src/channel/conn.rs` (**MODIFY**): campo `queries: QueryTable` en `Connection`; brazos `DIFF_WORKTREE` y `QUERY_CANCEL` en `dispatch` (`:703`), juntos, después de `TM_NOTICES`; al terminar la conexión, `conn.queries.cancel_all()` justo después de `conn.serve(reader_stream)` (`:225`) y antes de `executor.drop_connection(id)`: es el único punto donde `conn` sigue vivo
+- `crates/core/src/channel/conn.rs` (**MODIFY**): campo `queries: QueryTable` en `Connection` (`:394`); brazos `DIFF_WORKTREE` y `QUERY_CANCEL` en `dispatch` (`:824`), juntos, después de `TM_NOTICES` (`:932`); al terminar la conexión, `conn.queries.cancel_all()` justo después de `conn.serve(reader_stream)` (`:245`) y antes de `executor.drop_connection(id)`: es el único punto donde `conn` sigue vivo
 
 **Reglas**
 - El brazo de `diff.worktree`: parámetros con `validate::client_path` sobre `worktree`; repo por `repo_id` en el estado del motor (el que sirve `engine.snapshot`); worktree que no es del repo → `NOT_FOUND`; worktree no disponible → `diff-unavailable {reason: worktree-unavailable}`; repo no listo → `diff-unavailable {reason: repo-unavailable}`. Todo eso responde al momento. Si no, registra el token y encola; con 1 en vuelo en la conexión o la cola llena → `query-busy {limit}` (D4). Una conexión MCP no ve el método (`mcp: false` → `not_found`).
@@ -244,6 +245,9 @@ T001 → {T002, T004, T006} → T003 (tras T002), T005 (tras T004), T007 (tras T
 - `query.cancel {request}`: busca el id en la tabla de la conexión; responde `{cancelled: true}` si estaba en vuelo, `{cancelled: false}` si no.
 - La respuesta del diff no pasa por `self.ctx.logger` ni por el registro de auditoría, y nunca se escribe en el perfil (SEC-05). Los logs del brazo llevan solo `repo_id`, duración, número de archivos y `cut`.
 - El rate limit de la conexión (`bucket`) aplica a las dos peticiones como a cualquier otra.
+- `channel/query.rs` incluye un ayudante genérico (decisión R2): dado el trabajo, mira el token, llama a `finish` y empuja la respuesta (`query-cancelled` o `Response::ok`) con `outbox.push`, para que ninguna consulta olvide `finish`.
+- El hilo del pool se crea con `crate::work_class::spawn_unpooled(WorkClass::UserInitiated, "raptor-query", …)`, como el hilo de conexión (`conn.rs:214`) (D15). No se añade variante a `Pool` (`crates/api/src/resources.rs`): cambiaría la forma de `engine.resources`.
+- `QueryTable` es `Clone` (estado tras un `Arc`): el trabajo la captura para llamar a `finish` desde el hilo del pool. El trabajo captura solo datos `'static` (raíz, base, `Arc<Outbox>`, token, tabla), nunca `&Connection`.
 
 - **Depende:** T001, T002
 - **Refs:** D1 a D4, D15; ADR-GRP-005 (Enmienda 2026-10-04, Cockpit); ADR-GRP-009 Validación 8
@@ -253,30 +257,32 @@ T001 → {T002, T004, T006} → T003 (tras T002), T005 (tras T004), T007 (tras T
 
 **Objetivo.** Un cliente puede tener una petición en vuelo y seguir leyendo notificaciones.
 
-**Ubicación.** `crates/api/src/client/mod.rs` (**MODIFY**)
+**Ubicación.**
+- `crates/api/src/client/mod.rs` (**MODIFY**)
+- `apps/desktop/src-tauri/src/engine/link.rs` (**MODIFY**): su `match` sobre `Incoming` (`:134-138`) es exhaustivo; gana el brazo `Incoming::Reply { .. } => Ok(None)` (la app de escritorio no usa `submit`)
 
 **Reglas**
 - `pub fn submit<P: Serialize>(&mut self, method: &str, params: P) -> Result<u64, ClientError>`: escribe la petición con el siguiente id y lo apunta en `pending: BTreeSet<u64>` (como mucho 8; uno más → `ClientError::Protocol`).
 - `pub fn settle(&mut self, id: u64)`: quita el id de `pending`. Lo llama quien decodificó su respuesta desde una trama.
-- `call` guarda en `replies: VecDeque<(u64, Response)>` (con el `recv_ns` de la trama) toda respuesta cuyo id esté en `pending`, y lo quita de `pending`, en lugar de descartarla (`:431`). Una de otro id sigue descartándose.
-- `Incoming` (`:220`) gana `Reply { recv_ns: u64, response: Response }`. `next_incoming` entrega primero las notificaciones guardadas (`Buffered`), luego las respuestas guardadas (`Reply`) y después lee tramas como hoy (`Frame`, sin decodificar): la respuesta a un `submit` leída aquí sale como `Frame` y la decodifica el cliente.
-- Sin cambio para quien no usa `submit`: `raptor status`, `raptor-mcp` y los hooks. Quien hace `match` sobre `Incoming` (hoy `apps/cli/src/client/engine.rs:88`) añade el brazo de `Reply` en T005.
+- `call` guarda en `replies: VecDeque<(u64, Response)>` (con el `recv_ns` de la trama) toda respuesta cuyo id esté en `pending`, y lo quita de `pending`, en lugar de descartarla (`:455`). Una de otro id sigue descartándose.
+- `Incoming` (`:230`) gana `Reply { recv_ns: u64, response: Response }`. `next_incoming` entrega primero las notificaciones guardadas (`Buffered`), luego las respuestas guardadas (`Reply`) y después lee tramas como hoy (`Frame`, sin decodificar): la respuesta a un `submit` leída aquí sale como `Frame` y la decodifica el cliente.
+- Sin cambio para quien no usa `submit`: `raptor status`, `raptor-mcp` y los hooks. Quien hace `match` sobre `Incoming`: `apps/cli/src/client/engine.rs:88` añade el brazo de `Reply` en T005; `apps/desktop/src-tauri/src/engine/link.rs:134` lo añade en esta tarea, para que `gitraptor-desktop` siga compilando.
 
 - **Depende:** T001
 - **Refs:** D13
-- **Aceptación:** `cargo test -p gitraptor-api client::tests::submit`
+- **Aceptación:** `cargo test -p gitraptor-api client::tests::submit`; y, por tocar `apps/desktop`, `cargo clippy -p gitraptor-desktop --all-targets -- -D warnings` con `apps/desktop/dist` construido (AGENTS.md)
 
 ### T005 — Pedir y cancelar el diff desde el hilo del canal de la TUI
 
 **Objetivo.** El hilo del canal envía el diff, sigue con el stream y entrega la respuesta a `update`.
 
 **Ubicación.**
-- `apps/cli/src/client/mod.rs` (**MODIFY**): en `Link`, `fn submit(&mut self, method: &str, params: Value) -> Result<u64, LinkError>` (por defecto `Err(LinkError::Unsupported)`), `fn settle(&mut self, id: u64)` (por defecto nada) y `fn offers(&self, method: &str) -> bool` (por defecto `false`); el `Incoming` propio de la CLI (`:89`, hoy `Decoded` y `Frame`) gana `Reply { recv_ns, response }`; las respuestas dejan de perderse en `decode` (`:697`): el hilo separa antes de `decode` toda trama que sea `ServerMessage::Response` con un id de su tabla; `LinkCmd::Diff { ticket, repo_id, root }` y `LinkCmd::CancelQuery { ticket }`, junto al brazo de `Observe` (`:392`); al empezar la sesión (`:303`), `ConnEvent::Diff(link.offers(DIFF_WORKTREE))`
-- `apps/cli/src/client/engine.rs` (**MODIFY**): `submit`, `settle` y `offers` sobre la biblioteca cliente (`offers` mira `hello().methods`, como `support::offers` del binario) y el brazo `ApiIncoming::Reply` en `next` (`:85`)
+- `apps/cli/src/client/mod.rs` (**MODIFY**): en `Link`, `fn submit(&mut self, method: &str, params: Value) -> Result<u64, LinkError>` (por defecto `Err(LinkError::Unsupported)`), `fn settle(&mut self, id: u64)` (por defecto nada) y `fn offers(&self, method: &str) -> bool` (por defecto `false`; junto a `has`, `:68`, que mira capacidades y no métodos); el `Incoming` propio de la CLI (`:90`, hoy `Decoded` y `Frame`) gana `Reply { recv_ns, response }`; las respuestas dejan de perderse en `decode` (`:757`): el hilo separa antes de `decode` toda trama que sea `ServerMessage::Response` con un id de su tabla; `LinkCmd::Diff { ticket, repo_id, root }` y `LinkCmd::CancelQuery { ticket }`, junto al brazo de `Observe` (`:412`); al empezar la sesión (`session`, `:301`, junto a los `ConnEvent` de `:309-315`), `ConnEvent::Diff(link.offers(DIFF_WORKTREE))`
+- `apps/cli/src/client/engine.rs` (**MODIFY**): `submit`, `settle` y `offers` sobre la biblioteca cliente (`offers` mira `hello().methods`, como `support::offers` del binario, `apps/cli/src/support.rs:176`) y el brazo `ApiIncoming::Reply` en `next` (`:85`)
 - `apps/cli/src/tui/app.rs` (**MODIFY**): `Cmd::Diff` → `LinkCmd::Diff`, `Cmd::CancelQuery` → `LinkCmd::CancelQuery`
 
 **Reglas**
-- El hilo guarda `ticket → id` mientras la petición está en vuelo. `Incoming::Reply` de ese id, o una `Frame` que decodifica a una respuesta de ese id (y entonces `link.settle(id)`), → `EngineMsg::Diff { ticket, result }`, con `result` como `Ok(WorktreeDiff)` o `Err(DiffFailure)` (`busy`, `cancelled`, `unavailable(reason)`, `refused`).
+- El hilo guarda `ticket → (id, consulta)` mientras la petición está en vuelo; `consulta` dice a qué `EngineMsg` va la respuesta (hoy solo el diff; § Cómo extender). `Incoming::Reply` de ese id, o una `Frame` que decodifica a una respuesta de ese id (y entonces `link.settle(id)`), → `EngineMsg::Diff { ticket, result }`, con `result` como `Ok(WorktreeDiff)` o `Err(DiffFailure)` (`busy`, `cancelled`, `unavailable(reason)`, `refused`).
 - `LinkCmd::CancelQuery` de un ticket en vuelo → `link.call(QUERY_CANCEL, {request: id})`; de uno que ya no está, nada.
 - Una reconexión vacía la tabla y entrega `EngineMsg::Diff { ticket, result: Err(DiffFailure::Lost) }` por cada petición que estaba en vuelo.
 - El hilo no deserializa líneas a `SafeText`: entrega el `WorktreeDiff` del contrato y la ingesta (T007) lo sanea.
@@ -294,10 +300,10 @@ T001 → {T002, T004, T006} → T003 (tras T002), T005 (tras T004), T007 (tras T
 - `apps/cli/src/tui/diff.rs` (**CREATE**): `DiffState`, `open`, `close`, `apply_reply`, `scroll`
 - `apps/cli/src/tui/mod.rs` (**MODIFY**): `pub mod selection; pub mod diff;`
 - `apps/cli/src/tui/keymap.rs` (**MODIFY**): `Action::Diff` con `Key::Char('d')` y `Text::KeyDiff`
-- `apps/cli/src/model.rs` (**MODIFY**): `Ui.cursor: Option<u64>`, `Ui.diff: Option<DiffState>`, `Ui.next_ticket: u64`, `WorktreeRow.root: PathBuf`, `EngineReplica.diff: bool`, `ConnEvent::Diff(bool)`, `EngineMsg::Diff`, `Cmd::Diff`, `Cmd::CancelQuery`, y en `Notice` (`:193`, hoy sin ninguna de las dos) `RowActionDisabled(UnavailableReason)` y `DiffUnsupported`
+- `apps/cli/src/model.rs` (**MODIFY**): `Ui.cursor: Option<u64>`, `Ui.diff: Option<DiffState>`, `Ui.next_ticket: u64`, `WorktreeRow.root: PathBuf`, `EngineReplica.diff: bool`, `ConnEvent::Diff(bool)`, `EngineMsg::Diff`, `Cmd::Diff`, `Cmd::CancelQuery`, y en `Notice` (`:199`, hoy sin ninguna de las dos) `RowActionDisabled(UnavailableReason)` y `DiffUnsupported`
 - `apps/cli/src/present/i18n.rs` (**MODIFY**, compartido como `keymap.rs`, ADR-CKP-003 § 10): `Text::KeyDiff` (la pista de la tecla sale de `Text`, `keymap.rs:86`) y el texto de las dos notas, en en y es
-- `apps/cli/src/present/ingest.rs` (**MODIFY**): `worktrees()` (`:169`) rellena `root` con `PathBuf::from(view.path.raw())`
-- `apps/cli/src/tui/update.rs` (**MODIFY**): en la entrada (`:145`), `Up`/`Down` van al selector si lo hay y si no a `selection::move_cursor`; `Action::Diff` y, con `Ui.diff` abierto, `Up`/`Down`/`Later`/`Diff` van a `diff::scroll`/`diff::close`; `EngineMsg::Diff` a `diff::apply_reply`
+- `apps/cli/src/present/ingest.rs` (**MODIFY**): `worktrees()` (`:174`) rellena `root` con `PathBuf::from(view.path.raw())`
+- `apps/cli/src/tui/update.rs` (**MODIFY**): en la entrada (`:160`, el brazo `Up | Down | Open` que hoy va a `on_pick`), `Up`/`Down` van al selector si lo hay y si no a `selection::move_cursor`; `Action::Diff` y, con `Ui.diff` abierto, `Up`/`Down`/`Later`/`Diff` van a `diff::scroll`/`diff::close`; `EngineMsg::Diff` a `diff::apply_reply`
 - `apps/cli/tests/tui_engine_states.rs` (**MODIFY**): `no_action_targets_a_row` pasa a `row_actions_are_disabled_with_a_reason_on_unavailable_rows`: `targets_a_row(Action::Diff) == true` y, para cada acción que apunta a una fila, sobre un worktree no disponible no sale ningún `Cmd` y la nota es la del motivo
 
 **Reglas**
@@ -328,7 +334,7 @@ T001 → {T002, T004, T006} → T003 (tras T002), T005 (tras T004), T007 (tras T
 - Título: carpeta del worktree y "diff a las HH:MM:SS" (D9). Nunca un nombre de agente (D8).
 - Cabeceras de sección con el número de archivos de `files_total`: "entraría al merge (3 archivos)", "sin commitear (1 archivo)"; "no calculable: base sin confirmar" (y un texto por cada `CommittedGap`). Con `cut`, "truncado: más de 1.000 archivos" / "truncado: respuesta demasiado grande" / "truncado: más de 2 s".
 - Cabecera de archivo: ruta, cambio ("añadido", "modificado", "borrado", "cambio de tipo") y `+a −r`; `binary` → "binario" sin líneas (`DiffBody::Binary`); `too-large` → "truncado: más de 8 MiB"; `symlink` → "enlace simbólico" sin líneas; `submodule` → "submódulo"; `truncated` → las líneas que llegaron y "truncado: más de 2.000 líneas"; `omitted` → "sin contenido: se alcanzó un tope". `CommittedGap::TooSlow` → "no calculable: tardó demasiado".
-- Antes de `SafeText`, `present/diff.rs` expande cada `\t` a espacios hasta el siguiente múltiplo de 4 columnas y quita un `\r` final (CRLF). Sin ese paso, el saneado escapa la tabulación como `\x09` (`present/sanitize.rs:93`, `must_escape` incluye todo control) y un archivo con tabuladores o fines de línea de Windows sería ilegible. El resto de controles sigue escapado: `sanitize.rs` no cambia.
+- Antes de `SafeText`, `present/diff.rs` expande cada `\t` a espacios hasta el siguiente múltiplo de 4 columnas y quita un `\r` final (CRLF). Sin ese paso, el saneado escapa la tabulación como `\x09` (`gitraptor_api::display::must_escape`, `crates/api/src/display.rs:57`, incluye todo control) y un archivo con tabuladores o fines de línea de Windows sería ilegible. El resto de controles sigue escapado: ni `display.rs` ni `sanitize.rs` cambian.
 - Líneas con `DiffLineKind::{Hunk, Context, Added, Removed}` y sus números `old`/`new` derivados del hunk. `DiffView` no cambia.
 - Estados: `Loading` → "calculando el diff…"; `busy` → "otra consulta en curso; inténtalo en un momento"; `unavailable` → el motivo; `lost` → "se perdió la conexión; vuelve a pedirlo".
 - Cadenas enteras en el catálogo, sin concatenar frases. Solo tokens semánticos (`git.added`, `git.removed`, `text.muted`).
@@ -351,7 +357,7 @@ T001 → {T002, T004, T006} → T003 (tras T002), T005 (tras T004), T007 (tras T
 
 - **Depende:** T003, T005, T007
 - **Refs:** N8; ADR-GRP-009 Validación 8
-- **Aceptación:** `cargo fmt --all --check`, `cargo clippy --all-targets -- -D warnings` y `cargo test --workspace` en verde
+- **Aceptación:** `cargo fmt --all --check`, `cargo clippy --workspace --exclude gitraptor-desktop --all-targets -- -D warnings` y `cargo test --workspace --exclude gitraptor-desktop` en verde; por T004, también `cargo clippy -p gitraptor-desktop --all-targets -- -D warnings` y `cargo test -p gitraptor-desktop` con `apps/desktop/dist` construido (job `desktop` en CI)
 
 ---
 
@@ -428,7 +434,7 @@ impl QueryPool {
     pub fn submit(&self, job: Box<dyn FnOnce() + Send>) -> Result<(), Busy>;
 }
 #[derive(Clone)] pub(crate) struct QueryToken(Arc<AtomicBool>);
-pub(crate) struct QueryTable { /* Id → QueryToken, ≤ 1 */ }
+#[derive(Clone)] pub(crate) struct QueryTable { /* Arc<Mutex<Id → QueryToken>>, ≤ 1 */ }
 impl QueryTable {
     pub fn register(&self, id: &Id) -> Result<QueryToken, Busy>;
     pub fn cancel(&self, id: &Id) -> bool;
@@ -538,7 +544,7 @@ _No aplica — los topes son constantes de GitRaptor (§ Valores numéricos); no
 | Respuesta serializada | ≤ 768 KiB | Margen bajo `MAX_MESSAGE_BYTES` (1 MiB) |
 | Archivos por sección | ≤ 1.000 | ⚠️ **ASSUMPTION** |
 | Líneas de diff por archivo | ≤ 2.000 | ⚠️ **ASSUMPTION** |
-| Tamaño de blob o archivo leído | ≤ 8 MiB (de la cabecera o de `lstat`, antes de cargar) | `max_blob_bytes` de DS-TS-CKP-001 |
+| Tamaño de blob o archivo leído | ≤ 8 MiB (de la cabecera o de `fstat` del descriptor abierto, antes de cargar) | `max_blob_bytes` de DS-TS-CKP-001 |
 | Bytes que se miran para "binario" | 8.000 | Heurística de Git (D7) |
 | Líneas de contexto | 3 | Por defecto de Git |
 | Texto por línea | ≤ 4.096 bytes (`Untrusted`) | `crates/api/src/untrusted.rs:16` |
@@ -570,15 +576,12 @@ _No aplica — el diff no se persiste: vive en la respuesta y en `Model.ui.diff`
 - `another_connection_cannot_cancel_it`
 - `mcp_connection_does_not_see_diff_worktree` (F-001-05: el diff nunca sale por el MCP)
 - `diff_responses_are_never_logged_nor_persisted`: repo con secretos plantados (`.env`, token en un archivo cambiado), diff pedido 3 veces; gitleaks sobre perfil y logs con 0 hallazgos; en la captura del stream solo aparecen en las respuestas con el id del diff (ADR-GRP-009 Validación 8)
-- `limits_cut_and_never_fail` (`files`, `bytes`, `time`)
+- `limits_cut_files_keeps_the_total_and_never_fails` y `limits_cut_bytes_keeps_the_reply_under_768_kib` (el corte por `time` es unitario de T002)
 
-**Git (`crates/git`, unidad y `repo_intact`):**
+**Git (criterios del contrato en `crates/core/tests/diff_git.rs`, por el daemon; los unitarios de `crates/git` los añade el experto en T002):**
 
-- `committed_section_starts_at_the_merge_base_with_the_confirmed_base`, `uncommitted_includes_untracked_and_skips_ignored`, `unconfirmed_base_makes_committed_not_computable_and_keeps_uncommitted`
-- `filters_textconv_and_external_diff_never_run`: repo canario con `filter.*.clean`, `diff.*.textconv` y `diff.external` apuntando a un script que deja un marcador; el marcador no aparece (ADR-GRP-009 Validación 7)
-- `symlinks_are_not_followed` (enlace a un archivo con un marcador fuera del worktree, como archivo y como directorio padre: sale `symlink` y el marcador no aparece) y `nul_in_the_first_8000_bytes_is_binary`
-- `committed_past_the_deadline_is_too_slow_never_an_empty_section`
-- `repo_intact::worktree_diff_writes_nothing` (índice, refs, config y objetos sin cambios)
+- En `diff_git.rs` (por el daemon): `sections_committed_starts_at_the_merge_base_and_uncommitted_has_all_three_kinds`, `sections_unconfirmed_base_makes_committed_not_computable_and_keeps_uncommitted`, `no_exec_filters_textconv_and_external_diff_never_run` (repo canario con `filter.*.clean`, `diff.*.textconv` y `diff.external`: el marcador no aparece, ADR-GRP-009 Validación 7), `no_exec_a_symlink_as_a_file_is_not_followed`, `no_exec_a_symlink_as_the_parent_directory_is_not_followed`, `no_exec_nul_in_the_first_8000_bytes_is_binary` y `writes_nothing_to_the_repo_when_the_diff_is_requested`.
+- Unitarios de `crates/git` que escribe el experto en T002 (no son criterio del contrato): `committed_past_the_deadline_is_too_slow_never_an_empty_section`, el corte por `time` de `limits_cut` (`DiffCut::Time`, no determinista por el daemon) y `repo_intact::worktree_diff_writes_nothing`.
 
 **Cliente y TUI (unidad):** `client::tests::submit_keeps_replies_of_pending_ids` (respuesta leída por `call` → `Reply`; leída por `next_incoming` → `Frame`; de un id no enviado → descartada), `client::tests::diff` (incluye la respuesta que llega como `Frame` y la que llega como `Reply` mientras el hilo hace `query.cancel`), `present::diff::tests::tabs_expand_and_crlf_is_trimmed`, `tui::selection::tests::cursor_follows_the_worktree_across_reorders`, `tui::diff::tests::a_reply_for_an_old_ticket_is_dropped`, `tui::diff::tests::closing_while_loading_cancels`, `tui::view::tests::diff` (snapshots en/es/ASCII), `present::diff_text::tests::every_text_has_both_languages`, `present::diff::tests::lines_with_controls_are_sanitized` (SEC-12: `\x1b]52;…`, RLO, U+2028).
 
@@ -588,10 +591,10 @@ _No aplica — el diff no se persiste: vive en la respuesta y en `Model.ui.diff`
 
 ## Gate de seguridad
 
-- **Contenido confidencial (Q-CKP-8, NFR-03, SEC-05):** el diff solo va a la conexión CLI/TUI que lo pide; `diff.worktree` no existe para `raptor-mcp` (`mcp: false`); no pasa por el bus, el logger, la auditoría ni el perfil. Lo comprueba `diff_responses_are_never_logged_nor_persisted`. El perfil de la conexión lo fija hoy el handshake por el ejecutable del par o el `client` declarado (`conn.rs:506-517`), así que una TUI que lanza un agente recibe el diff como cualquier conexión CLI; ese agente ya puede leer los archivos del worktree, y Q-CKP-8 habla del MCP. Cuando el canal aplique el perfil `mcp` por solicitante (S-01, ADR-GRP-005 Enmienda MCP; aún no implementado), `mcp: false` le cerrará `diff.worktree` sin cambiar esta DS.
+- **Contenido confidencial (Q-CKP-8, NFR-03, SEC-05):** el diff solo va a la conexión CLI/TUI que lo pide; `diff.worktree` no existe para `raptor-mcp` (`mcp: false`); no pasa por el bus, el logger, la auditoría ni el perfil. Lo comprueba `diff_responses_are_never_logged_nor_persisted`. El perfil de la conexión lo fija hoy el handshake por el ejecutable del par o el `client` declarado (`conn.rs:540-551`), así que una TUI que lanza un agente recibe el diff como cualquier conexión CLI; ese agente ya puede leer los archivos del worktree, y Q-CKP-8 habla del MCP. Cuando el canal aplique el perfil `mcp` por solicitante (S-01, ADR-GRP-005 Enmienda MCP; aún no implementado), `mcp: false` le cerrará `diff.worktree` sin cambiar esta DS.
 - **Texto no confiable (SEC-12, NFR-02):** rutas, nombre de la base y cada línea de diff llegan como `Untrusted`/`UntrustedName` y solo se pintan como `SafeText` tras el saneado de ADR-CKP-003 § 8 (L-03). El modelo y la vista no tienen `Untrusted` (`tui_boundaries.rs`).
 - **Sin ejecución (NFR-02, SEC-09):** ni shell ni `git` hijo; `gix` sin filtros, `textconv` ni diff externo (D6). Los parámetros son un `repo_id` opaco y una ruta validada con `validate::client_path` que tiene que ser un worktree publicado del repo.
-- **Solo lectura (NFR-01):** el lector no escribe índice, refs, config ni objetos (`reader.rs:1-4`); el working tree se lee con `lstat` y sin seguir enlaces. Escenario 3 y `repo_intact` lo comprueban.
+- **Solo lectura (NFR-01):** el lector no escribe índice, refs, config ni objetos (`reader.rs:1-4`); el working tree se lee abriendo sin seguir enlaces y midiendo con `fstat` del descriptor. Escenario 3 y `repo_intact` lo comprueban.
 - **Denegación de servicio (SEC-08):** 1 consulta en vuelo por conexión, cola global de 4, plazo de 2 s, topes de tamaño y el rate limit de la conexión.
 
 ---
@@ -600,7 +603,13 @@ _No aplica — el diff no se persiste: vive en la respuesta y en `Model.ui.diff`
 
 Sin archivos compartidos más allá del dispatch de `conn.rs` (ADR-GRP-016, [guía](../../../../architecture/extender-sin-archivos-compartidos.md)):
 
-- **Otra consulta bajo demanda (grafo de US-CKP-022, timeline de US-CKP-021):** su método en el archivo de su módulo (`methods/graph.rs`), su brazo en `conn.rs` junto a los de su módulo y la misma pieza de `channel/query.rs`: `queries.register(id)`, `ctx.query.submit(job)`, respuesta con `outbox.push`. La cancelación es `query.cancel` y los códigos `query-busy` / `query-cancelled`: no se declaran otros. En la TUI, `Link::submit` y `Incoming::Reply` ya existen; el hilo del canal añade su `LinkCmd` y su `EngineMsg`.
+- **Otra consulta bajo demanda (grafo de US-CKP-022, timeline de US-CKP-021):** su método en el archivo de su módulo (`methods/graph.rs`), su brazo en `conn.rs` junto a los de su módulo y la misma pieza de `channel/query.rs`: `queries.register(id)`, `ctx.query.submit(job)`, respuesta con `outbox.push`. La cancelación es `query.cancel` y los códigos `query-busy` / `query-cancelled`: no se declaran otros. En la TUI, `Link::submit`, `Link::offers` e `Incoming::Reply` ya existen; el hilo del canal añade su `LinkCmd` y su `EngineMsg`. Lo que lo hace posible sin tocar `channel/query.rs` (comprobado contra DS-US-CKP-022 el 2026-11-09):
+  - `QueryPool::submit` recibe un `Box<dyn FnOnce() + Send>` genérico: el pool no conoce el diff. Toda la lógica de la consulta vive en su archivo (`channel/graph.rs`), que construye el cierre.
+  - El token es por petición (`QueryTable::register(id)`), no por método, y `QueryTable` es `Clone`: el trabajo de cualquier consulta lo mira entre pasos y llama a `finish` al terminar. `query.cancel` y `cancel_all` cancelan cualquier consulta sin saber cuál es.
+  - Los límites (1 en vuelo por conexión, cola global de 4) son de la consulta, no del método: el diff y el grafo los comparten. Cada consulta pone su propio plazo en su trabajo.
+  - En el hilo del canal de la TUI, la tabla `ticket → (id, consulta)` de T005 gana la variante de la consulta nueva; `Cmd::CancelQuery { ticket }` y `Ui.next_ticket` sirven tal cual.
+  - Lo que sigue tocando archivos compartidos, como cualquier método: el brazo en `dispatch` (`conn.rs`) y, si la consulta guarda estado entre conexiones (la caché de carriles de DS-US-CKP-022 D9), un campo en `ServerCtx` (`server.rs`), en una línea.
+  - El código repetido entre consultas («token cancelado → `query-cancelled`; si no, `Response::ok`; `finish`; `outbox.push`») puede vivir en un ayudante de `channel/query.rs`; ver § Revisión 2026-11-09, pregunta R2.
 - **Otra acción por fila (abrir en el editor, US-CKP-013; integrar, US-CKP-014):** su `Action` en `keymap.rs`, su clasificación en `row_actions_are_disabled_with_a_reason_on_unavailable_rows` (no compila sin ella) y su efecto sobre `selection::selected_row`. El cursor no cambia.
 - **Un tope nuevo:** un campo de `DiffLimits` y una variante de `DiffCut`. Añadir una variante es un cambio de forma del cable: necesita capacidad (ADR-GRP-016 § 1).
 
@@ -640,6 +649,27 @@ Revisión contra `main` (`crates/api`, `crates/core/src/channel`, `crates/git`, 
 - **Ratificadas:** D1 (módulos `query` y `diff`; los bloques `-33120`/`-33140` están libres: hoy `-33020` a `-33080` en código y `-33100` reservado por DS-US-MCP-006, y ninguna otra DS reclama bloque), D2 (el brazo no responde y el pool empuja al `Outbox` compartido; `dispatch` ya responde con `self.reply`, así que no hace falta otra variante de `After`), D3, D4 como ⚠️ supuesto medible (N4), D5, D7 a D12, D14 a D16. `mcp: false` deja el método fuera de una conexión MCP por `offered` (`conn.rs:674`).
 - **Corregido:** D6 (`changed_paths` solo da rutas y falla entero si pasa el plazo → `committed_file` por lado y `CommittedGap::TooSlow`; enlaces como `FileBody::Symlink` sin contenido ni destino, apertura sin seguir enlaces; `gix::diff::blob` como en `dry_merge/hunks.rs`). D13 y T004/T005 (`next_incoming` entrega tramas sin decodificar: la respuesta de un `submit` llega como `Frame` y la decodifica la CLI; `Reply` solo para las que guarda `call`; `settle`). T003 (`cancel_all` tras `conn.serve`). T006 (`Notice::{RowActionDisabled, DiffUnsupported}` y `Text::KeyDiff` en `present/i18n.rs`). T007 (tabulaciones y CRLF antes de `SafeText`). Gate (el perfil MCP por solicitante, S-01, aún no está en el canal).
 
+### Revisión 2026-11-09
+
+Revisión de cada referencia contra `main` (2026-11-09) antes de pasar a `spec-ready`. **Decisión del orquestador (2026-11-09), validada por Arquitecto (revisión).** D1 a D16 siguen ciertas; ninguna cambia.
+
+- **Líneas movidas, corregidas en el texto:** `conn.rs` 225→245, 506-517→540-551, 703→824 (`dispatch`; `TM_NOTICES` en 932); `crates/api/src/client/mod.rs` 431→455, 486→239, 220→230; `apps/cli/src/client/mod.rs` 697→757, 89→90, 392→412, 303→301; `update.rs` 145→160; `reader.rs` 530→571, 605→646; `changed_paths.rs` 66→65; `model.rs` 193→199; `ingest.rs` 169→174. Sin cambio: `server.rs:70`, `engine.rs:85/88`, `committed.rs:60`, `dry_merge/hunks.rs:8`, `keymap.rs:86`, `tui_engine_states.rs:620`, `untrusted.rs:16`. `offered` está hoy en `conn.rs:795` (la Revisión 2026-10-27 citaba 674; se deja como registro).
+- **Referencias que ya no eran ciertas:** `must_escape` ya no está en `present/sanitize.rs:93`, sino en `crates/api/src/display.rs:57` (T007). El tipo de `DiffView` es `DiffModel` (el nombre del componente no cambia).
+- **Bloques de error:** siguen libres `-33120` y `-33140`. En código: `-33020` a `-33080` y `-33160` (`attribution`, que los saltó adrede). T001 actualizado.
+- **TS-GRP-005 ya está en `main`:** `WorkClass` y `work_class::spawn_unpooled`. D15 se cumple sin cambiar: regla nueva en T003.
+- **App de escritorio:** `apps/desktop/src-tauri/src/engine/link.rs:134` hace un `match` exhaustivo sobre `gitraptor_api::client::Incoming`. T004 le añade el brazo `Reply`, y T004 y T008 añaden las comprobaciones de `gitraptor-desktop` de AGENTS.md.
+- **`rustix` solo en `cfg(unix)`:** D6 precisado y regla en T002.
+- **QueryPool y segunda consulta:** la API permite `graph.lanes` (DS-US-CKP-022) sin tocar `channel/query.rs`. Se explicitan `QueryTable: Clone`, la tabla `ticket → (id, consulta)` de T005 y § Cómo extender.
+- **Sin choque de archivos** con TS-CKP-011 (`daemon/{guard,mod,repos}.rs`, `daemon/modules/predict.rs`). El diff lee la base publicada por el motor: verá la confirmación hecha en caliente cuando TS-CKP-011 esté en `main`.
+
+Pendiente de decidir (no lo decide esta revisión):
+
+| ID | Pregunta | Por qué importa | Para |
+|----|----------|-----------------|------|
+| R1 | En Windows, ¿cómo se abre el lado del working tree sin seguir enlaces? `rustix` solo existe en `cfg(unix)`, y la vía portátil de `guard_write/portable.rs` (`symlink_metadata` y luego abrir) deja una ventana TOCTOU | D6 promete que nunca se sigue un enlace. En Windows la promesa necesita otra API (`FILE_FLAG_OPEN_REPARSE_POINT`) o declararse residuo de la etapa multiplataforma | **Decisión del orquestador (2026-11-09):** en el MVP, `cfg(unix)` usa `rustix` con `O_NOFOLLOW`; en otros sistemas se usa `symlink_metadata` por componente y luego abrir, y se declara residuo de la etapa de validación multiplataforma (Windows se valida más tarde en máquina real). Mac-only es válido por ahora | Arquitecto (seguridad) |
+| R2 | ¿T003 expone en `channel/query.rs` un ayudante genérico que, dado el trabajo, resuelva el token, `finish` y `outbox.push`, o cada consulta repite esos ~10 líneas? | Con el ayudante, DS-US-CKP-022 y US-CKP-021 no pueden olvidar `finish` (que dejaría la conexión en `query-busy` para siempre) | **Decisión del orquestador (2026-11-09):** sí, T003 incluye el ayudante genérico en `channel/query.rs` (token → `finish` → `outbox.push`) | Arquitecto |
+| R3 | El límite de 1 consulta en vuelo por conexión es común al diff y al grafo. Con la vista del grafo refrescándose (DS-US-CKP-022 D9), ¿pulsar `d` cancela el refresco en vuelo o recibe `query-busy`? | Hoy T006 solo cancela un diff anterior; sin regla, `d` puede fallar mientras se refresca el grafo | **Decisión del orquestador (2026-11-09):** `d` recibe `query-busy` con el mensaje de «otra consulta en curso» (no cancela refrescos ajenos); DS-US-CKP-022 puede revisarlo | PO y Arquitecto (al implementar DS-US-CKP-022) |
+
 ### Preguntas abiertas
 
 | ID | Pregunta | Por qué importa | Para |
@@ -649,7 +679,9 @@ Revisión contra `main` (`crates/api`, `crates/core/src/channel`, `crates/git`, 
 
 ## Estado
 
-- Hecho: Dev Spec en `draft` con T001 a T008, sin gaps bloqueantes.
+- Hecho: Dev Spec con T001 a T008, sin gaps bloqueantes.
 - Hecho: validación del PO (2026-10-27) de D1 a D16; Q-CKP-32 y Q-CKP-33 cerradas.
-- Pendiente: medir los topes de D4 en el banco (N4).
+- Hecho: revisión contra `main` (2026-11-09); pasa a `spec-ready`.
+- Hecho: R1 a R3 de § Revisión 2026-11-09 decididas por el orquestador (2026-11-09).
+- Pendiente: medir los topes de D4 en el banco (N4). `gitraptor-desktop` (brazo `Reply` en `link.rs`) lo verifica el job `desktop` del CI y, si es viable, `cargo clippy -p gitraptor-desktop` local; no es criterio del contrato.
 - Siguiente paso: T001 en rojo; luego backend, cliente y TUI en paralelo.
