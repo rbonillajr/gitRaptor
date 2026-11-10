@@ -1559,7 +1559,7 @@ impl Observer {
     pub fn poll_repo(&self, repo_id: &str) {
         let repos = self.shared.repos.read().unwrap_or_else(|e| e.into_inner());
         if let Some(repo) = repos.get(repo_id) {
-            let _ = repo.tx.send(RepoMsg::PollNow(ReadVia::Event));
+            let _ = repo.tx.send(RepoMsg::PollNow(ReadVia::Wake));
         }
     }
 
@@ -1570,7 +1570,7 @@ impl Observer {
     pub fn simulate_poll(&self) {
         let repos = self.shared.repos.read().unwrap_or_else(|e| e.into_inner());
         for repo in repos.values() {
-            let _ = repo.tx.send(RepoMsg::PollNow(ReadVia::Event));
+            let _ = repo.tx.send(RepoMsg::PollNow(ReadVia::Backup));
         }
     }
 
