@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-05
 date: 2026-10-05
 created: 2026-10-05
-updated: 2026-11-08
+updated: 2026-11-10
 deciders: [Orquestador (delegación de Rene Bonilla, 2026-10-04)]
 domain: MCP
 feature: mcp
@@ -14,10 +14,10 @@ related:
   adrs: [ADR-GRP-001, ADR-GRP-005, ADR-GRP-006, ADR-GRP-009, ADR-GRP-012, ADR-GRP-013, ADR-TMC-004, ADR-TMC-005, ADR-GRD-003, ADR-GRD-005, ADR-GRD-007, ADR-CKP-001, ADR-CKP-002]
   context: [CTX-MCP-001]
   rules: [BR-MCP-001]
-  stories: [US-MCP-001, US-MCP-002, US-MCP-003, US-MCP-004, US-MCP-005, US-MCP-006, US-MCP-007, US-MCP-008, US-MCP-009, US-MCP-010, US-MCP-011, US-MCP-012, US-MCP-013, US-MCP-014, US-MCP-015, US-MCP-016, US-MCP-017, US-MCP-018, US-MCP-019, INF-MCP-001, TS-CKP-002, TS-CKP-003, TS-GRP-004, TS-TMC-004]
+  stories: [US-MCP-001, US-MCP-002, US-MCP-003, US-MCP-004, US-MCP-005, US-MCP-006, US-MCP-007, US-MCP-008, US-MCP-009, US-MCP-010, US-MCP-011, US-MCP-012, US-MCP-013, US-MCP-014, US-MCP-015, US-MCP-016, US-MCP-017, US-MCP-018, US-MCP-019, US-MCP-020, US-MCP-021, US-MCP-022, US-MCP-023, US-MCP-024, US-MCP-025, US-MCP-026, INF-MCP-001, TS-CKP-002, TS-CKP-003, TS-GRP-004, TS-TMC-004]
   specs: [API-GRP-IPC]
 description: "raptor-mcp es un proceso stdio por sesión de Claude Code, cliente del daemon con perfil mcp: solo la capability tools, sin Git ni perfil; el daemon resuelve en cada llamada el solicitante por ascendencia y el ámbito por el cwd del proceso; allowlist como marca del repo observado, gestionada con comandos reservados; diez herramientas con su método del canal y su operación del catálogo de ADR-CKP-002; avisos reconocidos en una segunda llamada; respuestas estructuradas con allowlist de campos y topes; cifras de S-MCP-1; modelo de amenazas OWASP MCP Top 10"
-tags: [adr, mcp, rmcp, stdio, cliente-daemon, allowlist, ambito, solicitante, catalogo-operaciones, limites, s-mcp-1, s-mcp-3, owasp-mcp-top-10, nfr-02, br-14, br-15, br-16, dep-mcp-1]
+tags: [adr, mcp, rmcp, stdio, cliente-daemon, allowlist, ambito, solicitante, catalogo-operaciones, limites, s-mcp-1, s-mcp-3, owasp-mcp-top-10, nfr-02, br-14, br-15, br-16, dep-mcp-1, superficie-agentes, criterio-mcp, cli-json, configure-agents]
 ---
 
 # ADR-MCP-001 — Servidor MCP como cliente del daemon
@@ -477,3 +477,159 @@ Origen: [DS-TS-GRP-009](../../requirements/features/motor-local/dev-specs/TS-GRP
 - **La clase y su contrato.** La clase la deduce el daemon del nombre del ejecutable del par que da el kernel (`GitRaptor` o `gitraptor-desktop`); `hello` no cambia de forma (ADR-GRP-016). El motivo del perfil y el tipo de identidad se leen con el método `connection.desktop` (protocolo 9, abierto a los dos perfiles, no reservado), que solo se ofrece a la clase.
 - **Fila 4 (ascendencia limpia sin identidad)**: completo solo si pasan los controles 1 a 3; si no, `mcp`. Una ascendencia dudosa (intérprete, multiplexor, final no limpio), un solicitante no verificado, un descendiente del daemon o una identidad que no se puede verificar dan `mcp`.
 - **Identidad por ruta**: binarios aceptados `GitRaptor` y `gitraptor-desktop` dentro de `GitRaptor.app/Contents/MacOS/`; `/Applications` puede tener escritura de grupo (`root:admin 0775`, la de fábrica), así que un usuario administrador podría sustituir el binario de la app. Queda en la clase de R-6 de ADR-GRP-017 (solo lectura en las alphas sin firma) y lo evalúa la revisión de seguridad de TS-GRP-009. La carpeta de usuario sale de la base de usuarios del sistema, nunca de `HOME`.
+
+## Enmienda (2026-11-10, superficie para agentes)
+
+Origen: enfoque "MCP mínimo + guía para agentes + `raptor configure-agents`", **decidido por Rene el 2026-11-10** (bitácora `ideas/2026-11-10-superficie-agentes-mcp-minimo-skill.md`), y la ampliación de [CTX-MCP-001](../../requirements/features/mcp/context.md#ampliación-propuesta-2026-11-10-superficie-para-agentes): BR-MCP-WF-008, BR-MCP-CONS-007 a 010 y US-MCP-020 a 026. **Redactada por el Arquitecto (2026-11-10); pendiente de aceptación del coordinador.** El `status` sigue en `accepted`. No cambia el alcance del MVP ni D2: solo Claude Code.
+
+**Por qué enmienda y no ADR nuevo**: el criterio gobierna el catálogo fijo de § 4.1 ("añadir una herramienta exige revisar este ADR"), y lo demás aplica a la CLI y a `configure-agents` el perfil por solicitante (§ 2), los códigos de § 5 y la instalación de § 8. Un ADR aparte repetiría el modelo de amenazas de § 9 y obligaría a mirar dos documentos para saber qué entra en el MCP. El coste es que ADR-MCP-001 sigue creciendo. Si la superficie para agentes gana otro cliente (Codex, Cursor) o un modo script (punto B), esa decisión va en un ADR propio.
+
+### A. Criterio de entrada al MCP
+
+**Una herramienta entra en el MCP solo si necesita estado vivo del daemon o es una acción protegida. Lo demás va a la guía (skill) o a la CLI con `--json`.**
+
+- **Estado vivo**: estado que solo tiene el daemon en marcha y que el agente no puede reconstruir por su cuenta sin saltarse la vista `mcp`: flota, predicción publicada, oplog y timeline del perfil, registro de sesiones.
+- **Acción protegida**: escritura que pasa por el ejecutor del daemon con allowlist, solicitante por ascendencia, capa `mcp` y, cuando aplica, Guardrails (ADR-CKP-002) o las reglas de la Time Machine (ADR-TMC-005).
+- **No entra**: texto que explica cómo trabajar (qué significa un código, cuándo preguntar si se va a chocar), ayuda, catálogo de códigos, diagnóstico de instalación, configuración y todo comando reservado. Una herramienta que solo sirve un texto constante es guía, no MCP.
+
+Aplicado a las diez herramientas de § 4.1, **todas lo cumplen y no se recorta ninguna**. El MCP sigue completo para los clientes sin skills, y quitar una herramienta solo se decide con datos de US-MCP-025 y US-MCP-026.
+
+| Herramienta | Clase | Por qué no basta la guía ni la CLI sola |
+|---|---|---|
+| `status` | Estado vivo | Sesiones, protección y worktrees del motor, con la vista `mcp` y la allowlist aplicadas por el daemon |
+| `check_conflicts` | Estado vivo | La predicción publicada vive en el daemon (ADR-CKP-001 § 8) |
+| `explain_history` | Estado vivo | Oplog y timeline del perfil, que solo lee el daemon; es la vía para consultar una operación `running` por id |
+| `register_agent` | Estado vivo (registro de sesiones) | El solicitante se resuelve por ascendencia en el daemon; escribe en el perfil, nunca en el repo |
+| `unregister_agent` | Estado vivo (registro de sesiones) | Ídem; solo el propio registro |
+| `safe_commit` | Acción protegida | `commit` del catálogo, con Guardrails y snapshot previo |
+| `safe_rebase` | Acción protegida | `rebase-onto-base` en modo `atomic`, con avisos y Guardrails |
+| `create_worktree` | Acción protegida | `create-worktree` solo desde la plantilla (H-02) |
+| `snapshot` | Acción protegida (no gobernada, § 4.4) | Allowlist, solicitante atribuido y cuota durable (Enmienda 2026-10-08) |
+| `undo` | Acción protegida | Solo lo propio y `protected-ref` (§ 4.4, ADR-TMC-005) |
+
+Reglas para toda herramienta nueva:
+
+- **De intención, no de bajo nivel**: una herramienta = una intención del agente, que corresponde a una operación del catálogo o a una vista de lectura. No hay paso directo a `git`, ni ejecución genérica, ni CRUD del perfil o de la configuración (la Enmienda 2026-10-28 ya excluye los métodos `guard.*`).
+- **Compacta y paginada**: declara su presupuesto en RES-MCP-01 a 03 antes de entrar. Una lista va paginada con cursor por conexión (Enmienda 2026-10-08, US-MCP-004), y ninguna respuesta lleva texto de la guía.
+- **Declara su clase**: cada herramienta registrada lleva su clase (`live-state` o `protected-action`) en una tabla cerrada de `crates/api`.
+
+### B. Code mode: descartado; cuándo se reabre
+
+Ejecutar código del agente en un entorno propio añade superficie de ataque (MCP05) para un ahorro bajo con diez herramientas, y el agente ya tiene Bash con `--json`. **Se reabre con un ADR nuevo** si ocurre cualquiera de estas dos cosas:
+
+1. el catálogo llega a **20 herramientas** (extremo inferior del umbral de 20 a 30 del enfoque) o `tools/list` supera el total de 1.500 tokens de RES-MCP-01;
+2. las métricas de US-MCP-025 y US-MCP-026 muestran cadenas largas: ⚠️ **ASSUMPTION** hasta que US-MCP-026 fije la muestra, el p75 de las tareas tiene ≥ 10 llamadas a GitRaptor con > 48 KiB de resultados acumulados.
+
+**Aun entonces**, la única forma admisible es un **modo script sobre el mismo canal y el mismo perfil `mcp`**: una secuencia declarativa de llamadas a los mismos métodos, cada una con su rate limit por solicitante, su allowlist, su ámbito y su decisión. Nunca un intérprete propio ni un sandbox de código, y GitRaptor nunca ejecuta código escrito por el agente.
+
+### C. NFR-02 en la superficie para agentes
+
+**C1. La CLI que usa un agente recibe el perfil `mcp` por ascendencia** (§ 2, S-01; ADR-GRP-012). Así, la guía puede enseñar `raptor … --json` sin abrir una puerta que el MCP cierra: allowlist, vista con allowlist de campos y `repo-not-enabled` sin datos.
+
+- **Estado en `main` (2026-11-10)**: no está implementado. El canal decide el perfil por el ejecutable del par (`raptor-mcp`) o por lo que declara el cliente (`crates/core/src/channel/conn.rs`, `hello`). La CLI lanzada por un agente recibe hoy el perfil completo. SEC-MCP-01 figura con dueña US-MCP-003 (`technical-stories.md`) y como puerta de M4 (plan de releases, criterio 12), pero no se entregó.
+- **Consecuencia**: SEC-MCP-01 es **condición de entrada** de US-MCP-023 (su escenario "por la CLI un agente no ve más que por el MCP") y de la parte CLI de la guía de US-MCP-020, las dos en M3. Mientras no esté en `main`, la guía no enseña la CLI como camino del agente. Mover S-01 de M4 a M3 y darle historia dueña lo decide el coordinador (ver "Dudas").
+
+**C2. `configure-agents` no es lanzable por un agente** (P-MCP-35): la aplicación es un **comando reservado** con el mecanismo de ADR-GRP-005 § 6 (controles 1 a 3, `daemon-descendant`, auditoría append-only, fuera del MCP). Entra en la lista de ADR-GRD-007 § 1 como acción que **no relaja**, sin ventana D5, igual que `raptor guard install`. Esa fila de ADR-GRD-007 se aplica cuando se acepte esta enmienda.
+
+- **Plan y `--dry-run`**: método de lectura sin marca MCP. Con S-01, un agente no lo recibe. Antes de S-01, leer el plan no da poder: la aplicación sigue siendo reservada.
+- **Pasos del repo** (guía y bloque): los escribe el **daemon** tras el método reservado, como transacción al estilo de ADR-GRD-001:
+  - comprobaciones previas sin escribir;
+  - huella del plan con `(dev, inode)` y hash de cada archivo tocado, comprobada otra vez bajo el cerrojo del repo;
+  - escritura en un temporal y renombrado atómico;
+  - verificación de que los bytes fuera del bloque son idénticos;
+  - apunte de auditoría.
+
+  Sin shell y sin Git: no hace `git add` ni commit, y el plan dice qué archivos quedan por commitear.
+- **Paso del registro del MCP**: lo hace la CLI **solo después** de que el daemon acepte el método reservado, reutilizando sin cambios el módulo de § 8: `claude` por ruta absoluta comprobada, **argv fijo** `claude mcp add --scope user --transport stdio gitraptor -- <ruta>`, sin `--env`, idempotencia y propiedad con `claude mcp get`, y rechazo desde una caché de npx. Si `claude` no está, el paso queda "manual" con el comando impreso (BR-MCP-WF-008).
+- **Lo que esto protege y lo que no**: que la vía oficial no deje a un agente reescribir su propia guía, registrarse a sí mismo ni hacerlo sin rastro. **No** protege el contenido de `CLAUDE.md` frente a un agente con shell, que puede editarlo directamente. Es el mismo riesgo residual del § 9 (I-01) y se acepta.
+
+**C3. `raptor guard exec` sigue siendo reservado** (ADR-GRD-007 § 1, excepción consciente). US-MCP-023 le añade `--json`, pero un agente que lo lanza recibe el rechazo de comando reservado **en JSON**, nunca "la decisión de Guardrails y el resultado de Git". El PO corrige esa fila del escenario de US-MCP-023.
+
+### D. Contrato `--json` de la CLI (US-MCP-023): decisiones
+
+- **D1. Sobre único** en todas las salidas `--json` de `raptor`, no solo en las de uso por agentes, porque el design system pide `--json` en todos los comandos:
+  - éxito: `{"schema_version": "MAJOR.MINOR", "data": …}`;
+  - error: `{"schema_version": …, "error": {code, message, params, action}}`, por **stdout**, con stderr vacío y código de salida ≠ 0.
+
+  El nombre del campo sigue la convención de la salida (snake_case), y la Dev Spec la confirma.
+- **D2. Una versión para todo el contrato de la CLI**, no una por subcomando. La guía enseña un solo número y el agente comprueba un solo mayor. El coste es que un cambio incompatible en un subcomando sube el mayor de todos. Empieza en `1.0` con US-MCP-023. La salida de hoy, sin versión, es la "0" y se rompe sin transición. ⚠️ **ASSUMPTION**: no hay consumidores externos de la CLI antes de la beta, porque la app de escritorio usa el canal.
+- **D3. Dónde se declara**: una constante en `crates/api`, junto a los códigos de § 5 y a `catalogVersion`.
+  - Los tipos de salida viven en `crates/api` y el esquema JSON de cada subcomando se genera de ellos (como el `outputSchema` compacto, Enmienda 2026-10-07).
+  - Una instantánea de los esquemas en el repo y una **prueba de compatibilidad en CI** detectan el cambio incompatible: quitar o renombrar un campo o un código, o cambiar un tipo, falla salvo que suba el mayor, y añadir un campo exige subir el menor.
+  - La referencia para agentes se genera de los mismos esquemas, con prueba de deriva. Su ruta la fija la Dev Spec.
+- **D4. Códigos**: el mismo catálogo estable de § 5. Los códigos solo de la CLI (rechazo de comando reservado, argumentos inválidos) entran en ese catálogo, para que la guía y su prueba (punto F) cubran los dos caminos.
+- **D5. Vista**: con un agente como solicitante, la CLI recibe las vistas MCP con allowlist de campos (depende de C1).
+- **Para la Dev Spec**:
+  - JSON compacto en una línea (recomendado, por tokens) o con formato cuando stdout es un TTY;
+  - cómo sale en JSON un error de `clap` anterior a saber si hay `--json` (recomendado: detectar `--json` en argv antes de parsear y emitir `invalid-args`);
+  - tabla de códigos de salida por familia.
+
+### E. Conteo por canal (US-MCP-025): decisiones
+
+- **E1. El canal lo pone el daemon, nunca el cliente**: es el `RequestChannel` que ya usa el oplog (`cli`, `tui`, `mcp`, `hook`; DS-US-MCP-015), deducido del ejecutable del par.
+  - Solo se cuentan `mcp` y `cli` con un **agente** como solicitante, resuelto por ascendencia, como las claves de S-03 (Enmienda 2026-10-21). No depende de C1.
+  - El desarrollador ("sin atribuir") y el cliente del hook no cuentan.
+- **E2. Sin contenido**: contadores agregados por (día, repo, agente, canal, etiqueta, resultado), donde resultado es `ok` o el código estable del rechazo.
+  - Nunca parámetros, rutas, mensajes ni argv. Una prueba de allowlist de columnas lo fija.
+  - Retención ⚠️ **ASSUMPTION**: 90 días.
+  - Sin meta, y el conteo no interviene en el rate limit ni en ninguna decisión.
+- **E3. Una llamada, una vez**: el daemon ve métodos del canal, no herramientas ni subcomandos, y un subcomando puede hacer varias peticiones. **Para la Dev Spec**, con esta recomendación:
+  - el cliente marca cada invocación (llamada de herramienta o ejecución de subcomando) con una etiqueta de **enum cerrado** de `crates/api`, como campo opcional bajo una capacidad (ADR-GRP-016);
+  - una etiqueta desconocida cuenta como `other`;
+  - la etiqueta no es de confianza, pero solo afecta a la estadística; canal y solicitante siguen siendo del daemon.
+
+  Se descarta mapear métodos a subcomandos en el daemon: cuenta doble y se rompe con cada subcomando nuevo.
+
+### F. Guía para agentes (US-MCP-020): decisiones
+
+- **Fuente única**: un texto en inglés **embebido en el binario** como constante, igual que las descripciones de herramientas (§ 1, `initialize` constante), sin texto del repo. Los códigos que nombra salen del catálogo de `crates/api`.
+- **Puerta en CI, no solo en release**: una prueba compara los códigos de la guía con los códigos estables del contrato en los dos sentidos (BR-MCP-CONS-009). Falla en el PR que añade un código sin entrada o deja en la guía uno retirado.
+- **Destino en el repo** (P-MCP-33, P-MCP-34):
+  - la skill de proyecto de Claude Code en `.claude/skills/gitraptor/SKILL.md`. ⚠️ **ASSUMPTION**: la Dev Spec lo comprueba contra la versión instalada, como S-MCP-5;
+  - el bloque en `AGENTS.md` o en `CLAUDE.md`.
+- **Marca autodescriptiva**: todo lo que escribe GitRaptor (el archivo de la skill y el bloque) lleva una marca con la versión de la guía y el hash de su contenido.
+  - Si el hash no coincide, hubo edición a mano y hay conflicto (BR-MCP-CONS-007). Si la versión es anterior, el paso queda "se actualizará".
+  - Se descarta un diario en el perfil: la guía viaja con el repo, y el clon de otro miembro del equipo no tendría el apunte y vería conflicto donde no lo hay.
+  - "Creado por GitRaptor" = el archivo solo contiene el bloque. Retirarlo borra el archivo.
+- **El MCP no sirve la guía**: `instructions` de `initialize` sigue constante y corta (RES-MCP-01). Tener o no la guía no cambia `tools/list` (Validación 5).
+- **Un instalador, varios llamantes**: la Dev Spec de US-MCP-021 y US-MCP-022 fija el módulo del daemon que escribe guía y bloque. `raptor new` (feature "Ciclo de vida del worktree", sin ids aún) lo reutiliza; no escribe por su cuenta.
+
+### G. Dev Specs de US-MCP-020 a 026
+
+| Historia | Dev Spec | Razón |
+|---|---|---|
+| US-MCP-020 | **Ligera** | Fija la ruta de la fuente embebida, la prueba guía ↔ códigos, el formato de la marca (compartido con 021/022) y, si se elige la opción B de P-MCP-39, el comando que imprime la guía. Sin contrato del canal nuevo |
+| US-MCP-021 + US-MCP-022 | **Sí, una conjunta** | Método reservado nuevo, módulo del daemon que escribe en archivos del usuario (NFR-01), transacción con huella, marca, retirada byte a byte, orden con el paso de § 8 y modelo de amenazas propio |
+| US-MCP-023 | **Sí** | Sobre, versión, generación de esquemas, prueba de compatibilidad, errores en JSON por subcomando y los tres `--json` nuevos (C3 incluido); toca todos los comandos de `apps/cli` |
+| US-MCP-024 | **No** | Expone por la CLI, con el contrato de 023, la predicción que ya sirve `check_conflicts` (US-MCP-016) con la misma vista. Bastan sus Requisitos Técnicos |
+| US-MCP-025 | **Sí** | Etiqueta por invocación (E3), capacidad del canal, tabla de contadores en el perfil y retención |
+| US-MCP-026 | **No** | Experimento con fuente externa de tokens. Pasa a spike si no deja nada en el producto (P-MCP-38), y no está lista sin muestra, criterio de acierto ni fuente |
+
+### Validación (enmienda)
+
+Cada punto es una prueba que corre en CI en cada PR.
+
+1. **Clases** (A): una prueba falla si una herramienta registrada no tiene clase en la tabla de `crates/api`.
+2. **Umbral de revisión** (B): una prueba falla si el catálogo llega a 20 herramientas. Subir el umbral exige el ADR de B.
+3. **Guía ↔ códigos** (F): igualdad de conjuntos en los dos sentidos.
+4. **Compatibilidad del contrato `--json`** (D3): instantánea de esquemas y versión. La prueba falla con un cambio incompatible sin subir el mayor, o con un campo nuevo sin subir el menor.
+5. **Reservado** (C2): `configure-agents` lanzado bajo un agente simulado, con un descendiente del daemon o con `script` → rechazo; no cambia ningún archivo del repo y no se lanza `claude`.
+6. **Bytes del usuario** (C2, BR-MCP-CONS-007): prueba de propiedades con archivos generados → tras configurar y retirar, el archivo es idéntico byte a byte, o no existe si lo creó GitRaptor.
+7. **Conteo sin contenido** (E2): la tabla de contadores solo tiene las columnas de la allowlist. El desarrollador y el hook no suman.
+8. **CLI bajo un agente** (C1): la Validación 12 de este ADR, aplicada a `raptor status --json` y `raptor timeline --json`.
+
+### Consecuencias (enmienda)
+
+- ✅ El criterio deja escrito por qué las diez herramientas están en el MCP y qué no entra, sin recortar nada.
+- ✅ La CLI y el MCP comparten códigos, vista y solicitante: hay dos caminos y una sola frontera.
+- ✅ La guía no puede quedarse atrás del contrato: el PR que cambia un código falla.
+- ⚠️ **S-01 pasa a ser camino crítico de M3** (C1). **Mitigación**: hasta que esté en `main`, la guía omite la CLI como camino del agente.
+- ⚠️ Una versión global sube el mayor por un cambio en un solo subcomando (D2). **Mitigación**: la prueba de compatibilidad obliga a hacerlo de forma consciente, y antes de v0.1.0 no hay consumidores externos.
+- ⚠️ La etiqueta de E3 la declara el cliente. **Mitigación**: enum cerrado, y solo afecta a la estadística.
+- ⚠️ Que `configure-agents` sea reservado no impide a un agente con shell editar `CLAUDE.md` (C2). Riesgo residual aceptado, como I-01.
+
+### Dudas para el coordinador
+
+1. **S-01 sin dueña**: ¿se adelanta SEC-MCP-01 de la puerta de M4 a M3, con historia o TS propia? Recomendación del Arquitecto: sí, porque M3 enseña la CLI a los agentes.
+2. **Fila nueva en ADR-GRD-007 § 1** (`configure-agents`, no relaja): se aplica al aceptar esta enmienda.
+3. **US-MCP-023**: el PO corrige el escenario de `guard exec` (C3).

@@ -1,10 +1,10 @@
 ---
 mode: bulk
 generated: 2026-10-04T00:00Z
-updated: 2026-10-08
+updated: 2026-11-10
 generator: product-owner
-total_artifacts: 19
-expanded: 19
+total_artifacts: 26
+expanded: 26
 approved: 0
 blocked:
   - US-MCP-014
@@ -23,9 +23,10 @@ architecture_gate: []
 **Epic**: E-001 — MVP Fase 1: Cockpit + Time Machine + Guardrails (CLI/TUI + MCP)
 **Prioridad**: Alta (BR-14, BR-15 y BR-16 Must; NFR-02)
 **Estado**: En Análisis. **Sin bloqueos de arquitectura desde el 2026-10-05** (D-23): ADR-MCP-001, ADR-CKP-001 y ADR-CKP-002 están aceptados y las enmiendas DEP-MCP están aplicadas. Las escrituras siguen dependiendo de sus habilitadores (TS-CKP-002, TS-CKP-003). Solo US-MCP-014 sigue bloqueada, por producto (cola de confirmación, US-GRD-015).
+**Ampliación del 2026-11-10 (superficie para agentes)**: US-MCP-020 a 026, aprobada por Rene Bonilla desde el menú el 2026-11-10. Prioridad e hito decididos por Rene (P-MCP-32): Must en M3 (020 y 023), Should en M4 (021, 022 y 025), Could después de v0.1.0 (024 y 026). Ninguna entra en M2. Solo Claude Code; Codex y Cursor después de v0.1.0 (D2).
 
 **Enlace a contexto completo**: [`context.md`](./context.md) (CTX-MCP-001, aprobado por Rene Bonilla)
-**Reglas de negocio**: [`business-rules.md`](./business-rules.md) (BR-MCP-001, 48 reglas) · **Diseño**: no aplica (sin superficie visual; los mensajes en/es siguen la guía de contenido del [design system](../../../design-system/README.md))
+**Reglas de negocio**: [`business-rules.md`](./business-rules.md) (BR-MCP-001, 53 reglas) · **Diseño**: no aplica (sin superficie visual; los mensajes en/es siguen la guía de contenido del [design system](../../../design-system/README.md))
 
 ---
 
@@ -93,6 +94,7 @@ Ajustes del Juez AADD (reservas) y del Arquitecto.
 | D-25 | Perfil `mcp` por solicitante (S-01): un agente que usa la CLI `raptor` o habla directo con el socket recibe la vista MCP y la allowlist. La atribución sale del proceso, nunca del cwd: el desarrollador en el worktree de un agente conserva su vista. US-CKP-011 ("`raptor status` igual que la TUI") vale para el desarrollador; anotado para el PO del Cockpit (no se edita aquí). | Hallazgo High de seguridad; refuerza Q-MCP-3. |
 | D-26 | Por MCP, un `undo` que movería la rama base confirmada o una ref protegida se rechaza antes de cualquier efecto, hasta US-TMC-021 (S-04; BR-MCP-ELIG-005). | Endurecimiento coherente con BR-TMC-AUTH-001. |
 | D-24 | S-MCP-3 verificado en macOS con una prueba local (Claude Code 2.1.284): cwd = directorio de arranque de la sesión, padre `claude`, entorno heredado (ADR-MCP-001, "Evidencia de S-MCP-3"). | La documentación oficial no lo documenta. |
+| D-27 | **Dev Spec de US-MCP-020 a 026** (Arquitecto, 2026-11-10; [ADR-MCP-001, Enmienda (2026-11-10, superficie para agentes)](../../../architecture/decisions/ADR-MCP-001-servidor-mcp-cliente-daemon.md#enmienda-2026-11-10-superficie-para-agentes), punto G): **sí** en 021 + 022 (una conjunta), 023 y 025; **ligera** en 020; **no** en 024 (reutiliza la consulta de 016 y el contrato de 023) ni en 026 (experimento o spike, P-MCP-38). Además, **SEC-MCP-01** (perfil `mcp` por solicitante, sin implementar en `main`) es condición de entrada de 023 y de la parte CLI de la guía de 020. | Las cuatro con Dev Spec fijan contratos nuevos (sobre `--json`, método reservado, escritura en archivos del usuario, conteo); 024 y 026 no los fijan. |
 
 ---
 
@@ -119,6 +121,13 @@ Ajustes del Juez AADD (reservas) y del Arquitecto.
 | [US-MCP-017](./user-stories/US-MCP-017-explain-history.md) | Un agente entiende qué pasó en su repo sin ver mensajes ni contenido | Agente quiere eventos y timeline acotados, con filtro y paginación | expanded |
 | [US-MCP-018](./user-stories/US-MCP-018-safe-rebase-atomico.md) | Un agente se pone al día con la rama base y, si choca, su rama queda como estaba | Desarrollador quiere `safe_rebase` atómico con abort automático | expanded |
 | [US-MCP-019](./user-stories/US-MCP-019-create-worktree.md) | Un agente prepara un worktree nuevo desde la rama base para otro trabajo | Desarrollador quiere `create_worktree` desde la base confirmada, sin elegir ruta | expanded |
+| [US-MCP-020](./user-stories/US-MCP-020-guia-para-agentes.md) | Un agente de Claude Code sabe cómo trabajar con GitRaptor sin que el desarrollador se lo explique en cada sesión | Desarrollador quiere una guía (skill y bloque) en inglés, coherente con los códigos de rechazo, que no cierra el MCP | expanded |
+| [US-MCP-021](./user-stories/US-MCP-021-configure-agents.md) | El desarrollador deja un repo listo para Claude Code con un comando que enseña antes lo que va a cambiar | Desarrollador quiere `raptor configure-agents` con plan visible, idempotente, `--dry-run` y reservado al humano | expanded |
+| [US-MCP-022](./user-stories/US-MCP-022-archivos-del-usuario-y-reversion.md) | Configurar y retirar GitRaptor en un repo deja intacto lo que escribió el equipo | Desarrollador quiere el bloque solo dentro de su marca, sin pisar ediciones a mano y con retirada byte a byte | expanded |
+| [US-MCP-023](./user-stories/US-MCP-023-cli-json-estable.md) | Un agente que trabaja por Bash lee la salida de raptor con un contrato JSON estable y versionado | Desarrollador quiere versión del contrato en toda salida, errores en JSON y `--json` en `agent withdraw`, `daemon status` y `guard exec` | expanded |
+| [US-MCP-024](./user-stories/US-MCP-024-conflictos-por-cli.md) | Un agente que trabaja por Bash sabe con quién va a chocar antes de integrar | Desarrollador quiere la predicción de `check_conflicts` también por la CLI con `--json` | expanded |
+| [US-MCP-025](./user-stories/US-MCP-025-uso-por-canal.md) | El desarrollador ve cuánto usan sus agentes el MCP y cuánto la CLI | Desarrollador quiere llamadas y rechazos por canal, agente, repo y herramienta, sin meta ni contenido | expanded |
+| [US-MCP-026](./user-stories/US-MCP-026-comparacion-mcp-cli.md) | El desarrollador compara, por tarea, cuánto cuesta y cuánto acierta un agente por el MCP y por la CLI | Desarrollador quiere llamadas, tokens y aciertos por canal; spike si no deja nada en el producto | expanded |
 
 ---
 
@@ -147,6 +156,13 @@ Ajustes del Juez AADD (reservas) y del Arquitecto.
 | US-MCP-017 | CALC-005, VAL-002 (filtro) | US-MCP-003, US-MCP-005, US-TMC-006, US-TMC-007, TS-TMC-004 (consulta del timeline) | — (DEP-MCP-6 ya no la bloquea; eventos por ADR-GRP-013, aceptado; D-12) | Must | El agente entiende qué pasó sin ver contenido |
 | US-MCP-018 | ELIG-003, WF-002, WF-003, EDGE-007, EDGE-002 (rebase), EDGE-003 (rebase) | US-MCP-007, US-MCP-009, US-MCP-011, US-GRD-001, US-GRD-008, US-GRD-014, TS-CKP-002, TS-CKP-003 | ADR-CKP-002 (propuesto; DEP-MCP-2 y DEP-MCP-5 vía ADR-CKP-002); avisos del plan pendientes en ADR-MCP-001 (D-16). Dueña del modo `atomic` de `rebase-onto-base`; relación: US-CKP-015 | Must | Ningún worktree queda a medias por un rebase del agente |
 | US-MCP-019 | ELIG-004, VAL-002, EDGE-002 (worktree), VAL-001 (sin ruta) | US-MCP-007, US-MCP-009, US-MCP-011, US-GRD-014, TS-CKP-002, TS-CKP-003 | ADR-CKP-002 (propuesto; solo plantilla, H-02). Comparte `create-worktree` con US-CKP-018: la implementa la primera que entre | Must | El trabajo en paralelo empieza aislado y en un sitio predecible |
+| US-MCP-020 | CONS-009 | US-MCP-005, US-MCP-012, US-MCP-016, US-TMC-011, US-MCP-023 | SEC-MCP-01 para enseñar la CLI (D-27). Cómo llega la guía al repo en M3, antes de US-MCP-021: P-MCP-39 (recomendación del Arquitecto en el contexto). Relación: la feature en preparación "Ciclo de vida del worktree" (`raptor new`) instalará la guía | Must · M3 | El agente respeta los bloqueos sin que se lo repitan |
+| US-MCP-021 | WF-008 | US-MCP-001, US-MCP-020, US-MCP-022 (salen juntas) | ADR-GRD-007 (humano frente a agente, transversal) | Should · M4 | Preparar un repo para agentes es un paso seguro de repetir |
+| US-MCP-022 | CONS-007, WF-008 (retirar) | US-MCP-021 (salen juntas), US-MCP-020 | — (NFR-01) | Should · M4 | Las instrucciones del equipo no se pierden |
+| US-MCP-023 | CONS-008 | US-MCP-004, US-MCP-005 | SEC-MCP-01 (perfil `mcp` por solicitante; sin implementar, puerta de M4 en el plan; D-27) | Must · M3 | El camino por Bash no se rompe entre versiones |
+| US-MCP-024 | CONS-008 (parte), CALC-004 (mismo contenido) | US-MCP-016, US-MCP-023 | — | Could · después de v0.1.0 | Preguntar antes de integrar también por Bash |
+| US-MCP-025 | CONS-010 | US-MCP-015, US-MCP-023 | — | Should · M4 | Recortar el MCP con datos propios |
+| US-MCP-026 | CONS-010 (parte) | US-MCP-025, US-MCP-020 | Muestra, criterio de acierto y fuente de tokens: sin dato (P-MCP-38). Spike si no deja nada en el producto | Could · después de v0.1.0 | Elegir canal con un dato propio, no de terceros |
 
 ### Orden y paralelismo (DAG)
 
@@ -172,6 +188,12 @@ MCP-005, MCP-006, MCP-007 ─► MCP-009 (+ US-TMC-001, US-GRD-001, 007, 009, TS
 MCP-009, MCP-012, MCP-013 ─► MCP-015 (+ US-GRD-005, US-TMC-006)
 
 MCP-002, MCP-003, MCP-009 ─► US-GRD-016 (Guardrails) queda desbloqueada
+
+Superficie para agentes (2026-11-10):
+MCP-004, MCP-005 ─► MCP-023 [M3] ─┬─► MCP-020 [M3] (+ MCP-012, MCP-016, US-TMC-011)
+                                  │        └─► MCP-021 ⇄ MCP-022 [M4, salen juntas] (+ MCP-001)
+                                  ├─► MCP-024 [después de v0.1.0] (+ MCP-016)
+                                  └─► MCP-025 [M4] (+ MCP-015) ─► MCP-026 [después de v0.1.0] (+ MCP-020)
 ```
 
 - **Ola 1** (entrega 1 de Q-MCP-19: canal, allowlist, `status`, install y registro): US-MCP-001 y US-MCP-002 en paralelo; luego US-MCP-003 (esqueleto andante); luego US-MCP-004, US-MCP-005 y US-MCP-006 en paralelo.
@@ -179,6 +201,7 @@ MCP-002, MCP-003, MCP-009 ─► US-GRD-016 (Guardrails) queda desbloqueada
 - **Ola 3** (entrega 3: snapshot/undo y `safe_commit`): US-MCP-009 primero. Cuando su Dev Spec fije el flujo de escritura, US-MCP-008, US-MCP-011, US-MCP-012 y US-MCP-013 en paralelo. Después US-MCP-010 (tras 011) y US-MCP-015. US-MCP-014 queda bloqueada (US-GRD-015).
 - **Ola 4** (entrega 4: lecturas que dependen de otras features): US-MCP-016 y US-MCP-017. Solo dependen de la ola 1. US-MCP-017 se puede adelantar en cuanto exista ADR-MCP-001 con la enmienda de ADR-GRP-013 (vista MCP del timeline, aplicada el 2026-10-05); US-MCP-016, cuando se levanten ADR-CKP-001 y DEP-MCP-6 (D-7, D-12).
 - **Ola 5** (entrega 5: rebase y worktree): US-MCP-018 y US-MCP-019 en paralelo.
+- **Superficie para agentes** (fuera de las olas de Q-MCP-19; ninguna en M2): en M3, US-MCP-023 y después US-MCP-020 (la guía enseña el contrato `--json`). En M4, US-MCP-021 y US-MCP-022 en la misma entrega (NFR-01) y US-MCP-025. Después de v0.1.0, US-MCP-024 y US-MCP-026.
 
 > **Secuencias por contrato compartido**: 003 → 004/005 (contrato de respuesta de `status`), 005 → 016/017 (respuesta acotada y paginación), 009 → 008/011 (flujo de escritura), 011 → 010 (parámetros de `safe_commit`) y 011 → 018/019 (`expect_worktree` y precondiciones del ejecutor). En cada caso el contrato lo fija la Dev Spec de la historia que va primero.
 >
@@ -231,8 +254,11 @@ Los IDs omiten el prefijo `BR-MCP-`. Fuente: el campo `covers` de cada ficha.
 | EDGE-007 | US-MCP-018 | EDGE-004 | US-MCP-003 |
 | EDGE-008 | US-MCP-008, 011 | EDGE-005 | US-MCP-004 |
 | EDGE-009 | US-MCP-001 | EDGE-010 | US-MCP-010 |
+| WF-008 | US-MCP-021, 022 | CONS-007 | US-MCP-022 |
+| CONS-008 | US-MCP-023, 024 | CONS-009 | US-MCP-020 |
+| CONS-010 | US-MCP-025, 026 | | |
 
-**Resultado**: las 48 reglas tienen al menos una historia. Solo una variante la cubre únicamente una historia bloqueada por producto: la respuesta "pendiente" de BR-MCP-WF-004 (US-MCP-014); su variante "denegar" la entrega US-MCP-013. BR-MCP-AUTH-001 se ejercita además en US-MCP-013 y US-MCP-018, BR-MCP-TIME-001 en US-MCP-009 y US-MCP-018, BR-MCP-EDGE-008 en US-MCP-018, y la matriz BR-MCP-ELIG-001 en cada herramienta de escritura. BR-MCP-VAL-001 y BR-MCP-ELIG-004 ya dicen, desde la enmienda BR-MCP-001 v0.2, que `create_worktree` no acepta ruta por MCP (D-6). Q-MCP-7, en context.md, queda estrechada por esa enmienda.
+**Resultado**: las 53 reglas tienen al menos una historia. Solo una variante la cubre únicamente una historia bloqueada por producto: la respuesta "pendiente" de BR-MCP-WF-004 (US-MCP-014); su variante "denegar" la entrega US-MCP-013. BR-MCP-AUTH-001 se ejercita además en US-MCP-013 y US-MCP-018, BR-MCP-TIME-001 en US-MCP-009 y US-MCP-018, BR-MCP-EDGE-008 en US-MCP-018, y la matriz BR-MCP-ELIG-001 en cada herramienta de escritura. BR-MCP-VAL-001 y BR-MCP-ELIG-004 ya dicen, desde la enmienda BR-MCP-001 v0.2, que `create_worktree` no acepta ruta por MCP (D-6). Q-MCP-7, en context.md, queda estrechada por esa enmienda.
 
 ---
 
@@ -245,3 +271,5 @@ Los IDs omiten el prefijo `BR-MCP-`. Fuente: el campo `covers` de cada ficha.
 | 1.2 | 2026-10-05 | Orquestador (Fase 2, ADR-MCP-001) para Rene Bonilla | D-17 a D-26 validadas por Arquitecto/PO (D-25 y D-26 por la revisión de seguridad). D-12 corregida (timeline sin marca MCP en main). Sin bloqueos de arquitectura; solo US-MCP-014 sigue bloqueada (producto). US-MCP-018: escenario de rama ya empujada con `acknowledge`. US-MCP-008: sin decisión de Guardrails y con la captura manual de ADR-TMC-004. US-MCP-012: US-TMC-021 como relación de Fase 2. US-MCP-007: lado del canal resuelto. INF-MCP-001 creado en technical-stories.md |
 | 1.3 | 2026-10-08 | Orquestador (DS-US-MCP-008) para Rene Bonilla | D-3 invertida: US-MCP-009 hereda de US-MCP-008 el cubo de escrituras, el mapeo de errores y la resolución del ámbito, pero no la llamada única (`safe_commit` necesita una segunda llamada para reconocer avisos, BR-MCP-WF-001). Decisión del orquestador (2026-10-08), validada por Arquitecto y PO. |
 | 1.4 | 2026-10-21 | Orquestador (DS-US-MCP-009 y DS-US-MCP-010) para Rene Bonilla | D-3: `safe_commit` en una llamada mientras `commit` no tenga avisos. D-11: US-MCP-009 fija los parámetros y reserva `expect_worktree`; 010 y 011 sin orden entre sí. US-MCP-009: el escenario 2 usa la política de autoría "agents-commit" (el ejemplo de la convención pasa a US-GRD-009), criterios de certificación del motivo por código de regla y del corte del cliente, y liberación junto con 007, 010 y 011. Decisión del orquestador (2026-10-21), validada por Arquitecto y PO. |
+| 1.5 | 2026-11-10 | PO (AADD) para Rene Bonilla | Ampliación "superficie para agentes", aprobada por Rene desde el menú: US-MCP-020 a 026 (de 19 a 26 historias), cubren BR-MCP-WF-008 y BR-MCP-CONS-007 a 010 (de 48 a 53 reglas). Prioridad e hito decididos por Rene (P-MCP-32): Must M3 = 020, 023; Should M4 = 021, 022, 025; Could después de v0.1.0 = 024, 026. US-MCP-023 incluye `--json` en `agent withdraw`, `daemon status` y `guard exec`. US-MCP-020 deja la relación con la feature en preparación "Ciclo de vida del worktree" (`raptor new`). Nuevas preguntas abiertas: P-MCP-38 (en parte) y P-MCP-39 |
+| 1.6 | 2026-11-10 | Arquitecto para Rene Bonilla | D-27: Dev Spec sí en 021 + 022 (conjunta), 023 y 025; ligera en 020; no en 024 ni 026. Requisitos Técnicos de US-MCP-020 a 026 enlazados a la Enmienda (2026-11-10, superficie para agentes) de ADR-MCP-001. SEC-MCP-01 como condición de entrada de 023 y de la parte CLI de 020. Pendiente del PO: el escenario de `guard exec` en US-MCP-023 (sigue reservado) |

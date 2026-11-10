@@ -2,7 +2,15 @@
   "feature": "mcp",
   "context": {
     "approved": true,
-    "approvedAt": "2026-10-05",
-    "approvedVia": "nl-approval-hook"
+    "approvedAt": "2026-11-10",
+    "approvedVia": "ask",
+    "ask": {
+      "toolUseId": "toolu_01CMJqb7zuMXzYrfnrwJmyts",
+      "session": "23cf10f8-36bf-48af-890b-94db43e16add",
+      "sha12": "0dea8e4ac96c",
+      "at": "2026-11-10T20:17:04.646Z",
+      "transcriptPath": "/Users/rbonilla/.claude/projects/-Users-rbonilla-orca-workspaces-gitRaptor-agentsurf/23cf10f8-36bf-48af-890b-94db43e16add.jsonl",
+      "transcriptRoot": "/Users/rbonilla/.claude/projects"
+    }
   }
 }

@@ -4,7 +4,7 @@ title: "Contexto — Servidor MCP"
 type: context
 status: draft
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-11-10
 domain: GRP
 epic: E-001
 feature: mcp
@@ -417,7 +417,7 @@ Estas dependencias se anotan; **no se aplican** en este documento. Las resuelve 
 
 ## Preguntas abiertas
 
-Todas las preguntas de esta feature están resueltas. La tabla se conserva como historia. Quedan **pendientes técnicos del Arquitecto**, que no son preguntas de negocio: ADR-MCP-001, las operaciones de ADR-CKP-002 y las enmiendas DEP-MCP-n. Queda también la **etapa de validación multiplataforma** (DEP-MCP-9, S-MCP-4).
+Todas las preguntas P-MCP-1 a 31 están resueltas; la tabla se conserva como historia. Las de la ampliación del 2026-11-10 (P-MCP-32 a 39) están en su sección: P-MCP-38 sigue abierta en parte y P-MCP-39, abierta (con recomendación del Arquitecto del 2026-11-10). Quedan **pendientes técnicos del Arquitecto**, que no son preguntas de negocio: ADR-MCP-001, las operaciones de ADR-CKP-002 y las enmiendas DEP-MCP-n. Queda también la **etapa de validación multiplataforma** (DEP-MCP-9, S-MCP-4).
 
 | # | Pregunta | Recomendación original del orquestador | Estado |
 |---|----------|----------------------------------------|--------|
@@ -454,6 +454,56 @@ Todas las preguntas de esta feature están resueltas. La tabla se conserva como 
 | P-MCP-31 | ¿Repo de otro propietario en la allowlist? | "No disponible" sin datos para todas las herramientas. | Resuelta (Q-MCP-31), evaluado en cada llamada |
 
 > P-MCP-1 a P-MCP-19 llevan la recomendación del brief del orquestador; donde la validación la ajustó, la columna Estado lo indica. P-MCP-20 a P-MCP-24 salen de la validación del PO y P-MCP-25 a P-MCP-29 de la del Arquitecto: su recomendación coincide con la decisión. P-MCP-30 y P-MCP-31 salen de la revisión del orquestador sobre las reglas (HEAD separado y repo de otro propietario) y las validó el Arquitecto.
+
+---
+
+## Ampliación propuesta (2026-11-10): superficie para agentes
+
+**Estado**: aprobada por Rene Bonilla desde el menú el 2026-11-10. Historias US-MCP-020 a 026 escritas el mismo día ([índice](./user-stories.md)).
+
+**Decisión del humano**: el 2026-11-10 Rene Bonilla aprobó el enfoque "MCP mínimo + skill + `raptor configure-agents`" (bitácora `ideas/2026-11-10-superficie-agentes-mcp-minimo-skill.md`, no versionada). El MCP queda como estado vivo y frontera de seguridad; el conocimiento de cómo trabajar con GitRaptor va a una guía para agentes que se carga cuando hace falta; la CLI ofrece `--json` estable para el agente que trabaja por Bash. El MCP sigue completo para clientes sin skills. Code mode queda descartado por ahora.
+
+**Por qué en esta feature**: las cuatro piezas son la superficie de GitRaptor para agentes, que esta feature ya gobierna (BR-14 a BR-16, NFR-02, instalación de BR-15 y perfil `mcp` por solicitante de ADR-MCP-001 § 2), y comparten actores, códigos de rechazo y allowlist. Ni motor-local ni una feature nueva tienen ese contexto.
+
+**Alcance**:
+
+| Pieza | Reglas | Historias previstas |
+|---|---|---|
+| Guía para agentes (skill y bloque de instrucciones), solo Claude Code (D2) | BR-MCP-CONS-009 | US-MCP-020 |
+| `raptor configure-agents`: registro del MCP, guía y bloque; plan visible, idempotente, reversible | BR-MCP-WF-008, BR-MCP-CONS-007 | US-MCP-021, US-MCP-022 |
+| Contrato `--json` de la CLI para agentes, con el [inventario](./research/inventario-json-cli-2026-11.md) | BR-MCP-CONS-008 | US-MCP-023, US-MCP-024 |
+| Medición de MCP frente a CLI | BR-MCP-CONS-010 | US-MCP-025, US-MCP-026 |
+
+**Prioridad e hito** (decisión de Rene Bonilla, 2026-11-10; P-MCP-32):
+
+| Historia | Prioridad | Hito |
+|---|---|---|
+| US-MCP-020 Guía para agentes (viaja con el repo, en inglés; bloque en `AGENTS.md` cuando `CLAUDE.md` lo importa) | Must | M3 (beta) |
+| US-MCP-023 `--json` estable y versionado (versión en toda salida, errores en JSON, y `agent withdraw`, `daemon status` y `guard exec`) | Must | M3 (beta) |
+| US-MCP-021 `configure-agents` (plan visible, idempotente, reservado al desarrollador) | Should | M4 (v0.1.0) |
+| US-MCP-022 Respeto de archivos del usuario y reversión (sale con 021 por NFR-01) | Should | M4 (v0.1.0) |
+| US-MCP-025 Uso por canal MCP frente a CLI | Should | M4 (v0.1.0) |
+| US-MCP-024 Conflictos por CLI | Could | Después de v0.1.0 |
+| US-MCP-026 Comparación de llamadas, tokens y aciertos (spike si no deja nada en el producto) | Could | Después de v0.1.0 |
+
+Ninguna entra en M2. Codex y Cursor, después de v0.1.0 (D2). Relación anotada en US-MCP-020: la feature en preparación "Ciclo de vida del worktree" tendrá un comando `raptor new` que instalará la guía en el worktree que cree.
+
+**Fuera de alcance**: guía y configuración para Codex y Cursor (después de v0.1.0, D2); recortar herramientas del MCP (se decide con los datos de US-MCP-025 y 026); code mode.
+
+**Dato de terceros**: Nx informa 88 % de acierto con skills y CLI frente a 81 % con MCP (https://nx.dev/blog/why-we-deleted-most-of-our-mcp-tools). ⚠️ No verificado por el PO y medido con otra herramienta; no se usa como línea base ni como meta.
+
+**Preguntas abiertas de la ampliación**:
+
+| # | Pregunta | Recomendación del PO | Quién responde |
+|---|----------|----------------------|----------------|
+| P-MCP-32 | ¿Prioridad e hito de cada pieza? | **Decidido (2026-11-10, Rene delegó en el coordinador):** Must en M3 (beta) para 020 y 023; Should en M4 (v0.1.0) para 021, 022 y 025; Could después de v0.1.0 para 024 y 026. No entra nada en M2. Criterio: lo que diferencia a GitRaptor para agentes va antes, sin tocar M2 | Decidida |
+| P-MCP-33 | ¿La guía viaja con el repo (la comparte el equipo) o con cada usuario? | Con el repo: `configure-agents` la deja en el repo y el equipo la versiona | Decidida (2026-11-10): como recomienda el PO |
+| P-MCP-34 | ¿En qué archivo va el bloque: `CLAUDE.md` o `AGENTS.md`? | En `AGENTS.md` si ya existe y `CLAUDE.md` lo importa (como en este repo); si no, en `CLAUDE.md` | Decidida (2026-11-10): como recomienda el PO |
+| P-MCP-35 | ¿Un agente puede lanzar `configure-agents`? | No: se rechaza, como un comando reservado; un agente no reescribe su propia guía. `raptor mcp install` hoy no es reservado (ADR-MCP-001 § 8) | Decidida (2026-11-10): como recomienda el PO |
+| P-MCP-36 | ¿Idioma de la guía? | Inglés, como las descripciones de las herramientas (Q-MCP-15) | Decidida (2026-11-10): como recomienda el PO |
+| P-MCP-37 | ¿Entra un subcomando de la CLI que diga con quién va a chocar el agente (US-MCP-024)? | Sí, como Could; el agente ya lo tiene por MCP | Decidida (2026-11-10): como recomienda el PO |
+| P-MCP-38 | ¿La comparación por tarea (US-MCP-026) es historia de producto o un spike del Arquitecto? ¿Cuántas ejecuciones y qué criterio de acierto? ¿De dónde salen los tokens? | Spike del Arquitecto si no deja nada en el producto. Muestra y criterio: sin dato. Tokens: `/metrics` de nassa-core, a confirmar | Decidida en parte (2026-11-10): historia Could después de v0.1.0, que pasa a spike si no deja nada en el producto. Siguen sin dato la muestra, el criterio de acierto y la fuente de tokens: los responden Rene y el Arquitecto antes de empezar US-MCP-026 |
+| P-MCP-39 | ¿Cómo llega la guía de US-MCP-020 a un repo en M3, si `configure-agents` (US-MCP-021) llega en M4? | Sin recomendación del PO: opciones a valorar con el Arquitecto, como subir el paso de la guía de US-MCP-021 a M3, documentar la copia a mano o esperar a `raptor new` de "Ciclo de vida del worktree". **Recomendación del Arquitecto (2026-11-10): B, copia documentada con un comando de solo lectura que imprime la guía.** US-MCP-020 añade un subcomando sin escritura ni reserva (nombre en su Dev Spec ligera) que imprime la guía embebida con su marca de versión y hash, más la receta para dejarla en `.claude/skills/gitraptor/SKILL.md`; GitRaptor la deja así en su propio repo para el dogfooding. Por qué B: cumple M3 sin traer a M3 el método reservado ni la escritura en archivos del usuario (US-MCP-021/022, NFR-01), y la marca hace que `configure-agents` reconozca en M4 la copia como "hecha" o "se actualizará", sin conflicto. Imprimir no da poder a un agente: el contenido es constante. Contra A (adelantar el paso de la guía a M3): arrastra el método reservado, la transacción y la marca, es decir, la mitad de 021/022, y engorda M3. Contra C (esperar a `raptor new`): la feature no tiene contexto ni ids, deja US-MCP-020 sin forma de cumplir "guía disponible en una sesión" en M3 y ata la guía al worktree en lugar de al repo (P-MCP-33). Si el dogfooding muestra que la copia a mano se salta, A es el plan B. `raptor new` reutilizará después el instalador de US-MCP-021 ([ADR-MCP-001, Enmienda 2026-11-10](../../../architecture/decisions/ADR-MCP-001-servidor-mcp-cliente-daemon.md#enmienda-2026-11-10-superficie-para-agentes), F) | Rene / coordinador (abierta) |
 
 ---
 
