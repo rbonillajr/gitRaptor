@@ -400,7 +400,7 @@ Origen: [TD-GRP-005](../../requirements/features/motor-local/technical-stories/T
 
 ## Enmienda (2026-11-09, `git` inerte del propio daemon: TD-GRP-007)
 
-**Decisión del orquestador (2026-11-09), validada por el Arquitecto con ajustes, todos incorporados.** Cambia una regla de atribución, así que pasa por `security-review` y queda abierta al PO y al veto de Rene, como la Enmienda 2026-10-28. No cambia las señales, S4, el registro, la pista `single-session`, la regla del `git` ajeno ni los valores del actor. ADR-GRP-013 no cambia. El `status` sigue en `accepted`.
+**Decisión del orquestador (2026-11-09), validada por el Arquitecto y por `security-review` (security-expert) con condiciones, todas incorporadas. El Arquitecto aceptó las condiciones de seguridad.** Cambia una regla de atribución, así que queda abierta al PO y al veto de Rene, como la Enmienda 2026-10-28. No cambia las señales, S4, el registro, la pista `single-session`, la regla del `git` ajeno ni los valores del actor. ADR-GRP-013 no cambia. El `status` sigue en `accepted`.
 
 Origen: [TD-GRP-007](../../requirements/features/motor-local/technical-stories/TD-GRP-007-cwd-ilegible-ambiguo-bajo-carga.md). Bajo carga en macOS, el primer commit del agente simulado de `us_tmc_003` salía `ambiguous` y sin atribuir, y el PR #347 ignoró dos tests en macOS.
 
@@ -408,22 +408,43 @@ Origen: [TD-GRP-007](../../requirements/features/motor-local/technical-stories/T
 
 **No se adopta** distinguir un proceso terminado (`ESRCH`) de un cwd sin permiso (`EPERM`/`EACCES`). No cambia ninguno de los fallos observados. Y para un `git` del daemon, «ya terminó» no prueba inocencia, porque puede ser el escritor de un restore.
 
-**Regla: un `git` del daemon deja de contar como ajeno solo con evidencia positiva de que no puede producir un evento.** Tienen que cumplirse todas estas condiciones:
+### 1. La ventana de escritura del daemon (condición de seguridad 1)
 
-- su cwd es legible y está en el repo (`(Daemon, None)` sigue siendo ajeno: el proceso está saliendo y el `exe()` ya no verifica nada);
-- su argv se leyó en la misma lectura acotada de S3 (mismo proceso verificado con `exe()`, dentro del tope `MAX_REDIRECT_READS`);
-- su subcomando, según el parser de opciones globales que falla cerrado, está en la lista cerrada de **subcomandos inertes del daemon**: los de solo lectura de la Enmienda 2026-10-28 (`config` solo en sus formas de lectura; `--output` descalifica), más `merge-base`, `update-index`, `pack-objects`, `index-pack`, `repack` y `prune`. Ninguno mueve una ref, el `HEAD` ni la lista de worktrees, y ningún evento sale de una escritura que solo toca el índice (Enmienda 2026-10-28). `index-pack --keep` escribe solo en `objects/pack`, y `repack -d` y `prune` no tocan refs;
-- **toda la cadena hasta el daemon es inerte**: o su padre es el propio daemon, o cada `git` intermedio de la misma muestra es inerte por la misma regla. Si un intermedio no es un `git`, no se puede leer o no es inerte, el `git` cuenta como ajeno. Así, daemon → `repack` → `pack-objects` es inerte, y daemon → `commit` (ejecutor) → `pack-objects` es ajeno.
+Mientras un `git` del daemon que puede mover una ref o el `HEAD` del repo esté en marcha, cualquier evento del repo es ajeno, aunque ese `git` ya haya terminado al tomar la muestra. Las ventanas las abren dos sitios:
 
-**Siguen contando como ajenos**, como hasta ahora: `update-ref` (restores y capturas en el repo del usuario), `symbolic-ref`, `pack-refs`, `gc`, `maintenance`, `worktree` (también `worktree list`, que está en la lista de los que escriben), todo lo del ejecutor (`add`, `commit`, `reset`…), el `config` de escritura de Guardrails, un argv ilegible, un alias o una opción global desconocida, y todos los `git` del daemon en Windows (no hay lector de argv). El booleano «inerte» solo vale para `Owner::Daemon`. Para un `git` ajeno sigue la lista de «inofensivo» de la Enmienda 2026-10-28.
+- **el aplicador de la Time Machine** (`Applier::apply`: undo, redo, restore);
+- **el ejecutor de operaciones de usuario** (`run_git_with`: `commit`, `reset`, `checkout`…).
 
-**Lectura (SEC-04)**: la misma lectura acotada del argv da un booleano más, `inert`. El daemon solo registra un contador entero más en `s3_evidence`, `daemon_inert`, sin rutas, nombres, pids ni argv.
+Cada uno la abre con una guarda RAII sobre su repo, y la guarda la cierra también ante un pánico o un `?`. Ninguna operación de solo lectura ni ninguna captura abre ventana.
 
-**Fitness function**: cada `WriteSubcommand` de la capa de escritura de la Time Machine (`crates/git/src/invoke.rs`) tiene que estar clasificado. Su primer argumento es inerte si y solo si no es `update-ref`. Añadir un subcomando de escritura obliga a decidir su clasificación aquí.
+La ventana se mide con el mismo reloj monotónico que las marcas del lote. Un evento cuenta como ajeno si su ventana S3, `[t_recv − s3_lead, t_flush]`, se solapa con una ventana de escritura abierta o cerrada hace poco. Se cuenta en su propio contador, `daemon_write_window`.
 
-**Riesgo residual (explícito)**: se pierde una protección accidental. Hasta ahora, un `git` inerte del daemon dejaba ambiguo un evento escrito sin ningún `git` visible que coincidiera con un `git` vivo de la sesión que escribe. Es el mismo riesgo que asumió la Enmienda 2026-10-28 para el `git` ajeno inofensivo (regla 6, TD-GRP-004).
+Sin esta ventana, la regla siguiente quitaría una protección que hoy existe por casualidad. Un restore termina su `update-ref`, que mueve el `HEAD`, y deja vivos `git` inertes (la captura que dispara su propia escritura). Con un `git` de la sesión escribiendo en ese worktree, el restore se atribuiría al agente. La Time Machine corrige el eco **anclado** de sus operaciones (`branch_rule_events`), pero el actor crudo de `raptor events` y el eco sin ancla de TD-TMC-003 conservarían el actor de S3. Una regla que solo es segura si otra capa la corrige después no falla cerrado.
+
+### 2. El `git` inerte del daemon
+
+Un `git` del daemon deja de contar como ajeno solo con evidencia positiva de que no puede producir un evento. Tienen que cumplirse todas estas condiciones:
+
+- **Es hijo directo del daemon**: su padre en la tabla es el propio daemon (`parent_of`, con la regla del pid reutilizado). No hay cadena: un nieto (un `git` lanzado por el `commit` del ejecutor, o el `pack-objects` de un `repack`) cuenta como ajeno. `repack` y `prune` corren sobre el almacén de la Time Machine, fuera del repo, así que sus hijos ni siquiera llegan a contar.
+- **Su ejecutable es el Git que resolvió el motor**: la ruta del `exe` de la tabla es igual a la ruta canónica de `SystemGit` (que ya descarta el shim de `/usr/bin/git`). Sin un Git resuelto, ningún `git` es inerte.
+- **Su cwd es legible y está en el repo**. `(Daemon, None)` sigue siendo ajeno: el proceso está saliendo y el `exe()` ya no verifica nada.
+- **Su argv se leyó** en la misma lectura acotada de S3: mismo proceso verificado con `exe()` y dentro del tope `MAX_REDIRECT_READS`.
+- **Su argv tiene exactamente la forma** con la que lo lanza el daemon. La comprobación es por plantilla, no por una lista de subcomandos, y la hace `gitraptor-git`, que es quien construye esos argv:
+  - **capa de escritura de la Time Machine** (ADR-TMC-002): `WRITE_OPTIONS` tal cual, el `-c core.hooksPath=<absoluta>`, el `-c safe.directory=<absoluta>`, `--git-dir=<absoluta>`, opcionalmente `--work-tree=<absoluta>` y las palabras de un `WriteSubcommand` que no sea `UpdateRef`, sin nada después. Esto da `update-index`, `pack-objects`, `index-pack`, `repack` y `prune`;
+  - **capa de lectura** (ADR-GRP-009): `FIXED_OPTIONS` tal cual y las palabras de `version`, `rev-parse`, `for-each-ref`, `rev-list`, `merge-base` o `log`, con argumentos detrás que no sean `--output`. `worktree list`, `config` y `--exec-path` no entran.
+
+  Además, el parser de opciones globales que falla cerrado (`git_subcommand`) tiene que encontrar el mismo subcomando. Un `-c` ajeno, `--exec-path=`, un orden distinto, una ruta relativa o un argumento de más no encajan en la plantilla.
+
+**Siguen contando como ajenos**, como hasta ahora: `update-ref` (restores y capturas en el repo del usuario), todo lo del ejecutor (`add`, `commit`, `reset`…), el `config` de Guardrails, `worktree list`, un argv que no encaja, un argv ilegible, un cwd ilegible, cualquier nieto y todos los `git` del daemon en Windows, que no tiene lector de argv. «Inerte» solo vale para `Owner::Daemon`. Para un `git` ajeno sigue la lista de «inofensivo» de la Enmienda 2026-10-28.
+
+### 3. Diagnóstico, pruebas y límites
+
+- **Lectura (SEC-04)**: la misma lectura acotada del argv da un booleano más, `inert`. `s3_evidence` gana dos contadores enteros, `daemon_inert` y `daemon_write_window`, sin rutas, nombres, pids ni argv.
+- **Fitness function**: `gitraptor_git::daemon_git_argvs()` da el argv real de cada `WriteSubcommand` y de cada `Subcommand`. Es inerte si y solo si no es `update-ref`, `worktree`, `config` ni `--exec-path`. Una variante nueva no compila sin entrar en esa lista (`match` exhaustivo).
+- **Entorno**: los hijos de las capas de lectura y escritura arrancan con `env_clear()` (`invoke.rs`), así que ni `GIT_EXEC_PATH` ni `GIT_CONFIG_*` del daemon llegan a ellos. Lo fija un test.
+- **Riesgo residual (explícito)**: un evento escrito sin ningún `git` visible y fuera de toda ventana de escritura del daemon, que coincide con un `git` inerte del daemon y con un `git` de la sesión que escribe, se atribuye a la sesión. Es el mismo riesgo que asumió la Enmienda 2026-10-28 para el `git` ajeno inofensivo (regla 6, TD-GRP-004). La ventana de escritura cierra el caso del restore.
+- **Versión de Git**: `prune` corre solo sobre el almacén. Rige la versión mínima de ADR-GRP-009.
 
 **Fuera de esta enmienda**:
-- **Refuerzo opcional** propuesto por el Arquitecto: una marca por repo de «escritura del daemon en curso» que cubra el restore entero, `update-ref` incluido, sin depender del muestreo.
 - **El otro modo de fallo bajo carga**: FSEvents no entrega la escritura, solo el sondeo de respaldo de 30 s la ve, y el aviso de lectura se descarta por el tope de 3 s (`no-sighting`). Pertenece a [TD-GRP-006](../../requirements/features/motor-local/technical-stories/TD-GRP-006-bajo-carga-los-eventos-de-fsevents.md). El tope no se relaja.
 - **`s3_cwd_unreadable` en la línea de `s3_evidence`**: es un contador global y confunde. Sacarlo de la línea o pasarlo a un contador por evento cambia el test SEC-04 que fija sus campos, así que queda pendiente.

@@ -1,0 +1,154 @@
+{
+  "version": 1,
+  "source": [
+    "docs/dev-briefs/td-grp-007-daemon-inert.2-plan.md",
+    "docs/requirements/features/motor-local/technical-stories/TD-GRP-007-cwd-ilegible-ambiguo-bajo-carga.md",
+    "docs/architecture/decisions/ADR-GRP-012-deteccion-sesiones-claude-code.md"
+  ],
+  "rigor": "alto",
+  "goal": {
+    "intent": "Que la atribución de los commits de un agente no dependa de la suerte con la máquina cargada, sin abrir el riesgo residual de S3: un git del propio daemon que no puede producir un evento deja de volver ambiguo el commit del agente, y ante la duda el evento sigue ambiguo (NFR-01, ADR-GRP-012 Enmienda 2026-11-09).",
+    "endState": "Un git hijo directo del daemon, que ejecuta el Git resuelto por el motor, con su cwd legible en el repo y un argv que encaja exactamente en una plantilla inerte de las capas de lectura o de escritura de la Time Machine (nunca update-ref), se clasifica Ignored y suma daemon_inert; todo evento cuya ventana S3 se solapa con una ventana de escritura del daemon (aplicador de la Time Machine o ejecutor de operaciones de usuario, guarda RAII) es ajeno y suma daemon_write_window; todo lo demás del daemon sigue siendo ajeno; los dos tests de us_tmc_003 ignorados en macOS por el PR #347 vuelven a correr allí.",
+    "nonGoals": [
+      "distinguir ESRCH de EPERM/EACCES en la lectura del cwd",
+      "cambiar la regla del git ajeno o la lista de inofensivos",
+      "aceptar como inerte un nieto del daemon",
+      "relajar el tope de 3 s del aviso de lectura o tocar la latencia de FSEvents (TD-GRP-006)",
+      "sacar s3_cwd_unreadable de la línea s3_evidence",
+      "lector de argv en Windows"
+    ]
+  },
+  "criteria": [
+    {
+      "id": "GRP007-ARGV",
+      "statement": "is_daemon_inert_argv da true para el argv real de update-index (las dos formas), pack-objects, index-pack, repack y prune de la capa de escritura (con y sin --work-tree) y para version, rev-parse, for-each-ref, rev-list, merge-base y log de la capa de lectura con argumentos; da false para update-ref, worktree list, config, --exec-path, un -c de más, una opción de WRITE_OPTIONS que falta o cambia de orden, un --git-dir relativo, un argumento detrás de la plantilla de escritura, --output o --output=x en la lectura, un argv sin opciones fijas (git update-index) y un argv vacío",
+      "verify": "cargo test -p gitraptor-git --lib invoke::inert_tests::argv_",
+      "layer": "runtime",
+      "tests": [
+        "crates/git/src/invoke_inert_tests.rs"
+      ]
+    },
+    {
+      "id": "GRP007-FIT",
+      "statement": "Fitness: para cada entrada de daemon_git_argvs(), is_daemon_inert_argv es true si y solo si su subcomando no es update-ref, worktree, config ni --exec-path",
+      "verify": "cargo test -p gitraptor-git --lib invoke::inert_tests::fitness_",
+      "layer": "runtime",
+      "tests": [
+        "crates/git/src/invoke_inert_tests.rs"
+      ]
+    },
+    {
+      "id": "GRP007-CALL",
+      "statement": "git_call da inert para el argv real de un git inerte del daemon y no para git update-index sin las opciones fijas, git status, git log suelto ni el argv de update-ref del daemon",
+      "verify": "cargo test -p gitraptor-core --lib detect::procs::inert_tests",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/detect/procs_inert_tests.rs"
+      ]
+    },
+    {
+      "id": "GRP007-CLASSIFY",
+      "statement": "Con la tabla sintética y engine_git fijado: un git hijo directo del daemon con el Git del motor, una plantilla inerte y cwd en el repo, junto a un git de la sesión que escribe, da Attributed con daemon_inert=1 y foreign_daemon=0; dan Ambiguous con foreign_daemon un exe distinto del Git del motor, engine_git sin fijar, un argv sin plantilla, (Daemon, None) con argv inerte, un nieto (daemon → commit → git inerte), un git por encima del tope de lecturas y un inerte junto a un update-ref del daemon en la misma muestra",
+      "verify": "cargo test -p gitraptor-core --lib detect::tests::daemon_inert",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/detect/tests/daemon_inert.rs"
+      ]
+    },
+    {
+      "id": "GRP007-WINDOW",
+      "statement": "Con un git de la sesión que escribe y sin git del daemon: una ventana de escritura abierta sobre el repo durante la ventana S3, o cerrada dentro de ella, da Ambiguous con daemon_write_window=1; una ventana sobre otro repo o cerrada antes de la ventana S3 no cuenta (Attributed); soltar la guarda cierra la ventana y un pánico con la guarda viva también la cierra",
+      "verify": "cargo test -p gitraptor-core --lib detect::tests::daemon_write_window",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/detect/tests/daemon_write_window.rs"
+      ]
+    },
+    {
+      "id": "GRP007-WIRE",
+      "statement": "Integración con el daemon real en un repo temporal: el undo del agente sobre su propio commit deja al menos una ventana de escritura del daemon sobre el repo en DaemonWrites::global()",
+      "verify": "cargo test -p gitraptor-core --test td_grp_007",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/td_grp_007.rs"
+      ]
+    },
+    {
+      "id": "GRP007-LOG",
+      "statement": "SEC-04: s3_evidence lleva daemon_inert y daemon_write_window como enteros con el valor contado, y ningún valor de la línea es una ruta, un nombre, un pid ni un argv",
+      "verify": "cargo test -p gitraptor-core --lib daemon::sessions::s3_inert_tests",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/daemon/sessions_s3_inert_tests.rs"
+      ]
+    }
+  ],
+  "suite": {
+    "command": "node tools/test/nextest-junit.mjs"
+  },
+  "layers": {
+    "runtime": {
+      "commands": [
+        {
+          "id": "suite",
+          "cmd": "node tools/test/nextest-junit.mjs"
+        }
+      ],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "scope": {
+    "projects": [
+      "gitraptor-core",
+      "gitraptor-git"
+    ]
+  },
+  "constraints": {
+    "deny_paths": [
+      "Cargo.toml",
+      "Cargo.lock",
+      "crates/core/Cargo.toml",
+      "crates/git/Cargo.toml",
+      "crates/macsys/",
+      "crates/policy/",
+      "crates/theme/",
+      "crates/api/",
+      "apps/",
+      "crates/core/src/timemachine/oplog/",
+      "crates/core/tests/us_tmc_011_common/",
+      "docs/ARTIFACTS.md"
+    ],
+    "allow_dependency_changes": false
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 600000,
+    "suiteTimeoutMs": 5400000
+  },
+  "hops": {
+    "design": {
+      "agent": "main-loop",
+      "model": "opus"
+    },
+    "critic": {
+      "agent": "nassa-core:plan-critic",
+      "model": "opus"
+    },
+    "tester": {
+      "agent": "nassa-core:criterion-tester",
+      "model": "sonnet"
+    },
+    "build": {
+      "agent": "nassa-dev-rust:rust-expert",
+      "model": "opus"
+    },
+    "review": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "opus"
+    },
+    "conformance": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "sonnet"
+    }
+  }
+}

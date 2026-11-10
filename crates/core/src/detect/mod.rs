@@ -26,6 +26,7 @@
 //! line and the names of its environment (whether it redirects its target);
 //! no argument nor value is ever kept or logged (SEC-04).
 
+pub mod daemon_writes;
 pub mod hook;
 pub mod procs;
 
@@ -270,6 +271,12 @@ pub struct S3Counts {
     pub sessions_not_writing: u32,
     /// `git`s that started after the write: not evidence and not foreign.
     pub gits_after_notice: u32,
+    /// The daemon's own `git`s in the repo that cannot make a Git event, with every `git` between
+    /// them and the daemon alike: not foreign (ADR-GRP-012, amendment 2026-11-09).
+    pub daemon_inert: u32,
+    /// Evaluations whose window overlapped a write window of the daemon in the repo: foreign
+    /// (ADR-GRP-012, amendment 2026-11-09).
+    pub daemon_write_window: u32,
 }
 
 /// The S3 (or S4) outcome of one event and what it counted.
@@ -484,6 +491,9 @@ struct GitSeen {
     /// For a foreign `git` placed in the repo: whether it cannot make a Git
     /// event (`None`: unreadable). `None` for every other `git`.
     harmless: Option<bool>,
+    /// For a `git` of the daemon with its own readable folder in the repo: it and every `git`
+    /// between it and the daemon are inert ([`procs::GitFacts::inert`]). `false` otherwise.
+    daemon_inert: bool,
 }
 
 /// Whose a `git` is, by its ancestry.
@@ -544,6 +554,11 @@ struct Inner {
     samples: AtomicU64,
     cwd_unreadable: AtomicU64,
     placed_by_ancestor: AtomicU64,
+    /// The canonical path of the Git the engine resolved: only a `git` of the daemon running it
+    /// can be inert (ADR-GRP-012, amendment 2026-11-09). `None`: none is.
+    engine_git: Mutex<Option<PathBuf>>,
+    /// The daemon's write windows (TD-GRP-007).
+    daemon_writes: Mutex<Arc<daemon_writes::DaemonWrites>>,
     detected: AtomicU64,
     ended: AtomicU64,
 }
@@ -583,6 +598,8 @@ impl Detector {
             samples: AtomicU64::new(0),
             cwd_unreadable: AtomicU64::new(0),
             placed_by_ancestor: AtomicU64::new(0),
+            engine_git: Mutex::new(None),
+            daemon_writes: Mutex::new(daemon_writes::DaemonWrites::global()),
             detected: AtomicU64::new(0),
             ended: AtomicU64::new(0),
         });
@@ -891,6 +908,24 @@ impl Detector {
             _ => S3Outcome::Ambiguous,
         };
         S3Evidence { outcome, counts }
+    }
+
+    /// The canonical path of the Git the engine resolved (ADR-GRP-012, amendment 2026-11-09).
+    pub fn set_engine_git(&self, git: Option<PathBuf>) {
+        *self
+            .inner
+            .engine_git
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = git;
+    }
+
+    /// The write windows the detector reads (tests use their own; the daemon, the global ones).
+    pub fn use_daemon_writes(&self, writes: Arc<daemon_writes::DaemonWrites>) {
+        *self
+            .inner
+            .daemon_writes
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = writes;
     }
 
     pub fn diagnostics(&self) -> Diagnostics {
@@ -1259,6 +1294,7 @@ impl Inner {
                         redirect,
                         writes,
                         harmless,
+                        daemon_inert: false,
                     }
                 })
                 .collect();

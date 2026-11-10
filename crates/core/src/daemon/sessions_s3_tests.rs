@@ -105,6 +105,8 @@ fn the_s3_log_line_carries_only_counters() {
         foreign_harmless: 8,
         sessions_not_writing: 9,
         gits_after_notice: 10,
+        daemon_inert: 11,
+        daemon_write_window: 12,
     };
     // A repo id that is a path: the canary must never reach the line.
     let fields = s3_log_fields(

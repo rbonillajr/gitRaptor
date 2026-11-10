@@ -85,6 +85,7 @@ pub trait ProcLister: Send + Sync {
             redirect: self.git_redirect(pid)?,
             writes: call.writes,
             harmless: call.harmless,
+            inert: call.inert,
         })
     }
 }
@@ -99,6 +100,8 @@ pub struct GitFacts {
     pub writes: bool,
     /// [`GitCall::harmless`]: as a foreign `git`, it does not count then.
     pub harmless: bool,
+    /// [`GitCall::inert`]: as a `git` of the daemon, it does not count then.
+    pub inert: bool,
 }
 
 /// A path from the bytes of an argument: as they are on Unix; on Windows, where an argument is
@@ -197,6 +200,10 @@ pub struct GitCall {
     /// ([`gitraptor_macsys::process::git_subcommand_writes`]): a `git` of a session is evidence
     /// of a Git event only then (DS-US-GRP-008 D4).
     pub writes: bool,
+    /// A subcommand of the daemon's closed inert list (ADR-GRP-012, amendment 2026-11-09,
+    /// TD-GRP-007): it never moves a ref, `HEAD` or the list of worktrees. Only a `git` of the
+    /// daemon reads it; for a foreign `git`, [`GitCall::harmless`] applies.
+    pub inert: bool,
 }
 
 /// Subcommands that cannot produce a Git event although they are not [`READ_ONLY_SUBCOMMANDS`].
@@ -304,6 +311,7 @@ pub fn git_call(args: &[OsString]) -> GitCall {
         writes: gitraptor_macsys::process::git_subcommand_writes(
             args.iter().map(|a| a.as_encoded_bytes()),
         ),
+        inert: false,
     }
 }
 
@@ -612,6 +620,7 @@ impl ProcLister for SystemProcLister {
             redirect,
             writes: call.writes,
             harmless: call.harmless,
+            inert: call.inert,
         })
     }
 
@@ -731,6 +740,10 @@ mod redirect_tests;
 #[cfg(test)]
 #[path = "procs_s3_tests.rs"]
 mod s3_tests;
+
+#[cfg(test)]
+#[path = "procs_inert_tests.rs"]
+mod inert_tests;
 
 #[cfg(all(test, any(target_os = "macos", target_os = "linux")))]
 mod tests {
