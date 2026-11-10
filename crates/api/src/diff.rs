@@ -46,8 +46,13 @@ pub struct WorktreeDiff {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum CommittedDiff {
-    Ready { base: UntrustedName, section: DiffSection },
-    NotComputable { reason: CommittedGap },
+    Ready {
+        base: UntrustedName,
+        section: DiffSection,
+    },
+    NotComputable {
+        reason: CommittedGap,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -101,7 +106,10 @@ pub enum FileChange {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum FileBody {
-    Text { hunks: Vec<Hunk>, truncated: bool },
+    Text {
+        hunks: Vec<Hunk>,
+        truncated: bool,
+    },
     Binary {},
     TooLarge {},
     Submodule {},
