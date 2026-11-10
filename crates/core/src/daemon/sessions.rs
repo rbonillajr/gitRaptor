@@ -243,6 +243,8 @@ fn s3_log_fields(
         ("foreign_harmless", counter(counts.foreign_harmless)),
         ("sessions_not_writing", counter(counts.sessions_not_writing)),
         ("gits_after_notice", counter(counts.gits_after_notice)),
+        ("daemon_inert", counter(counts.daemon_inert)),
+        ("daemon_write_window", counter(counts.daemon_write_window)),
     ]
 }
 
