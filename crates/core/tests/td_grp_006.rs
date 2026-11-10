@@ -16,12 +16,15 @@ use gitraptor_core::watch::{Observer, ObserverHooks, ReadVia, WatchConfig};
 use gitraptor_testkit::Fixture;
 use gitraptor_testkit::fixture::git_from_path;
 
-/// The `(repo_id, via)` of every `git_dir_written` the observer calls.
-struct Reads(Mutex<Sender<(String, ReadVia)>>);
+/// The `(repo_id, via)` of every `git_dir_written` the observer calls, and a signal for every
+/// `git_dir_touched` (the file events of the Git directory reach the router).
+struct Reads(Mutex<Sender<(String, ReadVia)>>, Mutex<Sender<()>>);
 
 impl ObserverHooks for Reads {
     fn worktree_touched(&self, _: &str, _: &Path) {}
-    fn git_dir_touched(&self, _: &str, _: u64) {}
+    fn git_dir_touched(&self, _: &str, _: u64) {
+        let _ = self.1.lock().unwrap().send(());
+    }
     fn git_dir_written(&self, repo_id: &str, _: u64, _: u64, via: ReadVia) {
         let _ = self.0.lock().unwrap().send((repo_id.to_owned(), via));
     }
@@ -38,6 +41,7 @@ struct Watched {
     f: Fixture,
     observer: Observer,
     reads: Receiver<(String, ReadVia)>,
+    touched: Receiver<()>,
     commits: u32,
 }
 
@@ -47,6 +51,7 @@ fn watched(backup_poll: Duration, lose_events: bool) -> Watched {
     f.git(&["add", "login.txt"]);
     f.git(&["commit", "-q", "-m", "login"]);
     let (tx, reads) = channel();
+    let (touched_tx, touched) = channel();
     let config = WatchConfig {
         backup_poll,
         ..WatchConfig::default()
@@ -54,7 +59,7 @@ fn watched(backup_poll: Duration, lose_events: bool) -> Watched {
     let observer = Observer::start_counted(
         config,
         Arc::new(|_| {}),
-        Some(Arc::new(Reads(Mutex::new(tx)))),
+        Some(Arc::new(Reads(Mutex::new(tx), Mutex::new(touched_tx)))),
         Arc::new(AtomicU64::new(0)),
     );
     // Before the repo is watched: no file event of the commits wins the race to the read.
@@ -66,6 +71,7 @@ fn watched(backup_poll: Duration, lose_events: bool) -> Watched {
         f,
         observer,
         reads,
+        touched,
         commits: 0,
     }
 }
@@ -76,6 +82,24 @@ impl Watched {
         self.commits += 1;
         let msg = format!("step {}", self.commits);
         self.f.git(&["commit", "-q", "--allow-empty", "-m", &msg]);
+    }
+
+    /// The stream of the Git directory is live: a file written there (it moves no `HEAD`, so no
+    /// read notice) reaches the router as `git_dir_touched`. Written again per attempt, since the
+    /// OS may lose its event; then every signal and notice so far is drained.
+    fn wait_stream_live(&self) {
+        let probe = observe::locate(&self.f.repo).unwrap().join("raptor-td-grp-006-probe");
+        let live = (0..EVENT_ATTEMPTS).any(|i| {
+            std::fs::write(&probe, format!("{i}\n")).unwrap();
+            self.touched.recv_timeout(READ_WAIT).is_ok()
+        });
+        assert!(
+            live,
+            "no git_dir_touched from {EVENT_ATTEMPTS} writes in the Git directory"
+        );
+        std::fs::remove_file(&probe).unwrap();
+        while self.touched.recv_timeout(QUIET).is_ok() {}
+        while self.next(QUIET).is_some() {}
     }
 
     /// The next read notice, `None` after `wait`.
@@ -149,8 +173,9 @@ fn grp006_via_backup_a_simulate_poll_read_is_a_backup() {
 }
 
 /// Attempts of a commit whose file event the OS may lose under load (FSEvents drops them
-/// silently): 4 × `READ_WAIT` is the hang guard (~120 s).
-const EVENT_ATTEMPTS: u32 = 4;
+/// silently): 8 × `READ_WAIT` is the hang guard. The stream is made live first
+/// ([`Watched::wait_stream_live`]), so a commit before it is never one of them.
+const EVENT_ATTEMPTS: u32 = 8;
 
 /// GRP006-VIA-EVENT: with the file events delivered and the backup poll far away, and no
 /// `poll_repo` nor `simulate_poll`, the read that finds a commit is the window of its file event:
@@ -160,6 +185,7 @@ const EVENT_ATTEMPTS: u32 = 4;
 #[test]
 fn grp006_via_event_a_file_event_read_is_an_event() {
     let mut w = watched(FAR, false);
+    w.wait_stream_live();
     let mut seen = Vec::new();
     for _ in 0..EVENT_ATTEMPTS {
         w.commit();
