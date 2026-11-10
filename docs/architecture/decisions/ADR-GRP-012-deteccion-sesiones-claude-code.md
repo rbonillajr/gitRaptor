@@ -397,3 +397,33 @@ Origen: [TD-GRP-005](../../requirements/features/motor-local/technical-stories/T
 - **Riesgo restante de la lectura.** Amplía la fila «lectura posterior» con un caso: un `git` de sesión que **escribe** (D4 de US-GRP-008), vivo durante una escritura ajena en el mismo worktree y arrancado antes de ella, cuando la lectura llega hasta 3 s después. Dos `git` que escriben en el mismo worktree suelen chocar en `index.lock` o en los locks de refs, así que el caso es estrecho. La consecuencia y la mitigación son las de la fila anterior.
 - **Lo que no cubre.** Si la lectura llega cuando el `git` del commit ya terminó, la muestra no lo ve. Es la carrera de commit corto que esta ADR ya acepta (Enmienda 2026-10-06, pista `single-session`). Con carga ~40 la lectura llegó hasta 1,4 s después de la escritura.
 
+
+## Enmienda (2026-11-09, `git` inerte del propio daemon: TD-GRP-007)
+
+**Decisión del orquestador (2026-11-09), validada por el Arquitecto con ajustes, todos incorporados.** Cambia una regla de atribución, así que pasa por `security-review` y queda abierta al PO y al veto de Rene, como la Enmienda 2026-10-28. No cambia las señales, S4, el registro, la pista `single-session`, la regla del `git` ajeno ni los valores del actor. ADR-GRP-013 no cambia. El `status` sigue en `accepted`.
+
+Origen: [TD-GRP-007](../../requirements/features/motor-local/technical-stories/TD-GRP-007-cwd-ilegible-ambiguo-bajo-carga.md). Bajo carga en macOS, el primer commit del agente simulado de `us_tmc_003` salía `ambiguous` y sin atribuir, y el PR #347 ignoró dos tests en macOS.
+
+**Evidencia**: el run de CI 42714973247 (`s3_evidence … outcome=ambiguous samples=4 sessions_wt=4 foreign_daemon=1`, resto a cero) y la reproducción del PR #346 (`… sessions_wt=3 foreign_daemon=1 gits_after_notice=2`). Lo que vuelve ambiguo el evento es **`foreign_daemon`**: el `git` del propio daemon (la captura de la Time Machine que dispara la escritura del agente) está vivo en la ventana. La hipótesis inicial de la ficha (un cwd ilegible) no se sostiene. `s3_cwd_unreadable` es un contador global acumulado desde el arranque, no del evento, y en S3 un `git` ajeno o de sesión con el cwd ilegible ya se ignora (`(Other, None)` y `(Session, None)` dan `Ignored`). Con una traza temporal bajo carga (14 corridas), los `git` del daemon de las muestras fueron `update-index`, `pack-objects`, `index-pack`, `rev-parse` y `add`, todos con el cwd legible. El run 42694853372 se canceló y su job de macOS no tiene logs.
+
+**No se adopta** distinguir un proceso terminado (`ESRCH`) de un cwd sin permiso (`EPERM`/`EACCES`). No cambia ninguno de los fallos observados. Y para un `git` del daemon, «ya terminó» no prueba inocencia, porque puede ser el escritor de un restore.
+
+**Regla: un `git` del daemon deja de contar como ajeno solo con evidencia positiva de que no puede producir un evento.** Tienen que cumplirse todas estas condiciones:
+
+- su cwd es legible y está en el repo (`(Daemon, None)` sigue siendo ajeno: el proceso está saliendo y el `exe()` ya no verifica nada);
+- su argv se leyó en la misma lectura acotada de S3 (mismo proceso verificado con `exe()`, dentro del tope `MAX_REDIRECT_READS`);
+- su subcomando, según el parser de opciones globales que falla cerrado, está en la lista cerrada de **subcomandos inertes del daemon**: los de solo lectura de la Enmienda 2026-10-28 (`config` solo en sus formas de lectura; `--output` descalifica), más `merge-base`, `update-index`, `pack-objects`, `index-pack`, `repack` y `prune`. Ninguno mueve una ref, el `HEAD` ni la lista de worktrees, y ningún evento sale de una escritura que solo toca el índice (Enmienda 2026-10-28). `index-pack --keep` escribe solo en `objects/pack`, y `repack -d` y `prune` no tocan refs;
+- **toda la cadena hasta el daemon es inerte**: o su padre es el propio daemon, o cada `git` intermedio de la misma muestra es inerte por la misma regla. Si un intermedio no es un `git`, no se puede leer o no es inerte, el `git` cuenta como ajeno. Así, daemon → `repack` → `pack-objects` es inerte, y daemon → `commit` (ejecutor) → `pack-objects` es ajeno.
+
+**Siguen contando como ajenos**, como hasta ahora: `update-ref` (restores y capturas en el repo del usuario), `symbolic-ref`, `pack-refs`, `gc`, `maintenance`, `worktree` (también `worktree list`, que está en la lista de los que escriben), todo lo del ejecutor (`add`, `commit`, `reset`…), el `config` de escritura de Guardrails, un argv ilegible, un alias o una opción global desconocida, y todos los `git` del daemon en Windows (no hay lector de argv). El booleano «inerte» solo vale para `Owner::Daemon`. Para un `git` ajeno sigue la lista de «inofensivo» de la Enmienda 2026-10-28.
+
+**Lectura (SEC-04)**: la misma lectura acotada del argv da un booleano más, `inert`. El daemon solo registra un contador entero más en `s3_evidence`, `daemon_inert`, sin rutas, nombres, pids ni argv.
+
+**Fitness function**: cada `WriteSubcommand` de la capa de escritura de la Time Machine (`crates/git/src/invoke.rs`) tiene que estar clasificado. Su primer argumento es inerte si y solo si no es `update-ref`. Añadir un subcomando de escritura obliga a decidir su clasificación aquí.
+
+**Riesgo residual (explícito)**: se pierde una protección accidental. Hasta ahora, un `git` inerte del daemon dejaba ambiguo un evento escrito sin ningún `git` visible que coincidiera con un `git` vivo de la sesión que escribe. Es el mismo riesgo que asumió la Enmienda 2026-10-28 para el `git` ajeno inofensivo (regla 6, TD-GRP-004).
+
+**Fuera de esta enmienda**:
+- **Refuerzo opcional** propuesto por el Arquitecto: una marca por repo de «escritura del daemon en curso» que cubra el restore entero, `update-ref` incluido, sin depender del muestreo.
+- **El otro modo de fallo bajo carga**: FSEvents no entrega la escritura, solo el sondeo de respaldo de 30 s la ve, y el aviso de lectura se descarta por el tope de 3 s (`no-sighting`). Pertenece a [TD-GRP-006](../../requirements/features/motor-local/technical-stories/TD-GRP-006-bajo-carga-los-eventos-de-fsevents.md). El tope no se relaja.
+- **`s3_cwd_unreadable` en la línea de `s3_evidence`**: es un contador global y confunde. Sacarlo de la línea o pasarlo a un contador por evento cambia el test SEC-04 que fija sus campos, así que queda pendiente.
