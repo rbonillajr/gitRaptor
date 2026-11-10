@@ -456,10 +456,28 @@ Un `git` del daemon deja de contar como ajeno solo con evidencia positiva de que
 
 **Siguen contando como ajenos**, como hasta ahora: `update-ref` (restores y capturas en el repo del usuario), todo lo del ejecutor (`add`, `commit`, `reset`…), el `config` de Guardrails, `worktree list`, un argv que no encaja, un argv ilegible, un cwd ilegible, cualquier nieto y todos los `git` del daemon en Windows, que no tiene lector de argv. «Inerte» solo vale para `Owner::Daemon`. Para un `git` ajeno sigue la lista de «inofensivo» de la Enmienda 2026-10-28.
 
+### 2b. El `git` del daemon que está saliendo (`daemon_exiting`)
+
+El CI de macOS (run 42776057548) volvió a mostrar el fallo original con `foreign_daemon=1` y `s3_cwd_unreadable=1`: un `git` de captura del daemon que estaba saliendo, con el cwd ilegible, `(Daemon, None)`. Con la ventana de escritura implantada, ese caso deja de ser ajeno, y suma `daemon_exiting`, solo si se cumplen todas estas condiciones:
+
+- es hijo directo del daemon según la tabla de la misma muestra (`parent_of`, con la regla del pid reutilizado);
+- su `exe`, leído del kernel al listar y nunca de `argv[0]`, es el Git del motor (sin Git resuelto, nunca);
+- el evento no cae en ninguna ventana del daemon del repo, con todas las reglas de la sección 1.
+
+El fundamento es que todo escritor del daemon de refs, `HEAD` o worktrees del usuario abre una ventana:
+- `refs::apply_updates` y `swap_head` solo se llaman en el aplicador;
+- el ejecutor lanza sus hijos por `StepCtx`;
+- la captura escribe sus refs en el almacén y en el repo del usuario solo hace `index-pack --keep`;
+- Guardrails solo escribe `config`.
+
+Lo fija una fitness function estática (`crates/core/tests/td_grp_007_writers.rs`, GRP007-WRITERS): cada `Command::new` del motor queda en una allowlist por fichero, con su motivo, y no se permite lanzar `git` ni un shell fuera de los dos lanzadores de Git. `apply_updates` y `swap_head` solo se llaman bajo la guarda del aplicador.
+
+Decisión del orquestador (2026-11-10), validada por el Arquitecto con condiciones y por `security-review` («aprobar con condiciones», todas cumplidas), y autorizada por el coordinador. **Riesgo residual**: un escritor nuevo del daemon que se salte la fitness function.
+
 ### 3. Diagnóstico, pruebas y límites
 
 - **Revisión de seguridad**: `security-review` (security-expert, opus) revisó la enmienda inicial y luego el ajuste del margen. Sus veredictos están en el PR.
-- **Lectura (SEC-04)**: la misma lectura acotada del argv da un booleano más, `inert`. `s3_evidence` gana dos contadores enteros, `daemon_inert` y `daemon_write_window`, sin rutas, nombres, pids ni argv.
+- **Lectura (SEC-04)**: la misma lectura acotada del argv da un booleano más, `inert`. `s3_evidence` gana tres contadores enteros, `daemon_inert`, `daemon_write_window` y `daemon_exiting`, sin rutas, nombres, pids ni argv.
 - **Fitness function**: `gitraptor_git::daemon_git_argvs()` da el argv real de cada `WriteSubcommand` y de cada `Subcommand`. Es inerte si y solo si no es `update-ref`, `worktree`, `config` ni `--exec-path`. Una variante nueva no compila sin entrar en esa lista (`match` exhaustivo).
 - **Entorno**: los hijos de las capas de lectura y escritura arrancan con `env_clear()` (`invoke.rs`), así que ni `GIT_EXEC_PATH` ni `GIT_CONFIG_*` del daemon llegan a ellos. Lo fija un test.
 - **Riesgo residual (explícito)**: un evento escrito sin ningún `git` visible y fuera de toda ventana de escritura del daemon, que coincide con un `git` inerte del daemon y con un `git` de la sesión que escribe, se atribuye a la sesión. Es el mismo riesgo que asumió la Enmienda 2026-10-28 para el `git` ajeno inofensivo (regla 6, TD-GRP-004). La ventana de escritura cierra el caso del restore.
