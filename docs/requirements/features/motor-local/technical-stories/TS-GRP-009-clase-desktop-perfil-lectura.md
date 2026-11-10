@@ -37,15 +37,15 @@ tags: [desktop, canal, perfil-mcp, ascendencia, identidad-por-ruta, dep-dsk-2, s
 
 ### Alcance Técnico
 
-- **Añadir** al contrato del canal la clase de cliente de la app de escritorio como cambio aditivo anunciado con una capacidad nueva (ADR-GRP-016), sin subir el protocolo; un cliente que no la conoce ve las mismas formas que hoy.
+- **Añadir** al contrato del canal la clase de cliente de la app de escritorio como cambio aditivo (ADR-GRP-016), sin subir el protocolo; un cliente que no la conoce ve las mismas formas que hoy. Precisión (2026-11-09): la clase la deduce el daemon del ejecutable del par y `hello` no cambia de forma; lo nuevo es el método `connection.desktop` (protocolo 9), que se descubre en `hello.methods` y no necesita capacidad (DS-TS-GRP-009 D1 y D2). Decisión del orquestador (2026-11-09), validada por Arquitecto.
 - **Implementar** en el daemon la asignación del perfil de lectura de una conexión de esa clase, con la ascendencia resuelta por el propio daemon:
   - agente en la ascendencia del par: perfil `mcp` (fila 1);
   - ascendencia limpia, sin `daemon-descendant` e identidad por ruta verificada: perfil completo (fila 3);
-  - ascendencia limpia sin identidad: las reglas actuales de un cliente sin terminal de ADR-MCP-001 § 2 (fila 4);
+  - ascendencia limpia sin identidad: las reglas actuales de un cliente sin terminal de ADR-MCP-001 § 2 (fila 4): perfil completo solo si pasan los controles 1 a 3; si no, `mcp` (DS-TS-GRP-009 D3);
   - una identidad que no se puede verificar: perfil `mcp` (falla cerrada).
 - **Implementar** la identidad por ruta de las alphas sin firmar: el ejecutable del par, leído del kernel y nunca del cliente, es el binario de la app dentro de la carpeta de aplicaciones del sistema o del usuario, por ruta canónica, sin traslocación de Gatekeeper ni volumen montado y sin escritura para otros usuarios.
-- **Garantizar** que declararse de la clase de la app desde otro ejecutable no da más de lo que daría declararse `cli`, y que una conexión no cambie de clase ni de perfil tras el handshake. El control real es la identidad para escribir, no para leer (Ajuste tras la revisión (2026-11-08), validado por Arquitecto / security-expert, I-01).
-- **Publicar** en el handshake de esa clase el solicitante resuelto y el motivo del perfil (agente en la ascendencia, sin identidad), para que la app pinte la banda "abierta por un agente" con un dato del daemon en lugar de deducirlo.
+- **Garantizar** que un ejecutable que se hace pasar por la app (mismo nombre fuera de la ruta de la app) no da más de lo que daría declararse `cli`, y que una conexión no cambie de clase ni de perfil tras el handshake. El control real es la identidad para escribir, no para leer (Ajuste tras la revisión (2026-11-08), validado por Arquitecto / security-expert, I-01).
+- **Publicar** a esa clase el solicitante resuelto (en el `requester` del `hello` de siempre) y el motivo del perfil (agente en la ascendencia, sin identidad), este último con el método `connection.desktop`, para que la app pinte la banda "abierta por un agente" con un dato del daemon en lugar de deducirlo.
 - **Registrar** en el log del daemon la clase, el tipo de identidad y el perfil asignado de cada conexión de la app, sin rutas de repos ni texto del cliente.
 - **Fuera de alcance**: la identidad firmada y el requisito de firma (SPIKE-DSK-001); el factor del SO, la presencia de sesión y cualquier escritura de la app (SPIKE-GRD-002, DEP-DSK-1); detectar una app lanzada por un agente con `open -a`, cuya ascendencia queda limpia (SPIKE-DSK-002, hueco R-6 aceptado para las alphas); restringir a un agente que ejecuta la CLI `raptor` (no lo pide ADR-GRP-017); los cambios de la app para declararse de la nueva clase y leer el motivo (los hace US-DSK-003 o la primera historia de la app tras la mezcla); Windows y Linux (**Pendiente: etapa de validación multiplataforma**).
 
@@ -54,9 +54,9 @@ tags: [desktop, canal, perfil-mcp, ascendencia, identidad-por-ruta, dep-dsk-2, s
 #### Pruebas Automatizadas
 
 - **Fila 1 de V4 (lectura)**: con el doble de prueba de la ascendencia, un par de la clase de la app con un agente en su ascendencia recibe el perfil `mcp`, no ve los métodos que el perfil `mcp` no ofrece y lleva el motivo en el handshake.
-- **Filas 3 y 4**: ascendencia limpia con identidad por ruta, perfil completo; ascendencia limpia sin identidad, el mismo resultado que hoy da un cliente sin terminal.
+- **Filas 3 y 4**: ascendencia limpia con identidad por ruta, perfil completo; ascendencia limpia sin identidad, el resultado de un cliente sin terminal (completo solo con los controles 1 a 3; si no, `mcp`).
 - **Identidad por ruta**: rechazada para un binario fuera de las carpetas de aplicaciones, traslocado, en un volumen montado, escribible por otros o con otro nombre; el resultado no cambia con lo que el cliente declare.
-- **Sin escalada** (I-01): un impostor (un proceso que no es el binario de la app) que se declara de su clase obtiene exactamente el perfil, los métodos y el solicitante que obtendría declarándose `cli` desde el mismo proceso; nunca la identidad por ruta ni una capa de escritura. Un intento de cambiar de clase tras el handshake se rechaza. La clase solo estrecha la lectura; lo que protege es la identidad exigida para escribir. Ajuste tras la revisión (2026-11-08), validado por Arquitecto / security-expert.
+- **Sin escalada** (I-01): un impostor (un proceso que no es el binario de la app) que se declara de su clase obtiene exactamente el solicitante, y nunca más perfil ni métodos (salvo `connection.desktop`, que solo describe su conexión), que los que obtendría declarándose `cli` desde el mismo proceso (DS-TS-GRP-009 D6); nunca la identidad por ruta ni una capa de escritura. Un intento de cambiar de clase tras el handshake se rechaza. La clase solo estrecha la lectura; lo que protege es la identidad exigida para escribir. Ajuste tras la revisión (2026-11-08), validado por Arquitecto / security-expert.
 - **Compatibilidad**: la CLI, la TUI, `raptor-mcp` y el cliente de los hooks reciben las mismas formas y perfiles que antes (suites del canal en `crates/core` en verde).
 
 #### Verificación Manual / Sandbox
