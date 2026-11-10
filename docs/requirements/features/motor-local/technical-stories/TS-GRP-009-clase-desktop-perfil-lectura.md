@@ -8,11 +8,11 @@ domain: GRP
 priority: high
 complexity: high
 created: 2026-11-08
-updated: 2026-11-08
+updated: 2026-11-09
 related:
   adrs: [ADR-GRP-017, ADR-GRP-005, ADR-GRP-016, ADR-MCP-001, ADR-CKP-003]
   stories: [US-DSK-003, US-DSK-004, TS-DSK-002, SPIKE-DSK-001, SPIKE-DSK-002, US-GRP-007]
-  specs: [DS-US-DSK-003]
+  specs: [DS-US-DSK-003, DS-TS-GRP-009]
 ado:
   id: null
   url: null
@@ -22,6 +22,8 @@ tags: [desktop, canal, perfil-mcp, ascendencia, identidad-por-ruta, dep-dsk-2, s
 ## TS-GRP-009: Clase de cliente de la app de escritorio y perfil de lectura mcp con un agente en su ascendencia
 
 **Valor**: una ventana de la app que abrió un agente ve lo mismo que ese agente por el MCP, y lo decide el daemon, no la app.
+
+> Dev Spec: [DS-TS-GRP-009](../dev-specs/TS-GRP-009-dev-spec.md). Precisa la clase (la deduce el daemon del ejecutable, sin cambiar `hello`), el contrato (método `connection.desktop` en lugar de una capacidad, ADR-GRP-016) y la fila 4 (completo solo con los controles 1 a 3). Decisión del orquestador (2026-11-09), validada por Arquitecto.
 
 ### Descripción
 
