@@ -431,7 +431,8 @@ fn help_lists_the_eight_limits() {
                 .unwrap_or_else(|| panic!("the group of the limits:\n{}", help.join("\n")));
             let group: Vec<&str> = help[title + 1..]
                 .iter()
-                .map(|l| inner(l))
+                // The graph panel under the help shows to the left of the modal's border.
+                .map(|l| inner(l).rsplit('┃').next().unwrap_or_default().trim())
                 .filter(|l| !l.is_empty())
                 .take(8)
                 .collect();

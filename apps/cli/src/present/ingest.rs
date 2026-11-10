@@ -4,7 +4,8 @@
 
 use gitraptor_api::discovery::CandidateView;
 use gitraptor_api::messages::{
-    GitEventKind, GitEventView, HeadView, SessionView, TrailerCheck, WorktreeStatus, WorktreeView,
+    BaseStatusView, GitEventKind, GitEventView, HeadView, SessionView, TrailerCheck,
+    WorktreeStatus, WorktreeView,
 };
 use gitraptor_api::scope::{AttentionCount, ConnectionRequester, GlobalSnapshot, RepoSnapshot};
 use gitraptor_api::{Actor, AgentKind};
@@ -61,6 +62,7 @@ pub fn repo(snapshot: &RepoSnapshot) -> RepoView {
             .name
             .as_ref()
             .map(SafeText::name_from_untrusted),
+        base_confirmed: snapshot.repo.base.status == BaseStatusView::Confirmed,
         worktrees: worktrees(&snapshot.repo.worktrees),
         fetched_ms: snapshot.repo.fetched_utc_ms,
         sessions: Vec::new(),

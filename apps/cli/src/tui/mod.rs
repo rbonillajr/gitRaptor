@@ -7,6 +7,7 @@ pub mod engine_state;
 pub mod fleet_order;
 pub mod freshness;
 pub mod gallery;
+pub mod graph;
 pub mod help;
 pub mod input;
 pub mod keymap;
@@ -26,6 +27,8 @@ pub use term::run;
 mod conflict_toast_tests;
 #[cfg(test)]
 mod freshness_view_tests;
+#[cfg(test)]
+mod graph_tests;
 #[cfg(test)]
 mod prediction_stale_tests;
 #[cfg(test)]

@@ -13,13 +13,13 @@ expression: text
 ┃  ⚠  agente no disponible  no disponible: falta la carpeta                    ┃
 ┃  ⚠  agente no disponible  no disponible: falta la carpeta                    ┃
 ┃  ⚠  agente no disponible  no disponible: falta la carpeta                    ┃
-┃  ⚠  agente no disponible  no disponible: falta la carpeta                    ┃
-┃  ⚠  agente no disponible  no disponible: falta la carpeta                    ┃
-┃                                                                              ┃
-┃                                                                              ┃
-┃                                                                              ┃
-┃                                                                              ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+┌─ Grafo ──────────────────────────────────────────────────────────────────────┐
+│ • main                                                                       │
+│ ├─ shop · sin agente ↑0 ↓0                                                   │
+│ ├─ claude-1 · sin agente ↑0 ↓0                                               │
+│ └ +8 carriles                                                                │
+└──────────────────────────────────────────────────────────────────────────────┘
 ┌─ ⚡ Conflictos previstos ────────────────────────────────────────────────────┐
 │ ⚡ claude-1 ↔ claude-2  hace 3 min                                           │
 │  • 1 archivo                                                                 │

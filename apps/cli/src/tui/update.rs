@@ -30,7 +30,7 @@ use crate::tui::alerts::{Batch, ConflictAlerts};
 use crate::tui::keymap::{self, Action};
 use crate::tui::prediction::{self, PairRow, PredictionModel};
 use crate::tui::toasts::ToastBody;
-use crate::tui::{diff, selection};
+use crate::tui::{diff, graph, selection};
 
 pub fn update(model: &mut Model, msg: Msg) -> Vec<Cmd> {
     match msg {
@@ -56,7 +56,7 @@ pub fn update(model: &mut Model, msg: Msg) -> Vec<Cmd> {
             Vec::new()
         }
         Msg::Engine(stamped) => {
-            let cmds = on_engine(model, stamped.msg);
+            let cmds = on_engine_watched(model, stamped.msg);
             selection::track(model);
             cmds
         }
@@ -84,7 +84,8 @@ pub fn update(model: &mut Model, msg: Msg) -> Vec<Cmd> {
             if tick_alerts(model) {
                 model.dirty = true;
             }
-            Vec::new()
+            // The open graph asks again when it is stale and enough time has passed.
+            graph::tick(model, std::time::Instant::now())
         }
     }
 }
@@ -111,9 +112,30 @@ fn on_action(model: &mut Model, action: Option<Action>) -> Vec<Cmd> {
         model.ui.help = true;
         return Vec::new();
     }
+    // The graph view is full screen too: the keys scroll or close it, and nothing acts on a
+    // fleet row under it (D20). Leaving still works.
+    if model.ui.graph.is_some() {
+        match action {
+            Some(Action::Up) => {
+                graph::scroll(model, false);
+                return Vec::new();
+            }
+            Some(Action::Down) => {
+                graph::scroll(model, true);
+                return Vec::new();
+            }
+            Some(Action::Later | Action::Graph) => return graph::close(model),
+            Some(Action::Diff | Action::ShowEnded | Action::Open | Action::Yes | Action::No) => {
+                return Vec::new();
+            }
+            _ => {}
+        }
+    }
     // The diff view is full screen: the keys scroll or close it. Leaving still works.
     if model.ui.diff.is_some() {
         match action {
+            // One full-screen view at a time (D20).
+            Some(Action::Graph) => return Vec::new(),
             Some(Action::Up) => {
                 diff::scroll(model, false);
                 return Vec::new();
@@ -192,6 +214,12 @@ fn on_action(model: &mut Model, action: Option<Action>) -> Vec<Cmd> {
         {
             diff::open(model)
         }
+        Some(Action::Graph)
+            if !matches!(model.ui.pick, Pick::Choosing { .. } | Pick::Asking)
+                && model.discovery_prompt().is_none() =>
+        {
+            graph::open(model)
+        }
         Some(action @ (Action::Up | Action::Down | Action::Open)) => on_pick(model, action),
         Some(Action::ShowEnded) if model.ui.pick == Pick::None => {
             model.ui.show_ended = !model.ui.show_ended;
@@ -204,7 +232,8 @@ fn on_action(model: &mut Model, action: Option<Action>) -> Vec<Cmd> {
             | Action::Later
             | Action::Help
             | Action::ShowEnded
-            | Action::Diff,
+            | Action::Diff
+            | Action::Graph,
         )
         | None => {
             model.ui.notice = Some(Notice::UnknownKey);
@@ -363,6 +392,7 @@ fn on_conn(model: &mut Model, event: ConnEvent) -> Vec<Cmd> {
         ConnEvent::Activity(activity) => model.engine.activity = activity,
         ConnEvent::Prediction(has) => model.engine.prediction = has,
         ConnEvent::Diff(has) => model.engine.diff = has,
+        ConnEvent::Graph(has) => model.engine.graph = has,
         ConnEvent::Requester(requester) => model.engine.requester = requester,
         ConnEvent::State(state) => {
             if matches!(
@@ -394,6 +424,24 @@ fn on_conn(model: &mut Model, event: ConnEvent) -> Vec<Cmd> {
         }
     }
     Vec::new()
+}
+
+/// [`on_engine`], and the open graph is marked stale when what the message brought changes a
+/// branch, a divergence, the base or the set of worktrees, or is a Git event (D9). A snapshot
+/// that changes none of those is no reason to ask again.
+fn on_engine_watched(model: &mut Model, msg: EngineMsg) -> Vec<Cmd> {
+    let watching =
+        model.ui.graph.is_some() && matches!(msg, EngineMsg::Snapshot(_) | EngineMsg::Event { .. });
+    if !watching {
+        return on_engine(model, msg);
+    }
+    let git_event = matches!(&msg, EngineMsg::Event { event, .. } if event.kind == GIT_EVENT);
+    let before = graph::signature(model);
+    let cmds = on_engine(model, msg);
+    if git_event || graph::signature(model) != before {
+        graph::mark_stale(model);
+    }
+    cmds
 }
 
 fn on_engine(model: &mut Model, msg: EngineMsg) -> Vec<Cmd> {
@@ -461,6 +509,10 @@ fn on_engine(model: &mut Model, msg: EngineMsg) -> Vec<Cmd> {
         }
         EngineMsg::Diff { ticket, result } => {
             diff::apply_reply(model, ticket, result);
+            Vec::new()
+        }
+        EngineMsg::Graph { ticket, result } => {
+            graph::apply_reply(model, ticket, result);
             Vec::new()
         }
         EngineMsg::Protection { repo_id, hooks } => {

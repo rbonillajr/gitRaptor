@@ -1,0 +1,34 @@
+---
+source: apps/cli/src/tui/view/graph_tests.rs
+expression: panel_screen
+---
+ shop · ✔ en vivo · motor observando · actúas como tú                                    ⚡ –  ⛔ –
+┏━ › Flota · ↑↓ respecto a main (copia local, antigüedad no disponible) ━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃     Agente                  Rama                                 Arch. ↑↓          Actividad     ┃
+┃› ○  Sin agente · shop       main                                 ~0    ↑0 ↓0       no disponible ┃
+┃  ●  claude-1 · feat-pagos   feat-pagos                           ~2    ↑3 ↓1       no disponible ┃
+┃  ○  Sin agente · feat-docs  feat-docs                            ~0    ↑1 ↓0       no disponible ┃
+┃                                                                                                  ┃
+┃                                                                                                  ┃
+┃                                                                                                  ┃
+┃                                                                                                  ┃
+┃                                                                                                  ┃
+┃                                                                                                  ┃
+┃                                                                                                  ┃
+┃                                                                                                  ┃
+┃                                                                                                  ┃
+┃                                                                                                  ┃
+┃                                                                                                  ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+┌─ Grafo ──────────────────────────────────────────────────────────────────────────────────────────┐
+│ • main                                                                                           │
+│ ├──•─•─• claude-1 · feat-pagos ↑3 ↓1                                                             │
+│ └──• feat-docs · sin agente ↑1 ↓0                                                                │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+└──────────────────────────────────────────────────────────────────────────────────────────────────┘
+ q salir  r reintentar  d ver diff  g grafo                                                 ? ayuda

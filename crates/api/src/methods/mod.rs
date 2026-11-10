@@ -38,6 +38,7 @@ mod scope;
 mod sessions;
 mod timemachine;
 
+pub use crate::event::GIT_EVENT;
 pub use attribution::*;
 pub use audit::*;
 pub use connection::*;

@@ -19,19 +19,19 @@ expression: snap
 #                                                                                                  #
 #                                                                                                  #
 #                                                                                                  #
-#                                                                                                  #
-#                                                                                                  #
-#                                                                                                  #
-#                                                                                                  #
-#                                                                                                  #
-#                                                                                                  #
-#                                                                                                  #
-#                                                                                                  #
-#                                                                                                  #
-#                                                                                                  #
-#                                                                                                  #
 #==================================================================================================#
- q quit  r retry  d view diff   o no agent: changes by you or another tool   * active agent  ? help
++- Graph ------------------------------------------------------------------------------------------+
+| o main                                                                                           |
+| |--o-o-o claude-1 | feat-pagos +3 -1                                                             |
+| |- claude-2 | feat-idle +0 -0                                                                    |
+| |--o feat-docs | no agent +1 -0                                                                  |
+| `- feat-gone | no agent +0 -0                                                                    |
+|                                                                                                  |
+|                                                                                                  |
+|                                                                                                  |
+|                                                                                                  |
++--------------------------------------------------------------------------------------------------+
+ q quit  r retry  d view diff  g graph   o no agent: changes by you or another tool          ? help
 === styles ===
 0:0-4 BOLD
 0:5-7 BOLD | DIM
@@ -102,33 +102,44 @@ expression: snap
 15:99-99 BOLD | REVERSED
 16:0-0 BOLD | REVERSED
 16:99-99 BOLD | REVERSED
-17:0-0 BOLD | REVERSED
-17:99-99 BOLD | REVERSED
-18:0-0 BOLD | REVERSED
-18:99-99 BOLD | REVERSED
-19:0-0 BOLD | REVERSED
-19:99-99 BOLD | REVERSED
-20:0-0 BOLD | REVERSED
-20:99-99 BOLD | REVERSED
-21:0-0 BOLD | REVERSED
-21:99-99 BOLD | REVERSED
-22:0-0 BOLD | REVERSED
-22:99-99 BOLD | REVERSED
-23:0-0 BOLD | REVERSED
-23:99-99 BOLD | REVERSED
-24:0-0 BOLD | REVERSED
-24:99-99 BOLD | REVERSED
-25:0-0 BOLD | REVERSED
-25:99-99 BOLD | REVERSED
-26:0-0 BOLD | REVERSED
-26:99-99 BOLD | REVERSED
-27:0-0 BOLD | REVERSED
-27:99-99 BOLD | REVERSED
-28:0-99 BOLD | REVERSED
+17:0-99 BOLD | REVERSED
+18:0-2 DIM
+18:3-7 BOLD | DIM
+18:8-99 DIM
+19:0-0 DIM
+19:4-7 BOLD
+19:99-99 DIM
+20:0-0 DIM
+20:11-31 BOLD
+20:33-37 DIM
+20:99-99 DIM
+21:0-0 DIM
+21:5-24 BOLD
+21:26-30 DIM
+21:99-99 DIM
+22:0-0 DIM
+22:3-5 DIM
+22:7-26 DIM
+22:28-32 DIM
+22:99-99 DIM
+23:0-0 DIM
+23:3-3 DIM
+23:5-24 DIM
+23:26-30 DIM
+23:99-99 DIM
+24:0-0 DIM
+24:99-99 DIM
+25:0-0 DIM
+25:99-99 DIM
+26:0-0 DIM
+26:99-99 DIM
+27:0-0 DIM
+27:99-99 DIM
+28:0-99 DIM
 29:1-1 BOLD
 29:9-9 BOLD
 29:18-18 BOLD
-29:32-32 DIM
-29:34-73 DIM
-29:79-90 DIM
+29:31-31 BOLD
+29:41-41 DIM
+29:43-82 DIM
 29:93-93 BOLD

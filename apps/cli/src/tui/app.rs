@@ -220,6 +220,7 @@ impl<B: Backend> App<B> {
                     repo_id,
                     root,
                 },
+                Cmd::Graph { ticket, repo_id } => LinkCmd::Graph { ticket, repo_id },
                 Cmd::CancelQuery { ticket } => LinkCmd::CancelQuery { ticket },
                 // The model already says quit; the loop ends after this iteration.
                 Cmd::Quit => continue,

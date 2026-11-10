@@ -3,42 +3,42 @@ source: apps/cli/src/tui/engine_state.rs
 expression: "screen(&with_missing_base(lang), 120, 40)"
 ---
  shop · ✔ live · engine observing · acting as you                                                            ⚡ –  ⛔ –
-┏━ › Fleet · ↑↓ not computable: develop not found ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃     Agent                  Branch                                                 Files ↑↓             Activity      ┃
-┃› ○  No agent · shop        main                                                   ~0    not computable not available ┃
-┃  ●  claude-1 · feat-pagos  feat-pagos                                             ~2    not computable not available ┃
-┃  ○  No agent · feat-docs   feat-docs                                              ~0    not computable not available ┃
-┃                                                                                                                      ┃
-┃                                                                                                                      ┃
-┃                                                                                                                      ┃
-┃                                                                                                                      ┃
-┃                                                                                                                      ┃
-┃                                                                                                                      ┃
-┃                                                                                                                      ┃
-┃                                                                                                                      ┃
-┃                                                                                                                      ┃
-┃                                                                                                                      ┃
-┃                                                                                                                      ┃
-┃                                                                                                                      ┃
-┃                                                                                                                      ┃
-┃                                                                                                                      ┃
-┃                                                                                                                      ┃
-┃                                                                                                                      ┃
-┃                                                                                                                      ┃
-┃                                                                                                                      ┃
-┃                                                                                                                      ┃
-┃                                                                                                                      ┃
-┃                                                                                                                      ┃
-┃                                                                                                                      ┃
-┃                                                                                                                      ┃
-┃                                                                                                                      ┃
-┃                                                                                                                      ┃
-┃                                                                                                                      ┃
-┃                                                                                                                      ┃
-┃                                                                                                                      ┃
-┃                                                                                                                      ┃
-┃                                                                                                                      ┃
-┃                                                                                                                      ┃
-┃                                                                                                                      ┃
-┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
- q quit  r retry  d view diff   ○ no agent: changes by you or another tool   ● active agent                      ? help
+┏━ › Fleet · ↑↓ not computable: develop not found ━━━━━━━━━━━━━━━┓┌─ Graph ────────────────────────────────────────────┐
+┃     Agent          Branch      Files ↑↓          Activity      ┃│ ⚠  Base branch develop not found: not computable   │
+┃› ○  No agent · s…  main        ~0    not comput… not available ┃│                                                    │
+┃  ●  claude-1 · f…  feat-pagos  ~2    not comput… not available ┃│                                                    │
+┃  ○  No agent · f…  feat-docs   ~0    not comput… not available ┃│                                                    │
+┃                                                                ┃│                                                    │
+┃                                                                ┃│                                                    │
+┃                                                                ┃│                                                    │
+┃                                                                ┃│                                                    │
+┃                                                                ┃│                                                    │
+┃                                                                ┃│                                                    │
+┃                                                                ┃│                                                    │
+┃                                                                ┃│                                                    │
+┃                                                                ┃│                                                    │
+┃                                                                ┃│                                                    │
+┃                                                                ┃│                                                    │
+┃                                                                ┃│                                                    │
+┃                                                                ┃│                                                    │
+┃                                                                ┃│                                                    │
+┃                                                                ┃│                                                    │
+┃                                                                ┃│                                                    │
+┃                                                                ┃│                                                    │
+┃                                                                ┃│                                                    │
+┃                                                                ┃│                                                    │
+┃                                                                ┃│                                                    │
+┃                                                                ┃│                                                    │
+┃                                                                ┃│                                                    │
+┃                                                                ┃│                                                    │
+┃                                                                ┃│                                                    │
+┃                                                                ┃│                                                    │
+┃                                                                ┃│                                                    │
+┃                                                                ┃│                                                    │
+┃                                                                ┃│                                                    │
+┃                                                                ┃│                                                    │
+┃                                                                ┃│                                                    │
+┃                                                                ┃│                                                    │
+┃                                                                ┃│                                                    │
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛└────────────────────────────────────────────────────┘
+ q quit  r retry  d view diff  g graph   ○ no agent: changes by you or another tool   ● active agent             ? help

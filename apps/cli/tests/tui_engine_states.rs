@@ -636,7 +636,9 @@ fn row_actions_are_disabled_with_a_reason_on_unavailable_rows() {
             | Action::Later
             | Action::Help
             // Filters the whole list, no row.
-            | Action::ShowEnded => false,
+            | Action::ShowEnded
+            // Opens the graph of the whole repo, no row.
+            | Action::Graph => false,
             // Asks for the diff of the row under the cursor.
             Action::Diff => true,
         }
@@ -664,6 +666,7 @@ fn row_actions_are_disabled_with_a_reason_on_unavailable_rows() {
                     path: SafeText::text("/w"),
                     name: SafeText::name("w"),
                     base: None,
+                    base_confirmed: false,
                     worktrees: vec![WorktreeRow {
                         path: SafeText::text("/w/gone"),
                         name: SafeText::name("gone"),

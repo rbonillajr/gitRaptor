@@ -7,7 +7,8 @@ expression: snap
 ┃     Ag┃ In the fleet                                                 ┃y      ┃
 ┃› ○  No┃   f         show ended (0)                                   ┃ilable ┃
 ┃  ●  cl┃   d         view diff                                        ┃ilable ┃
-┃  ○  No┃                                                              ┃ilable ┃
+┃  ○  No┃   g         graph                                            ┃ilable ┃
+┃       ┃                                                              ┃       ┃
 ┃       ┃ Always                                                       ┃       ┃
 ┃       ┃   q Ctrl-C  quit                                             ┃       ┃
 ┃       ┃   r         retry                                            ┃       ┃
@@ -15,17 +16,16 @@ expression: snap
 ┃       ┃   ?         help                                             ┃       ┃
 ┃       ┃                                                              ┃       ┃
 ┃       ┃ Symbols                                                      ┃       ┃
-┃       ┃   ●         active agent                                     ┃       ┃
-┃       ┃   ◐         idle agent                                       ┃       ┃
-┃       ┃   ○         no agent or session ended                        ┃       ┃
-┃       ┃   ⚠         warning: the text beside it says why             ┃       ┃
-┃       ┃   ⚡        predicted conflict                               ┃       ┃
-┃       ┃   ⛔        blocked by policy                                ┃       ┃
-┃       ┃                                                              ┃       ┃
-┃       ┃                                                    Esc close ┃       ┃
-┃       ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛       ┃
-┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
- q quit  r retry  d view diff                                            ? help
+┗━━━━━━━┃   ●         active agent                                     ┃━━━━━━━┛
+┌─ Graph┃   ◐         idle agent                                       ┃───────┐
+│ • main┃   ○         no agent or session ended                        ┃       │
+│ ├──•─•┃   ⚠         warning: the text beside it says why             ┃       │
+│ └──• f┃   ⚡        predicted conflict                               ┃       │
+│       ┃   ⛔        blocked by policy                                ┃       │
+│       ┃                                                              ┃       │
+│       ┃                                                    Esc close ┃       │
+└───────┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛───────┘
+ q quit  r retry  d view diff  g graph                                   ? help
 === styles ===
 0:0-0 bg=#3a3a3a
 0:1-4 bg=#3a3a3a BOLD
@@ -79,87 +79,98 @@ expression: snap
 5:3-3 fg=#949494
 5:6-7 fg=#949494
 5:8-8 fg=#ffe066
+5:12-12 fg=#2dc2ad BOLD
 5:71-71 fg=#ffe066
 5:72-77 fg=#949494
 5:79-79 fg=#ffe066
 6:0-0 fg=#ffe066
 6:8-8 fg=#ffe066
-6:10-15 BOLD
 6:71-71 fg=#ffe066
 6:79-79 fg=#ffe066
 7:0-0 fg=#ffe066
 7:8-8 fg=#ffe066
-7:12-19 fg=#2dc2ad BOLD
+7:10-15 BOLD
 7:71-71 fg=#ffe066
 7:79-79 fg=#ffe066
 8:0-0 fg=#ffe066
 8:8-8 fg=#ffe066
-8:12-12 fg=#2dc2ad BOLD
+8:12-19 fg=#2dc2ad BOLD
 8:71-71 fg=#ffe066
 8:79-79 fg=#ffe066
 9:0-0 fg=#ffe066
 9:8-8 fg=#ffe066
-9:12-17 fg=#2dc2ad BOLD
+9:12-12 fg=#2dc2ad BOLD
 9:71-71 fg=#ffe066
 9:79-79 fg=#ffe066
 10:0-0 fg=#ffe066
 10:8-8 fg=#ffe066
-10:12-12 fg=#2dc2ad BOLD
+10:12-17 fg=#2dc2ad BOLD
 10:71-71 fg=#ffe066
 10:79-79 fg=#ffe066
 11:0-0 fg=#ffe066
 11:8-8 fg=#ffe066
+11:12-12 fg=#2dc2ad BOLD
 11:71-71 fg=#ffe066
 11:79-79 fg=#ffe066
 12:0-0 fg=#ffe066
 12:8-8 fg=#ffe066
-12:10-16 BOLD
 12:71-71 fg=#ffe066
 12:79-79 fg=#ffe066
 13:0-0 fg=#ffe066
 13:8-8 fg=#ffe066
-13:12-12 fg=#3fb950
+13:10-16 BOLD
 13:71-71 fg=#ffe066
 13:79-79 fg=#ffe066
-14:0-0 fg=#ffe066
-14:8-8 fg=#ffe066
-14:12-12 fg=#949494
-14:71-71 fg=#ffe066
-14:79-79 fg=#ffe066
-15:0-0 fg=#ffe066
+14:0-8 fg=#ffe066
+14:12-12 fg=#3fb950
+14:71-79 fg=#ffe066
+15:0-2 fg=#949494
+15:3-7 fg=#949494 BOLD
 15:8-8 fg=#ffe066
 15:12-12 fg=#949494
 15:71-71 fg=#ffe066
-15:79-79 fg=#ffe066
-16:0-0 fg=#ffe066
+15:72-79 fg=#949494
+16:0-0 fg=#949494
+16:2-2 fg=#bc8cff
+16:4-7 fg=#bc8cff BOLD
 16:8-8 fg=#ffe066
-16:12-13 fg=#d29922
+16:12-12 fg=#949494
 16:71-71 fg=#ffe066
-16:79-79 fg=#ffe066
-17:0-0 fg=#ffe066
+16:79-79 fg=#949494
+17:0-0 fg=#949494
+17:2-2 fg=#bc8cff
+17:3-7 fg=#e69f00
 17:8-8 fg=#ffe066
-17:12-12 fg=#d29922
+17:12-13 fg=#d29922
 17:71-71 fg=#ffe066
-17:79-79 fg=#ffe066
-18:0-0 fg=#ffe066
+17:79-79 fg=#949494
+18:0-0 fg=#949494
+18:2-2 fg=#bc8cff
+18:3-5 fg=#949494
+18:7-7 fg=#949494
 18:8-8 fg=#ffe066
-18:12-12 fg=#f85149
+18:12-12 fg=#d29922
 18:71-71 fg=#ffe066
-18:79-79 fg=#ffe066
-19:0-0 fg=#ffe066
+18:79-79 fg=#949494
+19:0-0 fg=#949494
 19:8-8 fg=#ffe066
+19:12-12 fg=#f85149
 19:71-71 fg=#ffe066
-19:79-79 fg=#ffe066
-20:0-0 fg=#ffe066
+19:79-79 fg=#949494
+20:0-0 fg=#949494
 20:8-8 fg=#ffe066
-20:61-63 fg=#2dc2ad BOLD
 20:71-71 fg=#ffe066
-20:79-79 fg=#ffe066
-21:0-0 fg=#ffe066
-21:8-71 fg=#ffe066
-21:79-79 fg=#ffe066
-22:0-79 fg=#ffe066
+20:79-79 fg=#949494
+21:0-0 fg=#949494
+21:8-8 fg=#ffe066
+21:61-63 fg=#2dc2ad BOLD
+21:71-71 fg=#ffe066
+21:79-79 fg=#949494
+22:0-7 fg=#949494
+22:8-71 fg=#ffe066
+22:72-79 fg=#949494
 23:1-1 fg=#2dc2ad BOLD
 23:9-9 fg=#2dc2ad BOLD
 23:18-18 fg=#2dc2ad BOLD
+23:31-31 fg=#2dc2ad BOLD
 23:73-73 fg=#2dc2ad BOLD
