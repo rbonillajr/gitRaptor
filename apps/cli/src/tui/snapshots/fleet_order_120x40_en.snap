@@ -8,7 +8,7 @@ expression: text
 #> o   No agent | shop  main        ~0    +0 -0       not ava... #| |- claude-1 | d-act +0 -0                          |
 #  *   claude-1 | d...  br-d        ~0    +0 -0       not ava... #| |- claude-2 | m-act +0 -0                          |
 #  *   claude-2 | m...  br-m        ~0    +0 -0       not ava... #| |- claude-3 | c-idle +0 -0                         |
-#  ~   claude-3 | c...  br-idle     ~0    +0 -0       not ava... #| |- claude-4 | b-done +0 -0                         |
+#  ~   claude-3 | c...  br-idle     ~0    +0 -0       not ava... #| |- b-done | no agent +0 -0                         |
 #  o   claude-4 | b...  br-done     ~0    +0 -0       not ava... #| `- a-none | no agent +0 -0                         |
 #      ` ended 2 h ago                                           #|                                                    |
 #  o   No agent | a...  br-none     ~0    +0 -0       not ava... #|                                                    |

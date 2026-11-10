@@ -22,7 +22,7 @@ expression: text
 | |- claude-1 | d-act +0 -0                                                    |
 | |- claude-2 | m-act +0 -0                                                    |
 | |- claude-3 | c-idle +0 -0                                                   |
-| |- claude-4 | b-done +0 -0                                                   |
+| |- b-done | sin agente +0 -0                                                 |
 | `- a-none | sin agente +0 -0                                                 |
 +------------------------------------------------------------------------------+
  q salir  r reintentar  d ver diff  g grafo                             ? ayuda

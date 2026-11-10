@@ -323,7 +323,7 @@ fn toast_count(m: &Model, needle: &str) -> usize {
 
 #[test]
 fn s1_a_new_conflict_records_an_alert_a_toast_and_raises_both_rows() {
-    let mut m = opened(Lang::Es, 120, 50, vec![]);
+    let mut m = opened(Lang::Es, 200, 50, vec![]);
     alert_new(&mut m, 2, &["src/api.rs"]);
     let s = screen(&m);
     assert!(
@@ -335,7 +335,7 @@ fn s1_a_new_conflict_records_an_alert_a_toast_and_raises_both_rows() {
         "the conflict panel entry has no 'nuevo' mark:\n{s}"
     );
     // A pair of the last worktrees: both rows go above a calm worktree (attention zone).
-    let mut m2 = opened(Lang::Es, 120, 50, vec![]);
+    let mut m2 = opened(Lang::Es, 200, 50, vec![]);
     let p = bolt("p87", 2, 8, 7);
     update(&mut m2, changed(2, vec![p.clone()], &[]));
     update(&mut m2, page(vec![detail(p, &["src/api.rs"])]));
@@ -355,27 +355,27 @@ fn s1_a_new_conflict_records_an_alert_a_toast_and_raises_both_rows() {
 #[test]
 fn s2_the_toast_text_in_en_es_and_ascii_with_files_and_without_detail() {
     // es / en, one file.
-    let mut es = opened(Lang::Es, 120, 50, vec![]);
+    let mut es = opened(Lang::Es, 200, 50, vec![]);
     alert_new(&mut es, 2, &["src/api.rs"]);
     assert!(screen(&es).contains(TOAST_ES), "es text missing");
-    let mut en = opened(Lang::En, 120, 50, vec![]);
+    let mut en = opened(Lang::En, 200, 50, vec![]);
     alert_new(&mut en, 2, &["src/api.rs"]);
     assert!(screen(&en).contains(TOAST_EN), "en text missing");
     // more files.
-    let mut es3 = opened(Lang::Es, 120, 50, vec![]);
+    let mut es3 = opened(Lang::Es, 200, 50, vec![]);
     alert_new(&mut es3, 2, &["src/api.rs", "b.rs", "c.rs"]);
     assert!(
         screen(&es3).contains(&format!("{TOAST_ES} y 2 más")),
         "es ' y N más' missing"
     );
-    let mut en2 = opened(Lang::En, 120, 50, vec![]);
+    let mut en2 = opened(Lang::En, 200, 50, vec![]);
     alert_new(&mut en2, 2, &["src/api.rs", "b.rs"]);
     assert!(
         screen(&en2).contains(&format!("{TOAST_EN} and 1 more")),
         "en ' and N more' missing"
     );
     // against the base: named with the base branch.
-    let mut base = opened(Lang::Es, 120, 50, vec![]);
+    let mut base = opened(Lang::Es, 200, 50, vec![]);
     let p = bolt_n("pb", 2, 1, None, 1);
     update(&mut base, changed(2, vec![p.clone()], &[]));
     update(&mut base, page(vec![detail(p, &["src/api.rs"])]));
@@ -385,7 +385,7 @@ fn s2_the_toast_text_in_en_es_and_ascii_with_files_and_without_detail() {
         screen(&base)
     );
     // no detail: after two ticks it goes out without file.
-    let mut nodetail = opened(Lang::Es, 120, 50, vec![]);
+    let mut nodetail = opened(Lang::Es, 200, 50, vec![]);
     update(&mut nodetail, changed(2, vec![bolt("p12", 2, 1, 2)], &[]));
     tick(&mut nodetail, T0 + 1_000);
     tick(&mut nodetail, T0 + 2_000);
@@ -427,7 +427,7 @@ fn s2_the_toast_text_in_en_es_and_ascii_with_files_and_without_detail() {
 #[test]
 fn s3_a_known_conflict_never_alerts_again_and_a_returning_one_does() {
     const MARK: &str = "Conflicto previsto:";
-    let mut m = opened(Lang::Es, 120, 50, vec![]);
+    let mut m = opened(Lang::Es, 200, 50, vec![]);
     alert_new(&mut m, 2, &["src/api.rs"]);
     assert_eq!(
         toast_count(&m, "⚡ Conflicto previsto: claude-1"),
@@ -528,7 +528,7 @@ fn s3_a_known_conflict_never_alerts_again_and_a_returning_one_does() {
 fn s4_opening_seeds_without_alerting_and_truncated_or_closed_scopes_are_honest() {
     let marks = |m: &Model| toast_count(m, "⚡ Conflicto previsto:");
     // Existing conflicts are seeded: no toast, no mark, even after the ticks.
-    let mut m = opened(Lang::Es, 120, 50, vec![bolt("p12", 1, 1, 2)]);
+    let mut m = opened(Lang::Es, 200, 50, vec![bolt("p12", 1, 1, 2)]);
     tick(&mut m, T0 + 1_000);
     tick(&mut m, T0 + 2_000);
     assert_eq!(marks(&m), 0, "an existing conflict alerted when opening");
@@ -545,14 +545,14 @@ fn s4_opening_seeds_without_alerting_and_truncated_or_closed_scopes_are_honest()
     assert_eq!(marks(&m), 0, "a prediction.list page alerted a seeded pair");
 
     // A truncated snapshot without the pair keeps it known.
-    let mut t = opened(Lang::Es, 120, 50, vec![bolt("p12", 1, 1, 2)]);
+    let mut t = opened(Lang::Es, 200, 50, vec![bolt("p12", 1, 1, 2)]);
     update(&mut t, snapshot_with(vec![], true));
     update(&mut t, changed(2, vec![bolt("p12", 2, 1, 2)], &[]));
     tick(&mut t, T0 + 1_000);
     tick(&mut t, T0 + 2_000);
     assert_eq!(marks(&t), 0, "a truncated snapshot dropped a known pair");
     // A complete snapshot without it drops it: its return alerts.
-    let mut c = opened(Lang::Es, 120, 50, vec![bolt("p12", 1, 1, 2)]);
+    let mut c = opened(Lang::Es, 200, 50, vec![bolt("p12", 1, 1, 2)]);
     update(&mut c, snapshot_with(vec![], false));
     update(&mut c, changed(2, vec![bolt("p12", 2, 1, 2)], &[]));
     tick(&mut c, T0 + 1_000);
@@ -564,7 +564,7 @@ fn s4_opening_seeds_without_alerting_and_truncated_or_closed_scopes_are_honest()
     );
 
     // ScopeClosed forgets the repo: the pair is unknown again afterwards.
-    let mut z = opened(Lang::Es, 120, 50, vec![bolt("p12", 1, 1, 2)]);
+    let mut z = opened(Lang::Es, 200, 50, vec![bolt("p12", 1, 1, 2)]);
     update(&mut z, resync(ResyncReason::ScopeClosed));
     update(&mut z, snapshot(vec![]));
     update(&mut z, changed(2, vec![bolt("p12", 2, 1, 2)], &[]));
@@ -576,7 +576,7 @@ fn s4_opening_seeds_without_alerting_and_truncated_or_closed_scopes_are_honest()
 #[test]
 fn s5_the_toast_expires_at_5_s_but_the_mark_stays_and_the_stack_is_bounded() {
     let toast = "⚡ Conflicto previsto: claude-1 ↔ claude-2";
-    let mut m = opened(Lang::Es, 120, 50, vec![]);
+    let mut m = opened(Lang::Es, 200, 50, vec![]);
     alert_new(&mut m, 2, &["src/api.rs"]);
     tick(&mut m, T0 + 4_999);
     assert!(screen(&m).contains(toast), "the toast is gone at +4.999 ms");
@@ -589,7 +589,7 @@ fn s5_the_toast_expires_at_5_s_but_the_mark_stays_and_the_stack_is_bounded() {
     );
 
     // The toast of a pair that disappears goes at the next tick.
-    let mut g = opened(Lang::Es, 120, 50, vec![]);
+    let mut g = opened(Lang::Es, 200, 50, vec![]);
     alert_new(&mut g, 2, &["src/api.rs"]);
     update(&mut g, changed(3, vec![], &["p12"]));
     tick(&mut g, T0 + 100);
@@ -599,7 +599,7 @@ fn s5_the_toast_expires_at_5_s_but_the_mark_stays_and_the_stack_is_bounded() {
     );
 
     // Stack of 3, the oldest leaves first.
-    let mut st = opened(Lang::Es, 120, 50, vec![]);
+    let mut st = opened(Lang::Es, 200, 50, vec![]);
     for (i, (a, b)) in [(1, 2), (3, 4), (5, 6), (7, 8)].into_iter().enumerate() {
         let id = format!("p{a}{b}");
         let p = bolt(&id, 2, a, b);
@@ -661,11 +661,11 @@ fn s6_no_bell_and_no_os_notification() {
     let mut terminal = Terminal::with_options(
         CrosstermBackend::new(rec.clone()),
         TerminalOptions {
-            viewport: Viewport::Fixed(Rect::new(0, 0, 120, 50)),
+            viewport: Viewport::Fixed(Rect::new(0, 0, 200, 50)),
         },
     )
     .unwrap();
-    let mut m = opened(Lang::Es, 120, 50, vec![]);
+    let mut m = opened(Lang::Es, 200, 50, vec![]);
     let p = bolt("p92", 2, BEL_WT, 2);
     update(&mut m, changed(2, vec![p.clone()], &[]));
     update(&mut m, page(vec![detail(p, &["src/a\u{7}pi.rs"])]));
