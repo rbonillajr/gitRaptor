@@ -11,6 +11,7 @@ use crate::present::i18n::{HelpPanel, Lang, Legend, Text};
 use crate::present::prediction_text::PredictionText;
 use crate::tui::fleet_order;
 use crate::tui::keymap::{Action, BINDINGS, Binding, Key};
+use crate::tui::selection;
 use crate::tui::view::Say;
 use crate::tui::widgets::key_hints::{HelpGroup, HelpModel, KeyHint, LegendRow};
 
@@ -20,7 +21,9 @@ pub const HELP_WIDTH: u16 = 64;
 /// The panel that receives the keys: the repo picker, a question (the folder's or a
 /// discovered repo) or the fleet.
 pub fn context(model: &Model) -> HelpPanel {
-    if matches!(model.ui.pick, Pick::Choosing { .. }) {
+    if model.ui.diff.is_some() {
+        HelpPanel::Diff
+    } else if matches!(model.ui.pick, Pick::Choosing { .. }) {
         HelpPanel::Picker
     } else if model.ui.pick == Pick::Asking || model.discovery_prompt().is_some() {
         HelpPanel::Question
@@ -36,14 +39,32 @@ pub fn available(model: &Model) -> impl Iterator<Item = &'static Binding> + '_ {
     let list = matches!(model.ui.pick, Pick::Choosing { .. });
     let discovering = model.discovery_prompt().is_some();
     let asking = model.ui.pick == Pick::Asking || discovering;
+    // The diff view is full screen: it scrolls, closes and leaves; nothing else is accepted.
+    let viewing = model.ui.diff.is_some();
     BINDINGS
         .iter()
-        .filter(move |b| list || !b.action.is_list())
-        .filter(move |b| asking || !b.action.is_answer())
-        .filter(move |b| discovering || b.action != Action::Later)
+        .filter(move |b| {
+            !viewing
+                || matches!(
+                    b.action,
+                    Action::Quit
+                        | Action::Up
+                        | Action::Down
+                        | Action::Later
+                        | Action::Help
+                        | Action::Suspend
+                )
+        })
+        .filter(move |b| viewing || list || !b.action.is_list())
+        .filter(move |b| viewing || asking || !b.action.is_answer())
+        .filter(move |b| viewing || discovering || b.action != Action::Later)
         .filter(move |b| b.action != Action::ShowEnded || context(model) == HelpPanel::Fleet)
-        // The bar and `?` list the diff key once the view paints it.
-        .filter(|b| b.action != Action::Diff)
+        // `d` acts on a fleet row: not while a picker or a question has the keys, nor with no
+        // row to act on.
+        .filter(move |b| {
+            b.action != Action::Diff
+                || (!list && !asking && selection::selected_row(model).is_some())
+        })
 }
 
 /// The text of a binding's hint: the `f` one counts the worktrees that hide an ended session,
@@ -59,6 +80,7 @@ pub(crate) fn hint_text(model: &Model, binding: &Binding) -> Text<'static> {
                 .and_then(|r| r.data.as_ref())
                 .map_or(0, |r| fleet_order::hidden_count(r, model.now_ms)),
         ),
+        Action::Later if model.ui.diff.is_some() => Text::KeyClose,
         _ => binding.hint,
     }
 }

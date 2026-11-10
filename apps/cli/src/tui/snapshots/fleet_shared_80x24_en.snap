@@ -1,11 +1,11 @@
 ---
 source: apps/cli/src/tui/view_order_tests.rs
-expression: screen(&model)
+expression: text
 ---
  shop | [ok] live | engine observing | acting as you         [c] -  [blocked] -
 #= > Fleet | +- vs main (local copy, fetch age not available) =================#
 #      Agent                   Branch          Files +-          Activity      #
-#  o   No agent | shop         main            ~0    +0 -0       not available #
+#> o   No agent | shop         main            ~0    +0 -0       not available #
 #  *   claude-1 | wt-pagos +2  feat-pagos      ~0    +0 -0       not available #
 #      ` shared with ~ claude-2, o claude-3 (ended 1 h ago)                    #
 #                                                                              #
@@ -25,4 +25,4 @@ expression: screen(&model)
 #                                                                              #
 #                                                                              #
 #==============================================================================#
- q quit  r retry   o no agent: changes by you or another tool            ? help
+ q quit  r retry  d view diff                                            ? help

@@ -204,6 +204,8 @@ pub enum Text<'a> {
     KeyLater,
     /// The hint of `d`: see what the selected worktree would integrate.
     KeyDiff,
+    /// The hint of `d` on a worktree that cannot be read: why it does nothing.
+    KeyDiffDisabled,
     /// "Observe this repo?" (US-CKP-025): the panel's title, what it means and the question
     /// with its default.
     ObserveTitle,
@@ -310,10 +312,11 @@ pub enum HelpPanel {
     Fleet,
     Picker,
     Question,
+    Diff,
 }
 
 impl HelpPanel {
-    pub const ALL: [Self; 3] = [Self::Fleet, Self::Picker, Self::Question];
+    pub const ALL: [Self; 4] = [Self::Fleet, Self::Picker, Self::Question, Self::Diff];
 }
 
 /// A state symbol and what it means.
@@ -476,6 +479,7 @@ fn en(text: Text<'_>) -> String {
         Text::KeyNo => "no".into(),
         Text::KeyLater => "later".into(),
         Text::KeyDiff => "view diff".into(),
+        Text::KeyDiffDisabled => "the worktree is not available".into(),
         Text::Notice(Notice::DiffUnsupported) => {
             "the engine does not offer the diff; restart it".into()
         }
@@ -576,6 +580,7 @@ fn en(text: Text<'_>) -> String {
         Text::HelpPanel(HelpPanel::Fleet) => "In the fleet".into(),
         Text::HelpPanel(HelpPanel::Picker) => "Choosing a repo".into(),
         Text::HelpPanel(HelpPanel::Question) => "In the question".into(),
+        Text::HelpPanel(HelpPanel::Diff) => "In the diff".into(),
         Text::HelpAlways => "Always".into(),
         Text::HelpSymbols => "Symbols".into(),
         Text::Legend(Legend::Active) => "active agent".into(),
@@ -760,6 +765,7 @@ fn es(text: Text<'_>) -> String {
         Text::KeyNo => "no".into(),
         Text::KeyLater => "luego".into(),
         Text::KeyDiff => "ver diff".into(),
+        Text::KeyDiffDisabled => "el worktree no está disponible".into(),
         Text::Notice(Notice::DiffUnsupported) => {
             "el motor no ofrece el diff; reinícialo".into()
         }
@@ -860,6 +866,7 @@ fn es(text: Text<'_>) -> String {
         Text::HelpPanel(HelpPanel::Fleet) => "En la flota".into(),
         Text::HelpPanel(HelpPanel::Picker) => "Al elegir repo".into(),
         Text::HelpPanel(HelpPanel::Question) => "En la pregunta".into(),
+        Text::HelpPanel(HelpPanel::Diff) => "En el diff".into(),
         Text::HelpAlways => "Siempre".into(),
         Text::HelpSymbols => "Símbolos".into(),
         Text::Legend(Legend::Active) => "agente activo".into(),
@@ -991,6 +998,21 @@ const MODULE_ERRORS: &[(&str, &str, &str)] = &[
         "attribution-rejected",
         "the attribution was not changed",
         "la atribución no cambió",
+    ),
+    (
+        "query-busy",
+        "another query is already running",
+        "hay otra consulta en curso",
+    ),
+    (
+        "query-cancelled",
+        "the query was cancelled",
+        "se canceló la consulta",
+    ),
+    (
+        "diff-unavailable",
+        "the diff is not available now",
+        "el diff no está disponible ahora",
     ),
 ];
 
@@ -1162,6 +1184,7 @@ pub(crate) fn every_text() -> Vec<Text<'static>> {
         Text::KeyNo,
         Text::KeyLater,
         Text::KeyDiff,
+        Text::KeyDiffDisabled,
         Text::ObserveTitle,
         Text::ObserveWhy,
         Text::ObserveQuestion,
@@ -1356,6 +1379,7 @@ fn sampled(text: &Text<'_>) {
         | Text::KeyNo
         | Text::KeyLater
         | Text::KeyDiff
+        | Text::KeyDiffDisabled
         | Text::ObserveTitle
         | Text::ObserveWhy
         | Text::ObserveQuestion

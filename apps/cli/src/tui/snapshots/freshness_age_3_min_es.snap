@@ -5,7 +5,7 @@ expression: text
  shop · ✔ en vivo · motor – · –                                      ⚡ –  ⛔ –
 ┏━ › Flota · ↑↓ respecto a main (copia local, antigüedad no disponible) ━━━━━━━┓
 ┃     Agente                Rama         Arch. ↑↓          Actividad           ┃
-┃  ⚠  agente no disponible  no disponible: falta la carpeta                    ┃
+┃› ⚠  agente no disponible  no disponible: falta la carpeta                    ┃
 ┃  ⚠  agente no disponible  no disponible: falta la carpeta              ⚡    ┃
 ┃  ⚠  agente no disponible  no disponible: falta la carpeta              ⚡    ┃
 ┃  ⚠  agente no disponible  no disponible: falta la carpeta                    ┃
@@ -25,4 +25,4 @@ expression: text
 │  • 1 archivo                                                                 │
 │ ⚠ con lo sin commitear · ⚡ solo commits · sin drivers ni .gitattributes     │
 └──────────────────────────────────────────────────────────────────────────────┘
- q salir  r reintentar   ⚠  aviso: el texto de al lado dice por qué     ? ayuda
+ q salir  r reintentar  d ver diff (el worktree no está disponible)     ? ayuda

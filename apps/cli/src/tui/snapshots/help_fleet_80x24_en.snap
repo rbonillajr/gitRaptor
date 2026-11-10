@@ -3,10 +3,10 @@ source: apps/cli/src/tui/view/a11y_tests.rs
 expression: snap
 ---
  shop · ✔ live · engine observing · acting as you                    ⚡ –  ⛔ –
-┏━ › Fleet · ↑↓ vs main (local copy, fetch age not available) ━━━━━━━━━━━━━━━━━┓
-┃     Ag┏━ › Keys ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓y      ┃
-┃  ○  No┃ In the fleet                                                 ┃ilable ┃
-┃  ●  cl┃   f         show ended (0)                                   ┃ilable ┃
+┏━ › Fle┏━ › Keys ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓━━━━━━━┓
+┃     Ag┃ In the fleet                                                 ┃y      ┃
+┃› ○  No┃   f         show ended (0)                                   ┃ilable ┃
+┃  ●  cl┃   d         view diff                                        ┃ilable ┃
 ┃  ○  No┃                                                              ┃ilable ┃
 ┃       ┃ Always                                                       ┃       ┃
 ┃       ┃   q Ctrl-C  quit                                             ┃       ┃
@@ -25,7 +25,7 @@ expression: snap
 ┃       ┃                                                    Esc close ┃       ┃
 ┃       ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛       ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
- q quit  r retry   ○ no agent: changes by you or another tool            ? help
+ q quit  r retry  d view diff                                            ? help
 === styles ===
 0:0-0 bg=#3a3a3a
 0:1-4 bg=#3a3a3a BOLD
@@ -44,22 +44,28 @@ expression: snap
 0:78-78 fg=#f85149 bg=#3a3a3a BOLD
 0:79-79 bg=#3a3a3a
 1:0-4 fg=#ffe066
-1:5-60 fg=#ffe066 BOLD
-1:61-79 fg=#ffe066
+1:5-7 fg=#ffe066 BOLD
+1:8-12 fg=#ffe066
+1:13-16 fg=#ffe066 BOLD
+1:17-79 fg=#ffe066
 2:0-0 fg=#ffe066
 2:6-7 fg=#949494 BOLD
-2:8-12 fg=#ffe066
-2:13-16 fg=#ffe066 BOLD
-2:17-71 fg=#ffe066
+2:8-8 fg=#ffe066
+2:10-21 BOLD
+2:71-71 fg=#ffe066
 2:72-72 fg=#949494 BOLD
 2:79-79 fg=#ffe066
 3:0-0 fg=#ffe066
-3:3-3 fg=#949494
-3:6-7 fg=#949494
+3:1-1 fg=#ffe066 bg=#303030
+3:2-2 bg=#303030
+3:3-3 fg=#949494 bg=#303030
+3:4-5 bg=#303030
+3:6-7 fg=#949494 bg=#303030
 3:8-8 fg=#ffe066
-3:10-21 BOLD
+3:12-12 fg=#2dc2ad BOLD
 3:71-71 fg=#ffe066
-3:72-77 fg=#949494
+3:72-77 fg=#949494 bg=#303030
+3:78-78 bg=#303030
 3:79-79 fg=#ffe066
 4:0-0 fg=#ffe066
 4:3-3 fg=#3fb950
@@ -155,6 +161,5 @@ expression: snap
 22:0-79 fg=#ffe066
 23:1-1 fg=#2dc2ad BOLD
 23:9-9 fg=#2dc2ad BOLD
-23:19-19 fg=#949494
-23:21-60 fg=#949494
+23:18-18 fg=#2dc2ad BOLD
 23:73-73 fg=#2dc2ad BOLD

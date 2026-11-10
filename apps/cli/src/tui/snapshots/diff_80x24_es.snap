@@ -1,0 +1,28 @@
+---
+source: apps/cli/src/tui/view/tests/diff_tests.rs
+expression: screen
+---
+ shop · ✔ en vivo · motor observando · actúas como tú                ⚡ –  ⛔ –
+┏━ › feat-pagos · diff a las 09:03:12 UTC ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ entraría al merge (6 archivos)                                               ┃
+┃ truncado: más de 1.000 archivos                                              ┃
+┃ src/pay.rs  modificado  +2 -1                                                ┃
+┃           │ @@ -10,2 +10,3 @@                                                ┃
+┃  10   10  │  fn pay() {                                                      ┃
+┃  11       │ -    old();                                                      ┃
+┃       11  │ +    charge();                                                   ┃
+┃       12  │ +    log();                                                      ┃
+┃ big.txt  modificado  +2000 -0  truncado: más de 2.000 líneas                 ┃
+┃           │ @@ -10,2 +10,3 @@                                                ┃
+┃       10  │ +new line 1                                                      ┃
+┃ logo.png  modificado  +0 -0  binario                                         ┃
+┃ data.bin  añadido  +0 -0  truncado: más de 8 MiB                             ┃
+┃ link  cambio de tipo  +0 -0  enlace simbólico                                ┃
+┃ vendor/lib  añadido  +0 -0  submódulo                                        ┃
+┃ sin commitear (1 archivo)                                                    ┃
+┃ README.md  modificado  +1 -1                                                 ┃
+┃           │ @@ -10,2 +10,3 @@                                                ┃
+┃  10       │ -shop                                                            ┃
+┃       10  │ +shop, edited                                                    ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ q salir  ↑ subir  ↓ bajar  Esc cerrar                                  ? ayuda

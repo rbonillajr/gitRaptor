@@ -1,0 +1,28 @@
+---
+source: apps/cli/src/tui/view/tests/diff_tests.rs
+expression: screen
+---
+ shop | [ok] live | engine observing | acting as you         [c] -  [blocked] -
+#= > feat-pagos | diff at 09:03:12 UTC ========================================#
+# would enter the merge (6 files)                                              #
+# truncated: more than 1,000 files                                             #
+# src/pay.rs  modified  +2 -1                                                  #
+#           | @@ -10,2 +10,3 @@                                                #
+#  10   10  |  fn pay() {                                                      #
+#  11       | -    old();                                                      #
+#       11  | +    charge();                                                   #
+#       12  | +    log();                                                      #
+# big.txt  modified  +2000 -0  truncated: more than 2,000 lines                #
+#           | @@ -10,2 +10,3 @@                                                #
+#       10  | +new line 1                                                      #
+# logo.png  modified  +0 -0  binary                                            #
+# data.bin  added  +0 -0  truncated: more than 8 MiB                           #
+# link  type changed  +0 -0  symbolic link                                     #
+# vendor/lib  added  +0 -0  submodule                                          #
+# uncommitted (1 file)                                                         #
+# README.md  modified  +1 -1                                                   #
+#           | @@ -10,2 +10,3 @@                                                #
+#  10       | -shop                                                            #
+#       10  | +shop, edited                                                    #
+#==============================================================================#
+ q quit  k up  j down  Esc close                                         ? help

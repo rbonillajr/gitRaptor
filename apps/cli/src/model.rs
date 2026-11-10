@@ -62,6 +62,7 @@ impl Model {
                 alerts: crate::tui::alerts::ConflictAlerts::default(),
                 toasts: crate::tui::toasts::Toasts::default(),
                 cursor: None,
+                cursor_at: 0,
                 diff: None,
                 next_ticket: 1,
             },
@@ -117,6 +118,9 @@ pub struct Ui {
     /// The fleet row the keys act on, by [`WorktreeRow::key`] and not by position: it follows
     /// its worktree across reorders. `None` until the first move; the first row stands in.
     pub cursor: Option<u64>,
+    /// Where the cursor's row was the last time it was seen: if the worktree vanishes, the
+    /// cursor goes to the row that takes its place in the order.
+    pub cursor_at: usize,
     /// The diff view while it is open (`d`). Not kept between runs.
     pub diff: Option<crate::tui::diff::DiffState>,
     /// The ticket of the next on-demand query: tells an answer apart from a stale one.

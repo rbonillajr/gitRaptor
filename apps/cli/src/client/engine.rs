@@ -82,6 +82,18 @@ impl Link for EngineLink {
         })
     }
 
+    fn submit(&mut self, method: &str, params: Value) -> Result<u64, LinkError> {
+        self.0.submit(method, params).map_err(link_error)
+    }
+
+    fn settle(&mut self, id: u64) {
+        self.0.settle(id);
+    }
+
+    fn offers(&self, method: &str) -> bool {
+        self.0.hello().methods.iter().any(|m| m == method)
+    }
+
     fn next(&mut self, timeout: Duration) -> Result<Option<Incoming>, LinkError> {
         Ok(match self.0.next_incoming(timeout).map_err(link_error)? {
             None => None,
@@ -93,8 +105,9 @@ impl Link for EngineLink {
                 notification,
             }),
             Some(ApiIncoming::Frame { recv_ns, bytes }) => Some(Incoming::Frame { recv_ns, bytes }),
-            // Nothing submits yet: the channel thread routes replies once it does.
-            Some(ApiIncoming::Reply { .. }) => None,
+            Some(ApiIncoming::Reply { recv_ns, response }) => {
+                Some(Incoming::Reply { recv_ns, response })
+            }
         })
     }
 }

@@ -84,28 +84,36 @@ impl Component for DiffModel {
         };
         let rows = usize::from(inner.bottom() - y);
         for line in lines.iter().skip(self.offset).take(rows) {
-            let mut pen = Pen::new(buf, inner, y, styles);
-            let number = |n: Option<u32>| n.map_or_else(String::new, |n| n.to_string());
-            if line.kind == DiffLineKind::Hunk {
-                pen.gap(NUMBER * 2 + 1)
-                    .text(g.rule, muted)
-                    .gap(1)
-                    .safe(&line.text, styles.fg(ColorToken::StatusInfo));
-            } else {
-                let (sign, style) = match line.kind {
-                    DiffLineKind::Added => (g.added, added),
-                    DiffLineKind::Removed => (g.removed, removed),
-                    _ => (" ", styles.fg(ColorToken::TextDefault)),
-                };
-                pen.text(&format!("{:>4} ", number(line.old)), muted)
-                    .text(&format!("{:>4} ", number(line.new)), muted)
-                    .gap(1)
-                    .text(g.rule, muted)
-                    .gap(1)
-                    .text(sign, style)
-                    .safe(&line.text, style);
-            }
+            paint_line(buf, inner, y, line, styles);
             y += 1;
         }
+    }
+}
+
+/// One line of a diff on row `y` of `inner`: both line numbers, the gutter rule, the sign and the
+/// text; a hunk header has no numbers.
+pub(crate) fn paint_line(buf: &mut Buffer, inner: Rect, y: u16, line: &DiffLine, styles: &Styles) {
+    let g = styles.glyphs;
+    let muted = styles.fg(ColorToken::TextMuted);
+    let mut pen = Pen::new(buf, inner, y, styles);
+    let number = |n: Option<u32>| n.map_or_else(String::new, |n| n.to_string());
+    if line.kind == DiffLineKind::Hunk {
+        pen.gap(NUMBER * 2 + 1)
+            .text(g.rule, muted)
+            .gap(1)
+            .safe(&line.text, styles.fg(ColorToken::StatusInfo));
+    } else {
+        let (sign, style) = match line.kind {
+            DiffLineKind::Added => (g.added, styles.fg(ColorToken::GitAdded)),
+            DiffLineKind::Removed => (g.removed, styles.fg(ColorToken::GitRemoved)),
+            _ => (" ", styles.fg(ColorToken::TextDefault)),
+        };
+        pen.text(&format!("{:>4} ", number(line.old)), muted)
+            .text(&format!("{:>4} ", number(line.new)), muted)
+            .gap(1)
+            .text(g.rule, muted)
+            .gap(1)
+            .text(sign, style)
+            .safe(&line.text, style);
     }
 }

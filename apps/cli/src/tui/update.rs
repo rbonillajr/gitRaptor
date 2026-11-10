@@ -55,7 +55,11 @@ pub fn update(model: &mut Model, msg: Msg) -> Vec<Cmd> {
             model.dirty = true;
             Vec::new()
         }
-        Msg::Engine(stamped) => on_engine(model, stamped.msg),
+        Msg::Engine(stamped) => {
+            let cmds = on_engine(model, stamped.msg);
+            selection::track(model);
+            cmds
+        }
         Msg::Conn(event) => on_conn(model, event),
         // The ages of the fleet move with the clock.
         Msg::Tick { now_ms } => {

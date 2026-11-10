@@ -37,15 +37,39 @@ fn ordered(repo: &RepoView, now_ms: i64, show_ended: bool) -> Vec<&WorktreeRow> 
     rows.into_iter().map(|(_, w)| w).collect()
 }
 
-/// The row the keys act on: the cursor's worktree, or the first row while the cursor has not
-/// moved or its worktree is gone.
+/// The row the keys act on: the cursor's worktree; while the cursor has not moved, the first
+/// row; and, if its worktree is gone, the row now at the position it had (D10).
 pub fn selected_row(model: &Model) -> Option<&WorktreeRow> {
     let rows = ordered_rows(model);
-    model
-        .ui
-        .cursor
-        .and_then(|key| rows.iter().copied().find(|w| w.key == key))
-        .or_else(|| rows.first().copied())
+    let at = match model.ui.cursor {
+        None => 0,
+        Some(key) => rows
+            .iter()
+            .position(|w| w.key == key)
+            .unwrap_or(model.ui.cursor_at),
+    };
+    rows.get(at.min(rows.len().saturating_sub(1))).copied()
+}
+
+/// Keeps the cursor's position up to date after the fleet changed: while its worktree is
+/// there, its place in the order; once it vanished, the cursor passes to the row that took that
+/// place, so it moves to the next row and not back to the first. With no rows (a snapshot on
+/// its way) it stays as it is.
+pub fn track(model: &mut Model) {
+    let Some(key) = model.ui.cursor else { return };
+    let rows = ordered_rows(model);
+    let Some(last) = rows.len().checked_sub(1) else {
+        return;
+    };
+    let (at, key) = match rows.iter().position(|w| w.key == key) {
+        Some(at) => (at, key),
+        None => {
+            let at = model.ui.cursor_at.min(last);
+            (at, rows[at].key)
+        }
+    };
+    model.ui.cursor = Some(key);
+    model.ui.cursor_at = at;
 }
 
 /// Moves the cursor one row without wrapping; with no rows it does nothing.
@@ -66,6 +90,7 @@ pub fn move_cursor(model: &mut Model, down: bool) {
     };
     let key = rows[next].key;
     model.ui.cursor = Some(key);
+    model.ui.cursor_at = next;
 }
 
 #[cfg(test)]
@@ -137,6 +162,29 @@ pub(crate) mod tests {
         move_cursor(&mut model, true);
         assert_eq!(selected_row(&model).map(|w| w.key), Some(2), "last row");
         move_cursor(&mut model, false);
+        assert_eq!(selected_row(&model).map(|w| w.key), Some(1));
+    }
+
+    #[test]
+    fn a_vanished_worktree_passes_the_cursor_to_the_next_row() {
+        let mut model = model_with(vec![
+            row("a", 1, false),
+            row("b", 2, false),
+            row("c", 3, false),
+        ]);
+        move_cursor(&mut model, true);
+        if let Some(data) = model.engine.repo.as_mut().and_then(|r| r.data.as_mut()) {
+            data.worktrees.retain(|w| w.key != 2);
+        }
+        track(&mut model);
+        assert_eq!(selected_row(&model).map(|w| w.key), Some(3));
+        assert_eq!(model.ui.cursor, Some(3));
+        // The last row vanishes: the cursor goes to the one that is now last.
+        move_cursor(&mut model, true);
+        if let Some(data) = model.engine.repo.as_mut().and_then(|r| r.data.as_mut()) {
+            data.worktrees.retain(|w| w.key != 3);
+        }
+        track(&mut model);
         assert_eq!(selected_row(&model).map(|w| w.key), Some(1));
     }
 

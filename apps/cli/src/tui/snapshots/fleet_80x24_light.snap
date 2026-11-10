@@ -5,7 +5,7 @@ expression: snap
  shop · ✔ live · engine observing · acting as you                    ⚡ –  ⛔ –
 ┏━ › Fleet · ↑↓ vs main (local copy, fetched 3 h ago) ━━━━━━━━━━━━━━━━━━━━━━━━━┓
 ┃     Agent                  Branch               Files ↑↓          Activity   ┃
-┃  ○  No agent · shop        main                 ~0    ↑0 ↓0       –          ┃
+┃› ○  No agent · shop        main                 ~0    ↑0 ↓0       –          ┃
 ┃  ●  claude-1 · feat-pagos  feat-pagos           ~2    ↑3 ↓1       2 min ago  ┃
 ┃  ○  No agent · feat-docs   feat-docs            ~0    ↑1 ↓0       –          ┃
 ┃                                                                              ┃
@@ -25,7 +25,7 @@ expression: snap
 ┃                                                                              ┃
 ┃                                                                              ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
- q quit  r retry   ○ no agent: changes by you or another tool            ? help
+ q quit  r retry  d view diff                                            ? help
 === styles (light) ===
 0:0-0 bg=#f0f0f0
 0:1-4 bg=#f0f0f0 BOLD
@@ -54,12 +54,20 @@ expression: snap
 2:68-75 fg=#6b6b6b BOLD
 2:79-79 fg=#8a5a00
 3:0-0 fg=#8a5a00
-3:3-3 fg=#6b6b6b
-3:6-20 fg=#6b6b6b
-3:29-32 fg=#6b6b6b
-3:50-51 fg=#6b6b6b
-3:56-60 fg=#6b6b6b
-3:68-68 fg=#6b6b6b
+3:1-1 fg=#8a5a00 bg=#e8e8e8
+3:2-2 bg=#e8e8e8
+3:3-3 fg=#6b6b6b bg=#e8e8e8
+3:4-5 bg=#e8e8e8
+3:6-20 fg=#6b6b6b bg=#e8e8e8
+3:21-28 bg=#e8e8e8
+3:29-32 fg=#6b6b6b bg=#e8e8e8
+3:33-49 bg=#e8e8e8
+3:50-51 fg=#6b6b6b bg=#e8e8e8
+3:52-55 bg=#e8e8e8
+3:56-60 fg=#6b6b6b bg=#e8e8e8
+3:61-67 bg=#e8e8e8
+3:68-68 fg=#6b6b6b bg=#e8e8e8
+3:69-78 bg=#e8e8e8
 3:79-79 fg=#8a5a00
 4:0-0 fg=#8a5a00
 4:3-3 fg=#1a7f37
@@ -110,6 +118,5 @@ expression: snap
 22:0-79 fg=#8a5a00
 23:1-1 fg=#0f7d70 BOLD
 23:9-9 fg=#0f7d70 BOLD
-23:19-19 fg=#6b6b6b
-23:21-60 fg=#6b6b6b
+23:18-18 fg=#0f7d70 BOLD
 23:73-73 fg=#0f7d70 BOLD

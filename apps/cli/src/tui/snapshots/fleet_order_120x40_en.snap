@@ -5,7 +5,7 @@ expression: text
  shop | [ok] live | engine observing | acting as you                                                 [c] -  [blocked] -
 #= > Fleet | +- vs main (local copy, fetch age not available) =========================================================#
 #      Agent              Branch                                                       Files +-          Activity      #
-#  o   No agent | shop    main                                                         ~0    +0 -0       not available #
+#> o   No agent | shop    main                                                         ~0    +0 -0       not available #
 #  *   claude-1 | d-act   br-d                                                         ~0    +0 -0       not available #
 #  *   claude-2 | m-act   br-m                                                         ~0    +0 -0       not available #
 #  ~   claude-3 | c-idle  br-idle                                                      ~0    +0 -0       not available #
@@ -41,4 +41,4 @@ expression: text
 #                                                                                                                      #
 #                                                                                                                      #
 #======================================================================================================================#
- q quit  r retry   o no agent: changes by you or another tool   * active agent   ~ idle agent                    ? help
+ q quit  r retry  d view diff   o no agent: changes by you or another tool   * active agent   ~ idle agent       ? help
