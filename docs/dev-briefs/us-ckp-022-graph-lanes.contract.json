@@ -61,7 +61,7 @@
     },
     {
       "id": "CKP022-GIT-NOBASE",
-      "statement": "Sin merge-base lane devuelve LaneGap NoMergeBase y no recorre nada",
+      "statement": "Sin merge-base lane devuelve GitLaneGap::NoMergeBase (D16) y no recorre nada",
       "verify": "cargo test -p gitraptor-git --test us_ckp_022_lane -- --list 2>/dev/null | grep -q 'lane_without_merge_base_is_a_gap: test$' && cargo test -p gitraptor-git --test us_ckp_022_lane lane_without_merge_base_is_a_gap",
       "layer": "runtime",
       "tests": [
@@ -79,8 +79,8 @@
     },
     {
       "id": "CKP022-GIT-SAMETOTAL",
-      "statement": "El total de lane es el mismo conjunto que count_only_in, el ↑ del stream (D4)",
-      "verify": "cargo test -p gitraptor-git --test us_ckp_022_lane -- --list 2>/dev/null | grep -q 'lane_total_equals_count_only_in: test$' && cargo test -p gitraptor-git --test us_ckp_022_lane lane_total_equals_count_only_in",
+      "statement": "El total de lane coincide con ahead_behind_commits (pública, reader.rs), el mismo conjunto que cuenta el ↑ del stream; only_in_walk es compartida pero privada al crate (D4)",
+      "verify": "cargo test -p gitraptor-git --test us_ckp_022_lane -- --list 2>/dev/null | grep -q 'lane_total_equals_ahead_behind_commits: test$' && cargo test -p gitraptor-git --test us_ckp_022_lane lane_total_equals_ahead_behind_commits",
       "layer": "runtime",
       "tests": [
         "crates/git/tests/us_ckp_022_lane.rs"
@@ -106,8 +106,8 @@
     },
     {
       "id": "CKP022-CORE-TOTAL",
-      "statement": "El total de la vista (lanes_total y total del carril) coincide con el ↑ del stream para el mismo repo",
-      "verify": "cargo test -p gitraptor-core --test graph_query -- --list 2>/dev/null | grep -q 'lanes_total_matches_the_ahead_of_the_stream: test$' && cargo test -p gitraptor-core --test graph_query lanes_total_matches_the_ahead_of_the_stream",
+      "statement": "El total de cada carril coincide con el ↑ (DivergenceView.ahead) del stream para el mismo repo, y lanes_total es el número de carriles (D4, D12)",
+      "verify": "cargo test -p gitraptor-core --test graph_query -- --list 2>/dev/null | grep -q 'lane_totals_match_the_ahead_of_the_stream: test$' && cargo test -p gitraptor-core --test graph_query lane_totals_match_the_ahead_of_the_stream",
       "layer": "runtime",
       "tests": [
         "crates/core/tests/graph_query.rs"
@@ -169,8 +169,17 @@
     },
     {
       "id": "CKP022-CORE-NOTFOUND",
-      "statement": "repo_id desconocido responde NOT_FOUND al momento",
+      "statement": "Con el motor en Observing, un repo_id desconocido responde NOT_FOUND al momento (D19)",
       "verify": "cargo test -p gitraptor-core --test graph_query -- --list 2>/dev/null | grep -q 'unknown_repo_is_not_found: test$' && cargo test -p gitraptor-core --test graph_query unknown_repo_is_not_found",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/graph_query.rs"
+      ]
+    },
+    {
+      "id": "CKP022-CORE-UNAVAILABLE",
+      "statement": "Un repo conocido que aún no está observado (o antes de Observing) responde resultado con base not-computable repo-unavailable y sin carriles, nunca un error (D19)",
+      "verify": "cargo test -p gitraptor-core --test graph_query -- --list 2>/dev/null | grep -q 'a_repo_not_yet_observed_is_repo_unavailable: test$' && cargo test -p gitraptor-core --test graph_query a_repo_not_yet_observed_is_repo_unavailable",
       "layer": "runtime",
       "tests": [
         "crates/core/tests/graph_query.rs"
@@ -187,7 +196,7 @@
     },
     {
       "id": "CKP022-CORE-NOLOG",
-      "statement": "La respuesta no pasa por el logger, la auditoría ni el perfil: asuntos con un token plantado no aparecen en perfil ni logs (SEC-12, gitleaks 0 hallazgos)",
+      "statement": "La respuesta no pasa por el logger, la auditoría ni el perfil: asuntos con un token plantado no aparecen en perfil ni logs (SEC-12): el token plantado en los asuntos no aparece en el log del watcher, el perfil ni los logs del motor",
       "verify": "cargo test -p gitraptor-core --test graph_query -- --list 2>/dev/null | grep -q 'responses_are_never_logged_nor_persisted: test$' && cargo test -p gitraptor-core --test graph_query responses_are_never_logged_nor_persisted",
       "layer": "runtime",
       "tests": [
@@ -205,11 +214,11 @@
     },
     {
       "id": "CKP022-CORE-CACHE",
-      "statement": "Un segundo refresco con el mismo HEAD y la misma base no recorre el carril: acierta la caché (D9)",
-      "verify": "cargo test -p gitraptor-core --test graph_query -- --list 2>/dev/null | grep -q 'second_refresh_hits_the_lane_cache: test$' && cargo test -p gitraptor-core --test graph_query second_refresh_hits_the_lane_cache",
+      "statement": "Un segundo refresco con el mismo HEAD y la misma base no recorre el carril (contador de recorridos): acierta la caché; cambiar HEAD o la base la invalida (D9)",
+      "verify": "cargo test -p gitraptor-core --lib -- --list 2>/dev/null | grep -q 'second_refresh_hits_the_lane_cache: test$' && cargo test -p gitraptor-core --lib second_refresh_hits_the_lane_cache",
       "layer": "runtime",
       "tests": [
-        "crates/core/tests/graph_query.rs"
+        "crates/core/src/channel/graph_tests.rs"
       ]
     },
     {
@@ -242,7 +251,7 @@
     {
       "id": "CKP022-CLI-TICKET",
       "statement": "Una respuesta de un ticket que no es el actual se descarta",
-      "verify": "cargo test -p gitraptor-cli --lib -- --list 2>/dev/null | grep -q 'a_reply_for_an_old_ticket_is_dropped: test$' && cargo test -p gitraptor-cli --lib a_reply_for_an_old_ticket_is_dropped",
+      "verify": "cargo test -p gitraptor-cli --lib -- --list 2>/dev/null | grep -q 'a_graph_reply_for_an_old_ticket_is_dropped: test$' && cargo test -p gitraptor-cli --lib a_graph_reply_for_an_old_ticket_is_dropped",
       "layer": "runtime",
       "tests": [
         "apps/cli/src/tui/graph_tests.rs"
@@ -251,7 +260,7 @@
     {
       "id": "CKP022-CLI-CLOSE",
       "statement": "Cerrar la vista con la petición en vuelo emite Cmd::CancelQuery",
-      "verify": "cargo test -p gitraptor-cli --lib -- --list 2>/dev/null | grep -q 'closing_while_loading_cancels: test$' && cargo test -p gitraptor-cli --lib closing_while_loading_cancels",
+      "verify": "cargo test -p gitraptor-cli --lib -- --list 2>/dev/null | grep -q 'closing_the_graph_while_loading_cancels: test$' && cargo test -p gitraptor-cli --lib closing_the_graph_while_loading_cancels",
       "layer": "runtime",
       "tests": [
         "apps/cli/src/tui/graph_tests.rs"
@@ -267,9 +276,36 @@
       ]
     },
     {
-      "id": "CKP022-CLI-CLIENT",
-      "statement": "El hilo del canal pide graph.lanes y entrega EngineMsg::Graph por ticket; una reconexión entrega Lost por cada petición en vuelo (T004)",
-      "verify": "cargo test -p gitraptor-cli --lib -- --list 2>/dev/null | grep -q 'a_graph_request_is_answered_by_ticket_and_a_reconnect_loses_it: test$' && cargo test -p gitraptor-cli --lib a_graph_request_is_answered_by_ticket_and_a_reconnect_loses_it",
+      "id": "CKP022-CLI-CLIENT-REPLY",
+      "statement": "El hilo del canal pide graph.lanes y entrega EngineMsg::Graph con el resultado por ticket (T004)",
+      "verify": "cargo test -p gitraptor-cli --lib -- --list 2>/dev/null | grep -q 'a_graph_reply_reaches_update_by_ticket: test$' && cargo test -p gitraptor-cli --lib a_graph_reply_reaches_update_by_ticket",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/src/client/tests/graph.rs"
+      ]
+    },
+    {
+      "id": "CKP022-CLI-CLIENT-FAIL",
+      "statement": "query-busy y query-cancelled se entregan como GraphFailure::Busy y ::Cancelled (D15)",
+      "verify": "cargo test -p gitraptor-cli --lib -- --list 2>/dev/null | grep -q 'busy_and_cancelled_map_to_graph_failure: test$' && cargo test -p gitraptor-cli --lib busy_and_cancelled_map_to_graph_failure",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/src/client/tests/graph.rs"
+      ]
+    },
+    {
+      "id": "CKP022-CLI-CLIENT-LOST",
+      "statement": "Una reconexión entrega GraphFailure::Lost por cada petición en vuelo",
+      "verify": "cargo test -p gitraptor-cli --lib -- --list 2>/dev/null | grep -q 'a_lost_connection_answers_lost: test$' && cargo test -p gitraptor-cli --lib a_lost_connection_answers_lost",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/src/client/tests/graph.rs"
+      ]
+    },
+    {
+      "id": "CKP022-CLI-CLIENT-CAP",
+      "statement": "Al empezar la sesión el hilo anuncia ConnEvent::Graph(link.offers(GRAPH_LANES)): un motor sin el método se anuncia",
+      "verify": "cargo test -p gitraptor-cli --lib -- --list 2>/dev/null | grep -q 'an_engine_without_graph_lanes_is_announced: test$' && cargo test -p gitraptor-cli --lib an_engine_without_graph_lanes_is_announced",
       "layer": "runtime",
       "tests": [
         "apps/cli/src/client/tests/graph.rs"
@@ -305,7 +341,7 @@
     {
       "id": "CKP022-CLI-TEXT",
       "statement": "Cada GraphText tiene texto en en y es",
-      "verify": "cargo test -p gitraptor-cli --lib -- --list 2>/dev/null | grep -q 'every_text_has_both_languages: test$' && cargo test -p gitraptor-cli --lib every_text_has_both_languages",
+      "verify": "cargo test -p gitraptor-cli --lib -- --list 2>/dev/null | grep -q 'every_graph_text_has_both_languages: test$' && cargo test -p gitraptor-cli --lib every_graph_text_has_both_languages",
       "layer": "runtime",
       "tests": [
         "apps/cli/src/present/graph_text_tests.rs"
@@ -367,7 +403,7 @@
     },
     {
       "id": "CKP022-E2E-5",
-      "statement": "Escenario 5: a 80×24 con 12 filas el grafo cede, la lista conserva LIST_MIN, g está en la barra y abre la vista",
+      "statement": "Escenario 5: a 80×24 con 12 filas en la flota y el panel de conflictos presente, la lista conserva su mínimo, la pista g grafo está en la barra y g abre la vista a pantalla completa (que el grafo cede ante el panel de conflictos lo fija CKP022-CLI-YIELD)",
       "verify": "cargo test -p gitraptor-cli --test tui_graph -- --list 2>/dev/null | grep -q 'the_graph_yields_space_first_at_80x24: test$' && cargo test -p gitraptor-cli --test tui_graph the_graph_yields_space_first_at_80x24",
       "layer": "runtime",
       "tests": [
