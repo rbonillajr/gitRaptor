@@ -825,7 +825,8 @@ fn ckp006_007_a_second_query_of_the_connection_is_busy_at_once() {
 #[test]
 fn ckp006_007_a_full_queue_is_busy() {
     let (_fx, e, _d, oid) = heavy();
-    let mut conns: Vec<Raw> = (0..12).map(|_| Raw::cli(&e.tp)).collect();
+    // 1 running, 4 queued, 1 refused: under the 8 connections of one requester (limits.rs).
+    let mut conns: Vec<Raw> = (0..6).map(|_| Raw::cli(&e.tp)).collect();
     let ids: Vec<u64> = conns
         .iter_mut()
         .map(|c| c.write(&[(methods::DIFF_COMMIT, commit_params(&e, &oid))])[0])
@@ -887,11 +888,20 @@ fn ckp006_008_no_exec_commit_between_and_index_never_run_a_program_of_the_repo()
         &ask(&mut raw, methods::DIFF_INDEX, &index_params(&e)),
         "diff.index",
     );
+    // A file of diff.index nests its FileDiff under `file` (D7).
+    let index_files = |section: &Value| -> Vec<String> {
+        section["files"]
+            .as_array()
+            .unwrap_or_else(|| panic!("no files in {section}"))
+            .iter()
+            .map(|f| f["file"]["path"]["untrusted"].as_str().unwrap().to_owned())
+            .collect()
+    };
     // The diffs were computed (the check is not vacuous) ...
     assert_eq!(files_of(&commit["section"]), vec!["x.txt"]);
     assert_eq!(files_of(&between["section"]), vec!["x.txt"]);
-    assert_eq!(files_of(&index["staged"]), vec!["x.txt"]);
-    assert!(files_of(&index["unstaged"]).contains(&"y.txt".to_owned()));
+    assert_eq!(index_files(&index["staged"]), vec!["x.txt"]);
+    assert!(index_files(&index["unstaged"]).contains(&"y.txt".to_owned()));
     // ... and no program of the repo ran.
     assert!(
         canary.fired().is_empty(),
