@@ -48,7 +48,7 @@
     },
     {
       "id": "GRP007-CLASSIFY",
-      "statement": "Con la tabla sintética y engine_git fijado: un git hijo directo del daemon con el Git del motor, una plantilla inerte y cwd en el repo, junto a un git de la sesión que escribe, da Attributed con daemon_inert=1 y foreign_daemon=0; dan Ambiguous con foreign_daemon un exe distinto del Git del motor, engine_git sin fijar, un argv sin plantilla, (Daemon, None) con argv inerte, un nieto (daemon → commit → git inerte), un git por encima del tope de lecturas y un inerte junto a un update-ref del daemon en la misma muestra; un git ajeno que escribe en el worktree del evento, junto a un inerte del daemon y un git de la sesión, da Ambiguous (NFR-01)",
+      "statement": "Con la tabla sintética y engine_git fijado: un git hijo directo del daemon con el Git del motor, una plantilla inerte y cwd en el repo, junto a un git de la sesión que escribe, da Attributed con daemon_inert=1 y foreign_daemon=0; dan Ambiguous con foreign_daemon un exe distinto del Git del motor, engine_git sin fijar, un argv sin plantilla, (Daemon, None) con argv inerte, un nieto (daemon → commit → git inerte), un git por encima del tope de lecturas y un inerte junto a un update-ref del daemon en la misma muestra; un git ajeno que escribe en el worktree del evento, junto a un inerte del daemon y un git de la sesión, da Ambiguous (NFR-01); un git del daemon que está saliendo (cwd ilegible), hijo directo con el exe del Git del motor y fuera de toda ventana del daemon, da Ignored con daemon_exiting=1, mientras que en el margen, con una ventana fallida, como nieto, con otro exe o con un pid reutilizado es ajeno",
       "verify": "cargo test -p gitraptor-core --lib detect::tests::daemon_inert",
       "layer": "runtime",
       "tests": [
@@ -75,7 +75,7 @@
     },
     {
       "id": "GRP007-LOG",
-      "statement": "SEC-04: s3_evidence lleva daemon_inert y daemon_write_window como enteros con el valor contado, y ningún valor de la línea es una ruta, un nombre, un pid ni un argv",
+      "statement": "SEC-04: s3_evidence lleva daemon_inert, daemon_write_window y daemon_exiting como enteros con el valor contado, y ningún valor de la línea es una ruta, un nombre, un pid ni un argv",
       "verify": "cargo test -p gitraptor-core --lib daemon::sessions::s3_",
       "layer": "runtime",
       "tests": [
@@ -108,6 +108,15 @@
       "layer": "runtime",
       "tests": [
         "crates/core/tests/td_tmc_003.rs"
+      ]
+    },
+    {
+      "id": "GRP007-WRITERS",
+      "statement": "Fitness estática: Command::new de git solo aparece en crates/git/src/invoke.rs y en UserGitCommand::spawn; UserGitCommand::spawn solo se llama desde StepCtx (run_git); refs::apply_updates y swap_head solo se llaman dentro de la guarda de ventana del aplicador (timemachine/apply)",
+      "verify": "cargo test -p gitraptor-core --test td_grp_007_writers",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/td_grp_007_writers.rs"
       ]
     }
   ],
