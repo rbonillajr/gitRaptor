@@ -4,7 +4,7 @@ title: "Reglas de Negocio — Servidor MCP"
 type: business-rules
 status: draft
 created: 2026-10-04
-updated: 2026-10-27
+updated: 2026-11-10
 domain: GRP
 epic: E-001
 feature: mcp
@@ -45,12 +45,12 @@ Principio que atraviesa todas las reglas: **el MCP no elige el repo, no autoriza
 | Validaciones de Datos (VAL) | 6 | 5 |
 | Cálculos de Negocio (CALC) | 5 | 2 |
 | Elegibilidad (ELIG) | 6 | 4 |
-| Workflows y Estados (WF) | 7 | 4 |
+| Workflows y Estados (WF) | 8 | 4 |
 | Permisos y Autorizaciones (AUTH) | 5 | 5 |
-| Consistencia de Datos (CONS) | 6 | 4 |
+| Consistencia de Datos (CONS) | 10 | 5 |
 | Tiempo y Expiración (TIME) | 3 | 1 |
 | Edge Cases (EDGE) | 10 | 6 |
-| **Total** | **48** | **31** |
+| **Total** | **53** | **32** |
 
 Criticidad "Alta" = crítica. Las cifras marcadas como tope (N) son el supuesto S-MCP-1: se fijan en la Dev Spec.
 
@@ -516,6 +516,32 @@ uninstall → retirar solo "gitraptor"
 
 ---
 
+### BR-MCP-WF-008: Configurar un repo para agentes
+
+**Estado**: aprobada por Rene Bonilla el 2026-11-10 desde el menú, sobre el enfoque "superficie para agentes: MCP mínimo + skill + `raptor configure-agents`". Un agente no puede lanzar `configure-agents`: se rechaza como comando reservado (P-MCP-35). Historias: US-MCP-021 y US-MCP-022 (Should, M4).
+
+**Descripción**: `raptor configure-agents` deja un repo listo para que Claude Code trabaje con GitRaptor en tres pasos: el registro del servidor MCP (con las mismas reglas que `raptor mcp install`, BR-MCP-WF-007), la guía para agentes (skill) y el bloque de instrucciones en el archivo de instrucciones del agente (BR-MCP-CONS-007). Antes de escribir muestra el plan, paso a paso, con lo que cambiará y lo que ya está hecho, y pide confirmación; `--yes` la da por adelantado, como en `raptor guard install`. Es idempotente: un paso ya hecho no se repite. Con `--dry-run` muestra el plan y no escribe nada. Si algún paso está en conflicto (servidor "gitraptor" ajeno, bloque editado a mano, archivo fuera del repo), no escribe nada y dice qué resolver. Sin la CLI `claude`, hace los pasos del repo y muestra el comando exacto del registro. No habilita el repo para el MCP: la allowlist sigue siendo un comando reservado aparte (BR-MCP-WF-006), y el plan lo dice cuando el repo no está habilitado. Retirar la configuración de un repo quita la guía y el bloque de ese repo y deja sus archivos como estaban antes de configurar. El registro del MCP es de ámbito de usuario y lo usan los demás repos: retirar no lo toca; se retira con `raptor mcp uninstall`. En el MVP solo para Claude Code (D2).
+
+**Criticidad**: Media
+
+**Regla formal**:
+```
+IF agente ≠ claude-code → "no soportado todavía", nada escrito
+plan = [registro MCP, guía, bloque] con estado {hecho, se hará, conflicto, manual}
+mostrar plan
+IF --dry-run → fin, nada escrito
+IF algún paso = conflicto → rechazo con motivo y acción, nada escrito
+IF todos = hecho → "ya configurado; nada que hacer"
+ELSE confirmar (o --yes) → aplicar los pasos "se hará"; "manual" (sin claude) → imprimir comando exacto
+retirar → quitar guía y bloque del repo; el registro del MCP (ámbito de usuario) no se toca
+```
+
+**Ejemplo**: segunda ejecución en el repo "shop" → "shop ya está configurado para Claude Code; nada que hacer".
+
+**Fuentes**: enfoque del 2026-11-10 (bitácora de Rene, no versionada); BRD BR-15, D2, NFR-01; ADR-MCP-001 § 8.
+
+---
+
 ## 5. Permisos y Autorizaciones
 
 ### BR-MCP-AUTH-001: El MCP no autoriza; decide Guardrails
@@ -703,6 +729,79 @@ bloqueos contados por capa; undos por MCP cuentan en el KPI de undos
 **Ejemplo**: el informe mensual muestra "acciones bloqueadas: 12 por mcp, 7 por hooks".
 
 **Fuentes**: Q-MCP-18, Q-MCP-24; ADR-GRD-003 § 4; BRD § 9.
+
+---
+
+> **BR-MCP-CONS-007 a BR-MCP-CONS-010**: aprobadas por Rene Bonilla el 2026-11-10 desde el menú. Historias: CONS-007 → US-MCP-022 (M4); CONS-008 → US-MCP-023 (M3) y US-MCP-024 (después de v0.1.0); CONS-009 → US-MCP-020 (M3); CONS-010 → US-MCP-025 (M4) y US-MCP-026 (después de v0.1.0).
+
+### BR-MCP-CONS-007: Bloque de GitRaptor en archivos del usuario
+
+**Descripción**: lo que GitRaptor escribe en un archivo de instrucciones del agente (`CLAUDE.md`, `AGENTS.md`) va dentro de un único bloque delimitado y marcado como de GitRaptor. Todo lo que está fuera del bloque es del usuario y nunca cambia, ni al configurar ni al retirar. Si el bloque fue editado a mano desde la última vez que GitRaptor lo escribió, no se sobrescribe ni se borra: se informa y se pide al desarrollador que decida. Un archivo de instrucciones que es un enlace o que apunta fuera del repo no se toca. Si el archivo no existía, retirar el bloque lo elimina; si existía, lo deja como estaba antes.
+
+**Criticidad**: Alta (NFR-01: el contenido del usuario no se pierde)
+
+**Regla formal**:
+```
+escribir = solo dentro del bloque de GitRaptor
+IF bloque editado a mano → conflicto (no se escribe ni se borra)
+IF archivo es enlace o fuera del repo → conflicto
+retirar: archivo creado por GitRaptor → se elimina; si no → contenido fuera del bloque intacto
+```
+
+**Ejemplo**: `CLAUDE.md` con 40 líneas del equipo → tras configurar tiene las 40 líneas y el bloque al final; tras retirar, las mismas 40 líneas, byte a byte.
+
+**Fuentes**: enfoque del 2026-11-10; NFR-01.
+
+### BR-MCP-CONS-008: Contrato `--json` de la CLI para agentes
+
+**Descripción**: los subcomandos de `raptor` que un agente usa por Bash ofrecen `--json` con un esquema estable, versionado y documentado, como ya pide el design system ("`--json` en todos los comandos, con un esquema estable y versionado"). Cada salida declara la versión del contrato. Añadir un campo es compatible; quitar o cambiar un campo o un código sube la versión mayor. Con `--json`, un error también sale en JSON, con el mismo código estable, motivo y acción que el MCP (BR-MCP-CONS-005). Lanzada por un agente, la CLI devuelve la misma vista restringida que el MCP (perfil por solicitante, D-25 del índice): el contrato `--json` no da a un agente más datos que el MCP. Inventario de partida: [research/inventario-json-cli-2026-11.md](./research/inventario-json-cli-2026-11.md).
+
+**Criticidad**: Media
+
+**Regla formal**:
+```
+salida --json = {versión del contrato, datos}
+error con --json = {versión, code, message, params, action}, código de salida ≠ 0
+cambio incompatible → versión mayor + 1
+solicitante agente → vista del perfil mcp
+```
+
+**Ejemplo**: `raptor status --json` con el motor caído → JSON con `code` "engine-unavailable" y la acción, nunca texto suelto.
+
+**Fuentes**: enfoque del 2026-11-10; design system (CLI, salida para máquinas); ADR-MCP-001 § 2 y § 5.
+
+### BR-MCP-CONS-009: Guía para agentes coherente con el contrato
+
+**Descripción**: la guía de GitRaptor para agentes (skill y bloque de instrucciones) explica cuatro cosas: preguntar si se va a chocar antes de integrar; ante un bloqueo, leer el motivo y seguir la acción, sin buscar otra vía para hacer lo mismo; deshacer solo lo propio; y qué significa cada código de rechazo. Cada código de rechazo estable del contrato tiene su entrada en la guía, y la guía no nombra códigos que el contrato no tenga. La guía ofrece los dos caminos, herramientas MCP y CLI con `--json`, y no desactiva ni sustituye ninguno: el MCP sigue completo para clientes sin skills. En el MVP la guía es para Claude Code (D2).
+
+**Criticidad**: Media
+
+**Regla formal**:
+```
+códigos(guía) = códigos estables del contrato (ni de más ni de menos)
+guía ⊇ {chocar antes de integrar, bloqueo = motivo + acción, undo de lo propio, significado de cada rechazo}
+MCP disponible con o sin guía
+```
+
+**Ejemplo**: la entrada de `policy-denied` dice qué significa, que no se reintenta por otra vía y qué acción propone el rechazo.
+
+**Fuentes**: enfoque del 2026-11-10; ADR-MCP-001 § 5; BR-MCP-CONS-005.
+
+### BR-MCP-CONS-010: Medición del uso por canal
+
+**Descripción**: GitRaptor cuenta, por agente y por repo, cuántas llamadas de agentes llegan por el MCP y cuántas por la CLI, por herramienta o subcomando, y cuántas terminan en rechazo. La medición no tiene meta ni se usa para limitar a nadie: sirve para decidir con datos qué herramientas del MCP se mantienen. Los tokens por tarea y el acierto no los ve GitRaptor: salen de un experimento aparte con una fuente externa. El dato de Nx (88 % de acierto con skills y CLI frente a 81 % con MCP) es de terceros y no está verificado; no se usa como línea base.
+
+**Criticidad**: Baja
+
+**Regla formal**:
+```
+llamada de un agente → contada 1 vez con canal ∈ {mcp, cli}, agente, repo, herramienta, resultado
+sin meta; sin contenido de la llamada
+```
+
+**Ejemplo**: "claude-1 en shop, último mes: 140 por mcp, 60 por cli; rechazos: 9 por mcp, 2 por cli".
+
+**Fuentes**: enfoque del 2026-11-10; https://nx.dev/blog/why-we-deleted-most-of-our-mcp-tools (consultado por Rene el 2026-11-10, sin verificar por el PO).
 
 ---
 
@@ -901,6 +1000,8 @@ Alineada con el orden de entrega Q-MCP-19: 1) canal + allowlist + `status` + ins
 | VAL-001, VAL-003, ELIG-002, ELIG-005, WF-001, WF-004, AUTH-001, AUTH-003, CONS-002, CONS-006, TIME-002, EDGE-002, EDGE-003, EDGE-008, EDGE-010 | Alta/Media | 🟡 P1 (entrega 3: snapshot/undo, `safe_commit`) |
 | CALC-004, CALC-005 | Media | 🟡 P1 (entrega 4: depende de DEP-MCP-6) |
 | VAL-002, ELIG-003, ELIG-004, WF-002, WF-003, EDGE-006, EDGE-007 | Alta/Media | 🟢 P2 (entrega 5: depende de ADR-CKP-002) |
+| CONS-008, CONS-009 | Media | 🟡 Must en M3, beta (superficie para agentes; US-MCP-023 y US-MCP-020). Decisión de Rene, 2026-11-10 |
+| WF-008, CONS-007, CONS-010 | Alta/Media/Baja | 🟢 Should en M4, v0.1.0 (US-MCP-021, 022 y 025). CONS-008 y CONS-010 tienen además una parte Could después de v0.1.0 (US-MCP-024 y 026). Decisión de Rene, 2026-11-10 |
 
 Los IDs omiten el prefijo `BR-MCP-`. WF-004 entrega hoy la variante "denegar"; la variante "pendiente" queda bloqueada por DEP-MCP-7.
 
@@ -913,13 +1014,14 @@ Los IDs omiten el prefijo `BR-MCP-`. WF-004 entrega hoy la variante "denegar"; l
 | Capacidad | Reglas |
 |-----------|--------|
 | BR-14 Herramientas de alto nivel y seguras | CALC-001 a CALC-005, ELIG-001 a ELIG-006, WF-001 a WF-005, AUTH-001 a AUTH-003, CONS-001, CONS-002, TIME-002, TIME-003, EDGE-001 a EDGE-003, EDGE-005 a EDGE-008, EDGE-010 |
-| BR-15 Instalación en un paso (parcial por D2: solo Claude Code) | WF-007, EDGE-009 |
+| BR-15 Instalación en un paso (parcial por D2: solo Claude Code) | WF-007, EDGE-009, WF-008, CONS-007 |
+| Superficie para agentes (enfoque del 2026-11-10, aprobado) | CONS-008, CONS-009, CONS-010 |
 | BR-16 Endurecimiento de seguridad | VAL-001 a VAL-006, CALC-002, WF-006, AUTH-004, AUTH-005, CONS-003 a CONS-005, TIME-001, EDGE-004 |
 | NFR-02 Sin shell, entradas validadas, solo allowlist, revisión por release | VAL-001 a VAL-006, WF-006, AUTH-004, AUTH-005, CONS-003, CONS-006 |
 
 ### Reglas → User Stories
 
-Pendiente: las historias se generan tras la aprobación del requerimiento (ADR-018).
+Tabla "Cobertura de reglas" de [user-stories.md](./user-stories.md): las 53 reglas tienen al menos una historia (US-MCP-001 a 026).
 
 **Historia de otra feature que depende de estas reglas**: [US-GRD-016](../guardrails/user-stories/US-GRD-016-misma-decision-por-mcp.md) (Guardrails), bloqueada por esta feature. La desbloquean BR-MCP-WF-001, BR-MCP-AUTH-001, BR-MCP-WF-006 y BR-MCP-CONS-003; el desbloqueo real llega con ADR-MCP-001 y la implementación. Su estado no cambia en este documento.
 
@@ -938,3 +1040,5 @@ Cada regla tendrá al menos un escenario Gherkin, incluido uno negativo, en su h
 | 0.3 | 2026-10-05 | PO (AADD) | Enmienda por ADR-MCP-001, decisión del orquestador (2026-10-05), validada por Arquitecto/PO. BR-MCP-ELIG-001: `snapshot` no gobernada (no está en BR-VAL-002) y `undo` sin decisión de Guardrails en el MVP (US-TMC-021, Fase 2). BR-MCP-WF-001: avisos del plan reconocidos en una segunda llamada, sin efectos si faltan. BR-MCP-EDGE-007: el aviso de upstream divergente se reconoce y la respuesta final vuelve a avisar. BR-MCP-TIME-001: cifras de ADR-MCP-001 § 6 y consulta del resultado por id de operación. BR-MCP-ELIG-005: cupo de 20 snapshots por solicitante y worktree en 24 h, con la cuota llena se rechaza sin borrar nada, y un `undo` por MCP que movería la base o una ref protegida se rechaza (S-04). BR-MCP-WF-001: orden alineado con ADR-MCP-001 (ámbito → allowlist → disponible → solicitante → … → Guardrails → avisos). Sin reglas nuevas: siguen 48. |
 | 0.4 | 2026-10-08 | PO (AADD) | Enmienda por DS-US-MCP-008, decisión del orquestador (2026-10-08), validada por Arquitecto/PO. BR-MCP-TIME-001: excepción de `snapshot` (sin id; `time-limit` si el daemon agota su tiempo; `outcome-unknown` sin id solo por fallo de transporte, con la acción "revisa `raptor timeline`") y cifras alineadas con ADR-MCP-001 (N1: 20 en 24 h por (solicitante, worktree), techos de 60 por worktree y 200 por repo). BR-MCP-VAL-004: el rechazo "texto no válido" es el código `invalid-text` y cubre también el texto vacío. Sin reglas nuevas: siguen 48. |
 | 0.5 | 2026-10-27 | PO (AADD) | Enmienda por DS-US-MCP-009 y DS-US-MCP-010, decisión del orquestador (2026-10-21), validada por Arquitecto/PO. BR-MCP-TIME-001: excepción de `safe_commit` (espera el desenlace, 380 s como suma de constantes; acción ante un reintento o un corte). BR-MCP-VAL-003: 16 KiB, `\t` permitido, bidi y anchura cero son "texto no válido". BR-MCP-WF-001: S-11, una segunda escritura del mismo agente se rechaza sin encolarse. BR-MCP-VAL-001: archivos, no carpetas ni submódulos; relativas a la raíz del worktree, nunca al cwd; tope real de 256; `\` y unidad rechazados en todas las plataformas; alias de `.git`. BR-MCP-EDGE-003: sesión = de otro agente, viva; el desarrollador no cuenta; ilegible = compartido. BR-MCP-EDGE-010: un archivo nuevo se nombra uno a uno; una carpeta no lo añade. Sin reglas nuevas: siguen 48. |
+| 0.6 | 2026-11-10 | PO (AADD) | Propuesta, pendiente de validar por Rene Bonilla: superficie para agentes (enfoque aprobado por Rene el 2026-11-10). Nuevas BR-MCP-WF-008 (`raptor configure-agents`), BR-MCP-CONS-007 (bloque en archivos del usuario), BR-MCP-CONS-008 (contrato `--json` de la CLI), BR-MCP-CONS-009 (guía para agentes) y BR-MCP-CONS-010 (uso por canal). Pasan de 48 a 53 reglas. Las cubren US-MCP-020 a US-MCP-026. |
+| 0.7 | 2026-11-10 | PO (AADD) | Rene Bonilla aprueba la ampliación desde el menú y decide prioridad e hito (P-MCP-32): Must M3 para CONS-008 y CONS-009; Should M4 para WF-008, CONS-007 y CONS-010; partes Could después de v0.1.0 en US-MCP-024 y 026. BR-MCP-WF-008: un agente no puede lanzar `configure-agents` (P-MCP-35). Historias US-MCP-020 a 026 escritas (ver [user-stories.md](./user-stories.md)). Sin reglas nuevas: siguen 53. |
