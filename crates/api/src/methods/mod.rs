@@ -24,6 +24,7 @@ mod diff;
 mod discovery;
 mod engine;
 mod events;
+mod graph;
 mod guard;
 mod mcp;
 mod observation;
@@ -45,6 +46,7 @@ pub use diff::*;
 pub use discovery::*;
 pub use engine::*;
 pub use events::*;
+pub use graph::*;
 pub use guard::*;
 pub use mcp::*;
 pub use observation::*;
@@ -81,6 +83,7 @@ pub const GROUPS: &[&Group] = &[
     &prediction::GROUP,
     &query::GROUP,
     &diff::GROUP,
+    &graph::GROUP,
 ];
 
 /// What one contract module declares, in its own file.

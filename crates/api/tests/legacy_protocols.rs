@@ -118,6 +118,7 @@ const AFTER_FREEZE_FULL: &[&str] = &[
     "diff.commit",
     "diff.between",
     "diff.index",
+    "graph.lanes",
 ];
 const AFTER_FREEZE_MCP: &[&str] = &["mcp.status", "mcp.conflicts", "connection.desktop"];
 
