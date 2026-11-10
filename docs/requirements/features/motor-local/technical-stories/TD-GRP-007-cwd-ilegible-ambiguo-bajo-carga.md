@@ -2,13 +2,13 @@
 id: TD-GRP-007
 title: "Bajo carga, un cwd ilegible en la muestra S3 deja la atribución en ambigua aunque el git del agente esté vivo"
 type: td
-status: spec-ready
+status: implemented
 feature: motor-local
 domain: GRP
 priority: medium
 complexity: medium
 created: 2026-11-09
-updated: 2026-11-09
+updated: 2026-11-10
 source: inline
 related:
   adrs: [ADR-GRP-012]
@@ -45,6 +45,8 @@ El `git` del agente estaba vivo (el hook lo retiene), pero el detector no pudo l
 ### Pregunta para el Arquitecto
 
 ¿Se puede distinguir "el proceso ya terminó" (la lectura falla por `ESRCH`; no es evidencia de nada) de "no tengo permiso para leer su cwd" (`EPERM`/`EACCES`; sí es duda) sin abrir el riesgo residual de S3? Y, si el cwd ilegible es de un proceso que terminó entre la lista y la lectura, ¿basta con descartarlo, o hay que confirmar con una segunda lectura?
+
+Implementado en: PR #352
 
 ### Decisión (2026-11-09)
 
