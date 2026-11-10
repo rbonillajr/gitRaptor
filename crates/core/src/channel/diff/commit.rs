@@ -132,9 +132,7 @@ pub(super) fn queue<T: Serialize + 'static>(
     request: &Request,
     event: &'static str,
     repo_id: String,
-    work: impl FnOnce(&DiffLimits, &dyn Fn() -> bool) -> Result<Answer<T>, ErrorObject>
-    + Send
-    + 'static,
+    work: impl FnOnce(&DiffLimits, &dyn Fn() -> bool) -> Result<Answer<T>, ErrorObject> + Send + 'static,
 ) -> Result<(), ErrorObject> {
     let token = queries.register(&request.id).map_err(|busy| busy.error())?;
     let (table, outbox, id) = (queries.clone(), Arc::clone(outbox), request.id.clone());

@@ -232,10 +232,18 @@ fn split(
 ) -> (BTreeMap<String, GitChange>, BTreeMap<String, GitChange>) {
     let mut staged = BTreeMap::new();
     let mut unstaged = BTreeMap::new();
-    for c in status.staged.iter().filter(|c| !conflicts.contains(&c.path)) {
+    for c in status
+        .staged
+        .iter()
+        .filter(|c| !conflicts.contains(&c.path))
+    {
         staged.insert(c.path.clone(), change_hint(c.kind));
     }
-    for c in status.unstaged.iter().filter(|c| !conflicts.contains(&c.path)) {
+    for c in status
+        .unstaged
+        .iter()
+        .filter(|c| !conflicts.contains(&c.path))
+    {
         unstaged.insert(c.path.clone(), change_hint(c.kind));
     }
     for path in status.untracked.iter().filter(|p| !conflicts.contains(*p)) {
