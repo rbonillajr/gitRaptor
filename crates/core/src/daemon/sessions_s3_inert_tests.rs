@@ -19,6 +19,7 @@ fn the_s3_log_line_carries_daemon_inert_and_daemon_write_window_as_counted_integ
     let counts = S3Counts {
         daemon_inert: 7,
         daemon_write_window: 3,
+        daemon_exiting: 5,
         ..S3Counts::default()
     };
     // A repo id that is a path: the canary must never reach the line.
@@ -37,6 +38,11 @@ fn the_s3_log_line_carries_daemon_inert_and_daemon_write_window_as_counted_integ
     assert!(
         fields.contains(&("daemon_write_window", Field::Int(3))),
         "GRP007-LOG: s3_evidence carries daemon_write_window with the counted value: {fields:?}"
+    );
+
+    assert!(
+        fields.contains(&("daemon_exiting", Field::Int(5))),
+        "GRP007-LOG: s3_evidence carries daemon_exiting with the counted value: {fields:?}"
     );
 
     let tmp = tempfile::tempdir().unwrap();
@@ -60,7 +66,12 @@ fn the_s3_log_line_carries_daemon_inert_and_daemon_write_window_as_counted_integ
         Some(&"3"),
         "GRP007-LOG: the line has daemon_write_window=3: {line}"
     );
-    for key in ["daemon_inert", "daemon_write_window"] {
+    assert_eq!(
+        map.get("daemon_exiting"),
+        Some(&"5"),
+        "GRP007-LOG: the line has daemon_exiting=5: {line}"
+    );
+    for key in ["daemon_inert", "daemon_write_window", "daemon_exiting"] {
         let value = map[key];
         assert!(value.parse::<i64>().is_ok(), "{key} is an integer: {line}");
     }
