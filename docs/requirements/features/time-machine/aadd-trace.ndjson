@@ -32,3 +32,4 @@
 {"v":1,"ts":"2026-11-09T04:19:01.261Z","event":"reused","session":"6f316a89-0c67-4417-9b02-a96ec3cde9f3","rel":"user-stories/US-TMC-024-solape-restauracion.md","id":"US-TMC-024","type":"us","phase":"architect","sha":"fafd0ab3203ebdec"}
 {"v":1,"ts":"2026-11-09T04:19:05.768Z","event":"updated","session":"6f316a89-0c67-4417-9b02-a96ec3cde9f3","rel":"technical-stories/TS-TMC-005-undo-espera-punto-base.md","id":"TS-TMC-005","type":"ts","sha":"7c1483b19c56b069"}
 {"v":1,"ts":"2026-11-09T04:19:07.248Z","event":"updated","session":"6f316a89-0c67-4417-9b02-a96ec3cde9f3","rel":"technical-stories/TS-TMC-005-undo-espera-punto-base.md","id":"TS-TMC-005","type":"ts","sha":"9d7d627b173b122a"}
+{"v":1,"ts":"2026-11-10T00:18:06.246Z","event":"updated","session":"4bc1024f-a89e-4963-9358-5cd04f7c231d","rel":"technical-stories/TS-TMC-005-undo-espera-punto-base.md","id":"TS-TMC-005","type":"ts","sha":"b3a40b8fd4327115"}

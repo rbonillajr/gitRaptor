@@ -10,10 +10,10 @@
 
 | Estado | Fichas |
 |---|---|
-| Implementado (`implemented`) | 76 |
+| Implementado (`implemented`) | 77 |
 | Hecho (`done`) | 3 |
 | Implementado en parte (`partially-implemented`) | 27 |
-| Listo (`ready`) | 22 |
+| Listo (`ready`) | 21 |
 | Borrador (`draft`) | 57 |
 | Bloqueado (`blocked`) | 1 |
 | **Total** | **186** |
@@ -27,7 +27,7 @@
 | [guardrails](#guardrails) | 14 | 0 | 7 | 1 | 3 | 0 | 25 |
 | [mcp](#mcp) | 7 | 0 | 4 | 0 | 9 | 0 | 20 |
 | [motor-local](#motor-local) | 18 | 2 | 9 | 3 | 13 | 0 | 45 |
-| [time-machine](#time-machine) | 18 | 1 | 1 | 1 | 13 | 0 | 34 |
+| [time-machine](#time-machine) | 19 | 1 | 1 | 0 | 13 | 0 | 34 |
 
 ### cockpit
 
@@ -218,7 +218,7 @@
 
 ### time-machine
 
-34 fichas: 18 implementado, 1 hecho, 1 implementado en parte, 1 listo, 13 borrador.
+34 fichas: 19 implementado, 1 hecho, 1 implementado en parte, 13 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -227,6 +227,7 @@
 | [TS-TMC-002](features/time-machine/technical-stories/TS-TMC-002-oplog-diario.md) | Oplog de la Time Machine con diario de intención y recuperación | Implementado (`implemented`) | #32, #176 | — |
 | [TS-TMC-003](features/time-machine/technical-stories/TS-TMC-003-escritura-aplicador.md) | Capa de escritura acotada y aplicador de estados | Implementado (`implemented`) | #45, #171, #172 | — |
 | [TS-TMC-004](features/time-machine/technical-stories/TS-TMC-004-operacion-protegida-solicitante.md) | Operación protegida y resolución del solicitante en el canal | Implementado (`implemented`) | #40 | — |
+| [TS-TMC-005](features/time-machine/technical-stories/TS-TMC-005-undo-espera-punto-base.md) | El undo espera, con plazo propio, la captura que da su punto base B en vez de responder `overlap-unverified` de inmediato | Implementado (`implemented`) | — | — |
 | [US-TMC-001](features/time-machine/user-stories/US-TMC-001-snapshot-previo-operaciones-gitraptor.md) | El desarrollador recupera su trabajo sin commitear tras cualquier operación lanzada por GitRaptor | Implementado (`implemented`) | #61 | — |
 | [US-TMC-002](features/time-machine/user-stories/US-TMC-002-undo-ultima-operacion.md) | El desarrollador deshace con un comando la última operación de su worktree | Implementado (`implemented`) | #90, #127, #146, #156 | — |
 | [US-TMC-003](features/time-machine/user-stories/US-TMC-003-redo.md) | El desarrollador rehace lo que deshizo por error | Implementado (`implemented`) | #335 | — |
@@ -242,7 +243,6 @@
 | [US-TMC-023](features/time-machine/user-stories/US-TMC-023-timeline-legible-restaurar-id-corto.md) | El desarrollador lee el timeline de un vistazo y restaura un punto con el id corto que ve en la misma línea | Implementado (`implemented`) | — | — |
 | [SPIKE-TMC-001](features/time-machine/technical-stories/SPIKE-TMC-001-repo-mediano-overhead.md) | Repo mediano de referencia y viabilidad del snapshot en menos de 200 ms | Hecho (`done`) | — | — |
 | [INF-TMC-001](features/time-machine/technical-stories/INF-TMC-001-arnes-caos-recuperable.md) | Arnés de caos y de garantías de los snapshots en los tres SO | Implementado en parte (`partially-implemented`) | — | — |
-| [TS-TMC-005](features/time-machine/technical-stories/TS-TMC-005-undo-espera-punto-base.md) | El undo espera, con plazo propio, la captura que da su punto base B en vez de responder `overlap-unverified` de inmediato | Listo (`ready`) | — | — |
 | [TD-TMC-001](features/time-machine/technical-stories/TD-TMC-001-previo-hook-plazo-y-cupo-sin-atribuir.md) | Previo de hook: plazo real, cupo barato y cubo «sin atribuir» acotado, antes de que un fallo deniegue (US-GRD-017) | Borrador (`draft`) | — | — |
 | [TD-TMC-002](features/time-machine/technical-stories/TD-TMC-002-captura-blobs-fuera-del-escritor.md) | Captura continua: blobs fuera del escritor del almacén, para bajar su hashing a background (RES-06) | Borrador (`draft`) | — | — |
 | [US-TMC-007](features/time-machine/user-stories/US-TMC-007-timeline-filtros-huecos.md) | El desarrollador filtra el timeline por worktree, agente o periodo y ve lo que no se observó | Borrador (`draft`) | — | — |
@@ -289,7 +289,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### M2
 
-105 fichas: 45 implementado, 3 hecho, 20 implementado en parte, 4 listo, 33 borrador.
+105 fichas: 46 implementado, 3 hecho, 20 implementado en parte, 3 listo, 33 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -305,6 +305,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [TS-TMC-001](features/time-machine/technical-stories/TS-TMC-001-almacen-captura-snapshots.md) | Almacén de snapshots en el perfil y captura de estado | Implementado (`implemented`) | #38, #127, #171 | — |
 | [TS-TMC-002](features/time-machine/technical-stories/TS-TMC-002-oplog-diario.md) | Oplog de la Time Machine con diario de intención y recuperación | Implementado (`implemented`) | #32, #176 | — |
 | [TS-TMC-003](features/time-machine/technical-stories/TS-TMC-003-escritura-aplicador.md) | Capa de escritura acotada y aplicador de estados | Implementado (`implemented`) | #45, #171, #172 | — |
+| [TS-TMC-005](features/time-machine/technical-stories/TS-TMC-005-undo-espera-punto-base.md) | El undo espera, con plazo propio, la captura que da su punto base B en vez de responder `overlap-unverified` de inmediato | Implementado (`implemented`) | — | — |
 | [US-CKP-003](features/cockpit/user-stories/US-CKP-003-estados-motor-conexion.md) | La TUI dice en qué estado está el motor y qué hacer en cada caso | Implementado (`implemented`) | #282 | — |
 | [US-CKP-006](features/cockpit/user-stories/US-CKP-006-conflictos-previstos.md) | El desarrollador ve qué agentes van a chocar antes de hacer merge | Implementado (`implemented`) | — | — |
 | [US-CKP-007](features/cockpit/user-stories/US-CKP-007-frescura-prediccion.md) | Una predicción vieja nunca se presenta como actual | Implementado (`implemented`) | #339 | — |
@@ -364,7 +365,6 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [SPIKE-GRD-002](features/guardrails/technical-stories/SPIKE-GRD-002-factor-so-daemon.md) | Factor de autenticación del SO invocado desde el daemon en los tres SO | Listo (`ready`) | — | — |
 | [TD-GRP-002](features/motor-local/technical-stories/TD-GRP-002-motor-bajo-rafaga.md) | Frescura y memoria del motor bajo una ráfaga de archivos | Listo (`ready`) | — | — |
 | [TD-GRP-003](features/motor-local/technical-stories/TD-GRP-003-nfr04-maquina-referencia.md) | Presupuesto de NFR-04 sin gate automático: medirlo en una máquina de referencia | Listo (`ready`) | — | — |
-| [TS-TMC-005](features/time-machine/technical-stories/TS-TMC-005-undo-espera-punto-base.md) | El undo espera, con plazo propio, la captura que da su punto base B en vez de responder `overlap-unverified` de inmediato | Listo (`ready`) | — | — |
 | [TD-TMC-001](features/time-machine/technical-stories/TD-TMC-001-previo-hook-plazo-y-cupo-sin-atribuir.md) | Previo de hook: plazo real, cupo barato y cubo «sin atribuir» acotado, antes de que un fallo deniegue (US-GRD-017) | Borrador (`draft`) | — | — |
 | [TD-TMC-002](features/time-machine/technical-stories/TD-TMC-002-captura-blobs-fuera-del-escritor.md) | Captura continua: blobs fuera del escritor del almacén, para bajar su hashing a background (RES-06) | Borrador (`draft`) | — | — |
 | [US-CKP-004](features/cockpit/user-stories/US-CKP-004-selector-repo-preferencias.md) | El desarrollador cambia de repo y la TUI recuerda cómo la dejó | Borrador (`draft`) | — | — |
