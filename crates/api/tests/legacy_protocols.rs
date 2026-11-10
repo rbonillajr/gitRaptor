@@ -110,8 +110,11 @@ const AFTER_FREEZE_FULL: &[&str] = &[
     "timemachine.notices",
     "events.gaps",
     "prediction.list",
+    // Registered for both profiles; the daemon offers it only to the desktop
+    // class (TS-GRP-009).
+    "connection.desktop",
 ];
-const AFTER_FREEZE_MCP: &[&str] = &["mcp.status", "mcp.conflicts"];
+const AFTER_FREEZE_MCP: &[&str] = &["mcp.status", "mcp.conflicts", "connection.desktop"];
 
 /// Protocol 9 adds `connection.accept`, for every profile, and nothing else
 /// that a connection of 8 could miss; methods added later exist only from 9.
