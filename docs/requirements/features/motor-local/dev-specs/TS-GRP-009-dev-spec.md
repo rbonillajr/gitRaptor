@@ -311,9 +311,9 @@ graph LR
 **Ubicación.** `crates/core/src/channel/desktop.rs` (**MODIFY**)
 
 **Pasos**
-1. Devolver `Unverifiable` si no hay ejecutable o si `fs.canonicalize(exe)` o cualquier `fs.metadata` falla.
+1. Devolver `Unverifiable` si no hay ejecutable o si `fs.canonicalize(exe)` o cualquier `fs.metadata` del ejecutable o de un directorio de su bundle falla. `Unverifiable` es solo para fallos sobre el ejecutable y su bundle (ajuste PC-2 del plan-critic, ronda 1).
 2. Sobre la ruta canónica, devolver `Absent` si algún componente es `AppTranslocation` o si empieza por `/Volumes`.
-3. Buscar la carpeta de aplicaciones `<apps>` de `apps` (cada una también canonicalizada) tal que la ruta sea exactamente `<apps>/GitRaptor.app/Contents/MacOS/<bin>`, con `<bin>` en `APP_BINARIES` y la comparación por componentes y sensible a mayúsculas; si ninguna, `Absent`.
+3. Buscar la carpeta de aplicaciones `<apps>` de `apps` (cada una también canonicalizada; una carpeta que no existe o que no se puede canonicalizar ni leer se **omite**, no cuenta como coincidencia ni da `Unverifiable`: `~/Applications` falta en muchas máquinas, y la app de `/Applications` debe seguir verificándose; test `missing_user_applications_folder_does_not_block_system_applications`) tal que la ruta sea exactamente `<apps>/GitRaptor.app/Contents/MacOS/<bin>`, con `<bin>` en `APP_BINARIES` y la comparación por componentes y sensible a mayúsculas; si ninguna, `Absent`.
 4. Comprobar el ejecutable y cada directorio `GitRaptor.app`, `Contents` y `MacOS`: archivo regular el primero y directorios los demás, sin `mode & 0o022`, propietario el uid del daemon o `0`, y el mismo `dev` que `<apps>`; si falla alguno, `Absent`.
 5. Comprobar `<apps>`: sin `mode & 0o002` y propietario el uid del daemon o `0`; la escritura de grupo se admite solo en `<apps>` (§ Notas, G2); si falla, `Absent`.
 6. Implementar `SystemFs` con `std::fs::canonicalize` y `std::fs::metadata` + `MetadataExt` (`mode`, `uid`, `dev`), y `system_app_dirs(uid)` con `/Applications` y el `pw_dir` de `nix::unistd::User::from_uid(uid)` + `Applications`, solo con `cfg(target_os = "macos")`; vacío en el resto.
@@ -351,7 +351,7 @@ graph LR
 
 ### T007 — Conectar la clase al handshake, al método y al log
 
-**Objetivo.** Una conexión de la clase recibe el perfil de `decide`, su `requester`, el método `connection.desktop` y su línea de log; ninguna otra conexión cambia. Fuera: escrituras, capas y la app.
+**Objetivo.** Una conexión de la clase recibe el perfil de `decide`, su `requester`, el método `connection.desktop` y su línea de log; las conexiones que no son de la clase no cambian. **Presupuestos (ajuste PC-1 del plan-critic, ronda 1)**: una conexión de la clase con perfil `mcp` gasta, como cualquier conexión `mcp`, el `mcp_read_bucket` y el presupuesto de lectura de su solicitante (`take_read`, clave del agente en la fila 1), que comparte con el `raptor-mcp` de ese agente. Es deliberado: los límites son por solicitante (ADR-MCP-001 § 6), y una ventana abierta por un agente lee en nombre de ese agente; no se añade excepción en `dispatch`. Decisión del orquestador (2026-11-09), validada por Arquitecto (D3/D6 de esta spec). Fuera: escrituras, capas y la app.
 
 **Ubicación.** `crates/core/src/channel/conn.rs` (**MODIFY**)
 
@@ -636,6 +636,7 @@ _No aplica — esta entrega no persiste nada; el perfil vive en memoria con la c
 - [ ] `symlink_is_resolved_before_checking` — enlace en `/Applications` a `~/Downloads` ⇒ `Absent`
 - [ ] `writable_executable_is_rejected` — `0775` y `0757` ⇒ `Absent`
 - [ ] `writable_bundle_directory_is_rejected` — cada uno de `GitRaptor.app`, `Contents`, `MacOS` con `0o020` o `0o002` ⇒ `Absent`
+- [ ] `missing_user_applications_folder_does_not_block_system_applications` — `~/Applications` no existe (canonicalize falla) y la app está en `/Applications` ⇒ `Verified` (PC-2)
 - [ ] `group_writable_system_applications_is_accepted` — `/Applications` `root:admin 0775` ⇒ `Verified`
 - [ ] `world_writable_applications_folder_is_rejected` ⇒ `Absent`
 - [ ] `foreign_owner_is_rejected` — ejecutable o directorio del bundle de otro uid distinto de `0` ⇒ `Absent`
@@ -723,4 +724,5 @@ Corre `/security-review --scope devspec docs/requirements/features/motor-local/d
 | G2 | `/Applications` es `root:admin 0775`: otro usuario administrador del equipo podría reemplazar el bundle. Se acepta igual que R-6 (solo alphas, solo lectura) y desaparece con la identidad firmada de v0.1.0 | Ninguna en esta historia | Arquitecto |
 | G3 | Un build de desarrollo (`pnpm tauri dev`) corre bajo `node`, así que la clase sale `mcp` con `ambiguous-ancestry`. Para ver la vista completa en desarrollo hay que lanzar el binario de `target/` desde una terminal (fila 4 con controles 1 a 3) | Contarlo en el README de `apps/desktop` cuando la app pinte el motivo | Historia de la app |
 | G4 | Renombrar el binario de la app lo saca de la clase y obtiene las reglas de `cli` (`full`). No es una escalada: es lo mismo que un agente que ejecuta `raptor` hoy (fuera de alcance en la ficha) | Ninguna | — |
+| G6 | Lanzamiento huérfano (PC-3 del plan-critic): un agente que lanza el binario real de `/Applications/GitRaptor.app` en segundo plano (`&`, `nohup`, `setsid`, doble fork) y cuyo padre muere antes del `hello` (o una reconexión posterior) queda con la ascendencia limpia bajo `launchd` y la identidad por ruta: `full` de lectura. Es la misma clase que `open -a` (SPIKE-DSK-002, R-6): solo lectura, solo alphas, escribir sigue pidiendo el factor por acción | Nombrarlo en R-6 para la revisión de seguridad; se cierra con la identidad firmada (v0.1.0) y SPIKE-DSK-002 | Coordinador (decisión a la firma) |
 | G5 | Los nombres del ejecutable del bundle dependen del bundler de Tauri. La prueba manual de la ficha con la alpha confirma cuál de los dos sale; los dos son constantes | Si el bundle usa otro nombre, añadirlo a `APP_BINARIES` en el mismo PR | Implementador |
