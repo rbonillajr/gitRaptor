@@ -254,8 +254,92 @@ pub fn daemon_git_argvs() -> Vec<(&'static str, Vec<OsString>)> {
 /// template of the Time Machine write layer other than `update-ref`, or of the read layer's
 /// `version`, `rev-parse`, `for-each-ref`, `rev-list`, `merge-base` or `log`. Fails closed.
 pub fn is_daemon_inert_argv(args: &[OsString]) -> bool {
-    let _ = args;
-    false
+    inert_write_argv(args) || inert_read_argv(args)
+}
+
+/// `args` with `options` stripped from its front, word by word, or `None` if they differ.
+fn strip_options<'a>(args: &'a [OsString], options: &[&str]) -> Option<&'a [OsString]> {
+    let rest = args.get(options.len()..)?;
+    args.iter()
+        .zip(options)
+        .all(|(a, o)| a == o)
+        .then_some(rest)
+}
+
+/// The absolute path a single word carries after `prefix`, or `None`.
+fn absolute_after<'a>(word: &'a OsString, prefix: &str) -> Option<&'a Path> {
+    let path = os_strip_prefix(word, prefix)?;
+    (!path.as_os_str().is_empty() && path.is_absolute()).then_some(path)
+}
+
+#[cfg(unix)]
+fn os_strip_prefix<'a>(word: &'a OsStr, prefix: &str) -> Option<&'a Path> {
+    use std::os::unix::ffi::OsStrExt;
+    let rest = word.as_bytes().strip_prefix(prefix.as_bytes())?;
+    Some(Path::new(OsStr::from_bytes(rest)))
+}
+
+/// Without a byte view of an `OsStr`, a word that is not Unicode fails closed.
+#[cfg(not(unix))]
+fn os_strip_prefix<'a>(word: &'a OsStr, prefix: &str) -> Option<&'a Path> {
+    word.to_str()?.strip_prefix(prefix).map(Path::new)
+}
+
+/// The exact layout of [`write_argv`] for a subcommand other than `update-ref`, nothing after.
+fn inert_write_argv(args: &[OsString]) -> bool {
+    let Some(rest) = strip_options(args, WRITE_OPTIONS) else {
+        return false;
+    };
+    let [c1, hooks, c2, safe, git_dir, rest @ ..] = rest else {
+        return false;
+    };
+    if c1 != "-c"
+        || c2 != "-c"
+        || absolute_after(hooks, "core.hooksPath=").is_none()
+        || absolute_after(safe, "safe.directory=").is_none()
+        || absolute_after(git_dir, "--git-dir=").is_none()
+    {
+        return false;
+    }
+    let words = match rest.first() {
+        Some(w) if os_strip_prefix(w, "--work-tree=").is_some() => {
+            if absolute_after(w, "--work-tree=").is_none() {
+                return false;
+            }
+            &rest[1..]
+        }
+        _ => rest,
+    };
+    WriteSubcommand::ALL
+        .iter()
+        .filter(|s| **s != WriteSubcommand::UpdateRef)
+        .any(|s| words.len() == s.words().len() && words.iter().zip(s.words()).all(|(a, w)| a == w))
+}
+
+/// [`FIXED_OPTIONS`], the words of an inert read subcommand, then arguments none of which makes
+/// Git write a file (`--output`).
+fn inert_read_argv(args: &[OsString]) -> bool {
+    const INERT_READS: [Subcommand; 6] = [
+        Subcommand::Version,
+        Subcommand::RevParse,
+        Subcommand::ForEachRef,
+        Subcommand::RevList,
+        Subcommand::MergeBase,
+        Subcommand::Log,
+    ];
+    let Some(rest) = strip_options(args, FIXED_OPTIONS) else {
+        return false;
+    };
+    INERT_READS.iter().any(|s| {
+        let words = s.words();
+        let Some(tail) = rest.get(words.len()..) else {
+            return false;
+        };
+        rest.iter().zip(words).all(|(a, w)| a == w)
+            && tail
+                .iter()
+                .all(|a| a != "--output" && os_strip_prefix(a, "--output=").is_none())
+    })
 }
 
 /// The closed list of the Guardrails write layer (ADR-GRD-001 § 7): only the activation key
