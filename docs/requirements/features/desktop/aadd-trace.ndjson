@@ -52,3 +52,7 @@
 {"v":1,"ts":"2026-11-10T05:33:09.515Z","event":"updated","session":"13987455-cbf1-48e3-a0d7-a2c0287e215e","rel":"user-stories/US-DSK-002-proteger-repo-con-un-clic.md","id":"US-DSK-002","type":"us","sha":"c609a5beab900978"}
 {"v":1,"ts":"2026-11-10T05:33:14.675Z","event":"updated","session":"13987455-cbf1-48e3-a0d7-a2c0287e215e","rel":"user-stories/US-DSK-002-proteger-repo-con-un-clic.md","id":"US-DSK-002","type":"us","sha":"cba0448447a2cabc"}
 {"v":1,"ts":"2026-11-10T05:41:09.738Z","event":"updated","session":"13987455-cbf1-48e3-a0d7-a2c0287e215e","rel":"user-stories/US-DSK-002-proteger-repo-con-un-clic.md","id":"US-DSK-002","type":"us","sha":"6b45891b196625a7"}
+{"v":1,"ts":"2026-11-10T05:56:59.182Z","event":"updated","session":"13987455-cbf1-48e3-a0d7-a2c0287e215e","rel":"user-stories/US-DSK-006-deshacer-de-un-boton.md","id":"US-DSK-006","type":"us","sha":"7dc09da48c98713d"}
+{"v":1,"ts":"2026-11-10T05:57:01.491Z","event":"updated","session":"13987455-cbf1-48e3-a0d7-a2c0287e215e","rel":"user-stories/US-DSK-006-deshacer-de-un-boton.md","id":"US-DSK-006","type":"us","sha":"404ffa8d27eb1e93"}
+{"v":1,"ts":"2026-11-10T05:57:02.561Z","event":"updated","session":"13987455-cbf1-48e3-a0d7-a2c0287e215e","rel":"user-stories/US-DSK-006-deshacer-de-un-boton.md","id":"US-DSK-006","type":"us","sha":"292d888d33c8f40c"}
+{"v":1,"ts":"2026-11-10T06:05:25.775Z","event":"updated","session":"13987455-cbf1-48e3-a0d7-a2c0287e215e","rel":"user-stories/US-DSK-006-deshacer-de-un-boton.md","id":"US-DSK-006","type":"us","sha":"dc815a2a15325d1a"}
