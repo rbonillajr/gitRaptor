@@ -9,6 +9,11 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
+use std::time::Duration;
+
+/// How long after it closes a window still covers an event: the delay of a write notice the
+/// detector still keeps (the 3 s cap of the read notice, ADR-GRP-012 amendment 2026-11-09).
+pub const WINDOW_TAIL: Duration = Duration::from_secs(3);
 
 /// The write windows of the daemon's process.
 #[derive(Debug, Default)]
