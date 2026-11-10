@@ -419,7 +419,13 @@ Cada uno la abre con una guarda RAII sobre su repo, y la guarda la cierra tambi�
 
 La ventana se mide con el mismo reloj monotónico que las marcas del lote. Las marcas de las ventanas se toman bajo el lock de la lista y son estrictamente crecientes: en macOS el reloj solo resuelve microsegundos. Un evento cuenta como ajeno, y suma `daemon_write_window`, en estos casos:
 
-- **Su ventana S3, `[t_recv − s3_lead, t_flush]`, se solapa con una ventana abierta.** Siempre.
+- **Su ventana S3, `[t_recv − s3_lead, t_flush]`, se solapa con una ventana**, en cualquiera de estos casos:
+  - la ventana sigue abierta al evaluar;
+  - la ventana falló: se soltó sin `complete()`, que el aplicador llama solo cuando todas sus escrituras volvieron bien;
+  - es del ejecutor;
+  - es una de dos ventanas de la misma ref que se solapan.
+
+  Una ventana del aplicador **ya cerrada con éxito** se juzga en el solape con la regla del margen. Con inotify, el lote de un commit posterior puede abrirse durante las escrituras del restore, así que «solape» no prueba que el evento sea del daemon. El caso es `td_tmc_003` en el CI de ubuntu. Lo aprobó el Arquitecto, con condiciones, y lo autorizó el coordinador.
 - **Cae en el margen de 3 s (`WINDOW_TAIL`) tras cerrarse una ventana**, el tope del aviso de lectura, salvo que pase la regla del margen.
 
 **La regla del margen** (decisión del orquestador, 2026-11-09, validada por el Arquitecto en tres pasos con el caso `td_tmc_003::another_actors_commit_after_an_own_echo_still_stops_the_undo`: otro agente hace commit unos 100 ms después del eco de un redo). La ventana del aplicador anota los pares `(ref, valor)` que escribe, `HEAD` separado incluido. La del ejecutor no conoce oids. Un evento del margen pasa a S3 normal solo si se cumple todo esto:
@@ -430,7 +436,7 @@ La ventana se mide con el mismo reloj monotónico que las marcas del lote. Las m
 - para su ref, **la ventana del aplicador más reciente que la escribió**, por `end_ns`, la dejó en el `old` del evento. Las ventanas del aplicador no se solapan porque toma el lock del repo, y dos que se solapan o comparten `end_ns` vuelven ajeno el evento. También vale que el `old` sea el `new` de la **cadena** de eventos que pasaron el margen después de esa ventana. La cadena se actualiza bajo el mismo lock que la lee y solo con eventos que pasaron; una ventana nueva la reinicia y muere con el margen. Un evento atribuido por S4 no la avanza (falla cerrado);
 - si ninguna ventana escribió esa ref, no se comprueba el `old`. Una rama a la que apunta un `HEAD` simbólico sin `RefUpdate` cuenta como no tocada: el aplicador no verifica su valor.
 
-Pasar el margen no atribuye nada: el evento sigue por S3 normal. Un evento fusionado que lleva dentro el movimiento del daemon (`old` anterior a la ventana) no pasa.
+Si una ref se escribe dos veces en una ventana, todos sus valores cuentan para el eco y solo el último vale para el `old`. Pasar el margen no atribuye nada: el evento sigue por S3 normal. Un evento fusionado que lleva dentro el movimiento del daemon (`old` anterior a la ventana) no pasa.
 
 Sin esta ventana, la regla siguiente quitaría una protección que hoy existe por casualidad. Un restore termina su `update-ref`, que mueve el `HEAD`, y deja vivos `git` inertes (la captura que dispara su propia escritura). Con un `git` de la sesión escribiendo en ese worktree, el restore se atribuiría al agente. La Time Machine corrige el eco **anclado** de sus operaciones (`branch_rule_events`), pero el actor crudo de `raptor events` y el eco sin ancla de TD-TMC-003 conservarían el actor de S3. Una regla que solo es segura si otra capa la corrige después no falla cerrado.
 
