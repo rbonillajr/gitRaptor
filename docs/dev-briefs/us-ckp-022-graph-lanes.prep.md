@@ -28,3 +28,4 @@ Ya medida por el Arquitecto: las citas de la DS están actualizadas a `main`. Ca
 - E2E-5: con 12 filas y el panel de conflictos, `layout` aún deja ~7 filas al grafo; el escenario comprueba lista, pista `g` y apertura de la vista, y la cesión ante el panel de conflictos la prueba `CKP022-CLI-YIELD`. DS § 9.4 alineada.
 - API de `LaneCache` fijada en la DS (T003) según `channel/graph_tests.rs`. Los tests de `apps/cli` asumen `graph::scroll(model, down: bool)`, `Anchor::Lane(u64)`, `GraphText::every()`, `Base::Missing(SafeText)` y `ConnEvent::Graph(bool)`: el experto los respeta (T005/T006 de la DS).
 - Los 6 `.snap` los crea y revisa el experto. Montajes de `mod` de prueba: `tui/mod.rs`, `present/mod.rs`, `view.rs`, `client/mod.rs` (`tests::graph`) y `channel/graph.rs`.
+- Ronda 2 (PC-8): E2E-5 queda en lista mínima, pista `g` y apertura de la vista, sin alertas; la cesión del grafo ante el panel de conflictos queda solo en `CKP022-CLI-YIELD` (unitaria de vista).

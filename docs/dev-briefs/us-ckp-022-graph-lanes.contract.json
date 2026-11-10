@@ -403,7 +403,7 @@
     },
     {
       "id": "CKP022-E2E-5",
-      "statement": "Escenario 5: a 80×24 con 12 filas en la flota y el panel de conflictos presente, la lista conserva su mínimo, la pista g grafo está en la barra y g abre la vista a pantalla completa (que el grafo cede ante el panel de conflictos lo fija CKP022-CLI-YIELD)",
+      "statement": "Escenario 5: a 80×24 con 12 filas en la flota (sin alertas: el repo de prueba no predice conflictos), la lista conserva su mínimo, la pista g grafo está en la barra y g abre la vista a pantalla completa (que el grafo cede ante el panel de conflictos lo fija CKP022-CLI-YIELD)",
       "verify": "cargo test -p gitraptor-cli --test tui_graph -- --list 2>/dev/null | grep -q 'the_graph_yields_space_first_at_80x24: test$' && cargo test -p gitraptor-cli --test tui_graph the_graph_yields_space_first_at_80x24",
       "layer": "runtime",
       "tests": [
