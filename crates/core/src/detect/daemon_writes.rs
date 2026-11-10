@@ -27,6 +27,10 @@ const RETENTION: Duration = Duration::from_secs(120);
 pub struct DaemonWrites {
     spans: Mutex<Vec<Span>>,
     next_id: AtomicU64,
+    /// The last mark given to a window: marks are strictly increasing, so two windows of the
+    /// same ref are ordered exactly even when the clock does not advance between them (macOS
+    /// reads `CLOCK_MONOTONIC` in microseconds).
+    last_mark: AtomicU64,
 }
 
 #[derive(Debug, Clone)]
@@ -44,24 +48,21 @@ struct Span {
 }
 
 impl Span {
-    /// Whether an event in the tail of this closed window cannot be its late echo and does not
-    /// start from a state it did not leave: only for a tracked window and a branch move whose
-    /// new value the window never wrote to that ref and whose old value is the one it left
-    /// there (or a ref it never wrote). Anything unknown fails closed.
-    fn cleared_by(&self, moved: Option<MoveSeen<'_>>) -> bool {
-        let Some(m) = moved else {
-            return false;
-        };
-        if !self.tracked {
-            return false;
-        }
-        let mut written = self.wrote.iter().filter(|(r, _)| r == m.refname);
-        if written.clone().any(|(_, v)| v == m.new) {
-            return false;
-        }
-        match written.next_back() {
-            None => true,
-            Some((_, left)) => m.old == Some(left.as_str()),
+    /// The last value the window left in `refname`, if it wrote it.
+    fn left(&self, refname: &str) -> Option<&str> {
+        self.wrote
+            .iter()
+            .rev()
+            .find(|(r, _)| r == refname)
+            .map(|(_, v)| v.as_str())
+    }
+
+    /// Whether the two windows were open at a common moment, or closed at the same mark: then
+    /// the order of their writes is unknown.
+    fn concurrent_with(&self, other: &Span) -> bool {
+        match (self.end_ns, other.end_ns) {
+            (Some(a), Some(b)) => a == b || (self.start_ns < b && other.start_ns < a),
+            _ => true,
         }
     }
 }
@@ -95,8 +96,9 @@ impl WriteWindow {
 
 impl Drop for WriteWindow {
     fn drop(&mut self) {
-        let now = monotonic_ns();
-        if let Some(span) = self.writes.spans().iter_mut().find(|s| s.id == self.id) {
+        let mut spans = self.writes.spans();
+        let now = self.writes.mark();
+        if let Some(span) = spans.iter_mut().find(|s| s.id == self.id) {
             span.end_ns = Some(now);
         }
     }
@@ -127,6 +129,15 @@ impl DaemonWrites {
         self.spans.lock().unwrap_or_else(|e| e.into_inner())
     }
 
+    /// The clock, never equal to or before the previous mark. Taken with the list locked, so the
+    /// order of the marks is the order of the opens and closes.
+    fn mark(&self) -> u64 {
+        // Only ever called with the list locked: no other mark can interleave.
+        let mark = monotonic_ns().max(self.last_mark.load(Ordering::Relaxed).saturating_add(1));
+        self.last_mark.store(mark, Ordering::Relaxed);
+        mark
+    }
+
     /// Opens a window over the repo or worktree at `path` until the guard drops. The path is
     /// kept canonical when it can be resolved, as given otherwise; windows closed longer than
     /// the retention ago are dropped here.
@@ -137,8 +148,8 @@ impl DaemonWrites {
     fn open(self: &Arc<Self>, path: &Path, tracked: bool) -> WriteWindow {
         let path = crate::observe::canonical(path);
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
-        let start_ns = monotonic_ns();
         let mut spans = self.spans();
+        let start_ns = self.mark();
         prune(&mut spans, start_ns);
         spans.push(Span {
             id,
@@ -162,9 +173,16 @@ impl DaemonWrites {
         self.open(path, true)
     }
 
-    /// Whether the daemon's windows make an event of the repo foreign: one over a path `in_repo`
-    /// accepts was open at some moment of `[from_ns, to_ns]`, or closed less than
-    /// [`WINDOW_TAIL`] before `from_ns` and `moved` does not clear it.
+    /// Whether the daemon's windows make an event of the repo foreign (ADR-GRP-012, amendment
+    /// 2026-11-09). Among the windows over a path `in_repo` accepts:
+    ///
+    /// - one open at some moment of `[from_ns, to_ns]` makes it foreign;
+    /// - the windows closed less than [`WINDOW_TAIL`] before `from_ns` (the margin) make it
+    ///   foreign unless `moved` clears them all: every one of them is the applier's, the move's
+    ///   old value is known, its new value is none any of them wrote to that ref, and its old
+    ///   value is what the latest window that wrote the ref (by `end_ns`) left there. Two
+    ///   windows that wrote the ref concurrently, or closed at the same mark, leave the order
+    ///   unknown: foreign. A ref none of them wrote is not checked.
     pub fn covers(
         &self,
         in_repo: &dyn Fn(&Path) -> bool,
@@ -173,20 +191,52 @@ impl DaemonWrites {
         moved: Option<MoveSeen<'_>>,
     ) -> bool {
         let tail = ns(WINDOW_TAIL);
-        self.spans().iter().filter(|s| in_repo(&s.path)).any(|s| {
-            if s.start_ns > to_ns {
-                return false;
-            }
+        let spans = self.spans();
+        let mut margin: Vec<&Span> = Vec::new();
+        for s in spans
+            .iter()
+            .filter(|s| s.start_ns <= to_ns && in_repo(&s.path))
+        {
             match s.end_ns {
                 // Open, or closed inside the window: foreign always.
-                None => true,
-                Some(end) if end >= from_ns => true,
-                // In its tail: foreign unless the move clears it. Every window of the margin
-                // must be cleared, so one that is not decides.
-                Some(end) if end.saturating_add(tail) >= from_ns => !s.cleared_by(moved),
-                Some(_) => false,
+                None => return true,
+                Some(end) if end >= from_ns => return true,
+                Some(end) if end.saturating_add(tail) >= from_ns => margin.push(s),
+                Some(_) => {}
             }
-        })
+        }
+        if margin.is_empty() {
+            return false;
+        }
+        let Some(m) = moved else {
+            return true;
+        };
+        let Some(old) = m.old else {
+            return true;
+        };
+        if margin.iter().any(|s| !s.tracked) {
+            return true;
+        }
+        // A late echo of any of them.
+        if margin
+            .iter()
+            .any(|s| s.wrote.iter().any(|(r, v)| r == m.refname && v == m.new))
+        {
+            return true;
+        }
+        let writers: Vec<&Span> = margin
+            .into_iter()
+            .filter(|s| s.left(m.refname).is_some())
+            .collect();
+        for (i, a) in writers.iter().enumerate() {
+            if writers[i + 1..].iter().any(|b| a.concurrent_with(b)) {
+                return true;
+            }
+        }
+        match writers.iter().max_by_key(|s| s.end_ns) {
+            None => false,
+            Some(latest) => latest.left(m.refname) != Some(old),
+        }
     }
 
     /// Whether a window over a path `in_repo` accepts was open at some moment of
