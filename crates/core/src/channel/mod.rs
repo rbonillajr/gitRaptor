@@ -15,6 +15,8 @@ pub mod bus;
 mod conn;
 pub mod desktop;
 #[cfg(any(unix, windows))]
+mod diff;
+#[cfg(any(unix, windows))]
 mod limits;
 pub mod marks;
 #[cfg(any(unix, windows))]
@@ -24,6 +26,8 @@ mod mcp_scope;
 #[cfg(any(unix, windows))]
 mod mcp_status;
 pub mod peer;
+#[cfg(any(unix, windows))]
+mod query;
 pub mod requester;
 #[cfg(any(unix, windows))]
 mod server;

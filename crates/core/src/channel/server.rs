@@ -109,6 +109,9 @@ pub(crate) struct ServerCtx {
     pub requester_limits: Arc<super::limits::RequesterLimits>,
     /// What the conflict predictor published (TS-CKP-001), written only by its module.
     pub prediction: Arc<crate::predict::store::PredictionStore>,
+    /// The one thread that answers on-demand queries (`diff.worktree`), shared by every
+    /// connection.
+    pub query: super::query::QueryPool,
 }
 
 impl ServerCtx {
@@ -238,6 +241,7 @@ impl Server {
             hook_claims: args.hook_claims,
             requester_limits: Arc::default(),
             prediction: args.prediction,
+            query: super::query::QueryPool::default(),
         });
         Self::listen(ctx, bound.listener)
     }

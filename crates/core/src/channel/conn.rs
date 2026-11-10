@@ -243,8 +243,11 @@ pub(crate) fn accept(ctx: &Arc<ServerCtx>, stream: Stream) {
                 mcp_cursors: std::sync::Mutex::new(super::mcp_status::McpCursors::default()),
                 slot: None,
                 desktop: None,
+                queries: super::query::QueryTable::default(),
             };
             conn.serve(reader_stream);
+            // The connection is closing: its queries stop before the pool's one thread is held.
+            conn.queries.cancel_all();
             if let Some(wiring) = &thread_ctx.protected {
                 wiring.executor.drop_connection(id);
             }
@@ -432,6 +435,8 @@ struct Connection<'a> {
     /// The profile decision of a desktop-class connection, fixed at `hello`;
     /// `None` for every other connection.
     desktop: Option<DesktopDecision>,
+    /// The on-demand queries of this connection that are in flight (N8).
+    queries: super::query::QueryTable,
 }
 
 /// What a handled request leads to.
@@ -984,6 +989,22 @@ impl Connection<'_> {
             }
             methods::TM_NOTICES => {
                 let result = self.tm_notices(request);
+                self.reply(&request.id, result);
+            }
+            methods::DIFF_WORKTREE => {
+                // The pool answers it, out of order, unless it is refused now.
+                if let Err(error) =
+                    super::diff::start(self.ctx, &self.queries, &self.outbox, request)
+                {
+                    self.reply::<()>(&request.id, Err(error));
+                }
+            }
+            methods::QUERY_CANCEL => {
+                let result = request
+                    .params::<gitraptor_api::query::CancelParams>()
+                    .map(|p| gitraptor_api::query::CancelResult {
+                        cancelled: self.queries.cancel(&p.request),
+                    });
                 self.reply(&request.id, result);
             }
             methods::PING => self.reply(&request.id, request.params::<NoParams>().map(|_| "pong")),
