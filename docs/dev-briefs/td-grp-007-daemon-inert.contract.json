@@ -57,7 +57,7 @@
     },
     {
       "id": "GRP007-WINDOW",
-      "statement": "Con un git de la sesión que escribe y sin git del daemon: una ventana de escritura abierta sobre el repo durante la ventana S3, o cerrada menos de WINDOW_TAIL (3 s) antes de su comienzo, da Ambiguous con daemon_write_window=1; una ventana sobre otro repo, o cerrada más de WINDOW_TAIL antes del comienzo de la ventana S3, no cuenta (Attributed); soltar la guarda cierra la ventana y un pánico con la guarda viva también la cierra",
+      "statement": "Ventana de escritura del daemon, con un git de la sesión que escribe y sin git del daemon. Una ventana abierta sobre el repo durante la ventana S3 da Ambiguous con daemon_write_window=1. En el margen WINDOW_TAIL (3 s) tras cerrarse, la ventana del aplicador guarda los pares (ref, new) que escribió, HEAD incluido. Un evento con branch_move sobre una ref que la ventana no tocó, o sobre una ref que tocó con un old igual al valor que dejó el daemon, se evalúa con S3 normal (Attributed). Son ajenos en el margen: un evento sin branch_move, un old distinto o ilegible (evento fusionado O→Y), un new igual al que escribió el aplicador (eco tardío), un commit sobre un HEAD separado por el restore, cualquier evento dentro del margen de una ventana del ejecutor (sin oids) y un evento que no pasa las condiciones de todas las ventanas de su margen. Un restore que cambia el HEAD simbólico, seguido de un commit en la ref de destino con un old igual al valor de esa ref al cerrar la ventana, va a S3 normal. Una ventana sobre otro repo, o cerrada más de WINDOW_TAIL antes del comienzo de la ventana S3, no cuenta. Soltar la guarda cierra la ventana, también ante un pánico.",
       "verify": "cargo test -p gitraptor-core --lib detect::tests::daemon_write_window",
       "layer": "runtime",
       "tests": [
@@ -99,6 +99,15 @@
       "layer": "runtime",
       "tests": [
         "crates/core/tests/us_tmc_003.rs"
+      ]
+    },
+    {
+      "id": "GRP007-ECHO",
+      "statement": "El caso del coordinador: en td_tmc_003, el commit de claude-2 justo después del eco del redo de claude-1 se atribuye a claude-2 y el undo de claude-1 se detiene por overlap (another_actors_commit_after_an_own_echo_still_stops_the_undo pasa)",
+      "verify": "cargo test -p gitraptor-core --test td_tmc_003 -- --exact another_actors_commit_after_an_own_echo_still_stops_the_undo",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/td_tmc_003.rs"
       ]
     }
   ],
