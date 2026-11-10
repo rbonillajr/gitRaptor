@@ -159,3 +159,48 @@ fn the_view_lists_the_lanes_in_the_order_of_the_panel() {
         "the view follows the order of the fleet, not the engine's"
     );
 }
+
+/// At 120 columns the graph panel sits beside the fleet (55 % of the body for the fleet), the
+/// fleet stays readable and the key bar names `g`.
+#[test]
+fn at_120_columns_the_panel_sits_beside_a_readable_fleet() {
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+
+    let model = model();
+    let mut terminal = Terminal::new(TestBackend::new(120, 30)).unwrap();
+    terminal
+        .draw(|f| crate::tui::view::view(&model, f))
+        .unwrap();
+    let buffer = terminal.backend().buffer();
+    let screen: Vec<String> = buffer
+        .content()
+        .chunks(120)
+        .map(|row| row.iter().map(|c| c.symbol()).collect())
+        .collect();
+    let all = screen.join("\n");
+
+    let title = screen
+        .iter()
+        .find(|l| l.contains("Fleet") && l.contains("Graph"))
+        .unwrap_or_else(|| panic!("the fleet and the graph panel share their top row:\n{all}"));
+    assert!(
+        title.find("Fleet").unwrap() < title.find("Graph").unwrap(),
+        "the graph is to the right of the fleet:\n{all}"
+    );
+    // The fleet's agent and folder fit whole in its 66 columns.
+    let row = screen
+        .iter()
+        .find(|l| l.contains("d-act") && l.contains("claude-1"))
+        .unwrap_or_else(|| panic!("the agent row of d-act:\n{all}"));
+    assert!(row.contains("claude-1 · d-act"), "{row}");
+    // The panel names the lanes of the fleet, the agent's first.
+    assert!(
+        screen
+            .iter()
+            .any(|l| l.contains("│") && l.contains("claude-1 · d-act")),
+        "the panel draws the lane of d-act:\n{all}"
+    );
+    let bar = screen.last().unwrap();
+    assert!(bar.contains("g graph"), "the key bar names `g`: {bar}");
+}
