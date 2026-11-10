@@ -2,7 +2,7 @@
 id: DS-US-CKP-022
 title: "Dev Spec — US-CKP-022: ver crecer la rama de cada agente sobre la base"
 type: dev-spec
-status: spec-ready
+status: implemented
 created: 2026-10-28
 updated: 2026-11-10
 story: US-CKP-022
@@ -674,4 +674,4 @@ No aplicadas por esta DS; las aplica T007.
 - Siguiente paso: T001 en rojo; luego T002/T003 (motor) y T004/T005/T006 (TUI) en paralelo.
 - La caché es un tipo `LaneCache` `pub(crate)` en `channel/graph.rs` con `lane(&self, repo_id, root, head, base_tip, walk: impl FnOnce() -> Result<GitLane, GitLaneGap>) -> Result<GitLane, GitLaneGap>` (un acierto no llama a `walk`; un `Err` no se guarda) y `prune(&self, repo_id, roots)`; `GitLane` es `Clone`. Lo fija `channel/graph_tests.rs` (D17).
 
-
+Implementado en: PR #366. La corrida de `/implement` se abortó en P0 por el modo rápido y la historia queda **sin certificar**. Pendiente con dueño: N4 (medir el peor caso de los topes), N5 (PO: cablear o retirar `LaneModel.conflict`), N6 (corregir la guía `extender-sin-archivos-compartidos.md`) y la verificación en Windows y Linux (XP-70).

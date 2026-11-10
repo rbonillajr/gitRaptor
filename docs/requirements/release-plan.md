@@ -154,7 +154,8 @@ Estados (al 2026-10-28, sacados de [release-status.md](release-status.md)): **I*
 | US-CKP-020 | Confirmar un plan sobre trabajo ajeno | Must | P (PR #220) | El `ConfirmPrompt` de la TUI y la confirmación ligada al plan; el texto en/es para Windows |
 | US-CKP-006, US-CKP-007, US-CKP-008, US-CKP-009, US-CKP-010 | Predicción de conflictos: choque, vigencia, aviso, base sin confirmar y KPI | Must | Pend | SPIKE-CKP-001 y TS-CKP-001 ya están en parte; faltan sus consumidores |
 | US-CKP-012, US-CKP-014, US-CKP-015, US-CKP-016, US-CKP-017, US-CKP-018, US-CKP-024 | Revisar, integrar, poner al día, choque detenido, descartar, crear worktree, integrar con seguridad | Must | Pend | — (TS-CKP-003 ya está implementada) |
-| US-CKP-019, US-CKP-021, US-CKP-022 | Por qué frena Guardrails; historial; grafo | Must | Pend | — |
+| US-CKP-019, US-CKP-021 | Por qué frena Guardrails; historial | Must | Pend | — |
+| US-CKP-022 | Grafo de carriles | Must | I (PR #366, sin certificar) | Linux y Windows (XP-70) |
 | US-CKP-004, US-CKP-013 | Recordar la vista; abrir en el editor | Should | Pend | — (US-CKP-004 tiene Dev Spec desde el 2026-10-28; US-CKP-013 guarda su aprobación en las preferencias de US-CKP-004). La consulta por CLI salió de M2 el 2026-11-08 ([recorte](#recorte-de-shoulds-de-m2-aplicado)); estas dos no se recortan (la tanda 2 no se aplica) |
 | TS-CKP-002, TS-CKP-004, TS-CKP-005 | Catálogo y ejecutor; tokens; widgets | Must | I | — |
 | TS-CKP-003 | Capa del Cockpit en la decisión de Guardrails | Must | I (PR #261) | — |
@@ -285,7 +286,7 @@ Lo que cambió respecto del 2026-10-08 (27 PR y 8,8 fichas equivalentes por día
 - El rango es amplio a propósito y sale del dato: antes del 2026-10-22 la velocidad era 2 a 3 veces mayor. Si la flota vuelve a 2 por día (la semana del 08 al 14 de octubre), el cierre cae hacia 2026-12-01. No se promete esa fecha.
 
 - **Ruta crítica:** SPIKE-CKP-001 (en parte) y TS-CKP-001 (en parte) → US-CKP-006 a 010 y US-MCP-016, con 4 o 5 eslabones de 1 a 2 días cada uno (6 a 10 días). Ya no limita: la fecha la fija la velocidad de la flota. **Riesgo:** si la fase (b) de SPIKE-CKP-001 concluye que el predictor no funciona como está diseñado, se replanifica todo el bloque de predicción.
-- **Otras cadenas:** US-CKP-012 a 022 y 024 (US-CKP-023 salió el 2026-11-08) y las escrituras del MCP (US-MCP-011, 012, 018 y 019; TS-CKP-003 ya está implementada); US-TMC-007 → US-MCP-017; SPIKE-GRD-002 → factor del SO de la app (UI-1, hito M2-UI); US-GRD-013 y la cola de confirmación salieron de M2 el 2026-11-08.
+- **Otras cadenas:** US-CKP-012 a 021 y 024 (US-CKP-023 salió el 2026-11-08) y las escrituras del MCP (US-MCP-011, 012, 018 y 019; TS-CKP-003 ya está implementada); US-TMC-007 → US-MCP-017; SPIKE-GRD-002 → factor del SO de la app (UI-1, hito M2-UI); US-GRD-013 y la cola de confirmación salieron de M2 el 2026-11-08.
 - **Cierre (2026-10-28, reemplazado por el cálculo de arriba):** lo que llegue más tarde entre la flota y M1, más 1 o 2 días de demo. **Central: 2027-01-14** (65 / 0,86, la media de los últimos 14 días, son 76 días hasta 2027-01-12, más 2 de demo). **Optimista: 2026-12-21** (si repunta la flota; no incluye los 3 a 6 días de la cola de confirmación). **Conservadora: 2027-01-28.** La velocidad va a la baja (2,0, 0,93 y 0,79 por día en las tres últimas semanas) y los cuellos de botella son la revisión y el CI de macOS, no solo la flota.
 - **M3 y M4** dependen del cierre de M2: sus fechas de abajo (calculadas el 2026-10-08) se desplazan al menos lo mismo que M2 y siguen **por recalcular** (no antes del cierre de M2, ahora central 2027-02-04).
 
@@ -346,7 +347,7 @@ Estimada el 2026-11-08 por el Scrum Master y recalculada ese mismo día con la v
 | US-DSK-007 bloqueo explicado | 1,0 | Lectura de `guard.log` y `audit.list` |
 | US-DSK-006 deshacer | 1,5 | Línea de tiempo, deshacer y rehacer, avisos de purga |
 | US-DSK-001 y US-DSK-002 | 2,0 | Versión de copiar el comando (Q-DSK-15) |
-| Motor de US-CKP-022 (`graph.lanes`) | 1,0 | La historia sigue en borrador; su Dev Spec está aprobada. US-DSK-005 no cierra sin ella |
+| Motor de US-CKP-022 (`graph.lanes`) | 1,0 | Implementada en el PR #366 (2026-11-10, sin certificar); US-DSK-005 ya puede pedir los commits |
 | **Total** | **12,5** | |
 
 **Capacidad en paralelo.** M2 tiene prioridad y no se retrasa. M2-UI toma una parte de la flota y de la revisión de Rene: 40 % en el optimista, 35 % en el central y 25 % en el pesimista, sobre la velocidad de 1,0 (p75 de 11 días), 0,6 (media de 14 días) y 0,50 (media de 7 días) fichas equivalentes por día natural que usa M2. Con esa parte, M2-UI absorbe 0,40, 0,21 y 0,125 fichas por día.
