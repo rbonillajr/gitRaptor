@@ -63,7 +63,7 @@
 *   **F-001-07**: Ciclo de vida del worktree (BR-07, BR-14, BR-17, BR-19 parcial)
     -   **Contexto**: [context.md](features/worktree-lifecycle/context.md) (CTX-WTL-001, reglas BR-WTL-001 a 016). Crear el worktree de un agente con rama con nombre y artefactos copiados con copy-on-write desde una semilla quieta, lanzar Claude Code, ver su estado, descartar de forma reversible y registrar los worktrees que crea el propio agente. Extiende US-CKP-017, US-CKP-018 y US-MCP-019.
     -   **Hito**: M3 (Must: `raptor new`, descarte reversible, estado del agente, worktrees de Claude Code) · M4 (Should: semilla mantenida, handoff, limpieza por política, hooks de setup aprobados) · después de v0.1.0 (Could: `land`, CI y PR por rama, puerto por worktree). Prioridades del coordinador por delegación de Rene, 2026-11-10.
-    -   **Pendiente de Rene**: enmienda de BRD § 6.4 para lanzar el agente (pregunta 7 del contexto) y las preguntas que bloquean historias (3, 4, 5, 8 y 12).
+    -   **Pendiente**: aprobar el requerimiento (Rene). Decididas el 2026-11-10 y sin aplicar: la enmienda de BRD § 6.4 (lanzar el agente a petición del humano) y la de ADR-GRP-012 (interceptar los eventos de worktree de Claude Code, a cargo del Arquitecto).
     -   **Status**: Draft (pendiente de aprobación de Rene)
 
 ---
