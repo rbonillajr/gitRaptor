@@ -45,9 +45,30 @@ struct Span {
     /// `(refname, value)` the window left, in the order written. Only oids and ref names of the
     /// repo, in memory (SEC-04).
     wrote: Vec<(String, String)>,
+    /// `(refname, value)` the cleared moves of its margin left after it, when it is the latest
+    /// window that wrote the ref: the ref's current value as far as the margin knows.
+    chain: Vec<(String, String)>,
 }
 
 impl Span {
+    /// The value the margin expects `refname` to start from: the last cleared move after this
+    /// window, or what the window left.
+    fn current(&self, refname: &str) -> Option<&str> {
+        self.chain
+            .iter()
+            .find(|(r, _)| r == refname)
+            .map(|(_, v)| v.as_str())
+            .or_else(|| self.left(refname))
+    }
+
+    /// A cleared move left `refname` at `value`.
+    fn advance(&mut self, refname: &str, value: &str) {
+        match self.chain.iter_mut().find(|(r, _)| r == refname) {
+            Some((_, v)) => value.clone_into(v),
+            None => self.chain.push((refname.to_owned(), value.to_owned())),
+        }
+    }
+
     /// The last value the window left in `refname`, if it wrote it.
     fn left(&self, refname: &str) -> Option<&str> {
         self.wrote
@@ -158,6 +179,7 @@ impl DaemonWrites {
             end_ns: None,
             tracked,
             wrote: Vec::new(),
+            chain: Vec::new(),
         });
         WriteWindow {
             writes: Arc::clone(self),
@@ -183,6 +205,9 @@ impl DaemonWrites {
     ///   value is what the latest window that wrote the ref (by `end_ns`) left there. Two
     ///   windows that wrote the ref concurrently, or closed at the same mark, leave the order
     ///   unknown: foreign. A ref none of them wrote is not checked.
+    ///
+    /// A move that clears the margin advances its chain: the next move of the ref may start from
+    /// its new value. So this call changes state, and is made once per event.
     pub fn covers(
         &self,
         in_repo: &dyn Fn(&Path) -> bool,
@@ -191,17 +216,19 @@ impl DaemonWrites {
         moved: Option<MoveSeen<'_>>,
     ) -> bool {
         let tail = ns(WINDOW_TAIL);
-        let spans = self.spans();
-        let mut margin: Vec<&Span> = Vec::new();
-        for s in spans
-            .iter()
-            .filter(|s| s.start_ns <= to_ns && in_repo(&s.path))
-        {
+        // One lock for the whole judgement: the chain is read and advanced in the same step, so
+        // two evaluations never advance from the same value.
+        let mut spans = self.spans();
+        let mut margin: Vec<usize> = Vec::new();
+        for (i, s) in spans.iter().enumerate() {
+            if s.start_ns > to_ns || !in_repo(&s.path) {
+                continue;
+            }
             match s.end_ns {
                 // Open, or closed inside the window: foreign always.
                 None => return true,
                 Some(end) if end >= from_ns => return true,
-                Some(end) if end.saturating_add(tail) >= from_ns => margin.push(s),
+                Some(end) if end.saturating_add(tail) >= from_ns => margin.push(i),
                 Some(_) => {}
             }
         }
@@ -214,29 +241,40 @@ impl DaemonWrites {
         let Some(old) = m.old else {
             return true;
         };
-        if margin.iter().any(|s| !s.tracked) {
+        if margin.iter().any(|&i| !spans[i].tracked) {
             return true;
         }
-        // A late echo of any of them.
-        if margin
-            .iter()
-            .any(|s| s.wrote.iter().any(|(r, v)| r == m.refname && v == m.new))
-        {
+        // A late echo of any of them, also from a value of the chain.
+        if margin.iter().any(|&i| {
+            spans[i]
+                .wrote
+                .iter()
+                .any(|(r, v)| r == m.refname && v == m.new)
+        }) {
             return true;
         }
-        let writers: Vec<&Span> = margin
+        let writers: Vec<usize> = margin
             .into_iter()
-            .filter(|s| s.left(m.refname).is_some())
+            .filter(|&i| spans[i].left(m.refname).is_some())
             .collect();
-        for (i, a) in writers.iter().enumerate() {
-            if writers[i + 1..].iter().any(|b| a.concurrent_with(b)) {
+        for (k, &a) in writers.iter().enumerate() {
+            if writers[k + 1..]
+                .iter()
+                .any(|&b| spans[a].concurrent_with(&spans[b]))
+            {
                 return true;
             }
         }
-        match writers.iter().max_by_key(|s| s.end_ns) {
-            None => false,
-            Some(latest) => latest.left(m.refname) != Some(old),
+        // The latest window that wrote the ref decides; a newer one restarts the chain from its
+        // own value, and the chain ends with its window's margin.
+        let Some(latest) = writers.into_iter().max_by_key(|&i| spans[i].end_ns) else {
+            return false;
+        };
+        if spans[latest].current(m.refname) != Some(old) {
+            return true;
         }
+        spans[latest].advance(m.refname, m.new);
+        false
     }
 
     /// Whether a window over a path `in_repo` accepts was open at some moment of
@@ -269,6 +307,7 @@ mod tests {
             end_ns,
             tracked: false,
             wrote: Vec::new(),
+            chain: Vec::new(),
         };
         let now = 10 * ns(RETENTION);
         let mut spans = vec![
