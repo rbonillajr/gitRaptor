@@ -56,3 +56,7 @@
 {"v":1,"ts":"2026-11-10T05:57:01.491Z","event":"updated","session":"13987455-cbf1-48e3-a0d7-a2c0287e215e","rel":"user-stories/US-DSK-006-deshacer-de-un-boton.md","id":"US-DSK-006","type":"us","sha":"404ffa8d27eb1e93"}
 {"v":1,"ts":"2026-11-10T05:57:02.561Z","event":"updated","session":"13987455-cbf1-48e3-a0d7-a2c0287e215e","rel":"user-stories/US-DSK-006-deshacer-de-un-boton.md","id":"US-DSK-006","type":"us","sha":"292d888d33c8f40c"}
 {"v":1,"ts":"2026-11-10T06:05:25.775Z","event":"updated","session":"13987455-cbf1-48e3-a0d7-a2c0287e215e","rel":"user-stories/US-DSK-006-deshacer-de-un-boton.md","id":"US-DSK-006","type":"us","sha":"dc815a2a15325d1a"}
+{"v":1,"ts":"2026-11-10T06:26:56.754Z","event":"updated","session":"13987455-cbf1-48e3-a0d7-a2c0287e215e","rel":"user-stories/US-DSK-009-diff-visual.md","id":"US-DSK-009","type":"us","sha":"4d751727c2c89336"}
+{"v":1,"ts":"2026-11-10T06:26:59.169Z","event":"updated","session":"13987455-cbf1-48e3-a0d7-a2c0287e215e","rel":"user-stories/US-DSK-009-diff-visual.md","id":"US-DSK-009","type":"us","sha":"23608d26336d2b0a"}
+{"v":1,"ts":"2026-11-10T06:27:00.265Z","event":"updated","session":"13987455-cbf1-48e3-a0d7-a2c0287e215e","rel":"user-stories/US-DSK-009-diff-visual.md","id":"US-DSK-009","type":"us","sha":"af7331561170cd08"}
+{"v":1,"ts":"2026-11-10T06:36:53.082Z","event":"updated","session":"13987455-cbf1-48e3-a0d7-a2c0287e215e","rel":"user-stories/US-DSK-009-diff-visual.md","id":"US-DSK-009","type":"us","sha":"05fa9123d64cf7f0"}
