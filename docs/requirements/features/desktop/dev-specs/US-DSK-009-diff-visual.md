@@ -13,7 +13,7 @@ frontend_surface: true
 stack: react
 profile: frontend-feature
 tooling: [cargo, pnpm, node, grep]
-blocked_by: []
+blocked_by: [US-CKP-012]
 related:
   context: ../context.md
   story: ../user-stories/US-DSK-009-diff-visual.md
@@ -144,7 +144,7 @@ El código del diff **no está en `main`**: vive en la rama `feat/US-CKP-012-age
 
 ### Decisión del orquestador pendiente
 
-Decisiones nuevas de frontera de esta historia, numeradas a continuación de las P15 a P23 de DS-US-DSK-006. Es solo lectura sobre un método que ya existe en la rama de US-CKP-012, así que la tabla es corta: un comando, qué ve la vista restringida, los límites del lado de la app, el reparto de la única consulta por conexión con el grafo y cómo se parte la entrega. **Ninguna está aceptada.**
+Decisiones nuevas de frontera de esta historia, numeradas a continuación de las P15 a P23 de DS-US-DSK-006. Es solo lectura sobre un método que ya existe en la rama de US-CKP-012, así que la tabla es corta: un comando, qué ve la vista restringida, los límites del lado de la app, el reparto de la única consulta por conexión con el grafo y cómo se parte la entrega. **P24 a P28 aceptadas por el coordinador el 2026-11-10; P29 pendiente** (ver la tabla de veredicto).
 
 | # | Decisión | Recomendación | Por qué |
 |---|---|---|---|
@@ -155,18 +155,18 @@ Decisiones nuevas de frontera de esta historia, numeradas a continuación de las
 | P28 | **Colores del diff sin tokens nuevos** | Añadidas con `--gr-success-bg` / `--gr-success-text`, quitadas con `--gr-danger-bg` / `--gr-danger-text`, contexto en `--gr-text-main`; números de línea en `--gr-text-muted`. El color **nunca va solo**: columna de signo `+` / `−` y texto accesible "añadida" / "quitada". Los tokens propios del diff (`git.added`, `git.removed`, `git.modified` web) siguen pendientes de UX (H-1 de DSF-DSK-001) y, cuando existan, sustituyen a estos en un cambio de una línea por clase | Hay tokens con variante clara y oscura que ya pasan axe en otras vistas; esperar a H-1 bloquearía la pintura por una decisión de UX que no cambia la estructura |
 | P29 | **Cómo se parte la entrega (escenario 2)** | Una sola historia con una tarea bloqueada, como DS-US-DSK-006 T007: T001 a T006 y T008 entregan los escenarios 1 y 3; **T007** (diff de un commit) espera a G2. La historia **no pasa a `implemented`** hasta T007; mientras, el plan la lleva `in-progress` con T007 en el backlog de su hito. Alternativa descartada: partir US-DSK-009 en dos historias (decisión del PO, no del Arquitecto) | El escenario 2 depende de un método del motor que no existe; partir la historia por eso duplica criterios y trazas. La partición en tareas da lo mismo sin tocar el backlog. La ficha de motor lleva R1, R3 y R7 endurecidos (M-03 de la revisión de seguridad 2026-11-10) |
 
-#### Veredicto del orquestador (pendiente de OK del coordinador)
+#### Veredicto del orquestador y decisión del coordinador
 
-Tras la **revisión de seguridad 2026-11-10** (opus, APROBADA CON COMENTARIOS: 0 crítico o alto, 3 medio, 4 bajo, 2 informativos). Cada hallazgo se comprobó en el código antes de aplicarlo (worktree de US-CKP-012 y `main`); los textos de arriba ya los incorporan. Una precisión al comprobar: el canario de filtros **sí existe** para `diff.worktree`, en `crates/core/tests/diff_git.rs:420`, no en `crates/git/src/diff_tests.rs`; el guard de M-03 se exige igualmente para el diff de un commit y se amplía con `diff.external` en `[diff]` sin subsección.
+**Decisión del coordinador (2026-11-10)**: P24 a P28 aceptadas; P26 con la condición de que el cambio de la TUI lleve tests propios (T002), P27 con la enmienda a DS-US-DSK-005 T008 y la nota de `graph.lanes` en DS-US-CKP-022. **P29 sigue pendiente** (el coordinador no la mencionó). Veredicto del orquestador, tras la **revisión de seguridad 2026-11-10** (opus, APROBADA CON COMENTARIOS: 0 crítico o alto, 3 medio, 4 bajo, 2 informativos). Cada hallazgo se comprobó en el código antes de aplicarlo (worktree de US-CKP-012 y `main`); los textos de arriba ya los incorporan. Una precisión al comprobar: el canario de filtros **sí existe** para `diff.worktree`, en `crates/core/tests/diff_git.rs:420`, no en `crates/git/src/diff_tests.rs`; el guard de M-03 se exige igualmente para el diff de un commit y se amplía con `diff.external` en `[diff]` sin subsección.
 
-| # | Veredicto | Cambios | Aterriza en |
-|---|---|---|---|
-| P24 | Aceptar | L-01: claves que chocan → `not-open` | T005 paso 1.4 |
-| P25 | Aceptar | I-02: alcance del cierre en el "Por qué"; verificaciones de T008 (sin captura de ventana en `Saved Application State`, sin `console.*` con el diff) | T008 |
-| P26 | Aceptar con cambios | M-02 (marca de corte), L-02 (error de serde sin registrar), L-03 (tope en una pasada), L-04 (`must_escape` ampliado) | T001, T002, T003, T005 |
-| P27 | Aceptar con cambios | M-01 (pendiente hasta la respuesta del cancelado, plazo y `busy`), I-01 (`graph.lanes` con `mcp: false` o presupuesto propio) | T005 |
-| P28 | Aceptar | — | T003 |
-| P29 | Aceptar con cambios | M-03: R1, R3 y R7 de la ficha de motor | T007, G2 |
+| # | Veredicto del orquestador | Cambios | Estado | Aterriza en |
+|---|---|---|---|---|
+| P24 | Aceptar | L-01: claves que chocan → `not-open` | Aceptada por el coordinador 2026-11-10 | T005 paso 1.4 |
+| P25 | Aceptar | I-02: alcance del cierre en el "Por qué"; verificaciones de T008 (sin captura de ventana en `Saved Application State`, sin `console.*` con el diff) | Aceptada por el coordinador 2026-11-10 | T008 |
+| P26 | Aceptar con cambios | M-02 (marca de corte), L-02 (error de serde sin registrar), L-03 (tope en una pasada), L-04 (`must_escape` ampliado) | Aceptada por el coordinador 2026-11-10, con tests propios de la TUI (`tui_diff_marks_cut_lines`, `tui_diff_escapes_invisible_chars`) | T001, T002, T003, T005 |
+| P27 | Aceptar con cambios | M-01 (pendiente hasta la respuesta del cancelado, plazo y `busy`), I-01 (`graph.lanes` con `mcp: false` o presupuesto propio) | Aceptada por el coordinador 2026-11-10, con la enmienda a DS-US-DSK-005 T008 y la nota en DS-US-CKP-022 | T005 |
+| P28 | Aceptar | — | Aceptada por el coordinador 2026-11-10 | T003 |
+| P29 | Aceptar con cambios | M-03: R1, R3 y R7 de la ficha de motor | **Pendiente** | T007, G2 |
 
 ---
 
@@ -204,7 +204,7 @@ Sin violaciones de la constitución: la app no lee repos ni lanza procesos (ADR-
 
 **Depende de**:
 
-- **US-CKP-012** (W147): G1. No va en `blocked_by` porque T001 a T003 se construyen y se prueban ya, con fixtures.
+- **US-CKP-012** (W147): G1. **Va en `blocked_by`** (decisión del coordinador, 2026-11-10): `diff.worktree`, `query.cancel` y `Client::submit` llegan con W147. Pese al bloqueo, T001 a T003 se construyen ya con fixtures; T004 a T008 están en `validation.blocked_tasks`, como en DS-US-DSK-005.
 - **DS-US-DSK-001, 002 y 006 entregadas** (dependencia de código, no de historia): `admit_read`, `DAEMON_METHODS`, el contador de ids del proceso y la lista exacta de 14 comandos. Si no están en `main` cuando empiece T004, T004 espera; no reimplementa la puerta.
 - **`Link::submit`, `reply` y `cancel`** de DS-US-DSK-005 T008: si no están en `main` cuando empiece T005, T005 los añade con la forma de DS-US-DSK-005 § Firmas del stack y la segunda historia que llegue se lo salta (G6 de DS-US-DSK-001).
 - **US-DSK-004** (`implemented`): la tarjeta de la flota es el punto de entrada. **US-DSK-005** (`ready`, sin entregar): la cabeza del carril es el segundo punto de entrada; si el grafo no está en `main` cuando llegue T006, esa entrada se omite y la añade quien entregue la segunda.
@@ -336,10 +336,11 @@ graph LR
 - `pub fn visible_cut(raw: &str, max_chars: usize) -> (String, bool)` para rutas y nombres, con la misma regla sin tabuladores.
 - `must_escape` gana (L-04 de la revisión de seguridad 2026-11-10): U+00AD, U+034F, U+115F, U+1160, U+17B4, U+17B5, U+180E, U+3164, U+FFA0, U+FE00 a U+FE0F y U+E0100 a U+E01EF. Hoy no los escapa (`display.rs`, lista de `must_escape`), y el arreglo sirve a la TUI y a la app a la vez. Se suman al corpus de V6.
 - La TUI conserva su comportamiento: los tests existentes de `present/diff.rs` (`tabs_expand_and_crlf_is_trimmed`, `lines_with_controls_are_sanitized`) siguen en verde sin cambiar sus esperados. Sin cambios en `visible` ni en sus constantes.
+- **El cambio de la TUI no entra sin cobertura** (condición del coordinador para P26, 2026-11-10): el PR que implemente esta historia añade, en `apps/cli/src/present/diff.rs`, `tui_diff_marks_cut_lines` (una línea cortada por `visible_line` sale marcada en la fila de la TUI) y `tui_diff_escapes_invisible_chars` (los invisibles de L-04 salen escapados en la vista de la TUI), además de los dos existentes.
 
 - **Depende:** —
 - **Refs:** P26; `display.rs:1-6`
-- **Aceptación:** `cargo test -p gitraptor-api display` en verde (y `cargo test -p gitraptor-cli present::diff` cuando exista)
+- **Aceptación:** `cargo test -p gitraptor-api display` en verde y `cargo test -p gitraptor-cli present::diff` en verde con `tui_diff_marks_cut_lines` y `tui_diff_escapes_invisible_chars`
 - **Guard:** `visible_line_expands_tabs_trims_cr_and_escapes_the_rest` (corpus hostil de V6: `\u{1b}]52;c;…\u{7}`, U+202E, U+2028, NUL y los invisibles de L-04)
 - **Guard M-02:** `a_line_hidden_after_tabs_is_marked_cut` (1.000 caracteres más 10 tabuladores y una cola: `cut = true`)
 
@@ -825,7 +826,7 @@ Ningún error del daemon llega con su texto al webview: el supervisor lo traduce
 - Topes: los del motor y el del DTO (2 MiB); virtualización con DOM acotado.
 - Cancelar y volver a pedir nunca envía con la plaza ocupada (⛔5.6, M-01); una clave que choca falla cerrada (L-01); una línea o ruta cortada se marca con texto (M-02); el error de serde no se registra (L-02); el tope del DTO se aplica en una pasada (L-03); `must_escape` cubre los invisibles de L-04.
 - Diff de un commit (T007): solo cuando la ficha de motor cumpla R1 (oid por `ObjectId::from_hex`, sin revspec ni `-`), R3 (alcanzabilidad acotada, el corte responde como "no existe") y R7 (`RepoReader::open`, sin Git CLI, canario con `diff.external` sin subsección).
-- Revisión de `security-expert`: **hecha el 2026-11-10** (revisión de seguridad 2026-11-10, opus, APROBADA CON COMENTARIOS: 0 crítico o alto, 3 medio, 4 bajo, 2 informativos). M-01 a M-03, L-01 a L-04, I-01 e I-02 incorporados, cada uno comprobado en el código (worktree de US-CKP-012 y `main`). El veredicto del orquestador sobre P24 a P29 está en la [tabla de veredicto](#veredicto-del-orquestador-pendiente-de-ok-del-coordinador) y espera el OK del coordinador.
+- Revisión de `security-expert`: **hecha el 2026-11-10** (revisión de seguridad 2026-11-10, opus, APROBADA CON COMENTARIOS: 0 crítico o alto, 3 medio, 4 bajo, 2 informativos). M-01 a M-03, L-01 a L-04, I-01 e I-02 incorporados, cada uno comprobado en el código (worktree de US-CKP-012 y `main`). La decisión sobre P24 a P29 está en la [tabla de veredicto](#veredicto-del-orquestador-y-decisión-del-coordinador): P24 a P28 aceptadas por el coordinador el 2026-11-10, P29 pendiente.
 
 Corre `/security-review --scope devspec docs/requirements/features/desktop/dev-specs/US-DSK-009-diff-visual.md` antes de mezclar.
 

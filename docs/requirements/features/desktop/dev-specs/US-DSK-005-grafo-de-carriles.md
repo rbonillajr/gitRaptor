@@ -467,6 +467,14 @@ graph LR
 - **Guard ⛔8.1:** `cargo test -p gitraptor-desktop --test graph_supervisor an_async_reply_read_while_waiting_for_events_reaches_the_webview` y `an_unknown_reply_id_is_dropped`
 - **Guard ⛔8.2:** `cargo test -p gitraptor-desktop --test graph_supervisor a_reply_for_a_repo_no_longer_open_is_dropped_and_the_query_is_cancelled`
 
+> **Enmienda aditiva (2026-11-10), por DS-US-DSK-009 P27 y T005; aceptada por el coordinador el 2026-11-10.** El daemon admite **una sola consulta bajo demanda en vuelo por conexión** (`QUERIES_PER_CONNECTION = 1`, DS-US-CKP-012 D4) y `query.cancel` no libera la plaza hasta que el trabajo cancelado responde (M-01 de la revisión de seguridad 2026-11-10 de DS-US-DSK-009). Por eso el supervisor comparte esa plaza entre `graph.lanes` y el diff de US-DSK-009, con estas reglas, que se suman a los pasos 1 a 6 sin cambiarlos:
+>
+> - **El diff gana.** Si el usuario pide un diff con un `graph.lanes` en vuelo, el supervisor hace `link.cancel(id)` del grafo y marca `stale = true`; la petición del diff queda pendiente, **sin enviarse**, hasta que llega cualquier respuesta del id cancelado (normalmente `query-cancelled`) o vence `PENDING_DEADLINE` (`DIFF_DEADLINE_MS` + 500 ms); entonces el diff sale, o el diff da `busy` (DS-US-DSK-009 T005 paso 2).
+> - **El grafo espera al diff.** Mientras haya un diff pendiente o en vuelo, el paso 4 no envía `graph.lanes` aunque esté `stale`; se vuelve a pedir cuando el diff responde, con el espaciado de D3.
+> - **Respuestas guardadas (paso 1.1).** `reply` guarda la respuesta del id en vuelo, sea del grafo o del diff, y la del id cancelado que se está esperando; cualquier otra se sigue tirando.
+> - **`query-busy`.** El del grafo sigue como en el paso 5 (`stale = true`); el del diff se reintenta una vez a los 500 ms (DS-US-DSK-009 P27).
+> - **Sin firmas nuevas**: `Link::submit`, `reply` y `cancel` no cambian; la regla vive en el supervisor. Prueba: `a_diff_cancels_the_graph_query_and_the_graph_refreshes_after` y `a_diff_after_cancel_waits_for_query_cancelled_and_never_reports_busy` de DS-US-DSK-009 T005, en `tests/diff_supervisor.rs`. Si esta historia se entrega antes que US-DSK-009, la regla la añade T005 de DS-US-DSK-009.
+
 ### T009 — Guardar el grafo en la caché y pintar los commits
 
 **Objetivo.** El webview guarda `graph` y `graphUnavailable` por repo y el grafo pinta los commits; marcas de NFR-13.2 y 13.4.

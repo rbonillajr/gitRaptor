@@ -449,7 +449,7 @@ pub fn panel(model: &Model, say: Say) -> Option<GraphModel>;   // None: sin carr
 
 | Pieza | Nombre | Dónde | Notas |
 |---|---|---|---|
-| Método | `graph.lanes` | `crates/api/src/methods/graph.rs` (**CREATE**): `pub const GRAPH_LANES: &str = "graph.lanes"` | `GraphParams` → `GraphLanes`; respuesta asíncrona (DS-012 D2); `mcp: false` |
+| Método | `graph.lanes` | `crates/api/src/methods/graph.rs` (**CREATE**): `pub const GRAPH_LANES: &str = "graph.lanes"` | `GraphParams` → `GraphLanes`; respuesta asíncrona (DS-012 D2); `mcp: false`. **No se relaja sin presupuesto propio por solicitante** (nota del 2026-11-10, I-01 de la revisión de seguridad de DS-US-DSK-009): la cola global del daemon tiene 4 consultas, compartida con `diff.worktree`; ofrecerlo a `raptor-mcp` sin presupuesto propio dejaría que un agente la agotara |
 | Cancelación | `query.cancel` | DS-US-CKP-012 | Sin cambio |
 | Códigos | `query-busy`, `query-cancelled` | bloque de `query` (DS-012) | Sin códigos propios (D2) |
 | Capacidad | — | — | Método nuevo: se descubre en `hello.methods`. El actor por commit futuro irá tras `graph.commit-actor` (D7) |
