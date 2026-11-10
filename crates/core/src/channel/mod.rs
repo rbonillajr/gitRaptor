@@ -17,6 +17,8 @@ pub mod desktop;
 #[cfg(any(unix, windows))]
 mod diff;
 #[cfg(any(unix, windows))]
+mod graph;
+#[cfg(any(unix, windows))]
 mod limits;
 pub mod marks;
 #[cfg(any(unix, windows))]
@@ -123,9 +125,9 @@ pub struct ChannelConfig {
     #[cfg(debug_assertions)]
     #[doc(hidden)]
     pub test_app_binaries: Option<Vec<String>>,
-    /// Tests only: the deadline of `diff.worktree` in place of `DIFF_DEADLINE_MS`, so a slow
-    /// debug runner does not turn a files cut into a time cut and a time cut can be provoked
-    /// with a few milliseconds. It does not exist in a release build.
+    /// Tests only: the deadline of on-demand queries (`diff.worktree`, `graph.lanes`) in place of
+    /// their own constants, so a slow debug runner does not turn a files cut into a time cut and
+    /// a time cut can be provoked with a few milliseconds. It does not exist in a release build.
     #[cfg(debug_assertions)]
     #[doc(hidden)]
     pub test_diff_deadline: Option<Duration>,

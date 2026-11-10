@@ -1013,6 +1013,14 @@ impl Connection<'_> {
                     self.reply::<()>(&request.id, Err(error));
                 }
             }
+            methods::GRAPH_LANES => {
+                // The pool answers it, out of order, unless it is refused now.
+                if let Err(error) =
+                    super::graph::start(self.ctx, &self.queries, &self.outbox, request)
+                {
+                    self.reply::<()>(&request.id, Err(error));
+                }
+            }
             methods::QUERY_CANCEL => {
                 let result = request
                     .params::<gitraptor_api::query::CancelParams>()
