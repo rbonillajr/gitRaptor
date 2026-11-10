@@ -20,6 +20,7 @@ related:
     - DSF-DSK-001
   specs:
     - DS-US-DSK-009
+blocked_by: [US-CKP-012]
 tags:
   - desktop
   - ui-2
@@ -73,4 +74,4 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 ## Diseño y Dev Spec
 
 - **Diseño:** pendiente (UI-2 no está en DSF-DSK-001).
-- **Dev Spec:** [DS-US-DSK-009](../dev-specs/US-DSK-009-diff-visual.md) (`spec-ready`, 2026-11-10). Revisión de seguridad 2026-11-10 (aprobada con comentarios) incorporada; veredicto del orquestador sobre P24 a P29 pendiente de OK del coordinador. T004 a T006 y T008 esperan a G1 (US-CKP-012 en `main`); T007 (diff de un commit, escenario 2) espera a G2 (Dev Spec de TS-CKP-006, DEP-DSK-3).
+- **Dev Spec:** [DS-US-DSK-009](../dev-specs/US-DSK-009-diff-visual.md) (`spec-ready`, 2026-11-10). Revisión de seguridad 2026-11-10 (aprobada con comentarios) incorporada; P24 a P28 aceptadas por el coordinador el 2026-11-10 y P29 pendiente. T004 a T006 y T008 esperan a G1 (US-CKP-012 en `main`); T007 (diff de un commit, escenario 2) espera a G2 (Dev Spec de TS-CKP-006, DEP-DSK-3).
