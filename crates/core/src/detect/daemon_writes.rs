@@ -201,10 +201,13 @@ impl DaemonWrites {
     /// - one open at some moment of `[from_ns, to_ns]` makes it foreign;
     /// - the windows closed less than [`WINDOW_TAIL`] before `from_ns` (the margin) make it
     ///   foreign unless `moved` clears them all: every one of them is the applier's, the move's
-    ///   old value is known, its new value is none any of them wrote to that ref, and its old
-    ///   value is what the latest window that wrote the ref (by `end_ns`) left there. Two
+    ///   old value is known, and it is what the latest window that wrote the ref (by `end_ns`)
+    ///   left there, or the chain after it. Two
     ///   windows that wrote the ref concurrently, or closed at the same mark, leave the order
     ///   unknown: foreign. A ref none of them wrote is not checked.
+    ///
+    /// Before all that, a move whose new value any kept applier window (closed less than the
+    /// retention ago) wrote, on any ref, is a late echo: foreign, in the margin or past it.
     ///
     /// A move that clears the margin advances its chain: the next move of the ref may start from
     /// its new value. So this call changes state, and is made once per event.
@@ -232,6 +235,20 @@ impl DaemonWrites {
                 Some(_) => {}
             }
         }
+        // A late echo by value: a move to any value a kept applier window wrote, on any ref and
+        // also past the margin, may be the applier's own write seen late.
+        if let Some(m) = moved
+            && spans.iter().any(|s| {
+                s.tracked
+                    && s.start_ns <= to_ns
+                    && s.end_ns
+                        .is_some_and(|e| e.saturating_add(ns(RETENTION)) >= from_ns)
+                    && in_repo(&s.path)
+                    && s.wrote.iter().any(|(_, v)| v == m.new)
+            })
+        {
+            return true;
+        }
         if margin.is_empty() {
             return false;
         }
@@ -242,15 +259,6 @@ impl DaemonWrites {
             return true;
         };
         if margin.iter().any(|&i| !spans[i].tracked) {
-            return true;
-        }
-        // A late echo of any of them, also from a value of the chain.
-        if margin.iter().any(|&i| {
-            spans[i]
-                .wrote
-                .iter()
-                .any(|(r, v)| r == m.refname && v == m.new)
-        }) {
             return true;
         }
         let writers: Vec<usize> = margin
