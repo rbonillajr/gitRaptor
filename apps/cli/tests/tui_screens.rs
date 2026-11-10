@@ -314,7 +314,7 @@ fn every_state_reads_without_color() {
         (SymbolSet::Ascii, ["*", "~", "o", "[!]"]),
     ] {
         let model = with_theme(shop(Lang::En), ColorMode::NoColor, symbols);
-        let buffer = render(&model, 100, 30);
+        let buffer = render(&model, 110, 30);
         for cell in buffer.content() {
             assert!(
                 cell.fg == Color::Reset && cell.bg == Color::Reset,

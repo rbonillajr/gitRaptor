@@ -7,7 +7,7 @@
 use gitraptor_api::graph::{
     BaseGap, GraphBase, GraphCut, GraphLanes, LaneGap, LaneHead, LaneState,
 };
-use gitraptor_api::messages::{CommitCountView, DivergenceView};
+use gitraptor_api::messages::{CommitCountView, DivergenceView, SessionStateView};
 
 use super::SafeText;
 use super::graph_text::GraphText;
@@ -160,7 +160,11 @@ fn first_agent(model: &Model, repo: &RepoView, worktree: u64, say: Say) -> Optio
         return None;
     }
     let shown = fleet_order::shown(&repo.sessions, worktree, model.now_ms, model.ui.show_ended);
-    let first: &SessionRow = shown.sessions.first()?;
+    // An ended session no longer grows the branch.
+    let first: &SessionRow = shown
+        .sessions
+        .iter()
+        .find(|s| s.state != SessionStateView::Ended)?;
     Some((
         model.ui.colors.index(&first.session_id).unwrap_or(0),
         agent_name(first, say),

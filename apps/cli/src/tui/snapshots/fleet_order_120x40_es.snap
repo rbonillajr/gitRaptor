@@ -8,7 +8,7 @@ expression: text
 #> o   Sin agente |...  main        ~0    +0 -0       no disp... #| |- claude-1 | d-act +0 -0                          |
 #  *   claude-1 | d...  br-d        ~0    +0 -0       no disp... #| |- claude-2 | m-act +0 -0                          |
 #  *   claude-2 | m...  br-m        ~0    +0 -0       no disp... #| |- claude-3 | c-idle +0 -0                         |
-#  ~   claude-3 | c...  br-idle     ~0    +0 -0       no disp... #| |- claude-4 | b-done +0 -0                         |
+#  ~   claude-3 | c...  br-idle     ~0    +0 -0       no disp... #| |- b-done | sin agente +0 -0                       |
 #  o   claude-4 | b...  br-done     ~0    +0 -0       no disp... #| `- a-none | sin agente +0 -0                       |
 #      ` terminó hace 2 h                                        #|                                                    |
 #  o   Sin agente |...  br-none     ~0    +0 -0       no disp... #|                                                    |

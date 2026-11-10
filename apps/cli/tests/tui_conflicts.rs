@@ -195,7 +195,7 @@ impl Tui {
         options.launcher = Launcher::Never;
         let (inbox, _input, engine) = queue::inbox();
         let size = Size {
-            width: 120,
+            width: 200,
             height: 40,
         };
         let mut app = App::new(
