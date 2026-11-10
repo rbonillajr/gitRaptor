@@ -24,6 +24,7 @@ pub mod discovery;
 pub mod display;
 pub mod event;
 pub mod framing;
+pub mod graph;
 pub mod guard;
 pub mod mcp_view;
 pub mod messages;
