@@ -18,6 +18,7 @@ pub mod catalog;
 pub mod client;
 pub mod clock;
 pub mod commit_paths;
+pub mod desktop;
 pub mod discovery;
 pub mod display;
 pub mod event;
