@@ -599,7 +599,7 @@ fn read_worktree(root: &Path, comps: &[&str], max: u64) -> Side {
     let flags = OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::CLOEXEC | OFlags::NONBLOCK;
     let Ok(mut dir) = open(
         root,
-        OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC,
+        OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
         Mode::empty(),
     ) else {
         return Side::Unreadable;
