@@ -314,8 +314,9 @@ fn the_catalog_is_fixed_and_declares_repo_text_as_data() {
     );
 }
 
-/// A request before `initialize` ends the session with `handshake-failed`, and its error answer
-/// still reaches the client: it is queued, not lost when the process exits (#233).
+/// A request before `initialize` gets an error answer, and the session ends with `handshake-failed`
+/// when the client closes stdin; the answer still reaches the client: it is queued, not lost when
+/// the process exits (#233).
 #[test]
 fn a_failed_handshake_still_answers_before_the_process_exits() {
     let profile = tempfile::tempdir().unwrap();
@@ -331,8 +332,10 @@ fn a_failed_handshake_still_answers_before_the_process_exits() {
     let mut stdin = child.stdin.take().unwrap();
     writeln!(stdin, r#"{{"jsonrpc":"2.0","id":1,"method":"tools/list"}}"#).unwrap();
     stdin.flush().unwrap();
-    let out = child.wait_with_output().unwrap();
+    // rmcp 3.9.0 answers a request that arrives before `initialize` and keeps waiting for the
+    // handshake instead of ending the session, so the end comes from closing stdin.
     drop(stdin);
+    let out = child.wait_with_output().unwrap();
 
     assert!(!out.status.success());
     assert_eq!(
