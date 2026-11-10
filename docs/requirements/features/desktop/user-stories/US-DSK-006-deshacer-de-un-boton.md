@@ -5,7 +5,7 @@ type: us
 status: ready
 priority: high
 created: 2026-10-28
-updated: 2026-11-09
+updated: 2026-11-10
 feature: desktop
 blocked_by: []
 source: inline
@@ -23,6 +23,8 @@ related:
     - US-TMC-024
   design:
     - DSF-DSK-001
+  specs:
+    - DS-US-DSK-006
 tags:
   - desktop
   - ui-1
@@ -86,4 +88,4 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 ## Diseño y Dev Spec
 
 - **Diseño:** [design-flow.md](../design/design-flow.md) (DSF-DSK-001), historial y deshacer.
-- **Dev Spec:** pendiente.
+- **Dev Spec:** [DS-US-DSK-006](../dev-specs/US-DSK-006-deshacer-de-un-boton.md) (`spec-ready`, 2026-11-10). Revisión de seguridad 2026-11-10 (aprobada con comentarios) incorporada; veredicto del orquestador sobre P15 a P23 pendiente de OK de Rene/coordinador; T007 (presencia de sesión y factor del SO) espera a G1 (DEP-DSK-1, con H-05 a H-07), G2 (deshacer por `operation_id`, DS-US-CKP-017) y G3 (rehacer con selector de guarda).
