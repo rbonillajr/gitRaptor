@@ -163,6 +163,11 @@
       "daemonRestarted": "The engine restarted.",
       "scopeClosed": "The repo stopped being observed."
     },
+    "autostart": {
+      "label": "Open GitRaptor when you log in to this Mac",
+      "enable": "Enable autostart",
+      "stop": "Stop autostart"
+    },
     "action": {
       "retryNow": "Retry now",
       "start": "Start engine",
@@ -350,6 +355,11 @@
       "label": "{{count}} predicted conflicts across your repos. Open them",
       "compact": "⚡ {{count}}"
     }
+  },
+  "error": {
+    "notOffered": "This build is not offered the autostart.",
+    "cancelled": "The change was cancelled.",
+    "failed": "The autostart could not be changed."
   },
   "grd": {
     "actor": {

@@ -42,3 +42,6 @@ Thumbs.db
 !.env.example
 # AADD local memory/caches (generated)
 .aadd/
+
+# Engine binaries staged as Tauri sidecars by tools/desktop/stage-sidecars.sh
+apps/desktop/src-tauri/binaries/

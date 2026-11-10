@@ -119,7 +119,11 @@ fn command_fns() -> Vec<String> {
             if line.trim() == "#[tauri::command]" {
                 for next in lines.by_ref() {
                     let t = next.trim();
-                    if let Some(rest) = t.strip_prefix("pub fn ").or_else(|| t.strip_prefix("fn "))
+                    if let Some(rest) = t
+                        .strip_prefix("pub async fn ")
+                        .or_else(|| t.strip_prefix("pub fn "))
+                        .or_else(|| t.strip_prefix("async fn "))
+                        .or_else(|| t.strip_prefix("fn "))
                     {
                         names.push(rest.split(['(', '<']).next().unwrap().trim().to_string());
                         break;
@@ -192,12 +196,14 @@ fn d3_cmds_engine_commands_are_listed_and_allowed() {
         commands_json(),
         [
             "app_info",
+            "engine_autostart",
+            "engine_autostart_offer",
             "engine_retry",
             "engine_watch",
             "fleet_open",
             "guard_blocks"
         ],
-        "D3-CMDS: commands.json is exactly app_info, engine_watch, engine_retry, fleet_open and guard_blocks"
+        "D3-CMDS: commands.json is exactly the seven commands, with the two autostart ones"
     );
     let text = std::fs::read_to_string(Path::new(ROOT).join("capabilities/main.json")).unwrap();
     let cap: Value = serde_json::from_str(&text).unwrap();
@@ -270,12 +276,14 @@ fn fleet_open_is_in_the_closed_list_and_the_capability() {
         commands_json(),
         [
             "app_info",
+            "engine_autostart",
+            "engine_autostart_offer",
             "engine_retry",
             "engine_watch",
             "fleet_open",
             "guard_blocks"
         ],
-        "D4-CMD: commands.json is the three of US-DSK-003 plus fleet_open and guard_blocks"
+        "D4-CMD: commands.json is the seven commands"
     );
     assert!(
         command_fns().iter().any(|c| c == "fleet_open"),
@@ -300,10 +308,7 @@ fn fleet_open_is_in_the_closed_list_and_the_capability() {
 fn fleet_open_verdict(body: &Value) -> Result<(), CommandError> {
     let params = parse::<FleetOpenParams>(body)?;
     let hub = EngineHub::new(Box::new(NoEngine), None);
-    hub.open(params.repo_id).map_err(|e| match e {
-        CommandError::InvalidParams => CommandError::InvalidParams,
-        CommandError::NotWatching => CommandError::NotWatching,
-    })
+    hub.open(params.repo_id)
 }
 
 #[test]
@@ -390,12 +395,14 @@ fn guard_blocks_is_in_the_closed_list_and_the_capability() {
         commands_json(),
         [
             "app_info",
+            "engine_autostart",
+            "engine_autostart_offer",
             "engine_retry",
             "engine_watch",
             "fleet_open",
             "guard_blocks"
         ],
-        "D7-WIRE: commands.json is exactly the five commands, with guard_blocks (no relaxed 'contains')"
+        "D7-WIRE: commands.json is exactly the seven commands, with guard_blocks (no relaxed 'contains')"
     );
     assert_eq!(
         command_fns(),

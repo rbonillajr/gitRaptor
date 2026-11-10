@@ -4,6 +4,8 @@
 //! Never add a generic command that receives a channel method name.
 
 pub mod app_info;
+pub mod engine_autostart;
+pub mod engine_autostart_offer;
 pub mod engine_retry;
 pub mod engine_watch;
 pub mod fleet_open;
@@ -15,6 +17,8 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static 
         app_info::app_info,
         engine_watch::engine_watch,
         engine_retry::engine_retry,
+        engine_autostart_offer::engine_autostart_offer,
+        engine_autostart::engine_autostart,
         fleet_open::fleet_open,
         guard_blocks::guard_blocks
     ]

@@ -1,5 +1,5 @@
 //! Tauri backend of the GitRaptor desktop app. It is a client of the engine like the TUI: no Git
-//! logic, a closed list of IPC commands and no plugins. It reads neither the environment nor the
+//! logic, a closed list of IPC commands and one plugin (the native dialog, never reachable from the webview). It reads neither the environment nor the
 //! command line.
 
 pub mod commands;
@@ -19,6 +19,7 @@ pub fn run() {
         engine::launcher::bundled_raptor(),
     );
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(hub)
         .invoke_handler(commands::handler())
         .setup(|app| {

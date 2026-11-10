@@ -87,8 +87,8 @@ describe("D8-CMD (DS-US-DSK-008 D1)", () => {
 });
 
 describe("D7-WIRE guard_blocks (DS-US-DSK-007 T003)", () => {
-  it("D7-WIRE: guard_blocks joins the closed list of five commands", () => {
-    expect([...COMMANDS].sort(), "the closed list has exactly the five commands").toEqual(["app_info", "engine_retry", "engine_watch", "fleet_open", "guard_blocks"]);
+  it("D7-WIRE: guard_blocks is in the closed list", () => {
+    expect([...COMMANDS], "guard_blocks must be a declared command").toContain("guard_blocks");
   });
 
   it('D7-WIRE: call("guard_blocks", { repoId }) invokes guard_blocks with { params: { repoId } }', async () => {
@@ -101,5 +101,43 @@ describe("D7-WIRE guard_blocks (DS-US-DSK-007 T003)", () => {
     const result = await (call as (c: string, p: unknown) => Promise<unknown>)("guard_blocks", { repoId: "tienda" });
     expect(seen).toEqual([{ cmd: "guard_blocks", args: { params: { repoId: "tienda" } } }]);
     expect(result).toEqual({});
+  });
+});
+
+describe("DSK002-CMDS autostart commands (TS-DSK-002 T007)", () => {
+  it("DSK002-CMDS: the closed list is exactly the seven commands", () => {
+    expect([...COMMANDS].sort(), "the closed list has exactly the seven commands, with the two autostart ones").toEqual([
+      "app_info",
+      "engine_autostart",
+      "engine_autostart_offer",
+      "engine_retry",
+      "engine_watch",
+      "fleet_open",
+      "guard_blocks",
+    ]);
+  });
+
+  it('DSK002-CMDS: call("engine_autostart_offer", {}) invokes it with { params: {} }', async () => {
+    expect(COMMANDS, "engine_autostart_offer must be a declared command").toContain("engine_autostart_offer");
+    const seen: { cmd: string; args: unknown }[] = [];
+    mockIPC((cmd, args) => {
+      seen.push({ cmd, args });
+      return { offer: "offered", reason: null };
+    });
+    const result = await (call as (c: string, p: unknown) => Promise<unknown>)("engine_autostart_offer", {});
+    expect(seen).toEqual([{ cmd: "engine_autostart_offer", args: { params: {} } }]);
+    expect(result).toEqual({ offer: "offered", reason: null });
+  });
+
+  it('DSK002-CMDS: call("engine_autostart", { enable }) invokes it with { params: { enable } }', async () => {
+    expect(COMMANDS, "engine_autostart must be a declared command").toContain("engine_autostart");
+    const seen: { cmd: string; args: unknown }[] = [];
+    mockIPC((cmd, args) => {
+      seen.push({ cmd, args });
+      return { registered: true };
+    });
+    const result = await (call as (c: string, p: unknown) => Promise<unknown>)("engine_autostart", { enable: true });
+    expect(seen).toEqual([{ cmd: "engine_autostart", args: { params: { enable: true } } }]);
+    expect(result).toEqual({ registered: true });
   });
 });

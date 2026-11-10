@@ -5,7 +5,7 @@ import type { EngineMessage } from "./engine-types";
  * The closed list of IPC commands of the backend and their types. Must equal
  * `src-tauri/commands.json` (D4); `commands.test.ts` checks it.
  */
-export const COMMANDS = ["app_info", "engine_watch", "engine_retry", "fleet_open", "guard_blocks"] as const;
+export const COMMANDS = ["app_info", "engine_watch", "engine_retry", "fleet_open", "guard_blocks", "engine_autostart_offer", "engine_autostart"] as const;
 
 export type CommandName = (typeof COMMANDS)[number];
 
@@ -29,4 +29,11 @@ export interface Commands {
    * `guardBlocks` or `guardBlocksUnavailable`. The path never leaves the backend.
    */
   guard_blocks: { params: { repoId: string }; result: Record<string, never> };
+  /** Asks whether the autostart can be offered: the app is in `/Applications` or `~/Applications` and is the registered binary. */
+  engine_autostart_offer: {
+    params: Record<string, never>;
+    result: { offer: "offered" | "registered" | "not-offered"; reason: "location" | "other-binary" | null };
+  };
+  /** Asks the backend to enable (`true`) or stop (`false`) the autostart; the confirmation dialog is the backend's. */
+  engine_autostart: { params: { enable: boolean }; result: { registered: boolean } };
 }

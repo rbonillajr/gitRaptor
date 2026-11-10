@@ -4,7 +4,7 @@ title: "Dev Spec — Arranque del motor desde la app y binarios del motor en el 
 type: dev-spec
 status: partially-implemented
 created: 2026-11-08
-updated: 2026-11-09
+updated: 2026-11-10
 story: TS-DSK-002
 feature: desktop
 domain: GRP
@@ -61,7 +61,7 @@ tags: [desktop, dep-dsk-5, ensure, connector, bundle-connector, externalbin, dmg
 
 # DS-TS-DSK-002 · Arranque del motor desde la app y binarios del motor en el bundle
 
-> Implementado en: PR #334 (T001 a T006). Pendiente: T007, T008 y T009. Ajustes de la implementación (A1 a A4, sin cambiar nombres ni firmas): [`ts-dsk-002-engine-link.prep.md`](../../../../dev-briefs/ts-dsk-002-engine-link.prep.md).
+> Implementado en: PR #334 (T001 a T006) y PR #358 (T007 y T008). Pendiente: T009 (verificación manual en macOS; guion en [`ts-dsk-002-t009-verificacion-macos.md`](../../../../dev-briefs/ts-dsk-002-t009-verificacion-macos.md)). Ajustes de la implementación (A1 a A4, sin cambiar nombres ni firmas): [`ts-dsk-002-engine-link.prep.md`](../../../../dev-briefs/ts-dsk-002-engine-link.prep.md).
 
 ## Contexto rápido
 
@@ -359,7 +359,7 @@ graph LR
 **Pasos**
 1. `tauri.release.conf.json` exactamente: `{"bundle": {"externalBin": ["binaries/raptor", "binaries/raptor-mcp"], "targets": ["dmg"], "macOS": {"signingIdentity": "-"}}}`. Ninguna otra clave (V2, M-1).
 2. `stage-sidecars.sh <target-triple> <carpeta-con-binarios>`: copia `raptor` y `raptor-mcp` a `apps/desktop/src-tauri/binaries/raptor-<triple>` y `raptor-mcp-<triple>`, con `chmod 755`; falla si falta alguno.
-3. Job `desktop-app` en `release.yml` (`name: desktop app (aarch64-apple-darwin)`), `needs: [plan, build]`, `runs-on: macos-latest`, permisos `contents: read`, sin restaurar caché: `download-artifact` de `archive-aarch64-apple-darwin`; extraer `raptor` y `raptor-mcp` del `.tar.gz`; `stage-sidecars.sh aarch64-apple-darwin <carpeta>`; `pnpm/action-setup` y `setup-node` (Node 22, sin caché); `pnpm install --frozen-lockfile --ignore-scripts`; `pnpm audit`; `rustup show`; `pnpm --filter @gitraptor/desktop exec tauri build --target aarch64-apple-darwin --bundles dmg --config src-tauri/tauri.release.conf.json`; renombrar el `.dmg` a `GitRaptor-<versión>-aarch64-apple-darwin.dmg` (versión de `needs.plan.outputs`); `hdiutil attach -nobrowse -readonly`, comprobar que `GitRaptor.app/Contents/MacOS/raptor --version` y `raptor-mcp --version` dan la versión, `hdiutil detach`; `upload-artifact` `archive-desktop-aarch64-apple-darwin`.
+3. Job `desktop-app` en `release.yml` (`name: desktop app (aarch64-apple-darwin)`), `needs: [plan, build]`, `runs-on: macos-latest`, permisos `contents: read`, sin restaurar caché: `download-artifact` de `archive-aarch64-apple-darwin`; extraer `raptor` y `raptor-mcp` del `.tar.gz`; `stage-sidecars.sh aarch64-apple-darwin <carpeta>`; `pnpm/action-setup` y `setup-node` (Node 22, sin caché); `pnpm install --frozen-lockfile --ignore-scripts`; `pnpm audit`; `rustup show`; `pnpm --filter @gitraptor/desktop exec tauri build --target aarch64-apple-darwin --bundles dmg --config src-tauri/tauri.release.conf.json`; renombrar el `.dmg` a `GitRaptor-<versión>-aarch64-apple-darwin.dmg` (versión de `needs.plan.outputs`); `hdiutil attach -nobrowse -readonly`, comprobar que `GitRaptor.app/Contents/MacOS/raptor --version` da la versión y que `raptor-mcp` está y lleva esa versión como literal (`grep -a -F`); **nunca se ejecuta `raptor-mcp`: no tiene `--version` y arrancaría el motor (NFR-01).** _Decisión del orquestador (2026-11-10), hallada por el revisor; enmienda del paso original_, `hdiutil detach`; `upload-artifact` `archive-desktop-aarch64-apple-darwin`.
 4. `assemble` añade `desktop-app` a `needs`; su `download-artifact` ya baja todos los `archive-*`.
 5. `select-assets.sh` adjunta en las alphas `GitRaptor-<versión>-aarch64-apple-darwin.dmg` y su `.sha256`; `select-assets.test.sh` lo cubre.
 

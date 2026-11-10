@@ -163,6 +163,11 @@
       "daemonRestarted": "El motor se reinició.",
       "scopeClosed": "El repo dejó de observarse."
     },
+    "autostart": {
+      "label": "Abrir GitRaptor al iniciar sesión en este Mac",
+      "enable": "Activar el arranque automático",
+      "stop": "Detener el arranque automático"
+    },
     "action": {
       "retryNow": "Reintentar ahora",
       "start": "Arrancar motor",
@@ -350,6 +355,11 @@
       "label": "{{count}} conflictos previstos en tus repos. Abrirlos",
       "compact": "⚡ {{count}}"
     }
+  },
+  "error": {
+    "notOffered": "A esta instalación no se le ofrece el arranque automático.",
+    "cancelled": "Se canceló el cambio.",
+    "failed": "No se pudo cambiar el arranque automático."
   },
   "grd": {
     "actor": {

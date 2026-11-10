@@ -4,6 +4,7 @@
 #   sh tools/release/select-assets.sh <version> <dist-dir> <out-dir>
 #
 # An early-access alpha (`*-alpha.*`) ships macOS only: the 2 apple-darwin archives with their
+# .sha256, the desktop app .dmg (GitRaptor-<version>-aarch64-apple-darwin.dmg, unsigned) with its
 # .sha256, the SBOMs, install.sh and a SHA256SUMS that lists only what is attached. Any other
 # version attaches everything in <dist-dir>. The build still covers the six targets.
 set -eu
@@ -24,6 +25,10 @@ case "$version" in
       case "$f" in *.sha256) ;; *) n=$((n + 1)) ;; esac
     done
     [ "$n" -eq 2 ] || fail "expected 2 macOS archives for $version, found $n"
+    # The desktop app (TS-DSK-002 T008): exactly one .dmg with its .sha256.
+    dmg="GitRaptor-$version-aarch64-apple-darwin.dmg"
+    [ -f "$dist/$dmg" ] && [ -f "$dist/$dmg.sha256" ] || fail "missing $dmg or its .sha256 in $dist"
+    cp "$dist/$dmg" "$dist/$dmg.sha256" "$out/"
     for f in "$dist/raptor-$version-sbom-"*.cdx.json; do
       [ -f "$f" ] || continue
       cp "$f" "$out/"
@@ -31,14 +36,14 @@ case "$version" in
     cp "$dist/install.sh" "$out/"
     # Exact file-name match: the version is dotted text, not a pattern.
     : > "$out/SHA256SUMS"
-    for f in "$out"/raptor-*; do
+    for f in "$out"/raptor-* "$out/$dmg"; do
       case "$f" in *.sha256) continue ;; esac
       name=$(basename "$f")
       line=$(awk -v f="$name" '$2 == f' "$dist/SHA256SUMS")
       [ -n "$line" ] && [ "$(printf '%s\n' "$line" | wc -l | tr -d ' ')" = 1 ] || fail "$name is not exactly once in SHA256SUMS"
       printf '%s\n' "$line" >> "$out/SHA256SUMS"
     done
-    [ "$(wc -l < "$out/SHA256SUMS" | tr -d ' ')" -ge 4 ] || fail "SHA256SUMS lists fewer files than expected"
+    [ "$(wc -l < "$out/SHA256SUMS" | tr -d ' ')" -ge 5 ] || fail "SHA256SUMS lists fewer files than expected"
     ;;
   *) cp "$dist"/* "$out/" ;;
 esac

@@ -28,16 +28,16 @@ use super::link::{
 };
 
 /// The only `PATH` the bundled `raptor` gets.
-const FIXED_PATH: &str = "/usr/bin:/bin:/usr/sbin:/sbin";
+pub(crate) const FIXED_PATH: &str = "/usr/bin:/bin:/usr/sbin:/sbin";
 
 /// Most bytes of the report read from `raptor`.
-const OUTPUT_LIMIT: usize = 64 * 1024;
+pub(crate) const OUTPUT_LIMIT: usize = 64 * 1024;
 
 /// How long `raptor daemon ensure` may run before it is killed.
-const ENSURE_TIMEOUT: Duration = Duration::from_secs(10);
+pub(crate) const ENSURE_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// How often the process is polled while it runs.
-const POLL: Duration = Duration::from_millis(20);
+pub(crate) const POLL: Duration = Duration::from_millis(20);
 
 /// Connects through the bundle's `raptor`. One per process; it keeps the runtime folder of the
 /// last report, so a connection without starting the engine goes straight to the channel (D9).
@@ -201,7 +201,7 @@ fn sibling_raptor(exe: &Path) -> Option<PathBuf> {
 /// Runs `raptor daemon ensure --json` and reads its report: the first line of its output, read
 /// up to [`OUTPUT_LIMIT`] bytes. A `raptor` that cannot run, outlives [`ENSURE_TIMEOUT`] (it is
 /// killed) or prints anything but a report is [`ConnectFailure::LaunchFailed`].
-fn run_ensure(raptor: &Path, start: bool) -> Result<EnsureReport, ConnectFailure> {
+pub(crate) fn run_ensure(raptor: &Path, start: bool) -> Result<EnsureReport, ConnectFailure> {
     let mut command = Command::new(raptor);
     command.args(["daemon", "ensure", "--json"]);
     if !start {

@@ -1,0 +1,1 @@
+{"bundle": {"externalBin": ["binaries/raptor", "binaries/raptor-mcp"], "targets": ["dmg"], "macOS": {"signingIdentity": "-"}}}

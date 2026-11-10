@@ -1,0 +1,157 @@
+{
+  "version": 1,
+  "source": [
+    "docs/requirements/features/desktop/dev-specs/TS-DSK-002-arranque-motor-binarios-bundle.md",
+    "docs/dev-briefs/ts-dsk-002-autostart-dmg.prep.md"
+  ],
+  "rigor": "alto",
+  "goal": {
+    "intent": "Que el humano pueda pedir desde la app de escritorio que el motor arranque al iniciar sesión, solo con un Sí en un diálogo nativo que el webview no controla, y que la alpha semanal publique la app como .dmg sin firmar con raptor y raptor-mcp dentro (ADR-GRP-014 Enmienda DEP-DSK-5, ADR-GRP-017, NFR-02, SEC-13).",
+    "endState": "gitraptor-desktop registra tauri-plugin-dialog =2.8.3 (único plugin, sin ningún permiso dialog:* en la capability); engine/autostart.rs decide la oferta (offer_with_home) y ejecuta daemon enable/disable con argv fijo y entorno vacío más PATH solo tras un Sí (run_choice); los comandos engine_autostart_offer y engine_autostart están en commands.json, el handler y la capability, y CommandError gana not-offered, cancelled y failed con su catálogo en/es; un componente AutostartOffer (primitivas y tokens, en/es, axe, claro y oscuro) deja pedirlo desde la app; tauri.release.conf.json, tools/desktop/stage-sidecars.sh, el job desktop-app de release.yml (sin secretos, signingIdentity -) y select-assets.sh publican GitRaptor-<versión>-aarch64-apple-darwin.dmg y su .sha256 en las alphas; un guion de verificación manual T009 queda listo para el coordinador. V1, V2 y V7 siguen en verde.",
+    "nonGoals": [
+      "firma Developer ID, notarización, cask y updater (v0.1.0)",
+      "Intel, Windows y Linux (etapa de validación multiplataforma)",
+      "ejecutar la verificación manual T009 (la ejecuta el coordinador) y marcar la ficha implemented antes de que se verifique",
+      "supervisor, EngineHub y pantallas del motor de US-DSK-003, más allá de montar AutostartOffer",
+      "audit token / LOCAL_PEERTOKEN (SPIKE-DSK-001) y clase de cliente desktop (DEP-DSK-2)",
+      "lanzar workflow_dispatch en macOS o cambiar variables RUST_* o CARGO_* de los workflows"
+    ]
+  },
+  "criteria": [
+    {
+      "id": "DSK002-OFFER",
+      "statement": "T007: offer_with_home da Offered para /Applications/GitRaptor.app/... y para <home>/Applications/..., y NotOffered Location para /Volumes/..., para una ruta con /AppTranslocation/ y para una ruta fuera de /Applications; con autostart registrado con el raptor del bundle da Registered; registrado con otro binario da NotOffered OtherBinary",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test autostart_offer",
+      "layer": "runtime",
+      "tests": [
+        "apps/desktop/src-tauri/tests/autostart_offer.rs"
+      ]
+    },
+    {
+      "id": "DSK002-FLOW",
+      "statement": "T007: run_choice con la confirmación en false devuelve Cancelled y el raptor falso no se ejecuta (registro vacío); con true ejecuta exactamente daemon enable (o daemon disable) con entorno = solo PATH y devuelve registered; una salida distinta de 0 es Failed; enable sin oferta Offered o disable sin Registered es NotOffered sin abrir la confirmación ni ejecutar nada; los textos del diálogo son los de la DS en español e inglés; lang_from_apple_languages elige Es para una salida cuyo primer idioma empieza por es y En para el resto",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test autostart",
+      "layer": "runtime",
+      "tests": [
+        "apps/desktop/src-tauri/tests/autostart.rs"
+      ]
+    },
+    {
+      "id": "DSK002-CMDS",
+      "statement": "T007: engine_autostart_offer y engine_autostart están en commands.json (lista exacta de siete), en el handler y con su allow-<comando> en la capability, y esta no contiene ningún dialog:*; EngineAutostartParams exige enable y rechaza campos desconocidos; engine_autostart_offer solo acepta params vacíos; CommandError serializa not-offered, cancelled y failed; lib.rs registra .plugin(tauri_plugin_dialog::init()); Cargo.toml fija tauri-plugin-dialog =2.8.3; commands.ts y su test de igualdad listan los siete comandos",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test autostart_commands --test commands && pnpm -C apps/desktop exec vitest run src/client/commands.test.ts",
+      "layer": "runtime",
+      "tests": [
+        "apps/desktop/src-tauri/tests/autostart_commands.rs",
+        "apps/desktop/src/client/commands.test.ts"
+      ]
+    },
+    {
+      "id": "DSK002-UI",
+      "statement": "T007 (D-A): AutostartOffer con offer offered muestra la acción de activar y con registered la de dejar de arrancar, llama a onChange(true) o onChange(false) al pulsarla, queda aria-disabled con pending, y no tiene violaciones de axe en claro y oscuro, en español e inglés; AutostartSection (montada por AppShell bajo EngineBand) solo muestra AutostartOffer con el motor conectado y la oferta offered o registered, y al pulsar invoca engine_autostart con { enable }; los errores not-offered, cancelled y failed tienen texto en en.json y es.json",
+      "verify": "pnpm -C apps/desktop exec vitest run src/engine/AutostartOffer.test.tsx src/engine/AutostartSection.test.tsx",
+      "layer": "runtime",
+      "tests": [
+        "apps/desktop/src/engine/AutostartOffer.test.tsx",
+        "apps/desktop/src/engine/AutostartSection.test.tsx"
+      ]
+    },
+    {
+      "id": "DSK002-DMG-ASSETS",
+      "statement": "T008: stage-sidecars.sh copia raptor y raptor-mcp a binarios/raptor-<triple> y raptor-mcp-<triple> con modo 755 y falla si falta alguno; select-assets.sh adjunta en las alphas el .dmg GitRaptor-<versión>-aarch64-apple-darwin.dmg y su .sha256 además de lo que ya adjuntaba, y en una versión estable adjunta todo; en la alpha el SHA256SUMS incluye la línea del .dmg y existe su .sha256",
+      "verify": "bash tools/desktop/stage-sidecars.test.sh && bash tools/release/select-assets.test.sh",
+      "layer": "runtime",
+      "tests": [
+        "tools/desktop/stage-sidecars.test.sh",
+        "tools/release/select-assets.test.sh"
+      ]
+    },
+    {
+      "id": "DSK002-RELEASE-JOB",
+      "statement": "T008: release.yml tiene el job desktop-app (name 'desktop app (aarch64-apple-darwin)', needs plan y build, runs-on macos-latest, permissions contents: read, sin secrets.*, con tauri build --bundles dmg --config src-tauri/tauri.release.conf.json, hdiutil attach -nobrowse -readonly y la comprobación de --version de raptor y raptor-mcp dentro de GitRaptor.app); el .dmg se renombra a GitRaptor-<versión>-aarch64-apple-darwin.dmg y se sube con upload-artifact archive-desktop-aarch64-apple-darwin; assemble lo lista en needs y calcula el .sha256 de GitRaptor-*.dmg; tauri.release.conf.json es exactamente externalBin raptor y raptor-mcp, targets dmg y signingIdentity -; .gitignore ignora apps/desktop/src-tauri/binaries/",
+      "verify": "bash tools/desktop/release-job.test.sh && pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test tauri_surface",
+      "layer": "runtime",
+      "tests": [
+        "tools/desktop/release-job.test.sh",
+        "apps/desktop/src-tauri/tests/tauri_surface.rs"
+      ]
+    },
+    {
+      "id": "DSK002-T009-SCRIPT",
+      "statement": "T009: el guion docs/dev-briefs/ts-dsk-002-t009-verificacion-macos.md existe, recoge los cuatro pasos de la DS con comandos y lo que hay que observar, y el paso 3 usa la fila de autoarranque de la app y cita ~/Library/LaunchAgents/dev.gitraptor.plist",
+      "verify": "bash tools/desktop/t009-script.test.sh",
+      "layer": "runtime",
+      "tests": [
+        "tools/desktop/t009-script.test.sh"
+      ]
+    },
+    {
+      "id": "DSK002-BOUNDARY",
+      "statement": "V1, V2 y V7 siguen en verde con el plugin de diálogo: gitraptor-desktop no alcanza gitraptor-core, -git ni -policy y no gana unsafe; el único plugin es tauri-plugin-dialog sin permisos para el webview; src/ no lee el entorno ni los argumentos",
+      "verify": "pnpm -C apps/desktop run build && cargo test -p gitraptor-desktop --test boundaries --test environment --test tauri_surface",
+      "layer": "runtime",
+      "tests": [
+        "apps/desktop/src-tauri/tests/boundaries.rs",
+        "apps/desktop/src-tauri/tests/environment.rs"
+      ]
+    }
+  ],
+  "suite": {
+    "command": "node tools/test/nextest-junit.mjs"
+  },
+  "layers": {
+    "runtime": {
+      "commands": [
+        {
+          "id": "suite",
+          "cmd": "node tools/test/nextest-junit.mjs"
+        }
+      ],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "constraints": {
+    "deny_paths": [
+      "docs/ARTIFACTS.md",
+      "docs/architecture/decisions/ADR-GRD-008*"
+    ],
+    "allow_dependency_changes": true
+  },
+  "scope": {
+    "projects": [
+      "gitraptor-desktop"
+    ]
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 900000,
+    "suiteTimeoutMs": 5400000,
+    "maxOutsidePlan": 4
+  },
+  "hops": {
+    "design": {
+      "agent": "main-loop",
+      "model": "sonnet"
+    },
+    "critic": {
+      "agent": "nassa-core:plan-critic",
+      "model": "opus"
+    },
+    "tester": {
+      "agent": "nassa-core:criterion-tester",
+      "model": "sonnet"
+    },
+    "build": {
+      "agent": "nassa-dev-rust:rust-expert",
+      "model": "sonnet"
+    },
+    "review": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "opus"
+    },
+    "conformance": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "sonnet"
+    }
+  }
+}
