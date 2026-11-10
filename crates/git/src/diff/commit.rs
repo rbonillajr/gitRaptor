@@ -103,7 +103,8 @@ impl RepoReader {
             .parent_ids()
             .map(|p| p.to_string())
             .collect();
-        let section = self.tree_section(parents.first().map(String::as_str), commit, limits, stop)?;
+        let section =
+            self.tree_section(parents.first().map(String::as_str), commit, limits, stop)?;
         Ok(Lookup::Found(GitCommitDiff {
             parents: parents.len(),
             section,
@@ -189,7 +190,9 @@ impl RepoReader {
         let max = limits.max_blob_bytes;
         let mut budget = limits.max_bytes;
         let side = |commit: Option<&str>, comps: &[&str], max: u64| match commit {
-            Some(commit) => self.committed_file(commit, comps, max).map(Side::from_committed),
+            Some(commit) => self
+                .committed_file(commit, comps, max)
+                .map(Side::from_committed),
             None => Ok(Side::Absent),
         };
         build_section(
@@ -281,10 +284,7 @@ impl RepoReader {
         // Only the tips' headers are read, never the requested objects'.
         let mut tips = Vec::with_capacity(candidates.len());
         for id in candidates {
-            let header = self
-                .repo
-                .try_find_header(id)
-                .map_err(|e| unavailable(&e))?;
+            let header = self.repo.try_find_header(id).map_err(|e| unavailable(&e))?;
             if header.is_some_and(|h| h.kind() == gix::object::Kind::Commit) {
                 tips.push(id);
             }

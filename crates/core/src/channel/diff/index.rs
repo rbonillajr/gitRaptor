@@ -112,7 +112,10 @@ fn reserved_conflicts(paths: Vec<String>) -> Vec<Untrusted> {
 }
 
 fn index_section(git: GitIndexSection) -> IndexSection {
-    let GitIndexSection { mut section, mut ids } = git;
+    let GitIndexSection {
+        mut section,
+        mut ids,
+    } = git;
     let files = std::mem::take(&mut section.files)
         .into_iter()
         .map(|file| {
