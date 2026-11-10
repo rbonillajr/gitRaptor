@@ -9,7 +9,7 @@ priority: medium
 complexity: medium
 milestone: M2
 created: 2026-11-08
-updated: 2026-11-09
+updated: 2026-11-10
 related:
   adrs: [ADR-TMC-005, ADR-TMC-004, ADR-TMC-002, ADR-TMC-003]
   stories: [US-TMC-012, US-TMC-011, US-TMC-010]
