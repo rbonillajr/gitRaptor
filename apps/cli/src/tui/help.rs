@@ -42,6 +42,8 @@ pub fn available(model: &Model) -> impl Iterator<Item = &'static Binding> + '_ {
         .filter(move |b| asking || !b.action.is_answer())
         .filter(move |b| discovering || b.action != Action::Later)
         .filter(move |b| b.action != Action::ShowEnded || context(model) == HelpPanel::Fleet)
+        // The bar and `?` list the diff key once the view paints it.
+        .filter(|b| b.action != Action::Diff)
 }
 
 /// The text of a binding's hint: the `f` one counts the worktrees that hide an ended session,

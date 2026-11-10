@@ -2,6 +2,7 @@
 
 pub mod alerts;
 pub mod app;
+pub mod diff;
 pub mod engine_state;
 pub mod fleet_order;
 pub mod freshness;
@@ -11,6 +12,7 @@ pub mod input;
 pub mod keymap;
 pub mod metrics;
 pub mod prediction;
+pub mod selection;
 pub mod style;
 pub mod term;
 pub mod toasts;

@@ -9,7 +9,7 @@
 //! instance lock) is the engine's knowledge: `crates/core` implements [`Launch`], and this
 //! module never launches a process.
 
-use std::collections::VecDeque;
+use std::collections::{BTreeSet, VecDeque};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -19,7 +19,7 @@ use serde::de::DeserializeOwned;
 
 use crate::PROTOCOL_VERSION;
 use crate::messages::{ClientKind, HelloResult, IncompatibleData, StopResult};
-use crate::rpc::{ErrorObject, Notification, ServerMessage};
+use crate::rpc::{ErrorObject, Notification, Response, ServerMessage};
 
 #[cfg(any(unix, windows))]
 use {
@@ -215,6 +215,10 @@ pub struct Client {
     /// Notifications read while waiting for an answer, with the
     /// [`monotonic_ns`] reading taken when their frame was read.
     notifications: VecDeque<(u64, Notification)>,
+    /// Ids sent with [`Client::submit`] whose answer has not been settled yet.
+    pending: BTreeSet<u64>,
+    /// Answers to pending ids that a [`Client::call`] read while waiting for its own.
+    replies: VecDeque<(u64, Response)>,
     hello: HelloResult,
     /// The part of a frame read before a timeout, kept for the next read: dropping it would
     /// leave the stream in the middle of a line.
@@ -235,7 +239,12 @@ pub enum Incoming {
     },
     /// A complete frame, not decoded yet: decoding counts in the client's budget.
     Frame { recv_ns: u64, bytes: Vec<u8> },
+    /// The answer to a [`Client::submit`] that a [`Client::call`] read first, already decoded.
+    Reply { recv_ns: u64, response: Response },
 }
+
+/// How many [`Client::submit`] requests may wait for their answer at once.
+const MAX_PENDING: usize = 8;
 
 /// Outcome of a handshake on an open connection.
 #[cfg(any(unix, windows))]
@@ -323,6 +332,8 @@ impl Client {
             reader,
             next_id: 1,
             notifications: VecDeque::new(),
+            pending: BTreeSet::new(),
+            replies: VecDeque::new(),
             hello: HelloResult {
                 protocol: 0,
                 binary_version: String::new(),
@@ -452,10 +463,41 @@ impl Client {
                         .map(ClientError::Rpc)
                         .unwrap_or(ClientError::Protocol("response without id")));
                 }
-                ServerMessage::Response(_) => {}
+                ServerMessage::Response(resp) => {
+                    // An answer to another id is dropped unless a `submit` is waiting for it.
+                    if let Some(Id::Num(other)) = resp.id
+                        && self.pending.remove(&other)
+                    {
+                        self.replies.push_back((recv_ns, resp));
+                    }
+                }
                 ServerMessage::Notification(n) => self.notifications.push_back((recv_ns, n)),
             }
         }
+    }
+
+    /// Sends a request without waiting for its answer and returns its id. The answer arrives
+    /// through [`Client::next_incoming`]; whoever decodes it from a frame calls
+    /// [`Client::settle`]. At most eight requests may be pending: one more is a
+    /// [`ClientError::Protocol`].
+    ///
+    /// # Errors
+    /// [`ClientError::Protocol`] over the pending limit; I/O errors from the write.
+    #[cfg(any(unix, windows))]
+    pub fn submit<P: Serialize>(&mut self, method: &str, params: P) -> Result<u64, ClientError> {
+        if self.pending.len() >= MAX_PENDING {
+            return Err(ClientError::Protocol("too many pending requests"));
+        }
+        let id = self.next_id;
+        self.next_id += 1;
+        self.send_line(&Request::new(id, method, params))?;
+        self.pending.insert(id);
+        Ok(id)
+    }
+
+    /// Forgets a pending id: its answer was decoded by the caller.
+    pub fn settle(&mut self, id: u64) {
+        self.pending.remove(&id);
     }
 
     /// Writes one raw line (tests use it to send malformed messages).
@@ -512,6 +554,9 @@ impl Client {
                 recv_ns,
                 notification,
             }));
+        }
+        if let Some((recv_ns, response)) = self.replies.pop_front() {
+            return Ok(Some(Incoming::Reply { recv_ns, response }));
         }
         match self.read_frame(Some(timeout)) {
             Ok(Some(bytes)) => Ok(Some(Incoming::Frame {
@@ -726,6 +771,10 @@ impl Client {
         Err(ClientError::TransportUnsupported)
     }
 
+    pub fn submit<P: Serialize>(&mut self, _method: &str, _params: P) -> Result<u64, ClientError> {
+        Err(ClientError::TransportUnsupported)
+    }
+
     pub fn stop_daemon(&mut self) -> Result<StopResult, ClientError> {
         Err(ClientError::TransportUnsupported)
     }
@@ -897,5 +946,62 @@ mod tests {
                 .expect("a notification");
             assert_eq!(n.method, "events.notify");
         }
+    }
+
+    /// The answer to a submitted request that a `call` reads while waiting for its own comes
+    /// out of `next_incoming` as a `Reply`; one for an id nobody submitted is dropped.
+    #[test]
+    fn submit_keeps_replies_of_pending_ids() {
+        use std::io::{BufRead, BufReader};
+        let (ours, daemon) = UnixStream::pair().unwrap();
+        let mut client = Client::over(ours).unwrap();
+        let submitted = client
+            .submit("diff.worktree", serde_json::json!({}))
+            .unwrap();
+        let mut daemon_reader = BufReader::new(daemon.try_clone().unwrap());
+        let mut line = String::new();
+        daemon_reader.read_line(&mut line).unwrap();
+        let mut daemon = daemon;
+        let stranger = submitted + 50;
+        let called = submitted + 1;
+        let answers = [
+            format!(r#"{{"jsonrpc":"2.0","id":{stranger},"result":1}}"#),
+            format!(r#"{{"jsonrpc":"2.0","id":{submitted},"result":2}}"#),
+            format!(r#"{{"jsonrpc":"2.0","id":{called},"result":3}}"#),
+        ];
+        for answer in &answers {
+            daemon.write_all(answer.as_bytes()).unwrap();
+            daemon.write_all(b"\n").unwrap();
+        }
+        let got: u32 = client.call("x.y", serde_json::json!({})).unwrap();
+        assert_eq!(got, 3);
+        match client.next_incoming(Duration::from_millis(50)).unwrap() {
+            Some(Incoming::Reply { response, .. }) => {
+                assert_eq!(response.id, Some(Id::Num(submitted)));
+            }
+            other => panic!("{other:?}"),
+        }
+        assert!(
+            client
+                .next_incoming(Duration::from_millis(20))
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn submit_is_bounded_and_settle_frees_a_slot() {
+        let (ours, _daemon) = UnixStream::pair().unwrap();
+        let mut client = Client::over(ours).unwrap();
+        let first = client.submit("m", serde_json::json!({})).unwrap();
+        for _ in 1..MAX_PENDING {
+            client.submit("m", serde_json::json!({})).unwrap();
+        }
+        assert!(matches!(
+            client.submit("m", serde_json::json!({})),
+            Err(ClientError::Protocol(_))
+        ));
+        client.settle(first);
+        client.submit("m", serde_json::json!({})).unwrap();
     }
 }
