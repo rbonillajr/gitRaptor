@@ -270,6 +270,9 @@ mod repo_intact_tm_write {
             src.join("tm_write").join("cli.rs"),
             // `repack` and `prune` of the store name their variant (ADR-TMC-007 § 4).
             src.join("tm_write").join("store").join("mod.rs"),
+            // The tests of the daemon's inert argv templates (TD-GRP-007) build the real write
+            // argv of every variant; they run nothing.
+            src.join("invoke_inert_tests.rs"),
         ];
         let offenders: Vec<String> = files
             .iter()
