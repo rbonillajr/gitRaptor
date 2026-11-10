@@ -265,6 +265,9 @@ impl Daemon {
                 }),
             )
         });
+        // Only a `git` of the daemon running this very Git can be inert (ADR-GRP-012, amendment
+        // 2026-11-09); without a resolved Git, none is.
+        detector.set_engine_git(self.report.git.as_ref().map(|g| g.path.clone()));
         if !detection_supported() {
             self.logger.warn(
                 "session_detection_unavailable",

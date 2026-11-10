@@ -427,6 +427,11 @@ fn classify<'g, 'c>(
         // The daemon's own `git` in this repo, or exiting: the Time
         // Machine's writer runs in the common dir, with any scope.
         (Owner::Daemon, None) => (Class::Foreign, Some(&mut counts.foreign_daemon)),
+        // A `git` of the daemon that cannot make a Git event made none (ADR-GRP-012, amendment
+        // 2026-11-09): only with its own readable folder in the repo, so never `None` here.
+        (Owner::Daemon, Some(_)) if git.daemon_inert => {
+            (Class::Ignored, Some(&mut counts.daemon_inert))
+        }
         (Owner::Daemon, Some(cwd)) if repo.contains(cwd) => {
             (Class::Foreign, Some(&mut counts.foreign_daemon))
         }
@@ -1247,6 +1252,11 @@ impl Inner {
             facts.insert(pid, read);
             read
         };
+        let engine_git = self
+            .engine_git
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
         let mut sightings: Vec<(String, Vec<Sighting>)> = Vec::with_capacity(by_repo.len());
         for ((repo_id, own), (sessions, repo)) in by_repo.iter().zip(&snapshots) {
             let repo = repo.as_ref();
@@ -1259,6 +1269,7 @@ impl Inner {
                     let mut redirect = None;
                     let mut writes = None;
                     let mut harmless = None;
+                    let mut daemon_inert = false;
                     // Only where the answer can change the outcome, and
                     // read once per sample. A `git` whose folder is
                     // outside the repo is not read and never counts here,
@@ -1294,7 +1305,20 @@ impl Inner {
                                 writes = read.map(|f| f.writes);
                             }
                         }
-                        Owner::Daemon => {}
+                        // Inert only with positive evidence (ADR-GRP-012, amendment
+                        // 2026-11-09): a direct child of the daemon running the engine's Git,
+                        // its own folder in the repo, and its argv read and of an inert
+                        // template. The argv is read last so the cheap checks spare the cap.
+                        Owner::Daemon => {
+                            daemon_inert = engine_git
+                                .as_deref()
+                                .is_some_and(|e| g.exe.as_deref() == Some(e))
+                                && parent_of(g, &by_pid).is_some_and(|p| p.pid == self.own_pid)
+                                && cwd
+                                    .as_deref()
+                                    .is_some_and(|c| repo.is_some_and(|r| r.contains(c)))
+                                && facts_of(g).is_some_and(|f| f.inert);
+                        }
                     }
                     GitSeen {
                         owner,
@@ -1305,7 +1329,7 @@ impl Inner {
                         redirect,
                         writes,
                         harmless,
-                        daemon_inert: false,
+                        daemon_inert,
                     }
                 })
                 .collect();
