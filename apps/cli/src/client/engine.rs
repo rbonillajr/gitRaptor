@@ -93,6 +93,8 @@ impl Link for EngineLink {
                 notification,
             }),
             Some(ApiIncoming::Frame { recv_ns, bytes }) => Some(Incoming::Frame { recv_ns, bytes }),
+            // Nothing submits yet: the channel thread routes replies once it does.
+            Some(ApiIncoming::Reply { .. }) => None,
         })
     }
 }

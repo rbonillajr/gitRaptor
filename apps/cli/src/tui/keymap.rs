@@ -29,6 +29,8 @@ pub enum Action {
     Help,
     /// Also show the ended session of every worktree, or stop showing them.
     ShowEnded,
+    /// See what the agent of the selected row would integrate (`d`).
+    Diff,
 }
 
 /// A key as the table names it.
@@ -134,6 +136,11 @@ pub const BINDINGS: &[Binding] = &[
         action: Action::ShowEnded,
         keys: &[Key::Char('f')],
         hint: Text::KeyShowEnded(0),
+    },
+    Binding {
+        action: Action::Diff,
+        keys: &[Key::Char('d')],
+        hint: Text::KeyDiff,
     },
 ];
 
@@ -250,6 +257,7 @@ mod tests {
             Action::Later,
             Action::Help,
             Action::ShowEnded,
+            Action::Diff,
         ];
         for action in actions {
             // No wildcard: a new action does not compile until it is listed here.
@@ -264,7 +272,8 @@ mod tests {
                 | Action::No
                 | Action::Later
                 | Action::Help
-                | Action::ShowEnded => {}
+                | Action::ShowEnded
+                | Action::Diff => {}
             }
             let binding = BINDINGS.iter().find(|b| b.action == action);
             assert!(

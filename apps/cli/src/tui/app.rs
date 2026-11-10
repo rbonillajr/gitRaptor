@@ -211,6 +211,8 @@ impl<B: Backend> App<B> {
                     pair_ids,
                     cursor,
                 },
+                // Wired to the channel thread together with the other link commands.
+                Cmd::Diff { .. } | Cmd::CancelQuery { .. } => continue,
                 // The model already says quit; the loop ends after this iteration.
                 Cmd::Quit => continue,
                 // After the input of this iteration, outside `update`.

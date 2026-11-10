@@ -135,6 +135,8 @@ impl Link for ClientLink {
                 recv_ns,
                 notification,
             }) => Ok(Some((recv_ns, notification))),
+            // The desktop app never calls `submit`, so no reply to a pending id arrives.
+            Some(Incoming::Reply { .. }) => Ok(None),
             Some(Incoming::Frame { recv_ns, bytes }) => {
                 match serde_json::from_slice::<ServerMessage>(&bytes) {
                     Ok(ServerMessage::Notification(notification)) => {

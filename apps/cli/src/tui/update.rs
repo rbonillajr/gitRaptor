@@ -30,6 +30,7 @@ use crate::tui::alerts::{Batch, ConflictAlerts};
 use crate::tui::keymap::{self, Action};
 use crate::tui::prediction::{self, PairRow, PredictionModel};
 use crate::tui::toasts::ToastBody;
+use crate::tui::{diff, selection};
 
 pub fn update(model: &mut Model, msg: Msg) -> Vec<Cmd> {
     match msg {
@@ -106,6 +107,21 @@ fn on_action(model: &mut Model, action: Option<Action>) -> Vec<Cmd> {
         model.ui.help = true;
         return Vec::new();
     }
+    // The diff view is full screen: the keys scroll or close it. Leaving still works.
+    if model.ui.diff.is_some() {
+        match action {
+            Some(Action::Up) => {
+                diff::scroll(model, false);
+                return Vec::new();
+            }
+            Some(Action::Down) => {
+                diff::scroll(model, true);
+                return Vec::new();
+            }
+            Some(Action::Later | Action::Diff) => return diff::close(model),
+            _ => {}
+        }
+    }
     if model.discovery_prompt().is_some() {
         match action {
             Some(Action::Yes) => return answer_discovered(model, true),
@@ -157,13 +173,35 @@ fn on_action(model: &mut Model, action: Option<Action>) -> Vec<Cmd> {
             model.ui.notice = Some(Notice::SuspendUnsupported);
             Vec::new()
         }
+        // The arrows are the selector's while one is on screen, and a question keeps them;
+        // otherwise they move the row cursor.
+        Some(action @ (Action::Up | Action::Down))
+            if !matches!(model.ui.pick, Pick::Choosing { .. })
+                && model.discovery_prompt().is_none() =>
+        {
+            selection::move_cursor(model, action == Action::Down);
+            Vec::new()
+        }
+        Some(Action::Diff)
+            if !matches!(model.ui.pick, Pick::Choosing { .. } | Pick::Asking)
+                && model.discovery_prompt().is_none() =>
+        {
+            diff::open(model)
+        }
         Some(action @ (Action::Up | Action::Down | Action::Open)) => on_pick(model, action),
         Some(Action::ShowEnded) if model.ui.pick == Pick::None => {
             model.ui.show_ended = !model.ui.show_ended;
             Vec::new()
         }
         // No question on screen (`Help` was handled above).
-        Some(Action::Yes | Action::No | Action::Later | Action::Help | Action::ShowEnded)
+        Some(
+            Action::Yes
+            | Action::No
+            | Action::Later
+            | Action::Help
+            | Action::ShowEnded
+            | Action::Diff,
+        )
         | None => {
             model.ui.notice = Some(Notice::UnknownKey);
             Vec::new()
@@ -320,6 +358,7 @@ fn on_conn(model: &mut Model, event: ConnEvent) -> Vec<Cmd> {
         }
         ConnEvent::Activity(activity) => model.engine.activity = activity,
         ConnEvent::Prediction(has) => model.engine.prediction = has,
+        ConnEvent::Diff(has) => model.engine.diff = has,
         ConnEvent::Requester(requester) => model.engine.requester = requester,
         ConnEvent::State(state) => {
             if matches!(
@@ -415,6 +454,10 @@ fn on_engine(model: &mut Model, msg: EngineMsg) -> Vec<Cmd> {
             }
             settle_alerts(model);
             prediction::wanted(model)
+        }
+        EngineMsg::Diff { ticket, result } => {
+            diff::apply_reply(model, ticket, result);
+            Vec::new()
         }
         EngineMsg::Protection { repo_id, hooks } => {
             if let Some(data) = selected(model, &repo_id).and_then(|r| r.data.as_mut()) {

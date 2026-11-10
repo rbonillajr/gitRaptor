@@ -202,6 +202,8 @@ pub enum Text<'a> {
     KeyObserve,
     KeyNo,
     KeyLater,
+    /// The hint of `d`: see what the selected worktree would integrate.
+    KeyDiff,
     /// "Observe this repo?" (US-CKP-025): the panel's title, what it means and the question
     /// with its default.
     ObserveTitle,
@@ -473,6 +475,19 @@ fn en(text: Text<'_>) -> String {
         Text::KeyObserve => "observe".into(),
         Text::KeyNo => "no".into(),
         Text::KeyLater => "later".into(),
+        Text::KeyDiff => "view diff".into(),
+        Text::Notice(Notice::DiffUnsupported) => {
+            "the engine does not offer the diff; restart it".into()
+        }
+        Text::Notice(Notice::RowActionDisabled(UnavailableReason::Missing)) => {
+            "no action on this worktree: its folder is missing".into()
+        }
+        Text::Notice(Notice::RowActionDisabled(UnavailableReason::Untrusted)) => {
+            "no action on this worktree: Git does not trust it (safe.directory)".into()
+        }
+        Text::Notice(Notice::RowActionDisabled(UnavailableReason::Unreadable)) => {
+            "no action on this worktree: it cannot be read now".into()
+        }
         Text::DiscoveredTitle => "Discovered repo".into(),
         Text::DiscoveredWhy(root) => format!("In your code folder {root}"),
         Text::DiscoveredQuestion(name) => format!("Observe {name}?"),
@@ -744,6 +759,19 @@ fn es(text: Text<'_>) -> String {
         Text::KeyObserve => "observar".into(),
         Text::KeyNo => "no".into(),
         Text::KeyLater => "luego".into(),
+        Text::KeyDiff => "ver diff".into(),
+        Text::Notice(Notice::DiffUnsupported) => {
+            "el motor no ofrece el diff; reinícialo".into()
+        }
+        Text::Notice(Notice::RowActionDisabled(UnavailableReason::Missing)) => {
+            "ninguna acción sobre este worktree: falta su carpeta".into()
+        }
+        Text::Notice(Notice::RowActionDisabled(UnavailableReason::Untrusted)) => {
+            "ninguna acción sobre este worktree: Git no confía en él (safe.directory)".into()
+        }
+        Text::Notice(Notice::RowActionDisabled(UnavailableReason::Unreadable)) => {
+            "ninguna acción sobre este worktree: no se puede leer ahora".into()
+        }
         Text::DiscoveredTitle => "Repo descubierto".into(),
         Text::DiscoveredWhy(root) => format!("En tu carpeta de código {root}"),
         Text::DiscoveredQuestion(name) => format!("¿Observar {name}?"),
@@ -1133,6 +1161,7 @@ pub(crate) fn every_text() -> Vec<Text<'static>> {
         Text::KeyObserve,
         Text::KeyNo,
         Text::KeyLater,
+        Text::KeyDiff,
         Text::ObserveTitle,
         Text::ObserveWhy,
         Text::ObserveQuestion,
@@ -1238,6 +1267,10 @@ pub(crate) fn every_text() -> Vec<Text<'static>> {
         Notice::Retrying,
         Notice::Starting,
         Notice::SuspendUnsupported,
+        Notice::DiffUnsupported,
+        Notice::RowActionDisabled(UnavailableReason::Missing),
+        Notice::RowActionDisabled(UnavailableReason::Untrusted),
+        Notice::RowActionDisabled(UnavailableReason::Unreadable),
     ] {
         texts.push(Text::Notice(notice));
     }
@@ -1322,6 +1355,7 @@ fn sampled(text: &Text<'_>) {
         | Text::KeyObserve
         | Text::KeyNo
         | Text::KeyLater
+        | Text::KeyDiff
         | Text::ObserveTitle
         | Text::ObserveWhy
         | Text::ObserveQuestion

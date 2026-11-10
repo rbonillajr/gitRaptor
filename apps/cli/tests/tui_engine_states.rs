@@ -17,14 +17,18 @@ use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
 
 use gitraptor_api::messages::ClientKind;
+use gitraptor_api::messages::UnavailableReason;
 use gitraptor_cli::client::engine::EngineConnector;
 use gitraptor_cli::client::{self, ClientThread};
-use gitraptor_cli::model::{Model, Size};
+use gitraptor_cli::model::{
+    Model, Msg, Notice, RepoView, SafeText, ScopeReplica, Size, WorktreeRow, WorktreeState,
+};
 use gitraptor_cli::present::i18n::Lang;
 use gitraptor_cli::queue;
 use gitraptor_cli::tui::app::App;
 use gitraptor_cli::tui::gallery::buffer_text;
-use gitraptor_cli::tui::keymap::Action;
+use gitraptor_cli::tui::keymap::{Action, BINDINGS, Key};
+use gitraptor_cli::tui::update::update;
 use gitraptor_core::client::{ClientOptions, Launcher};
 use gitraptor_core::daemon::running_pid;
 use gitraptor_core::profile::ProfileDirs;
@@ -32,6 +36,7 @@ use gitraptor_testkit::Fixture;
 use gitraptor_testkit::fixture::git_from_path;
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
+use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 const RAPTOR: &str = env!("CARGO_BIN_EXE_raptor");
 const DEADLINE: Duration = Duration::from_secs(20);
@@ -613,11 +618,11 @@ fn a_missing_base_branch_is_not_computable_and_no_other_is_used() {
     tui.quit();
 }
 
-/// Every key of the TUI is global: none acts on a row. The first action per row (US-CKP-012)
-/// has to be disabled with a reason on an unavailable worktree (BR-CKP-EDGE-003) before being
-/// classified here: a new `Action` stops this from compiling until someone decides (D7).
+/// The first action per row (US-CKP-012) is disabled with a reason on an unavailable worktree
+/// (BR-CKP-EDGE-003): no command goes out and the note is the reason's. A new `Action` stops
+/// this from compiling until someone decides whether it targets a row (D7).
 #[test]
-fn no_action_targets_a_row() {
+fn row_actions_are_disabled_with_a_reason_on_unavailable_rows() {
     fn targets_a_row(action: Action) -> bool {
         match action {
             Action::Quit
@@ -632,21 +637,69 @@ fn no_action_targets_a_row() {
             | Action::Help
             // Filters the whole list, no row.
             | Action::ShowEnded => false,
+            // Asks for the diff of the row under the cursor.
+            Action::Diff => true,
         }
     }
-    for action in [
-        Action::Quit,
-        Action::Retry,
-        Action::Up,
-        Action::Down,
-        Action::Open,
-        Action::Suspend,
-        Action::Yes,
-        Action::No,
-        Action::Later,
-        Action::Help,
-        Action::ShowEnded,
-    ] {
-        assert!(!targets_a_row(action), "{action:?}");
+    assert!(targets_a_row(Action::Diff));
+    for binding in BINDINGS.iter().filter(|b| targets_a_row(b.action)) {
+        for reason in [
+            UnavailableReason::Missing,
+            UnavailableReason::Untrusted,
+            UnavailableReason::Unreadable,
+        ] {
+            let mut model = Model::new(
+                Lang::En,
+                Size {
+                    width: 100,
+                    height: 30,
+                },
+            );
+            // The engine offers the diff and the session state is irrelevant: only the
+            // worktree's availability decides.
+            model.engine.diff = true;
+            model.engine.repo = Some(ScopeReplica {
+                data: Some(RepoView {
+                    repo_id: "r1".into(),
+                    path: SafeText::text("/w"),
+                    name: SafeText::name("w"),
+                    base: None,
+                    worktrees: vec![WorktreeRow {
+                        path: SafeText::text("/w/gone"),
+                        name: SafeText::name("gone"),
+                        key: 7,
+                        main: false,
+                        state: WorktreeState::Unavailable(reason),
+                        last_activity_ms: None,
+                        temporary: false,
+                        root: PathBuf::from("/w/gone"),
+                    }],
+                    sessions: Vec::new(),
+                    fetched_ms: None,
+                    detection: None,
+                    commits: Vec::new(),
+                    protection: None,
+                    prediction: None,
+                }),
+                ..ScopeReplica::default()
+            });
+            let key = match binding.keys[0] {
+                Key::Char(c) => KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE),
+                other => panic!("{other:?} is not a plain key"),
+            };
+            let cmds = update(&mut model, Msg::Key(key));
+            assert!(
+                cmds.is_empty(),
+                "{:?} on {reason:?}: {cmds:?}",
+                binding.action
+            );
+            assert_eq!(
+                model.ui.notice,
+                Some(Notice::RowActionDisabled(reason)),
+                "{:?}",
+                binding.action
+            );
+            assert!(model.ui.diff.is_none());
+        }
     }
 }

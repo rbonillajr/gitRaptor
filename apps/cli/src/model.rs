@@ -61,6 +61,9 @@ impl Model {
                 seen: std::collections::BTreeSet::new(),
                 alerts: crate::tui::alerts::ConflictAlerts::default(),
                 toasts: crate::tui::toasts::Toasts::default(),
+                cursor: None,
+                diff: None,
+                next_ticket: 1,
             },
             conn: ConnState::Connecting,
             now_ms: 0,
@@ -111,6 +114,13 @@ pub struct Ui {
     pub alerts: crate::tui::alerts::ConflictAlerts,
     /// The toasts on screen.
     pub toasts: crate::tui::toasts::Toasts,
+    /// The fleet row the keys act on, by [`WorktreeRow::key`] and not by position: it follows
+    /// its worktree across reorders. `None` until the first move; the first row stands in.
+    pub cursor: Option<u64>,
+    /// The diff view while it is open (`d`). Not kept between runs.
+    pub diff: Option<crate::tui::diff::DiffState>,
+    /// The ticket of the next on-demand query: tells an answer apart from a stale one.
+    pub next_ticket: u64,
 }
 
 /// The fewest rows with room for the discovery panel under the fleet.
@@ -211,6 +221,25 @@ pub enum Notice {
     ObserveFailed(ObserveFailure),
     /// `repo.add` or `discovery.dismiss` of a discovered repo failed.
     DiscoveryFailed(ObserveFailure),
+    /// A key that acts on a fleet row met a worktree that cannot be read: nothing was asked.
+    RowActionDisabled(UnavailableReason),
+    /// `d` on an engine that does not offer `diff.worktree`.
+    DiffUnsupported,
+}
+
+/// Why a diff did not arrive, from the engine's typed answer or the link; never its text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DiffFailure {
+    /// Another query is still running (`query-busy`).
+    Busy,
+    /// The query was cancelled: the view had already been closed.
+    Cancelled,
+    /// The engine cannot read that worktree or repo (`diff-unavailable`).
+    Unavailable(gitraptor_api::diff::DiffUnavailable),
+    /// The connection dropped before the answer.
+    Lost,
+    /// The engine refused the request.
+    Refused,
 }
 
 /// The replica of the engine: the global scope and the selected repo's.
@@ -229,6 +258,8 @@ pub struct EngineReplica {
     pub resync: Option<ResyncReason>,
     /// The connection has `prediction.pairs` (US-CKP-006).
     pub prediction: bool,
+    /// The connection offers `diff.worktree` (US-CKP-012).
+    pub diff: bool,
 }
 
 impl EngineReplica {
@@ -393,6 +424,8 @@ pub struct WorktreeRow {
     pub last_activity_ms: Option<i64>,
     /// Under the system's temporary folder: a scratch worktree (US-CKP-001).
     pub temporary: bool,
+    /// The raw root, only to name the worktree in `Cmd::Diff`: never painted.
+    pub root: std::path::PathBuf,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -564,6 +597,11 @@ pub enum EngineMsg {
     PredictionRefused {
         repo_id: String,
     },
+    /// The answer to the `diff.worktree` asked with `ticket`, or why there is none.
+    Diff {
+        ticket: u64,
+        result: Result<Box<gitraptor_api::diff::WorktreeDiff>, DiffFailure>,
+    },
 }
 
 /// What the channel thread says about the connection.
@@ -587,6 +625,8 @@ pub enum ConnEvent {
     DiscoveryFailed(ObserveFailure),
     /// Whether the connection has `prediction.pairs` (US-CKP-006).
     Prediction(bool),
+    /// Whether the connection offers `diff.worktree` (US-CKP-012).
+    Diff(bool),
 }
 
 /// Effects that `update` asks for; they run outside it.
@@ -622,6 +662,16 @@ pub enum Cmd {
         repo_id: String,
         pair_ids: Vec<String>,
         cursor: Option<String>,
+    },
+    /// `diff.worktree` of the worktree rooted at `root`; the answer comes back with `ticket`.
+    Diff {
+        ticket: u64,
+        repo_id: String,
+        root: std::path::PathBuf,
+    },
+    /// Cancel the query asked with `ticket` (`query.cancel`), if it is still running.
+    CancelQuery {
+        ticket: u64,
     },
     /// Hand the terminal back to the shell (`Ctrl-Z`) and take it again when resumed.
     Suspend,
