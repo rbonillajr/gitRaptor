@@ -12,6 +12,10 @@ pub const PING: &str = "ping";
 /// connection has.
 pub const CONNECTION_ACCEPT: &str = "connection.accept";
 
+/// Why the daemon fixed the profile of a desktop-class connection
+/// (protocol 9, TS-GRP-009). Offered only to that class.
+pub const CONNECTION_DESKTOP: &str = "connection.desktop";
+
 /// The requester in the handshake (protocol 6, ADR-CKP-003 § 4 N5).
 pub const CAP_REQUESTER: Capability = Capability::legacy("connection.requester", 6);
 

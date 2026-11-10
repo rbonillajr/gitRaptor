@@ -174,6 +174,25 @@ fn presence(server: &ProcInfo, checks: &Checks<'_>) -> Option<Presence> {
     Some(out)
 }
 
+/// What the ancestry walk saw, beyond the resolution (TS-GRP-009).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct AncestryTrace {
+    pub interpreter: bool,
+    pub multiplexer: bool,
+    pub ended_cleanly: bool,
+    pub daemon_descendant: bool,
+}
+
+/// [`resolve`] with what the walk saw.
+pub fn resolve_traced(
+    peer: AcceptedPeer,
+    checks: &Checks<'_>,
+    marks: Option<&super::marks::ExecutorMarks>,
+) -> Result<(Resolution, AncestryTrace), Unverified> {
+    // Stub (TS-GRP-009 T002): the trace is filled by the build.
+    resolve(peer, checks, marks).map(|r| (r, AncestryTrace::default()))
+}
+
 /// Resolves the requester of the peer of a connection, now.
 pub fn resolve(
     peer: AcceptedPeer,

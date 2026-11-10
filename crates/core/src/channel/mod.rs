@@ -11,6 +11,7 @@
 pub(crate) mod audit_view;
 pub mod authz;
 pub mod bus;
+pub mod desktop;
 #[cfg(any(unix, windows))]
 mod conn;
 #[cfg(any(unix, windows))]
@@ -112,6 +113,12 @@ pub struct ChannelConfig {
     #[cfg(debug_assertions)]
     #[doc(hidden)]
     pub test_confirmation: Option<TestConfirmation>,
+    /// Tests only: the executable file names of the desktop class, in place
+    /// of [`desktop::APP_BINARIES`], so an in-process client is of the class.
+    /// It does not exist in a release build and is `None` in production.
+    #[cfg(debug_assertions)]
+    #[doc(hidden)]
+    pub test_app_binaries: Option<Vec<String>>,
 }
 
 /// What a test makes the confirmation eligibility answer (debug builds only).
@@ -140,6 +147,8 @@ impl Default for ChannelConfig {
             capabilities: gitraptor_api::capability::all().map(|c| c.name).collect(),
             #[cfg(debug_assertions)]
             test_confirmation: None,
+            #[cfg(debug_assertions)]
+            test_app_binaries: None,
         }
     }
 }
