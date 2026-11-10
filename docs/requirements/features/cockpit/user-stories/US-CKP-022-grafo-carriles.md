@@ -2,10 +2,10 @@
 id: US-CKP-022
 title: "El desarrollador ve crecer la rama de cada agente sobre la base"
 type: us
-status: draft
+status: ready
 priority: medium
 created: 2026-10-04
-updated: 2026-10-28
+updated: 2026-11-10
 feature: cockpit
 related:
   context:
