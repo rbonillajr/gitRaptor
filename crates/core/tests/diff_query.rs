@@ -19,7 +19,7 @@ use std::time::{Duration, Instant};
 use common::TempProfile;
 use gitraptor_api::PROTOCOL_VERSION;
 use gitraptor_api::diff::{
-    CommittedDiff, DiffCut, DiffParams, DiffSection, FileBody, WorktreeDiff,
+    CommittedDiff, CommittedGap, DiffCut, DiffParams, DiffSection, FileBody, WorktreeDiff,
 };
 use gitraptor_api::event::RESERVED_AUDIT;
 use gitraptor_api::messages::ClientKind;
@@ -725,9 +725,17 @@ fn a_deadline_cut_is_reported_as_time() {
     let _d = Running::start_with(&e.tp, Some(Duration::from_millis(1)));
     let mut raw = Raw::cli(&e.tp);
     let diff = diff_of(&ask_diff(&mut raw, &e));
-    assert_eq!(
-        ready(&diff).cut,
-        Some(DiffCut::Time),
-        "a deadline of 1 ms cuts the section with `time`"
-    );
+    // The deadline can fire while the changed paths are listed (the section is then not
+    // computable for being too slow) or while the files are diffed (a section cut with `time`):
+    // both are the deadline, and neither is an error.
+    match &diff.committed {
+        CommittedDiff::Ready { section, .. } => assert_eq!(
+            section.cut,
+            Some(DiffCut::Time),
+            "a deadline of 1 ms cuts the section with `time`"
+        ),
+        CommittedDiff::NotComputable { reason } => {
+            assert_eq!(*reason, CommittedGap::TooSlow, "{reason:?}");
+        }
+    }
 }
