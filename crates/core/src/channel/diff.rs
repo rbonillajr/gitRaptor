@@ -34,6 +34,9 @@ use super::query::QueryTable;
 use super::validate;
 use crate::daemon::{Field, now_ms};
 
+pub(super) mod commit;
+pub(super) mod index;
+
 /// Slack under [`MAX_DIFF_RESPONSE_BYTES`] for the envelope of the response.
 const ENVELOPE_MARGIN: usize = 256;
 
