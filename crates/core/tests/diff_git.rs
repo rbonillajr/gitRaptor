@@ -429,6 +429,13 @@ fn no_exec_filters_textconv_and_external_diff_never_run() {
     std::fs::write(wt.join("x.txt"), "one\ntwo\n").unwrap();
     std::fs::write(wt.join("y.txt"), "untracked\n").unwrap();
     let canary = Canary::arm(fx);
+    // R7 of DS-US-DSK-009: `diff.external` without a subsection is armed, so the check below
+    // also proves that it is never consulted (DS-TS-CKP-006 T006).
+    assert_eq!(
+        canary.f.git(&["config", "--get", "diff.external"]).trim(),
+        canary.bin.join("diff-external").display().to_string(),
+        "the canary must arm diff.external without a subsection"
+    );
     let e = env_with(&canary.f, wt, true);
     let _d = Running::start(&e.tp);
     let mut raw = Raw::cli(&e.tp);
