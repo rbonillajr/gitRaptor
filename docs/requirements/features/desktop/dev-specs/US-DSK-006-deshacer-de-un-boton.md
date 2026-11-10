@@ -13,7 +13,7 @@ frontend_surface: true
 stack: react
 profile: frontend-feature
 tooling: [cargo, pnpm, node, grep]
-blocked_by: [TS-GRP-009]
+blocked_by: []
 related:
   context: ../context.md
   story: ../user-stories/US-DSK-006-deshacer-de-un-boton.md
@@ -70,7 +70,7 @@ must_read:
   - ../../../../../apps/desktop/src/ui/CopyCommand.tsx
   - ../../../../../AGENTS.md
 evidence:
-  - grp009://docs/requirements/features/motor-local/dev-specs/TS-GRP-009-dev-spec.md
+  - ../../motor-local/dev-specs/TS-GRP-009-dev-spec.md
 lineage:
   supersedes: []
   superseded_by: []
@@ -211,7 +211,7 @@ Sin violaciones de la constitución: la app no lee repos ni lanza procesos (ADR-
 
 **Depende de**:
 
-- **TS-GRP-009** (`blocked_by`): el daemon fija `hello.profile` `mcp` para una ventana que abrió un agente (DS-TS-GRP-009 D3); el perfil se fija en el `hello` y no cambia (D5); el `hello` no cambia de forma (D1).
+- **TS-GRP-009** (ya en `main`, PR #351; era el `blocked_by`): el daemon fija `hello.profile` `mcp` para una ventana que abrió un agente (DS-TS-GRP-009 D3); el perfil se fija en el `hello` y no cambia (D5); el `hello` no cambia de forma (D1).
 - **DS-US-DSK-001 y DS-US-DSK-002 entregadas** (T001 a T004 de cada una): `write_gate`, `commands/write/`, `WriteToken`, `RESERVED_HANDLERS`, el contador de ids del proceso, `LinkError::Refused { code, data }`, `Link::accepted` y la relectura antes de escribir. Es una dependencia de código, no de historia: si no están en `main` cuando empiece T001, esta entrega espera; no reimplementa la puerta.
 - **`Link::submit`** de DS-US-DSK-005 (envío asíncrono con ticket): si no está en `main` cuando empiece T003, T003 lo añade con la forma de DS-US-DSK-005 y la segunda historia que llegue se lo salta (G6 de DS-US-DSK-001).
 - **DEP-DSK-1** (ficha de motor del factor del SO, dueño **Arquitecto**, aún sin reservar): bloquea solo T007 (G1). No va en `blocked_by`: T001 a T006 y T008 se construyen y se verifican en `copy-only`.
@@ -567,7 +567,7 @@ graph LR
 3. "Rehacer" en la entrada del undo enseña `raptor redo` en la misma carpeta; ejecutarlo devuelve `feat-pagos` al estado posterior al reset (escenario 2).
 4. Repetir el paso 1 y, antes de deshacer, cambiar `pagos.rs` desde otro proceso de agente: el comando de la terminal se detiene por solape y nombra el archivo (escenario 3, versión `copy-only`; con presencia, c3 lo muestra en la app, T007).
 5. Con una entrada de nivel `none` (un evento crudo sin punto): la vista previa dice que no se puede deshacer y por qué (escenario 4).
-6. Con TS-GRP-009 en `main`, abrir la app con `open -a GitRaptor` desde un proceso de Claude Code: vista restringida, sin historial; `tm_timeline`, `tm_undo` y `tm_redo`, invocados desde las herramientas de desarrollo de una build de depuración, responden `read-only`.
+6. Con TS-GRP-009 (ya en `main`), abrir la app con `open -a GitRaptor` desde un proceso de Claude Code: vista restringida, sin historial; `tm_timeline`, `tm_undo` y `tm_redo`, invocados desde las herramientas de desarrollo de una build de depuración, responden `read-only`.
 7. `cd -- '<ruta con espacios>' && '<raptor>' 'undo'` funciona pegado en zsh y en bash (T003 paso 5).
 8. Repetir el paso 2 en tema claro y oscuro y en en y es.
 

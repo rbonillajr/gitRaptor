@@ -13,7 +13,7 @@ frontend_surface: true
 stack: react
 profile: frontend-feature
 tooling: [cargo, pnpm, node, grep]
-blocked_by: [TS-GRP-009]
+blocked_by: []
 related:
   context: ../context.md
   story: ../user-stories/US-DSK-002-proteger-repo-con-un-clic.md
@@ -69,7 +69,7 @@ must_read:
   - ../../../../../apps/desktop/src/ui/CopyCommand.tsx
   - ../../../../../AGENTS.md
 evidence:
-  - grp009://docs/requirements/features/motor-local/dev-specs/TS-GRP-009-dev-spec.md
+  - ../../motor-local/dev-specs/TS-GRP-009-dev-spec.md
 lineage:
   supersedes: []
   superseded_by: []
@@ -215,7 +215,7 @@ Sin violaciones de la constitución: la app no lee repos ni lanza procesos (ADR-
 
 **Depende de**:
 
-- **TS-GRP-009** (`blocked_by`): el daemon fija `hello.profile` `mcp` para una ventana que abrió un agente (DS-TS-GRP-009 D3). El perfil se fija en el `hello` y no cambia (D5), y el `hello` no cambia de forma (D1).
+- **TS-GRP-009** (ya en `main`, PR #351; era el `blocked_by`): el daemon fija `hello.profile` `mcp` para una ventana que abrió un agente (DS-TS-GRP-009 D3). El perfil se fija en el `hello` y no cambia (D5), y el `hello` no cambia de forma (D1).
 - **DS-US-DSK-001 entregada**, T001 a T003: `write_gate`, `commands/write/`, `WriteToken`, el contador de ids del proceso, `LinkError::Refused { code, data }` y `Link::accepted`. Es una dependencia de código, no de historia. Si DS-US-DSK-001 no está en `main` cuando empiece T001, esta entrega espera; no reimplementa la puerta.
 - **DEP-DSK-1** (ficha de motor del factor del SO, dueño **Arquitecto**, aún sin reservar): bloquea solo T007 (G1). No va en `blocked_by`: T001 a T006 y T008 se construyen y se verifican en `copy-only`.
 
@@ -578,7 +578,7 @@ graph LR
 4. En `~/tmp/nuevo`, pulsar "Ahora no": la oferta no vuelve a aparecer al reabrir el repo en esta app. Ejecutar el comando copiado y responder "n": tras reiniciar la app, sigue sin ofrecerse y el panel dice `grd.protect.declined` (escenario 3).
 5. En "tienda", "Quitar protección", copiar el comando de retirada y ejecutarlo. Durante la ventana, el panel enseña la cuenta atrás: pulsar "Cancelar" mantiene la protección. Repetir sin cancelar: tras la ventana, `core.hooksPath` y `.git/config` coinciden con el paso 1 (byte a byte con `cmp`) y `.git/hooks` no cambió (escenario 4).
 6. Antes de retirar, añadir a mano un archivo en `.git/gitraptor/hooks/` y retirar: el archivo y su carpeta se quedan, y el panel dice `grd.protect.leftover`.
-7. Con TS-GRP-009 en `main`, abrir la app con `open -a GitRaptor` desde un proceso de Claude Code: vista restringida, sin panel de escritura. `guard_install`, `guard_uninstall`, `guard_plan` y `guard_cancel`, invocados desde las herramientas de desarrollo de una build de depuración, responden `read-only`.
+7. Con TS-GRP-009 (ya en `main`), abrir la app con `open -a GitRaptor` desde un proceso de Claude Code: vista restringida, sin panel de escritura. `guard_install`, `guard_uninstall`, `guard_plan` y `guard_cancel`, invocados desde las herramientas de desarrollo de una build de depuración, responden `read-only`.
 8. `raptor guard install -- /ruta` y `raptor guard uninstall -- /ruta` funcionan con el `--` (T003 3.1).
 9. Repetir el paso 2 en tema claro y oscuro y en en y es.
 
