@@ -122,10 +122,13 @@ pub(super) fn start(
     let (table, outbox, id) = (queries.clone(), Arc::clone(outbox), request.id.clone());
     let logger = ctx.logger.clone();
     let job_token = token.clone();
+    let deadline = Duration::from_millis(DIFF_DEADLINE_MS);
+    #[cfg(debug_assertions)]
+    let deadline = ctx.config.test_diff_deadline.unwrap_or(deadline);
     let job = Box::new(move || {
         let started = Instant::now();
         table.run(&outbox, id.clone(), &job_token, |token| {
-            let diff = compute(&resolved, &|| token.is_cancelled())?;
+            let diff = compute(&resolved, deadline, &|| token.is_cancelled())?;
             let (files, cut) = summary(&diff);
             logger.info(
                 "diff_worktree",
@@ -151,7 +154,11 @@ pub(super) fn start(
     Ok(())
 }
 
-fn compute(resolved: &Resolved, stop: &dyn Fn() -> bool) -> Result<WorktreeDiff, ErrorObject> {
+fn compute(
+    resolved: &Resolved,
+    deadline: Duration,
+    stop: &dyn Fn() -> bool,
+) -> Result<WorktreeDiff, ErrorObject> {
     let reader = crate::observe::open_worktree(
         &resolved.common_dir,
         &resolved.root,
@@ -169,7 +176,7 @@ fn compute(resolved: &Resolved, stop: &dyn Fn() -> bool) -> Result<WorktreeDiff,
         max_lines_per_file: MAX_DIFF_LINES_PER_FILE,
         max_blob_bytes: MAX_DIFF_BLOB_BYTES,
         max_bytes: MAX_DIFF_RESPONSE_BYTES,
-        deadline: Instant::now() + Duration::from_millis(DIFF_DEADLINE_MS),
+        deadline: Instant::now() + deadline,
     };
     let request = DiffRequest {
         base: resolved.base.as_ref(),
