@@ -11,9 +11,9 @@
 pub(crate) mod audit_view;
 pub mod authz;
 pub mod bus;
-pub mod desktop;
 #[cfg(any(unix, windows))]
 mod conn;
+pub mod desktop;
 #[cfg(any(unix, windows))]
 mod limits;
 pub mod marks;
