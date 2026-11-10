@@ -382,6 +382,22 @@ impl Rig {
 }
 
 /// The reason of a refusal; an overlap that could not be checked is `overlap-unverified`.
+/// Writes what an undo waited for its base to the CI job summary, when there is one: the
+/// measurement `BASE_WAIT` is fixed from (TS-TMC-005), visible without `--nocapture`.
+fn publish_waits(test: &str, took: Duration, waits: &[(i64, String)]) {
+    let Ok(summary) = std::env::var("GITHUB_STEP_SUMMARY") else {
+        return;
+    };
+    use std::io::Write as _;
+    if let Ok(mut f) = std::fs::OpenOptions::new().append(true).open(summary) {
+        let _ = writeln!(
+            f,
+            "- {test} ({}): undo took {took:?}, tm_base_wait {waits:?}",
+            std::env::consts::OS
+        );
+    }
+}
+
 fn reason(err: &UndoError) -> TmRejectReason {
     match err {
         UndoError::Rejected { reason, .. } => *reason,
@@ -412,14 +428,19 @@ fn ca1_the_undo_right_after_a_raw_reset_waits_for_its_base_and_recovers_the_work
     let capture = r.capture(&deps);
     let git = system_git();
 
+    let started = Instant::now();
     let out = r.undo(Some(&deps), &agent_who(), Selection::Last, &git);
+    let took = started.elapsed();
 
+    publish_waits("ca1_last", took, &r.base_waits());
     drop(release);
     capture.stop();
     let done = out.unwrap_or_else(|e| {
         panic!(
             "TMC005-CA1: the undo right after the reset must wait for the capture of its base \
-             and recover the agent's work at the first try, got {e:?}"
+             and recover the agent's work at the first try, got {e:?}; the undo took {took:?}, \
+             tm_base_wait logged: {:?}",
+            r.base_waits()
         )
     });
     assert_eq!(
@@ -440,6 +461,7 @@ fn ca1_agent_the_undo_by_agent_right_after_a_raw_reset_waits_for_its_base() {
     let capture = r.capture(&deps);
     let git = system_git();
 
+    let started = Instant::now();
     let out = r.undo(
         Some(&deps),
         &agent_who(),
@@ -449,13 +471,17 @@ fn ca1_agent_the_undo_by_agent_right_after_a_raw_reset_waits_for_its_base() {
         },
         &git,
     );
+    let took = started.elapsed();
 
+    publish_waits("ca1_agent", took, &r.base_waits());
     drop(release);
     capture.stop();
     let done = out.unwrap_or_else(|e| {
         panic!(
             "TMC005-CA1: `undo --agent` right after the reset must wait for the capture of its \
-             base and recover the agent's work at the first try, got {e:?}"
+             base and recover the agent's work at the first try, got {e:?}; the undo took \
+             {took:?}, tm_base_wait logged: {:?}",
+            r.base_waits()
         )
     });
     assert_eq!(done.undone_all.len(), 1);
@@ -521,17 +547,13 @@ fn ca3_a_capture_given_up_after_max_retries_is_not_waited_for() {
         .await_bases(REPO, &[RESET_SEQ], Duration::from_secs(60));
     let git = system_git();
 
-    let started = Instant::now();
+    // The wait is measured by what the undo logs, not by the undo's own time: an undo costs
+    // seconds by itself on a slow runner (Windows CI), with no wait at all.
     let out = r.undo(Some(&deps), &agent_who(), Selection::Last, &git);
-    let took = started.elapsed();
 
     capture.stop();
     let err = out.expect_err("TMC005-CA3: without its base the undo is refused (D7)");
     assert_eq!(reason(&err), TmRejectReason::OverlapUnverified);
-    assert!(
-        took < BASE_WAIT,
-        "TMC005-CA3: no capture is pending: the undo does not wait, took {took:?}"
-    );
     let waits = r.base_waits();
     assert!(
         waits
@@ -586,15 +608,17 @@ fn ca3_without_an_engine_the_undo_does_not_wait() {
     }
     let git = system_git();
 
-    let started = Instant::now();
+    // The wait is measured by what the undo logs, not by the undo's own time: an undo costs
+    // seconds by itself on a slow runner (Windows CI), with no wait at all.
     let out = r.undo(None, &agent_who(), Selection::Last, &git);
-    let took = started.elapsed();
 
     let err = out.expect_err("TMC005-CA3: without its base the undo is refused (D7)");
     assert_eq!(reason(&err), TmRejectReason::OverlapUnverified);
+    let waits = r.base_waits();
     assert!(
-        took < BASE_WAIT,
-        "TMC005-CA3: without an engine there is no capture to wait for, took {took:?}"
+        waits.is_empty(),
+        "TMC005-CA3: without an engine there is no capture to wait for: no tm_base_wait; \
+         logged: {waits:?}"
     );
 }
 
