@@ -147,10 +147,15 @@ struct ShellAgent {
 }
 
 impl ShellAgent {
-    fn run(&mut self, command: &str) {
+    /// Hands `command` to the agent without waiting for it: [`ShellAgent::wait_done`] does.
+    fn send(&mut self, command: &str) {
         let stdin = self.stdin.as_mut().unwrap();
         writeln!(stdin, "({command}) 2>&1").unwrap();
         stdin.flush().unwrap();
+    }
+
+    /// Waits for the [`DONE`] of the command sent last, which must have succeeded.
+    fn wait_done(&mut self, command: &str) {
         let mut output = String::new();
         let mut line = String::new();
         loop {
@@ -168,13 +173,16 @@ impl ShellAgent {
         }
     }
 
-    /// A commit with a slow `post-commit` hook, so `git` is alive when S3 samples it.
-    fn commit(&mut self, hooks: &Path, message: &str) {
-        self.run(&format!(
+    /// Sends a commit whose `post-commit` hook holds `git` alive (see [`Env::hooks`]) and returns
+    /// the command, for [`ShellAgent::wait_done`].
+    fn send_held_commit(&mut self, hooks: &Path, message: &str) -> String {
+        let command = format!(
             "printf 'user\\n{message}\\n' > login.txt && git add login.txt && \
-             git -c core.hooksPath={} commit -q -m '{message}'",
+             git -c core.hooksPath='{}' commit -q -m '{message}'",
             hooks.display()
-        ));
+        );
+        self.send(&command);
+        command
     }
 }
 
@@ -195,12 +203,18 @@ struct Env {
     stop: PathBuf,
     daemon: Child,
     bin: PathBuf,
+    /// The `post-commit` hook that holds `git` alive: it writes [`Env::marker`] and waits for
+    /// [`Env::go`] (bounded), so S3 samples a `git` that is still running.
     hooks: PathBuf,
+    marker: PathBuf,
+    go: PathBuf,
     out_n: std::cell::Cell<u32>,
 }
 
 impl Drop for Env {
     fn drop(&mut self) {
+        // No held `git` outlives the test.
+        let _ = std::fs::write(&self.go, b"");
         let _ = std::fs::write(&self.stop, b"");
         let start = Instant::now();
         while self.daemon.try_wait().ok().flatten().is_none() {
@@ -240,10 +254,22 @@ fn env() -> Env {
         .unwrap();
     let bin = tp.root.path().join("bin");
     std::fs::create_dir(&bin).unwrap();
-    let hooks = tp.root.path().join("slow-hooks");
+    let hooks = tp.root.path().join("held-hooks");
     std::fs::create_dir(&hooks).unwrap();
+    let marker = tp.root.path().join("post-commit-started");
+    let go = tp.root.path().join("post-commit-go");
     let post_commit = hooks.join("post-commit");
-    std::fs::write(&post_commit, "#!/bin/sh\nsleep 1\n").unwrap();
+    // Bounded: 1200 turns of 50 ms, then the hook ends on its own (no `git` hangs).
+    std::fs::write(
+        &post_commit,
+        format!(
+            "#!/bin/sh\n: > '{}'\ni=0\nwhile [ ! -e '{}' ] && [ $i -lt 1200 ]; do\n  \
+             sleep 0.05\n  i=$((i + 1))\ndone\nexit 0\n",
+            marker.display(),
+            go.display()
+        ),
+    )
+    .unwrap();
     std::fs::set_permissions(&post_commit, std::fs::Permissions::from_mode(0o755)).unwrap();
     gitraptor_testkit::fixture::clone_binary(
         &std::env::current_exe().unwrap(),
@@ -277,6 +303,8 @@ fn env() -> Env {
         daemon,
         bin,
         hooks,
+        marker,
+        go,
         out_n: std::cell::Cell::new(0),
     }
 }
@@ -473,6 +501,110 @@ impl Env {
     }
 }
 
+/// Turns of [`POLL`] a wait for a signal of the held commit gets: its hang guard.
+const SIGNAL_TURNS: u32 = 1500;
+const POLL: Duration = Duration::from_millis(20);
+
+impl Env {
+    /// The `git-event` entries of the timeline of `feat-login`: `(id, actor)`.
+    fn git_events(&self) -> Vec<(String, Value)> {
+        let timeline: Value = self
+            .client()
+            .call(methods::TM_TIMELINE, json!({"worktree": self.login}))
+            .unwrap();
+        timeline["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|entry| entry["origin"]["entry"] == "git-event")
+            .map(|entry| {
+                (
+                    entry["id"].as_str().unwrap().to_owned(),
+                    entry["actor"].clone(),
+                )
+            })
+            .collect()
+    }
+
+    /// One commit of `agent` while its `git` is held alive: the hook's marker, a read of the repo
+    /// asked through the channel (`scope.snapshot` wakes the repo: `poll_repo`), the commit's
+    /// entry in the timeline, then the hook is let go. The actor of the new entry.
+    fn held_commit(&self, agent: &mut ShellAgent, message: &str) -> Value {
+        let known: Vec<String> = self.git_events().into_iter().map(|(id, _)| id).collect();
+        let _ = std::fs::remove_file(&self.marker);
+        let _ = std::fs::remove_file(&self.go);
+        let command = agent.send_held_commit(&self.hooks, message);
+        let mut turns = 0;
+        while !self.marker.exists() {
+            turns += 1;
+            assert!(
+                turns < SIGNAL_TURNS,
+                "the post-commit hook of {message} never started\n{}",
+                self.read_notices()
+            );
+            std::thread::sleep(POLL);
+        }
+        let scope = json!({"scope": "repo", "repo_id": self.repo_id});
+        let _: Value = self
+            .client()
+            .call(methods::SCOPE_SNAPSHOT, json!({ "scope": scope }))
+            .unwrap();
+        let mut turns = 0;
+        let actor = loop {
+            if let Some((_, actor)) = self
+                .git_events()
+                .into_iter()
+                .find(|(id, _)| !known.contains(id))
+            {
+                break actor;
+            }
+            turns += 1;
+            assert!(
+                turns < SIGNAL_TURNS,
+                "the timeline never showed the commit {message}\n{}",
+                self.read_notices()
+            );
+            std::thread::sleep(POLL);
+        };
+        std::fs::write(&self.go, b"").unwrap();
+        agent.wait_done(&command);
+        actor
+    }
+
+    /// `age_ms` and `via` of every `s3_read_notice` of the daemon's log, for a failure message.
+    fn read_notices(&self) -> String {
+        fn find(dir: &Path, out: &mut String) {
+            let Ok(rd) = std::fs::read_dir(dir) else {
+                return;
+            };
+            for e in rd.flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    find(&p, out);
+                } else if p.file_name().is_some_and(|n| n == "daemon.log") {
+                    for l in std::fs::read_to_string(&p).unwrap_or_default().lines() {
+                        if l.contains("s3_read_notice") {
+                            let fields: Vec<&str> = l
+                                .split(' ')
+                                .filter(|w| w.starts_with("age_ms=") || w.starts_with("via="))
+                                .collect();
+                            out.push_str("s3_read_notice ");
+                            out.push_str(&fields.join(" "));
+                            out.push('\n');
+                        }
+                    }
+                }
+            }
+        }
+        let mut out = String::new();
+        find(self.tp.root.path(), &mut out);
+        if out.is_empty() {
+            out.push_str("no s3_read_notice in the daemon's log\n");
+        }
+        out
+    }
+}
+
 fn codex() -> Value {
     json!({"kind": "other", "name": "Codex"})
 }
@@ -644,26 +776,44 @@ fn an_agent_cannot_correct_and_it_is_audited() {
 /// GRP010-CORE-6: what the Time Machine reads (the timeline's `SessionActors` over
 /// `sessions.list`, and `requester_of` over the same projection) follows the correction and its
 /// withdrawal.
+///
+/// It proves that the Time Machine follows the current attribution of a commit that S3
+/// attributed; it does not prove that the engine reads a commit in time under load (TD-GRP-006).
+/// So it waits for signals, not for file events: the commit's `post-commit` hook keeps `git`
+/// alive until the test lets it go, the read is forced with `scope.snapshot` of the repo
+/// (`poll_repo`), and a commit that still comes out unattributed is made again, 3 attempts at
+/// most. A failure prints `age_ms` and `via` of every `s3_read_notice` of the daemon's log.
 #[test]
 fn the_time_machine_sees_the_current_attribution() {
+    const ATTEMPTS: u32 = 3;
     let e = env();
     let mut claude_agent = e.agent_in(&e.login);
     e.wait_detected(&e.login, 1);
-    claude_agent.commit(&e.hooks, "c1");
+    let detected = json!({"actor": "agent", "kind": "claude-code", "origin": "detected"});
+    let corrected = json!({"actor": "agent", "kind": "other", "name": {"untrusted": "Codex"}, "origin": "registered"});
+
+    let mut seen = Vec::new();
+    for n in 1..=ATTEMPTS {
+        let actor = e.held_commit(&mut claude_agent, &format!("c{n}"));
+        let attributed = actor["actor"] != "unattributed";
+        seen.push(actor);
+        if attributed {
+            break;
+        }
+    }
+    assert!(
+        seen.last().is_some_and(|a| a["actor"] != "unattributed"),
+        "no commit of {ATTEMPTS} came out attributed: {seen:?}\n{}",
+        e.read_notices()
+    );
 
     let actors = |want: &Value| -> Vec<Value> {
         let start = Instant::now();
         loop {
-            let timeline: Value = e
-                .client()
-                .call(methods::TM_TIMELINE, json!({"worktree": e.login}))
-                .unwrap();
-            let actors: Vec<Value> = timeline["entries"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .filter(|entry| entry["origin"]["entry"] == "git-event")
-                .map(|entry| entry["actor"].clone())
+            let actors: Vec<Value> = e
+                .git_events()
+                .into_iter()
+                .map(|(_, actor)| actor)
                 .filter(|actor| actor["actor"] != "unattributed")
                 .collect();
             if actors.iter().any(|a| a == want) || start.elapsed() > DEADLINE {
@@ -672,13 +822,12 @@ fn the_time_machine_sees_the_current_attribution() {
             std::thread::sleep(Duration::from_millis(50));
         }
     };
-    let detected = json!({"actor": "agent", "kind": "claude-code", "origin": "detected"});
-    let corrected = json!({"actor": "agent", "kind": "other", "name": {"untrusted": "Codex"}, "origin": "registered"});
 
     let before = actors(&detected);
     assert!(
         !before.is_empty() && before.iter().all(|a| *a == detected),
-        "the commit is Claude Code, detected: {before:?}"
+        "the commit is Claude Code, detected: {before:?}\n{}",
+        e.read_notices()
     );
     ok(&e.correct(codex(), &e.login, None));
     let after = actors(&corrected);
