@@ -625,26 +625,36 @@ fn daemon_write_window_a_ref_written_twice_is_left_at_its_last_value() {
 
 // ----- Windows that open after the batch's flush ----------------------------------------------------
 
-/// An event evaluated for an S3 window that ended ten seconds ago, with the move `OLD -> OTHER`.
-fn evaluate_an_old_batch(rig: &Rig) -> S3Evidence {
-    let t = monotonic_ns().saturating_sub(10_000_000_000);
-    assert!(t > 0, "the monotonic clock is past ten seconds");
-    evaluate_moved(rig, t, t + FLUSH_NS, feat_login(Some(OLD), OTHER))
+/// The marks of an S3 window, taken before the daemon's window opens (no subtraction from the
+/// clock: on Windows it starts with the process). A pause after them makes the window open
+/// strictly after `t_flush`.
+fn batch_marks() -> (u64, u64) {
+    let t_recv = monotonic_ns();
+    let t_flush = monotonic_ns();
+    std::thread::sleep(Duration::from_millis(2));
+    (t_recv, t_flush)
+}
+
+/// The event `OLD -> OTHER` of the batch with these marks.
+fn evaluate_batch(rig: &Rig, (t_recv, t_flush): (u64, u64)) -> S3Evidence {
+    evaluate_moved(rig, t_recv, t_flush, feat_login(Some(OLD), OTHER))
 }
 
 #[test]
 fn daemon_write_window_a_window_that_opens_after_the_flush_still_catches_the_echo() {
     // Positive first: the same event with no window at all is attributed.
     let none = self::rig();
-    assert_attributed_uncounted(&evaluate_an_old_batch(&none), "baseline: no window");
+    let marks = batch_marks();
+    assert_attributed_uncounted(&evaluate_batch(&none, marks), "baseline: no window");
 
     // (a) A window that opened after the event's flush, wrote its new value and closed.
     let rig = self::rig();
+    let marks = batch_marks();
     let window = rig.writes.begin_tracked(Path::new("/r"));
     window.wrote(BRANCH_REF, OTHER);
     window.complete();
     drop(window);
-    let e = evaluate_an_old_batch(&rig);
+    let e = evaluate_batch(&rig, marks);
     assert_ambiguous_by_window(
         &e,
         "window opened after the flush, new equals what it wrote",
@@ -652,7 +662,8 @@ fn daemon_write_window_a_window_that_opens_after_the_flush_still_catches_the_ech
 
     // (b) A window that opened after the flush and is still open.
     let rig = self::rig();
+    let marks = batch_marks();
     let _open = rig.writes.begin_tracked(Path::new("/r"));
-    let e = evaluate_an_old_batch(&rig);
+    let e = evaluate_batch(&rig, marks);
     assert_ambiguous_by_window(&e, "window opened after the flush and still open");
 }

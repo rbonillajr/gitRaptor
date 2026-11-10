@@ -71,7 +71,7 @@ fn s3_scope_follows_the_event_kind() {
     }
 }
 
-const COUNTERS: [&str; 12] = [
+const COUNTERS: [&str; 13] = [
     "sessions_wt",
     "foreign_wt",
     "foreign_other_wt",
@@ -84,6 +84,7 @@ const COUNTERS: [&str; 12] = [
     "gits_after_notice",
     "daemon_inert",
     "daemon_write_window",
+    "daemon_exiting",
 ];
 
 /// SEC-04: the line carries the scope and integer counters, never a path,
@@ -109,6 +110,7 @@ fn the_s3_log_line_carries_only_counters() {
         gits_after_notice: 10,
         daemon_inert: 11,
         daemon_write_window: 12,
+        daemon_exiting: 13,
     };
     // A repo id that is a path: the canary must never reach the line.
     let fields = s3_log_fields(
