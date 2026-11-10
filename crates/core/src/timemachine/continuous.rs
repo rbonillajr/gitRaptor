@@ -145,6 +145,15 @@ fn below_floor(profile: &ProfileDirs, floor: FreeSpaceFloor) -> bool {
     }
 }
 
+/// Marks the capture stopped when the thread ends, by return or by unwinding.
+struct StopOnExit(Arc<super::base_wait::CaptureSeals>);
+
+impl Drop for StopOnExit {
+    fn drop(&mut self) {
+        self.0.stopped();
+    }
+}
+
 impl ContinuousCapture {
     pub fn start(config: CaptureConfig, deps: CaptureDeps) -> std::io::Result<Self> {
         let (tx, rx) = channel();
@@ -158,8 +167,10 @@ impl ContinuousCapture {
             crate::work_class::WorkClass::Default,
             "raptor-tm-capture",
             move || {
+                // Also on a panic of the thread: a capture that died must not leave undos
+                // waiting for seals nobody will publish.
+                let _stopped = StopOnExit(done);
                 run(config, deps, rx);
-                done.stopped();
             },
         );
         let thread = match thread {
