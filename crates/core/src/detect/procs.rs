@@ -293,6 +293,10 @@ pub fn git_call(args: &[OsString]) -> GitCall {
     let harmless = subcommand.is_some_and(|s| {
         parsed == Some(s.as_bytes()) && (read_only || HARMLESS_SUBCOMMANDS.contains(&s))
     });
+    // The exact template of the daemon's argv, and the same subcommand for the fail-closed
+    // parser, as for `harmless`.
+    let inert = gitraptor_git::is_daemon_inert_argv(args)
+        && subcommand.is_some_and(|s| parsed == Some(s.as_bytes()));
     let clean: String = subcommand
         .unwrap_or_default()
         .chars()
@@ -311,7 +315,7 @@ pub fn git_call(args: &[OsString]) -> GitCall {
         writes: gitraptor_macsys::process::git_subcommand_writes(
             args.iter().map(|a| a.as_encoded_bytes()),
         ),
-        inert: false,
+        inert,
     }
 }
 
