@@ -622,3 +622,37 @@ fn daemon_write_window_a_ref_written_twice_is_left_at_its_last_value() {
     let stale = evaluate_in_the_tail(&rig, Some(feat_login(Some(OLD), NEW)));
     assert_ambiguous_by_window(&stale, "tail, old is not the final value");
 }
+
+// ----- Windows that open after the batch's flush ----------------------------------------------------
+
+/// An event evaluated for an S3 window that ended ten seconds ago, with the move `OLD -> OTHER`.
+fn evaluate_an_old_batch(rig: &Rig) -> S3Evidence {
+    let t = monotonic_ns().saturating_sub(10_000_000_000);
+    assert!(t > 0, "the monotonic clock is past ten seconds");
+    evaluate_moved(rig, t, t + FLUSH_NS, feat_login(Some(OLD), OTHER))
+}
+
+#[test]
+fn daemon_write_window_a_window_that_opens_after_the_flush_still_catches_the_echo() {
+    // Positive first: the same event with no window at all is attributed.
+    let none = self::rig();
+    assert_attributed_uncounted(&evaluate_an_old_batch(&none), "baseline: no window");
+
+    // (a) A window that opened after the event's flush, wrote its new value and closed.
+    let rig = self::rig();
+    let window = rig.writes.begin_tracked(Path::new("/r"));
+    window.wrote(BRANCH_REF, OTHER);
+    window.complete();
+    drop(window);
+    let e = evaluate_an_old_batch(&rig);
+    assert_ambiguous_by_window(
+        &e,
+        "window opened after the flush, new equals what it wrote",
+    );
+
+    // (b) A window that opened after the flush and is still open.
+    let rig = self::rig();
+    let _open = rig.writes.begin_tracked(Path::new("/r"));
+    let e = evaluate_an_old_batch(&rig);
+    assert_ambiguous_by_window(&e, "window opened after the flush and still open");
+}
