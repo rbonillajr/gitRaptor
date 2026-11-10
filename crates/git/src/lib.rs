@@ -15,12 +15,14 @@
 //! the profile (ADR-TMC-002 § 1), and [`guard_write`], the Guardrails write layer, which only
 //! touches `core.hooksPath` in the common `config` and the files of `<common>/gitraptor/`
 //! (ADR-GRD-001 § 7). [`dry_merge`] writes the objects of a merge only into an in-memory object
-//! store that lives for one job and is dropped after it.
+//! store that lives for one job and is dropped after it. [`diff`] reads the diff of a worktree for
+//! the cockpit, without filters: only gitoxide, bytes, and no link is followed.
 
 mod capture;
 mod changed_paths;
 pub mod cli;
 mod committed;
+pub mod diff;
 pub mod dry_merge;
 mod guard_changes;
 mod guard_paths;

@@ -65,6 +65,34 @@ mod repo_intact {
 
     // --- Observable acceptance: the harness catches an injected write; the real layer passes --
 
+    /// The diff of a worktree reads the index, the objects and the working tree and writes none.
+    #[test]
+    fn worktree_diff_writes_nothing() {
+        use gitraptor_git::RefName;
+        use gitraptor_git::diff::{DiffLimits, DiffRequest};
+        use std::time::{Duration, Instant};
+
+        let f = busy();
+        let base = RefName::new("refs/heads/feature").unwrap();
+        let req = DiffRequest {
+            base: Some(&base),
+            base_confirmed: true,
+        };
+        let limits = DiffLimits {
+            max_files: 1_000,
+            max_lines_per_file: 2_000,
+            max_blob_bytes: 8 * 1024 * 1024,
+            max_bytes: 768 * 1024,
+            deadline: Instant::now() + Duration::from_secs(60),
+        };
+        check("worktree diff on a busy repo", &f, &profile(), || {
+            let reader = RepoReader::open(&f.repo, &ReaderOptions::default()).unwrap();
+            let diff = reader.worktree_diff(&req, &limits, &|| false).unwrap();
+            assert!(!diff.uncommitted.files.is_empty());
+        })
+        .assert_intact();
+    }
+
     #[test]
     fn read_layer_leaves_everything_intact() {
         let f = busy();
