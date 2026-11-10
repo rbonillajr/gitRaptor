@@ -20,7 +20,7 @@ use gitraptor_api::messages::{GitEventDetails, GitEventKind};
 use gitraptor_git::{ReaderOptions, ReflogEntry, RepoReader};
 
 use super::{
-    GapMark, Marks, ObservedBatch, RawEvent, RepoAccess, RepoMsg, Shared, WtMsg, wall_now,
+    GapMark, Marks, ObservedBatch, RawEvent, ReadVia, RepoAccess, RepoMsg, Shared, WtMsg, wall_now,
 };
 use crate::observe::{self, linked_is_trusted};
 use crate::profile::GapCause;
@@ -709,7 +709,11 @@ pub(super) fn run(
                 let _ = done.send(task.has_base.then(|| task.view.clone()));
                 return;
             }
-            Ok(RepoMsg::PollNow) => task.next_poll = Instant::now(),
+            Ok(RepoMsg::PollNow(via)) => {
+                // Stub (TD-GRP-006 T000): the via is not kept yet.
+                let _: ReadVia = via;
+                task.next_poll = Instant::now();
+            }
             Ok(RepoMsg::Stop) | Err(RecvTimeoutError::Disconnected) => return,
             Err(RecvTimeoutError::Timeout) => {}
         }
@@ -774,7 +778,7 @@ impl Task {
             if moved.contains(&&wt.root)
                 && let Some(written_us) = head_log_written_us(&wt.git_dir)
             {
-                hooks.git_dir_written(&self.repo_id, t_recv, written_us);
+                hooks.git_dir_written(&self.repo_id, t_recv, written_us, ReadVia::Event);
             }
         }
     }

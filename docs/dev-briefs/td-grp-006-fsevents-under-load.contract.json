@@ -1,0 +1,134 @@
+{
+  "version": 1,
+  "source": [
+    "docs/dev-briefs/td-grp-006-fsevents-under-load.2-plan.md",
+    "docs/requirements/features/motor-local/technical-stories/TD-GRP-006-bajo-carga-los-eventos-de-fsevents.md",
+    "docs/architecture/decisions/ADR-GRP-010-observacion-cambios-worktrees.md"
+  ],
+  "rigor": "alto",
+  "goal": {
+    "intent": "Medir en el log cuántas escrituras del directorio Git ve el motor por un evento FS y cuántas solo por una lectura pedida (Wake) o por el sondeo de respaldo, y que us_grp_010 deje de depender de la latencia de FSEvents, sin cambiar la red de seguridad ni la regla S3 (TD-GRP-006, ADR-GRP-010 Enmienda 2026-11-10).",
+    "endState": "Cada s3_read_notice lleva via=event (lectura por la ventana de un evento FS), via=wake (lectura pedida con poll_repo) o via=backup (temporizador del sondeo o simulate_poll), como palabra fija y sin rutas; the_time_machine_sees_the_current_attribution espera por señales (marcador del hook, lectura forzada con scope.snapshot) y repite el commit como máximo 3 veces si sale sin atribuir.",
+    "nonGoals": [
+      "cambiar el intervalo del sondeo de respaldo o añadir un sondeo rápido",
+      "cambiar la regla S3 o READ_WRITE_MAX_AGE (ADR-GRP-012)",
+      "medir la latencia de los eventos del worktree",
+      "estabilizar los tests de caja blanca del observador (TD-GRP-010)",
+      "agregados p50/p99 en engine.resources"
+    ]
+  },
+  "criteria": [
+    {
+      "id": "GRP006-VIA-WAKE",
+      "statement": "Con los eventos FS tirados (simulate_lost_events) y el sondeo de respaldo lejano, un commit en un repo observado seguido de Observer::poll_repo produce git_dir_written con ReadVia::Wake, y ninguno con otro via",
+      "verify": "cargo test -p gitraptor-core --test td_grp_006 -- via_wake",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/td_grp_006.rs"
+      ]
+    },
+    {
+      "id": "GRP006-VIA-BACKUP",
+      "statement": "Con los eventos FS tirados y backup_poll de 1 s, un commit sin poll_repo produce git_dir_written con ReadVia::Backup; y Observer::simulate_poll tras otro commit también da ReadVia::Backup",
+      "verify": "cargo test -p gitraptor-core --test td_grp_006 -- via_backup",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/td_grp_006.rs"
+      ]
+    },
+    {
+      "id": "GRP006-VIA-EVENT",
+      "statement": "Con los eventos FS entregados y el sondeo de respaldo lejano, sin poll_repo ni simulate_poll, la lectura que encuentra un commit produce git_dir_written con ReadVia::Event (la escritura se repite contando intentos si el SO pierde el evento)",
+      "verify": "cargo test -p gitraptor-core --test td_grp_006 -- via_event",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/td_grp_006.rs"
+      ]
+    },
+    {
+      "id": "GRP006-LOG",
+      "statement": "SEC-04: ReadNoticeLog escribe s3_read_notice con via=event, via=wake o via=backup según el ReadVia recibido, además de repo, age_ms y kept, y ningún valor de la línea es una ruta",
+      "verify": "cargo test -p gitraptor-core --lib daemon::sessions::read_notice_tests",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/daemon/sessions_read_notice_tests.rs"
+      ]
+    },
+    {
+      "id": "GRP006-US010",
+      "statement": "the_time_machine_sees_the_current_attribution espera por señal (marcador del hook post-commit, lectura forzada con scope.snapshot, archivo go), repite el commit como máximo 3 veces si sale sin atribuir, imprime age_ms y via de cada intento al fallar, y pasa",
+      "verify": "cargo test -p gitraptor-core --test us_grp_010 -- --exact the_time_machine_sees_the_current_attribution",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_010.rs"
+      ]
+    }
+  ],
+  "suite": {
+    "command": "node tools/test/nextest-junit.mjs"
+  },
+  "layers": {
+    "runtime": {
+      "commands": [
+        {
+          "id": "suite",
+          "cmd": "node tools/test/nextest-junit.mjs"
+        }
+      ],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "scope": {
+    "projects": [
+      "gitraptor-core"
+    ]
+  },
+  "constraints": {
+    "deny_paths": [
+      "Cargo.toml",
+      "Cargo.lock",
+      "crates/core/Cargo.toml",
+      "crates/macsys/",
+      "crates/git/",
+      "crates/policy/",
+      "crates/theme/",
+      "crates/api/",
+      "apps/",
+      "crates/core/src/timemachine/",
+      "crates/core/tests/us_tmc_011_common/",
+      "docs/ARTIFACTS.md"
+    ],
+    "allow_dependency_changes": false
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 600000,
+    "suiteTimeoutMs": 5400000
+  },
+  "hops": {
+    "design": {
+      "agent": "main-loop",
+      "model": "opus"
+    },
+    "critic": {
+      "agent": "nassa-core:plan-critic",
+      "model": "opus"
+    },
+    "tester": {
+      "agent": "nassa-core:criterion-tester",
+      "model": "opus"
+    },
+    "build": {
+      "agent": "nassa-dev-rust:rust-expert",
+      "model": "opus"
+    },
+    "review": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "opus"
+    },
+    "conformance": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "sonnet"
+    }
+  }
+}

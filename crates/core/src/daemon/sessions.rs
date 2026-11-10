@@ -197,7 +197,13 @@ impl ObserverHooks for ReadNoticeLog {
 
     fn git_dir_touched(&self, _repo_id: &str, _t_recv: u64) {}
 
-    fn git_dir_written(&self, repo_id: &str, _t_recv: u64, written_us: u64) {
+    fn git_dir_written(
+        &self,
+        repo_id: &str,
+        _t_recv: u64,
+        written_us: u64,
+        _via: crate::watch::ReadVia,
+    ) {
         let (age_ms, kept) = read_write_age(written_us);
         self.0.info(
             "s3_read_notice",
@@ -1210,3 +1216,7 @@ mod start_changes_tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "sessions_read_notice_tests.rs"]
+mod read_notice_tests;

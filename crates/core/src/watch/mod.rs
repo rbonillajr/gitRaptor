@@ -262,6 +262,30 @@ pub struct WatchStart {
 /// Where batches go: the daemon loop.
 pub type Sink = Arc<dyn Fn(ObservedBatch) + Send + Sync>;
 
+/// What made the repo task read the repo that found a write (TD-GRP-006, ADR-GRP-010 Enmienda
+/// 2026-11-10): the measure of how often a write is seen by its file event and how often only by a
+/// read that something else asked for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ReadVia {
+    /// The window a file event of the repo's Git directory opened.
+    Event,
+    /// A read asked with [`Observer::poll_repo`] (a Time Machine wait, a client, a hook).
+    Wake,
+    /// The backup poll's timer (or [`Observer::simulate_poll`], which stands for it).
+    Backup,
+}
+
+impl ReadVia {
+    /// The fixed word of the log (SEC-04).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Event => "event",
+            Self::Wake => "wake",
+            Self::Backup => "backup",
+        }
+    }
+}
+
 /// What the session detector learns from the router, as soon as a file
 /// event arrives and before any debounce (US-GRP-007, ADR-GRP-012).
 pub trait ObserverHooks: Send + Sync {
@@ -276,8 +300,8 @@ pub trait ObserverHooks: Send + Sync {
     /// The repo task's read found a worktree's `HEAD` moved, written at `written_us` (wall
     /// clock microseconds, the mtime of its `HEAD` reflog): the S3 notice of that write, whose
     /// "started before" is the write itself, if it is recent enough (TD-GRP-005). `t_recv` is
-    /// the first mark of the batch the read closes.
-    fn git_dir_written(&self, _repo_id: &str, _t_recv: u64, _written_us: u64) {}
+    /// the first mark of the batch the read closes, and `via` what made the task read.
+    fn git_dir_written(&self, _repo_id: &str, _t_recv: u64, _written_us: u64, _via: ReadVia) {}
     /// A worktree's window closed with files outside every ignored folder,
     /// or with a new state: after its batch is handed over, outside the
     /// budget (US-TMC-004, the Time Machine's continuous capture).
@@ -309,9 +333,9 @@ impl ObserverHooks for FanoutHooks {
         }
     }
 
-    fn git_dir_written(&self, repo_id: &str, t_recv: u64, written_us: u64) {
+    fn git_dir_written(&self, repo_id: &str, t_recv: u64, written_us: u64, via: ReadVia) {
         for h in &self.0 {
-            h.git_dir_written(repo_id, t_recv, written_us);
+            h.git_dir_written(repo_id, t_recv, written_us, via);
         }
     }
 
@@ -376,8 +400,8 @@ pub(crate) enum RepoMsg {
     /// Flush the window, answer with the view and end (going dormant).
     /// The answer is the task's base view, `None` if it never had one.
     Sleep(Sender<Option<RefsView>>),
-    /// Test hook: the backup poll is due now.
-    PollNow,
+    /// The backup poll is due now, asked by `via` (a wake, or the test hook of the timer).
+    PollNow(ReadVia),
     Stop,
 }
 
@@ -1535,7 +1559,7 @@ impl Observer {
     pub fn poll_repo(&self, repo_id: &str) {
         let repos = self.shared.repos.read().unwrap_or_else(|e| e.into_inner());
         if let Some(repo) = repos.get(repo_id) {
-            let _ = repo.tx.send(RepoMsg::PollNow);
+            let _ = repo.tx.send(RepoMsg::PollNow(ReadVia::Event));
         }
     }
 
@@ -1546,7 +1570,7 @@ impl Observer {
     pub fn simulate_poll(&self) {
         let repos = self.shared.repos.read().unwrap_or_else(|e| e.into_inner());
         for repo in repos.values() {
-            let _ = repo.tx.send(RepoMsg::PollNow);
+            let _ = repo.tx.send(RepoMsg::PollNow(ReadVia::Event));
         }
     }
 
