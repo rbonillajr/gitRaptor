@@ -189,7 +189,8 @@ fn start_changes(
 
 /// Logs the age of every write a repo read gave an S3 notice for, kept or dropped by
 /// `READ_WRITE_MAX_AGE` (TD-GRP-005, ADR-GRP-012 amendment 2026-11-09): the data to tune that
-/// bound in dogfooding. Integers, a boolean and the filtered repo id only (SEC-04).
+/// bound in dogfooding, and which read found it (`via`, TD-GRP-006). Integers, a boolean, a fixed
+/// word and the filtered repo id only (SEC-04).
 struct ReadNoticeLog(Logger);
 
 impl ObserverHooks for ReadNoticeLog {
@@ -202,7 +203,7 @@ impl ObserverHooks for ReadNoticeLog {
         repo_id: &str,
         _t_recv: u64,
         written_us: u64,
-        _via: crate::watch::ReadVia,
+        via: crate::watch::ReadVia,
     ) {
         let (age_ms, kept) = read_write_age(written_us);
         self.0.info(
@@ -214,6 +215,7 @@ impl ObserverHooks for ReadNoticeLog {
                     Field::from(i64::try_from(age_ms).unwrap_or(i64::MAX)),
                 ),
                 ("kept", kept.into()),
+                ("via", Field::word(via.as_str())),
             ],
         );
     }

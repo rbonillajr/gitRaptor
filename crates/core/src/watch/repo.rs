@@ -647,6 +647,9 @@ struct Task {
     /// A `HEAD` reflog grew alone in the last flush: its window was
     /// extended once.
     heads_deferred: bool,
+    /// Who asked for the next poll ([`RepoMsg::PollNow`]); `None` is the backup poll's timer
+    /// (TD-GRP-006). Taken by that poll.
+    poll_via: Option<ReadVia>,
     /// Worktrees the view has that were not `Ready` when they were read (`git worktree add` was
     /// half-way): they are read again with each view until they are, so their task starts.
     unready: Vec<PathBuf>,
@@ -679,6 +682,7 @@ pub(super) fn run(
         last_event_ms: wall_now().0,
         next_poll: Instant::now() + config.backup_poll,
         heads_deferred: false,
+        poll_via: None,
         unready,
     };
     let len = config.window.saturating_sub(config.timer_slack);
@@ -710,8 +714,8 @@ pub(super) fn run(
                 return;
             }
             Ok(RepoMsg::PollNow(via)) => {
-                // Stub (TD-GRP-006 T000): the via is not kept yet.
-                let _: ReadVia = via;
+                // A window open now is flushed instead: its read is the event's.
+                task.poll_via = Some(via);
                 task.next_poll = Instant::now();
             }
             Ok(RepoMsg::Stop) | Err(RecvTimeoutError::Disconnected) => return,
@@ -750,7 +754,7 @@ impl Task {
     /// the router after the read that classifies it (the backup poll, or the Time Machine's
     /// `poll_repo`), or never on their own. It is cut at the write (the newest moved `HEAD`
     /// reflog), never at the read; `t_recv` is the batch's first mark.
-    fn notice_moved_heads(&self, new: &RefsView, t_recv: u64) {
+    fn notice_moved_heads(&self, new: &RefsView, t_recv: u64, via: ReadVia) {
         let Some(hooks) = &self.shared.hooks else {
             return;
         };
@@ -778,7 +782,7 @@ impl Task {
             if moved.contains(&&wt.root)
                 && let Some(written_us) = head_log_written_us(&wt.git_dir)
             {
-                hooks.git_dir_written(&self.repo_id, t_recv, written_us, ReadVia::Event);
+                hooks.git_dir_written(&self.repo_id, t_recv, written_us, via);
             }
         }
     }
@@ -792,7 +796,7 @@ impl Task {
             t_computed: 0,
         };
         self.take_read(marks, overflow.then_some(started), |task, new| {
-            task.notice_moved_heads(new, t_recv);
+            task.notice_moved_heads(new, t_recv, ReadVia::Event);
         });
     }
 
@@ -800,6 +804,7 @@ impl Task {
     /// the task last saw. A worktree whose fingerprint moved without an
     /// event is reconciled by its own task.
     fn poll(&mut self) {
+        let via = self.poll_via.take().unwrap_or(ReadVia::Backup);
         let t_flush = clock::monotonic_ns();
         let marks = Marks {
             t_recv: t_flush,
@@ -818,7 +823,7 @@ impl Task {
                 })
                 .map(|(root, _)| root.clone())
                 .collect();
-            task.notice_moved_heads(new, t_flush);
+            task.notice_moved_heads(new, t_flush, via);
             for wt in task.shared.worktrees_of(&task.repo_id) {
                 if moved.contains(&wt.root) {
                     let _ = wt.tx.send(WtMsg::Reconcile(t_flush));
@@ -1109,6 +1114,7 @@ mod tests {
             window: None,
             last_event_ms: 0,
             next_poll: Instant::now(),
+            poll_via: None,
             heads_deferred: false,
             unready: Vec::new(),
         };
