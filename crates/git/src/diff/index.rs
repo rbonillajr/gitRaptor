@@ -52,8 +52,18 @@ enum IndexEntry {
 /// One read of the index: what the sections and the ids are built from.
 struct IndexRead {
     checksum: Option<gix::ObjectId>,
+    /// (path, mode, oid, stage) of every entry, in index order. With `index.skipHash` the
+    /// checksum is `None` on every read, so only this tells two reads apart (L-02).
+    fingerprint: Vec<(Vec<u8>, u32, gix::ObjectId, u32)>,
     entries: BTreeMap<String, IndexEntry>,
     conflicts: BTreeSet<String>,
+}
+
+impl IndexRead {
+    /// Whether `other` is the same index content as `self`.
+    fn same_as(&self, other: &Self) -> bool {
+        self.checksum == other.checksum && self.fingerprint == other.fingerprint
+    }
 }
 
 /// One side read with its content id.
@@ -99,14 +109,16 @@ impl RepoReader {
             self.repo.workdir().map(Path::to_path_buf).ok_or_else(|| {
                 ReadError::InvalidInput("the repository has no working tree".into())
             })?;
-        // L-02: the ids and the membership of each section come from the same index. The
-        // checksum is read again after the status; if it changed, both are read once more, and a
-        // second change is TemporarilyUnavailable: never a mix of two indexes.
+        // L-02: the ids and the membership of each section come from the same index. The index
+        // is read again after the status and compared by checksum and by the (path, mode, oid,
+        // stage) of every entry (the checksum alone is `None` under `index.skipHash`); if it
+        // changed, both are read once more, and a second change is TemporarilyUnavailable: never
+        // a mix of two indexes.
         let mut attempt = 0;
         let (index, status) = loop {
             let index = self.read_index()?;
             let status = self.status()?;
-            if self.read_index()?.checksum == index.checksum {
+            if self.read_index()?.same_as(&index) {
                 break (index, status);
             }
             attempt += 1;
@@ -199,8 +211,11 @@ impl RepoReader {
             .map_err(|e| ReadError::Unavailable(format!("index: {e}")))?;
         let mut entries = BTreeMap::new();
         let mut conflicts = BTreeSet::new();
+        let mut fingerprint = Vec::with_capacity(index.entries().len());
         for entry in index.entries() {
-            let path = entry.path(&index).to_str_lossy().into_owned();
+            let raw = entry.path(&index);
+            fingerprint.push((raw.to_vec(), entry.mode.bits(), entry.id, entry.stage_raw()));
+            let path = raw.to_str_lossy().into_owned();
             if entry.stage() != gix::index::entry::Stage::Unconflicted {
                 conflicts.insert(path);
                 continue;
@@ -219,6 +234,7 @@ impl RepoReader {
         }
         Ok(IndexRead {
             checksum: index.checksum(),
+            fingerprint,
             entries,
             conflicts,
         })
