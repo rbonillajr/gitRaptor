@@ -373,3 +373,92 @@ fn daemon_write_window_tail_a_late_echo_of_an_earlier_window_is_foreign() {
         "baseline: new nobody wrote",
     );
 }
+
+// ----- The chain of cleared moves: a cleared event's new is the ref's current value ----------------
+
+const THIRD: &str = "4444444444444444444444444444444444444444";
+const FIFTH: &str = "5555555555555555555555555555555555555555";
+
+/// The applier's window left the branch at `OLD`; the agent then commits `OLD -> OTHER` and
+/// `OTHER -> THIRD` inside the margin. Returns the rig, after both evaluations.
+fn chain_of_two() -> Rig {
+    let rig = self::rig();
+    closed_tracked(&rig, &[(BRANCH_REF, OLD)]);
+    let first = evaluate_in_the_tail(&rig, Some(feat_login(Some(OLD), OTHER)));
+    assert_attributed_uncounted(
+        &first,
+        "chain: the first commit starts from the window's value",
+    );
+    let second = evaluate_in_the_tail(&rig, Some(feat_login(Some(OTHER), THIRD)));
+    assert_attributed_uncounted(
+        &second,
+        "chain: the second commit starts from the first one's new",
+    );
+    rig
+}
+
+#[test]
+fn daemon_write_window_tail_a_chain_of_two_commits_is_attributed() {
+    let _ = chain_of_two();
+}
+
+#[test]
+fn daemon_write_window_tail_a_missing_middle_event_breaks_the_chain() {
+    let _ = chain_of_two();
+    let rig = self::rig();
+    closed_tracked(&rig, &[(BRANCH_REF, OLD)]);
+    // The commit OLD -> OTHER was never evaluated: OTHER is not in the chain.
+    let e = evaluate_in_the_tail(&rig, Some(feat_login(Some(OTHER), THIRD)));
+    assert_ambiguous_by_window(&e, "tail, second commit without the first");
+}
+
+#[test]
+fn daemon_write_window_tail_a_new_tracked_window_restarts_the_chain() {
+    let _ = chain_of_two();
+    let rig = self::rig();
+    closed_tracked(&rig, &[(BRANCH_REF, OLD)]);
+    let first = evaluate_in_the_tail(&rig, Some(feat_login(Some(OLD), OTHER)));
+    assert_attributed_uncounted(&first, "first commit");
+    // A new window leaves the branch at FIFTH.
+    closed_tracked(&rig, &[(BRANCH_REF, FIFTH)]);
+    let stale = evaluate_in_the_tail(&rig, Some(feat_login(Some(OTHER), THIRD)));
+    assert_ambiguous_by_window(&stale, "tail, old from the chain before the new window");
+    let fresh = evaluate_in_the_tail(&rig, Some(feat_login(Some(FIFTH), THIRD)));
+    assert_attributed_uncounted(&fresh, "old equals the new window's value");
+}
+
+#[test]
+fn daemon_write_window_tail_a_new_that_a_window_wrote_is_foreign_even_inside_the_chain() {
+    let _ = chain_of_two();
+    let rig = self::rig();
+    closed_tracked(&rig, &[(BRANCH_REF, OLD)]);
+    let first = evaluate_in_the_tail(&rig, Some(feat_login(Some(OLD), OTHER)));
+    assert_attributed_uncounted(&first, "first commit");
+    // OTHER is in the chain, but the new OLD is what the applier wrote: a late echo.
+    let echo = evaluate_in_the_tail(&rig, Some(feat_login(Some(OTHER), OLD)));
+    assert_ambiguous_by_window(&echo, "tail, new equals a written value");
+}
+
+#[test]
+fn daemon_write_window_tail_an_event_that_is_not_cleared_does_not_advance_the_chain() {
+    let _ = chain_of_two();
+    let rig = self::rig();
+    closed_tracked(&rig, &[(BRANCH_REF, OLD)]);
+    // A foreign event (old unreadable) moved the branch to OTHER: it is not cleared.
+    let foreign = evaluate_in_the_tail(&rig, Some(feat_login(None, OTHER)));
+    assert_ambiguous_by_window(&foreign, "tail, unreadable old");
+    let next = evaluate_in_the_tail(&rig, Some(feat_login(Some(OTHER), THIRD)));
+    assert_ambiguous_by_window(
+        &next,
+        "tail, old equals the new of an event that was not cleared",
+    );
+}
+
+#[test]
+fn daemon_write_window_tail_the_chain_expires_with_the_margin() {
+    let rig = chain_of_two();
+    // Past WINDOW_TAIL no window covers: S3 as usual, with no window to clear.
+    let t = monotonic_ns() + beyond_the_tail();
+    let e = evaluate(&rig, t, t + FLUSH_NS);
+    assert_attributed_uncounted(&e, "past the margin");
+}
