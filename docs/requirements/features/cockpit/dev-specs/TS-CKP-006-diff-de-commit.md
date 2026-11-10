@@ -303,7 +303,7 @@ graph LR
 - **Refs:** D4, D5, D6, D10, D12; R1, R3, R4, R7, R8
 - **Aceptación:** `cargo test -p gitraptor-git --test ts_ckp_006_commit_diff` y `cargo test -p gitraptor-git --test static_check`
 - **Guard ⛔2.1:** `ts_ckp_006_boundary.rs` › `ckp006_fit_new_modules_never_parse_revspecs_nor_spawn` (T006)
-- **Guard ⛔3.1:** `ts_ckp_006_commit_diff.rs` › `ckp006_005_missing_and_unreachable_take_the_same_path` (mismo resultado `Missing` para todo) y la revisión de código: no hay punto de inyección que cuente lecturas, así que «no leer el objeto antes del fin del recorrido» es una regla de implementación que el revisor comprueba (decisión del orquestador, 2026-11-10: PC-2 de la crítica)
+- **Guard ⛔3.1:** `ts_ckp_006_commit_diff.rs` › `ckp006_005_missing_and_unreachable_take_the_same_path` (mismo resultado `Missing` para todo) y la revisión de código: no hay punto de inyección que cuente lecturas, así que «no leer el objeto antes del fin del recorrido» es una regla de implementación que el revisor comprueba (propuesta del worker confirmada por el coordinador, 2026-11-10: PC-2 de la crítica)
 - **Guard ⛔6.1:** `ts_ckp_006_boundary.rs` › `ckp006_fit_new_modules_never_parse_revspecs_nor_spawn` (`merge_bases` está en la lista de D14) y `ts_ckp_006_commit_diff.rs` › `ckp006_003_unrelated_histories_diff_tree_to_tree`
 
 ### T003 — Calcular el diff del índice con ids de contenido y conflictos
@@ -326,7 +326,7 @@ graph LR
 - **Depende:** T001
 - **Refs:** D7, D8, D10; US-DSK-010, US-DSK-011, US-DSK-014
 - **Aceptación:** `cargo test -p gitraptor-git --test ts_ckp_006_index_diff`
-- **Guard ⛔2.1:** `ts_ckp_006_index_diff.rs` › `ckp006_004_content_ids_come_from_the_index_head_and_worktree` (sin punto de inyección en `index_diff`: la ventana entre las dos lecturas del índice no la alcanza un test de integración, así que la regla de rehacer una vez y `TemporarilyUnavailable` la comprueba el revisor; el test verifica que, con el índice quieto, ids y pertenencia salen del mismo índice. Decisión del orquestador, 2026-11-10: PC-3 de la crítica)
+- **Guard ⛔2.1:** `ts_ckp_006_index_diff.rs` › `ckp006_004_content_ids_come_from_the_index_head_and_worktree` (sin punto de inyección en `index_diff`: la ventana entre las dos lecturas del índice no la alcanza un test de integración, así que la regla de rehacer una vez y `TemporarilyUnavailable` la comprueba el revisor; el test verifica que, con el índice quieto, ids y pertenencia salen del mismo índice. Propuesta del worker confirmada por el coordinador, 2026-11-10: PC-3 de la crítica)
 - **Guard ⛔4.1:** `ts_ckp_006_index_diff.rs` › `ckp006_004_worktree_id_is_the_raw_blob_hash` (repo con `filter.x.clean` y `.gitattributes`: el id es el de los bytes crudos y el canario no salta)
 
 ### T004 — Servir `diff.commit` y `diff.between` desde el pool
