@@ -25,6 +25,9 @@ pub(super) const GROUP: Group = Group {
         method(PING, false, true),
         // Every profile: it only changes shapes, never what a connection may do.
         method(CONNECTION_ACCEPT, false, true).since(CAPABILITIES_PROTOCOL),
+        // Open to `mcp` so a narrowed desktop connection can read why; the
+        // daemon offers it only to that class.
+        method(CONNECTION_DESKTOP, false, true).since(CAPABILITIES_PROTOCOL),
     ],
     capabilities: &[CAP_REQUESTER],
     ..Group::new("connection")
