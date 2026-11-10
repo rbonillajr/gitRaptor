@@ -1,0 +1,442 @@
+{
+  "source": {
+    "kind": "devspec",
+    "ref": "docs/requirements/features/cockpit/dev-specs/US-CKP-022-grafo-carriles.md"
+  },
+  "goal": {
+    "intent": "El desarrollador ve bajo la flota un carril por rama de agente y, con g, el grafo a pantalla completa por graph.lanes (consulta de solo lectura, fuera del MCP) que desbloquea US-DSK-005",
+    "endState": "graph.lanes responde por el QueryPool con base confirmada solamente, la TUI pinta panel y vista conectados al widget GraphLanes, y los cinco escenarios de US-CKP-022 pasan",
+    "nonGoals": [
+      "Exponer graph.lanes al MCP",
+      "Actor por commit",
+      "Desplegar o paginar 'N más'",
+      "Cablear LaneModel.conflict"
+    ]
+  },
+  "criteria": [
+    {
+      "id": "CKP022-API-METHOD",
+      "statement": "graph.lanes está declarado y en GROUPS, sin error_block propio, con mcp false (no se ofrece a raptor-mcp) y con .since(CAPABILITIES_PROTOCOL) (D2, D14)",
+      "verify": "cargo test -p gitraptor-api --test us_ckp_022_wire -- --list 2>/dev/null | grep -q 'graph_lanes_is_declared_for_the_full_profile_only: test$' && cargo test -p gitraptor-api --test us_ckp_022_wire graph_lanes_is_declared_for_the_full_profile_only",
+      "layer": "runtime",
+      "tests": [
+        "crates/api/tests/us_ckp_022_wire.rs"
+      ]
+    },
+    {
+      "id": "CKP022-API-WIRE",
+      "statement": "Los tipos de crates/api/src/graph.rs serializan como los dos ejemplos del contrato de API de la DS (kebab-case, deny_unknown_fields)",
+      "verify": "cargo test -p gitraptor-api --test us_ckp_022_wire -- --list 2>/dev/null | grep -q 'graph_lanes_wire_matches_the_contract_example: test$' && cargo test -p gitraptor-api --test us_ckp_022_wire graph_lanes_wire_matches_the_contract_example",
+      "layer": "runtime",
+      "tests": [
+        "crates/api/tests/us_ckp_022_wire.rs"
+      ]
+    },
+    {
+      "id": "CKP022-API-NOACTOR",
+      "statement": "Ningún tipo del contrato lleva actor, sesión, autor ni correo, y un campo actor se rechaza (D6, D7)",
+      "verify": "cargo test -p gitraptor-api --test us_ckp_022_wire -- --list 2>/dev/null | grep -q 'graph_types_carry_no_actor_author_or_email: test$' && cargo test -p gitraptor-api --test us_ckp_022_wire graph_types_carry_no_actor_author_or_email",
+      "layer": "runtime",
+      "tests": [
+        "crates/api/tests/us_ckp_022_wire.rs"
+      ]
+    },
+    {
+      "id": "CKP022-GIT-WALK",
+      "statement": "RepoReader::lane devuelve HEAD menos la base, del commit más reciente al más antiguo, con merge-base y flag merge (D4)",
+      "verify": "cargo test -p gitraptor-git --test us_ckp_022_lane -- --list 2>/dev/null | grep -q 'lane_walks_head_minus_base_newest_first: test$' && cargo test -p gitraptor-git --test us_ckp_022_lane lane_walks_head_minus_base_newest_first",
+      "layer": "runtime",
+      "tests": [
+        "crates/git/tests/us_ckp_022_lane.rs"
+      ]
+    },
+    {
+      "id": "CKP022-GIT-TOTAL",
+      "statement": "El total es exacto hasta max_walk y pasa a AtLeast después (D4, D12)",
+      "verify": "cargo test -p gitraptor-git --test us_ckp_022_lane -- --list 2>/dev/null | grep -q 'lane_total_is_exact_until_the_walk_limit: test$' && cargo test -p gitraptor-git --test us_ckp_022_lane lane_total_is_exact_until_the_walk_limit",
+      "layer": "runtime",
+      "tests": [
+        "crates/git/tests/us_ckp_022_lane.rs"
+      ]
+    },
+    {
+      "id": "CKP022-GIT-NOBASE",
+      "statement": "Sin merge-base lane devuelve LaneGap NoMergeBase y no recorre nada",
+      "verify": "cargo test -p gitraptor-git --test us_ckp_022_lane -- --list 2>/dev/null | grep -q 'lane_without_merge_base_is_a_gap: test$' && cargo test -p gitraptor-git --test us_ckp_022_lane lane_without_merge_base_is_a_gap",
+      "layer": "runtime",
+      "tests": [
+        "crates/git/tests/us_ckp_022_lane.rs"
+      ]
+    },
+    {
+      "id": "CKP022-GIT-SUMMARY",
+      "statement": "El asunto es la primera línea cortada a max_summary_bytes en límite de carácter UTF-8, sin autor ni correo (D6)",
+      "verify": "cargo test -p gitraptor-git --test us_ckp_022_lane -- --list 2>/dev/null | grep -q 'summary_is_the_first_line_cut_on_a_char_boundary: test$' && cargo test -p gitraptor-git --test us_ckp_022_lane summary_is_the_first_line_cut_on_a_char_boundary",
+      "layer": "runtime",
+      "tests": [
+        "crates/git/tests/us_ckp_022_lane.rs"
+      ]
+    },
+    {
+      "id": "CKP022-GIT-SAMETOTAL",
+      "statement": "El total de lane es el mismo conjunto que count_only_in, el ↑ del stream (D4)",
+      "verify": "cargo test -p gitraptor-git --test us_ckp_022_lane -- --list 2>/dev/null | grep -q 'lane_total_equals_count_only_in: test$' && cargo test -p gitraptor-git --test us_ckp_022_lane lane_total_equals_count_only_in",
+      "layer": "runtime",
+      "tests": [
+        "crates/git/tests/us_ckp_022_lane.rs"
+      ]
+    },
+    {
+      "id": "CKP022-GIT-READONLY",
+      "statement": "lane no escribe índice, refs, config ni objetos (NFR-01)",
+      "verify": "cargo test -p gitraptor-git --test us_ckp_022_lane -- --list 2>/dev/null | grep -q 'lane_writes_nothing: test$' && cargo test -p gitraptor-git --test us_ckp_022_lane lane_writes_nothing",
+      "layer": "runtime",
+      "tests": [
+        "crates/git/tests/us_ckp_022_lane.rs"
+      ]
+    },
+    {
+      "id": "CKP022-GIT-STOP",
+      "statement": "Si stop() devuelve true a mitad del recorrido el resultado es TooSlow, nunca una ventana parcial",
+      "verify": "cargo test -p gitraptor-git --test us_ckp_022_lane -- --list 2>/dev/null | grep -q 'a_stop_mid_walk_is_too_slow_never_a_partial_window: test$' && cargo test -p gitraptor-git --test us_ckp_022_lane a_stop_mid_walk_is_too_slow_never_a_partial_window",
+      "layer": "runtime",
+      "tests": [
+        "crates/git/tests/us_ckp_022_lane.rs"
+      ]
+    },
+    {
+      "id": "CKP022-CORE-TOTAL",
+      "statement": "El total de la vista (lanes_total y total del carril) coincide con el ↑ del stream para el mismo repo",
+      "verify": "cargo test -p gitraptor-core --test graph_query -- --list 2>/dev/null | grep -q 'lanes_total_matches_the_ahead_of_the_stream: test$' && cargo test -p gitraptor-core --test graph_query lanes_total_matches_the_ahead_of_the_stream",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/graph_query.rs"
+      ]
+    },
+    {
+      "id": "CKP022-CORE-UNCONF",
+      "statement": "Base sin confirmar: base not-computable base-unconfirmed y lanes vacío (D5, BR-CKP-CALC-004)",
+      "verify": "cargo test -p gitraptor-core --test graph_query -- --list 2>/dev/null | grep -q 'unconfirmed_base_has_no_lanes: test$' && cargo test -p gitraptor-core --test graph_query unconfirmed_base_has_no_lanes",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/graph_query.rs"
+      ]
+    },
+    {
+      "id": "CKP022-CORE-MISSING",
+      "statement": "Base sin ref (develop): not-computable base-missing, sin carriles y sin usar otra rama (BR-CKP-EDGE-001)",
+      "verify": "cargo test -p gitraptor-core --test graph_query -- --list 2>/dev/null | grep -q 'missing_base_is_not_computable_without_lanes: test$' && cargo test -p gitraptor-core --test graph_query missing_base_is_not_computable_without_lanes",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/graph_query.rs"
+      ]
+    },
+    {
+      "id": "CKP022-CORE-TRUNK",
+      "statement": "El worktree con la rama base sacada no es un carril (D3)",
+      "verify": "cargo test -p gitraptor-core --test graph_query -- --list 2>/dev/null | grep -q 'the_base_worktree_is_not_a_lane: test$' && cargo test -p gitraptor-core --test graph_query the_base_worktree_is_not_a_lane",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/graph_query.rs"
+      ]
+    },
+    {
+      "id": "CKP022-CORE-STATES",
+      "statement": "Worktree no disponible, rama sin nacer y HEAD separado son carriles con su motivo o su nombre de carpeta (D3)",
+      "verify": "cargo test -p gitraptor-core --test graph_query -- --list 2>/dev/null | grep -q 'unavailable_and_unborn_worktrees_are_lanes_with_a_reason: test$' && cargo test -p gitraptor-core --test graph_query unavailable_and_unborn_worktrees_are_lanes_with_a_reason",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/graph_query.rs"
+      ]
+    },
+    {
+      "id": "CKP022-CORE-CANCEL",
+      "statement": "query.cancel de una consulta graph.lanes en vuelo responde query-cancelled",
+      "verify": "cargo test -p gitraptor-core --test graph_query -- --list 2>/dev/null | grep -q 'cancel_answers_query_cancelled: test$' && cargo test -p gitraptor-core --test graph_query cancel_answers_query_cancelled",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/graph_query.rs"
+      ]
+    },
+    {
+      "id": "CKP022-CORE-BUSY",
+      "statement": "Una segunda graph.lanes en la conexión, o la cola llena, responde query-busy",
+      "verify": "cargo test -p gitraptor-core --test graph_query -- --list 2>/dev/null | grep -q 'a_second_request_on_the_connection_is_query_busy: test$' && cargo test -p gitraptor-core --test graph_query a_second_request_on_the_connection_is_query_busy",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/graph_query.rs"
+      ]
+    },
+    {
+      "id": "CKP022-CORE-NOTFOUND",
+      "statement": "repo_id desconocido responde NOT_FOUND al momento",
+      "verify": "cargo test -p gitraptor-core --test graph_query -- --list 2>/dev/null | grep -q 'unknown_repo_is_not_found: test$' && cargo test -p gitraptor-core --test graph_query unknown_repo_is_not_found",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/graph_query.rs"
+      ]
+    },
+    {
+      "id": "CKP022-CORE-MCP",
+      "statement": "Una conexión MCP no ve graph.lanes (METHOD_NOT_FOUND) (mcp: false, P27 de DS-US-DSK-009)",
+      "verify": "cargo test -p gitraptor-core --test graph_query -- --list 2>/dev/null | grep -q 'mcp_connection_does_not_see_graph_lanes: test$' && cargo test -p gitraptor-core --test graph_query mcp_connection_does_not_see_graph_lanes",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/graph_query.rs"
+      ]
+    },
+    {
+      "id": "CKP022-CORE-NOLOG",
+      "statement": "La respuesta no pasa por el logger, la auditoría ni el perfil: asuntos con un token plantado no aparecen en perfil ni logs (SEC-12, gitleaks 0 hallazgos)",
+      "verify": "cargo test -p gitraptor-core --test graph_query -- --list 2>/dev/null | grep -q 'responses_are_never_logged_nor_persisted: test$' && cargo test -p gitraptor-core --test graph_query responses_are_never_logged_nor_persisted",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/graph_query.rs"
+      ]
+    },
+    {
+      "id": "CKP022-CORE-LIMITS",
+      "statement": "Los topes (32 carriles, 768 KiB, plazo) cortan con cut o too-slow y nunca fallan (D12)",
+      "verify": "cargo test -p gitraptor-core --test graph_query -- --list 2>/dev/null | grep -q 'limits_cut_and_never_fail: test$' && cargo test -p gitraptor-core --test graph_query limits_cut_and_never_fail",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/graph_query.rs"
+      ]
+    },
+    {
+      "id": "CKP022-CORE-CACHE",
+      "statement": "Un segundo refresco con el mismo HEAD y la misma base no recorre el carril: acierta la caché (D9)",
+      "verify": "cargo test -p gitraptor-core --test graph_query -- --list 2>/dev/null | grep -q 'second_refresh_hits_the_lane_cache: test$' && cargo test -p gitraptor-core --test graph_query second_refresh_hits_the_lane_cache",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/graph_query.rs"
+      ]
+    },
+    {
+      "id": "CKP022-CLI-REFRESH",
+      "statement": "El refresco de la vista espera max(1 s, 2 × la última duración) y solo hay una petición en vuelo (D9)",
+      "verify": "cargo test -p gitraptor-cli --lib -- --list 2>/dev/null | grep -q 'refresh_spacing_is_twice_the_last_duration_and_one_in_flight: test$' && cargo test -p gitraptor-cli --lib refresh_spacing_is_twice_the_last_duration_and_one_in_flight",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/src/tui/graph_tests.rs"
+      ]
+    },
+    {
+      "id": "CKP022-CLI-STALE",
+      "statement": "Un snapshot sin cambios de rama, divergencia, base o worktrees no marca la vista como desactualizada; un git.event sí (D9)",
+      "verify": "cargo test -p gitraptor-cli --lib -- --list 2>/dev/null | grep -q 'a_snapshot_without_changes_does_not_mark_stale: test$' && cargo test -p gitraptor-cli --lib a_snapshot_without_changes_does_not_mark_stale",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/src/tui/graph_tests.rs"
+      ]
+    },
+    {
+      "id": "CKP022-CLI-ANCHOR",
+      "statement": "El desplazamiento se ancla al primer commit visible y sobrevive a commits nuevos arriba (D9)",
+      "verify": "cargo test -p gitraptor-cli --lib -- --list 2>/dev/null | grep -q 'anchor_survives_new_commits_on_top: test$' && cargo test -p gitraptor-cli --lib anchor_survives_new_commits_on_top",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/src/tui/graph_tests.rs"
+      ]
+    },
+    {
+      "id": "CKP022-CLI-TICKET",
+      "statement": "Una respuesta de un ticket que no es el actual se descarta",
+      "verify": "cargo test -p gitraptor-cli --lib -- --list 2>/dev/null | grep -q 'a_reply_for_an_old_ticket_is_dropped: test$' && cargo test -p gitraptor-cli --lib a_reply_for_an_old_ticket_is_dropped",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/src/tui/graph_tests.rs"
+      ]
+    },
+    {
+      "id": "CKP022-CLI-CLOSE",
+      "statement": "Cerrar la vista con la petición en vuelo emite Cmd::CancelQuery",
+      "verify": "cargo test -p gitraptor-cli --lib -- --list 2>/dev/null | grep -q 'closing_while_loading_cancels: test$' && cargo test -p gitraptor-cli --lib closing_while_loading_cancels",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/src/tui/graph_tests.rs"
+      ]
+    },
+    {
+      "id": "CKP022-CLI-G",
+      "statement": "g sin repo no hace nada; con el motor sin graph.lanes da Notice::GraphUnsupported y ningún Cmd; con el diff abierto no hace nada (D11, D20)",
+      "verify": "cargo test -p gitraptor-cli --lib -- --list 2>/dev/null | grep -q 'g_is_inert_without_a_repo_the_capability_or_with_the_diff_open: test$' && cargo test -p gitraptor-cli --lib g_is_inert_without_a_repo_the_capability_or_with_the_diff_open",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/src/tui/graph_tests.rs"
+      ]
+    },
+    {
+      "id": "CKP022-CLI-CLIENT",
+      "statement": "El hilo del canal pide graph.lanes y entrega EngineMsg::Graph por ticket; una reconexión entrega Lost por cada petición en vuelo (T004)",
+      "verify": "cargo test -p gitraptor-cli --lib -- --list 2>/dev/null | grep -q 'a_graph_request_is_answered_by_ticket_and_a_reconnect_loses_it: test$' && cargo test -p gitraptor-cli --lib a_graph_request_is_answered_by_ticket_and_a_reconnect_loses_it",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/src/client/tests/graph.rs"
+      ]
+    },
+    {
+      "id": "CKP022-CLI-PANEL",
+      "statement": "El panel sigue el orden de la flota y el color de la sesión; sin sesión, carril sin atribuir (D3, D8)",
+      "verify": "cargo test -p gitraptor-cli --lib -- --list 2>/dev/null | grep -q 'panel_follows_fleet_order_and_session_color: test$' && cargo test -p gitraptor-cli --lib panel_follows_fleet_order_and_session_color",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/src/present/graph_tests.rs"
+      ]
+    },
+    {
+      "id": "CKP022-CLI-SAFE",
+      "statement": "Ramas, rutas y asuntos con controles (OSC 52, RLO, U+2028) se saneán antes de pintarse (SEC-12)",
+      "verify": "cargo test -p gitraptor-cli --lib -- --list 2>/dev/null | grep -q 'summaries_with_controls_are_sanitized: test$' && cargo test -p gitraptor-cli --lib summaries_with_controls_are_sanitized",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/src/present/graph_tests.rs"
+      ]
+    },
+    {
+      "id": "CKP022-CLI-BASEMSG",
+      "statement": "Los mensajes de base no calculable son exactos: develop no encontrada, sin confirmar con raptor guard confirm, sin rama base (D5)",
+      "verify": "cargo test -p gitraptor-cli --lib -- --list 2>/dev/null | grep -q 'base_not_computable_messages_are_exact: test$' && cargo test -p gitraptor-cli --lib base_not_computable_messages_are_exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/src/present/graph_tests.rs"
+      ]
+    },
+    {
+      "id": "CKP022-CLI-TEXT",
+      "statement": "Cada GraphText tiene texto en en y es",
+      "verify": "cargo test -p gitraptor-cli --lib -- --list 2>/dev/null | grep -q 'every_text_has_both_languages: test$' && cargo test -p gitraptor-cli --lib every_text_has_both_languages",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/src/present/graph_text_tests.rs"
+      ]
+    },
+    {
+      "id": "CKP022-CLI-YIELD",
+      "statement": "A 80×24 con panel de conflictos el grafo cede antes que él y la lista conserva LIST_MIN (D10, G2)",
+      "verify": "cargo test -p gitraptor-cli --lib -- --list 2>/dev/null | grep -q 'the_graph_yields_before_the_conflict_panel_at_80x24: test$' && cargo test -p gitraptor-cli --lib the_graph_yields_before_the_conflict_panel_at_80x24",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/src/tui/view/graph_tests.rs"
+      ]
+    },
+    {
+      "id": "CKP022-CLI-SNAPS",
+      "statement": "Snapshots del panel 100×30 y de la vista 80×24 en en, es y ASCII",
+      "verify": "cargo test -p gitraptor-cli --lib -- --list 2>/dev/null | grep -q 'graph_snapshots_panel_100x30_and_view_80x24: test$' && cargo test -p gitraptor-cli --lib graph_snapshots_panel_100x30_and_view_80x24",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/src/tui/view/graph_tests.rs"
+      ]
+    },
+    {
+      "id": "CKP022-E2E-1",
+      "statement": "Escenario 1: un carril por worktree desde su merge-base, claude-1 y claude-2 con su agent.n, sin carril para main",
+      "verify": "cargo test -p gitraptor-cli --test tui_graph -- --list 2>/dev/null | grep -q 'one_lane_per_worktree_from_its_merge_base: test$' && cargo test -p gitraptor-cli --test tui_graph one_lane_per_worktree_from_its_merge_base",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_graph.rs"
+      ]
+    },
+    {
+      "id": "CKP022-E2E-2",
+      "statement": "Escenario 2: feat-pagos muestra 50 commits y '22 más'",
+      "verify": "cargo test -p gitraptor-cli --test tui_graph -- --list 2>/dev/null | grep -q 'a_lane_shows_50_commits_and_22_more: test$' && cargo test -p gitraptor-cli --test tui_graph a_lane_shows_50_commits_and_22_more",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_graph.rs"
+      ]
+    },
+    {
+      "id": "CKP022-E2E-3",
+      "statement": "Escenario 3: cada commit dice 'sin atribuir' y el nodo lleva el color del carril",
+      "verify": "cargo test -p gitraptor-cli --test tui_graph -- --list 2>/dev/null | grep -q 'every_commit_is_unattributed_and_keeps_the_lane_color: test$' && cargo test -p gitraptor-cli --test tui_graph every_commit_is_unattributed_and_keeps_the_lane_color",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_graph.rs"
+      ]
+    },
+    {
+      "id": "CKP022-E2E-4",
+      "statement": "Escenario 4: base develop inexistente, ningún carril y 'Rama base develop no encontrada: no calculable' en vista y panel",
+      "verify": "cargo test -p gitraptor-cli --test tui_graph -- --list 2>/dev/null | grep -q 'missing_base_shows_no_lanes_and_says_why: test$' && cargo test -p gitraptor-cli --test tui_graph missing_base_shows_no_lanes_and_says_why",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_graph.rs"
+      ]
+    },
+    {
+      "id": "CKP022-E2E-5",
+      "statement": "Escenario 5: a 80×24 con 12 filas el grafo cede, la lista conserva LIST_MIN, g está en la barra y abre la vista",
+      "verify": "cargo test -p gitraptor-cli --test tui_graph -- --list 2>/dev/null | grep -q 'the_graph_yields_space_first_at_80x24: test$' && cargo test -p gitraptor-cli --test tui_graph the_graph_yields_space_first_at_80x24",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_graph.rs"
+      ]
+    }
+  ],
+  "constraints": {
+    "deny_paths": [
+      "docs/ARTIFACTS.md",
+      "Cargo.lock",
+      "**/Cargo.toml",
+      "apps/mcp/**",
+      "crates/core/src/timemachine/**",
+      "docs/architecture/decisions/ADR-GRD-008*"
+    ],
+    "allow_dependency_changes": false
+  },
+  "scope": {
+    "projects": [
+      "gitraptor-api",
+      "gitraptor-git",
+      "gitraptor-core",
+      "gitraptor-cli"
+    ]
+  },
+  "hops": {
+    "design": {
+      "agent": "main-loop",
+      "model": "opus"
+    },
+    "critic": {
+      "agent": "nassa-core:plan-critic",
+      "model": "opus"
+    },
+    "tester": {
+      "agent": "nassa-core:criterion-tester",
+      "model": "sonnet"
+    },
+    "build": {
+      "agent": "nassa-dev-rust:rust-expert",
+      "model": "sonnet"
+    },
+    "review": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "opus"
+    },
+    "conformance": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "sonnet"
+    }
+  },
+  "suite": {
+    "command": "node tools/test/nextest-junit.mjs"
+  },
+  "layers": {
+    "runtime": {
+      "commands": [
+        {
+          "id": "suite",
+          "cmd": "node tools/test/nextest-junit.mjs"
+        }
+      ],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 600000,
+    "suiteTimeoutMs": 1800000
+  }
+}
