@@ -714,7 +714,8 @@ pub(super) fn run(
                 return;
             }
             Ok(RepoMsg::PollNow(via)) => {
-                // A window open now is flushed instead: its read is the event's.
+                // An open window flushes first (its read is the event's); the poll asked for
+                // runs right after it and takes this via.
                 task.poll_via = Some(via);
                 task.next_poll = Instant::now();
             }
