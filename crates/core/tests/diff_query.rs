@@ -26,7 +26,7 @@ use gitraptor_api::messages::ClientKind;
 use gitraptor_api::methods;
 use gitraptor_api::rpc::code;
 use gitraptor_api::scope::{Scope, ScopeSnapshot};
-use gitraptor_core::channel::EventBus;
+use gitraptor_core::channel::{ChannelConfig, EventBus};
 use gitraptor_core::client::{Client, ClientError, socket_path};
 use gitraptor_core::daemon::{
     Daemon, DaemonConfig, DaemonEnv, LogLimits, ShutdownHandle, StopCause, StopReport,
@@ -61,6 +61,11 @@ struct Running {
 
 impl Running {
     fn start(tp: &TempProfile) -> Self {
+        Self::start_with(tp, None)
+    }
+
+    /// `deadline`: the `diff.worktree` deadline of this daemon (debug builds only).
+    fn start_with(tp: &TempProfile, deadline: Option<Duration>) -> Self {
         let env = DaemonEnv::from_vars(std::env::vars_os());
         let config = DaemonConfig {
             dirs: tp.dirs(),
@@ -69,7 +74,10 @@ impl Running {
             heartbeat: Duration::from_secs(3600),
             log: LogLimits::default(),
             stop_deadline: None,
-            channel: Default::default(),
+            channel: ChannelConfig {
+                test_diff_deadline: deadline,
+                ..Default::default()
+            },
             protected: None,
             operations: None,
             tm_prior_layer: None,
@@ -649,7 +657,8 @@ fn limits_cut_files_keeps_the_total_and_never_fails() {
     }
     commit_in(&fx, &wt, "many files");
     let e = env_with(&fx, wt, true);
-    let _d = Running::start(&e.tp);
+    // A debug runner can be slow: the deadline must not win over the files cap here.
+    let _d = Running::start_with(&e.tp, Some(Duration::from_secs(60)));
     let mut raw = Raw::cli(&e.tp);
     let diff = diff_of(&ask_diff(&mut raw, &e));
     let section = ready(&diff);
@@ -699,5 +708,26 @@ fn limits_cut_bytes_keeps_the_reply_under_768_kib() {
             .iter()
             .any(|f| matches!(f.body, FileBody::Omitted {})),
         "the files that did not fit come out as omitted"
+    );
+}
+
+#[test]
+fn a_deadline_cut_is_reported_as_time() {
+    let fx = Fixture::with_commit(&git());
+    fx.git(&["branch", "feat"]);
+    let wt = fx.add_worktree("feat", "feat");
+    std::fs::create_dir_all(wt.join("many")).unwrap();
+    for i in 0..300 {
+        std::fs::write(wt.join(format!("many/f{i:04}.txt")), format!("{i}\n")).unwrap();
+    }
+    commit_in(&fx, &wt, "many files");
+    let e = env_with(&fx, wt, true);
+    let _d = Running::start_with(&e.tp, Some(Duration::from_millis(1)));
+    let mut raw = Raw::cli(&e.tp);
+    let diff = diff_of(&ask_diff(&mut raw, &e));
+    assert_eq!(
+        ready(&diff).cut,
+        Some(DiffCut::Time),
+        "a deadline of 1 ms cuts the section with `time`"
     );
 }

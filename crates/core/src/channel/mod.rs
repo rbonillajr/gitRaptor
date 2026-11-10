@@ -123,6 +123,12 @@ pub struct ChannelConfig {
     #[cfg(debug_assertions)]
     #[doc(hidden)]
     pub test_app_binaries: Option<Vec<String>>,
+    /// Tests only: the deadline of `diff.worktree` in place of `DIFF_DEADLINE_MS`, so a slow
+    /// debug runner does not turn a files cut into a time cut and a time cut can be provoked
+    /// with a few milliseconds. It does not exist in a release build.
+    #[cfg(debug_assertions)]
+    #[doc(hidden)]
+    pub test_diff_deadline: Option<Duration>,
 }
 
 /// What a test makes the confirmation eligibility answer (debug builds only).
@@ -153,6 +159,8 @@ impl Default for ChannelConfig {
             test_confirmation: None,
             #[cfg(debug_assertions)]
             test_app_binaries: None,
+            #[cfg(debug_assertions)]
+            test_diff_deadline: None,
         }
     }
 }
