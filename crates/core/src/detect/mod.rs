@@ -430,6 +430,13 @@ fn classify<'g, 'c>(
         (Owner::Session(_), _) => (Class::Ignored, None),
         // The daemon's own `git` in this repo, or exiting: the Time
         // Machine's writer runs in the common dir, with any scope.
+        // An exiting direct child of the daemon running the engine's Git made no write the
+        // daemon's windows did not already account for: `evidence` returns before this loop when
+        // any window of the repo covers the event, so it only gets here with none (ADR-GRP-012,
+        // amendment 2026-11-09). That order must stay.
+        (Owner::Daemon, None) if git.daemon_exiting => {
+            (Class::Ignored, Some(&mut counts.daemon_exiting))
+        }
         (Owner::Daemon, None) => (Class::Foreign, Some(&mut counts.foreign_daemon)),
         // A `git` of the daemon that cannot make a Git event made none (ADR-GRP-012, amendment
         // 2026-11-09): only with its own readable folder in the repo, so never `None` here.
@@ -505,6 +512,9 @@ struct GitSeen {
     /// repo and an inert argv template ([`procs::GitFacts::inert`]). `false` otherwise, a
     /// grandchild included.
     daemon_inert: bool,
+    /// A direct child of the daemon running the engine's Git whose folder could not be read: it
+    /// is exiting. `false` otherwise, a grandchild included.
+    daemon_exiting: bool,
 }
 
 /// Whose a `git` is, by its ancestry.
@@ -909,6 +919,8 @@ impl Detector {
                 old: m.old,
                 new: m.new,
             });
+        // Before the S3 loop, always: `classify` ignores an exiting `git` of the daemon only
+        // because no window of the daemon covers the event once it gets there.
         if writes.covers(&|p| repo.contains(p), from, t_flush, seen) {
             return S3Evidence {
                 outcome: S3Outcome::Ambiguous,
@@ -1301,6 +1313,7 @@ impl Inner {
                     let mut writes = None;
                     let mut harmless = None;
                     let mut daemon_inert = false;
+                    let mut daemon_exiting = false;
                     // Only where the answer can change the outcome, and
                     // read once per sample. A `git` whose folder is
                     // outside the repo is not read and never counts here,
@@ -1341,10 +1354,13 @@ impl Inner {
                         // its own folder in the repo, and its argv read and of an inert
                         // template. The argv is read last so the cheap checks spare the cap.
                         Owner::Daemon => {
-                            daemon_inert = engine_git
+                            // The table's exe is the kernel's, never argv[0].
+                            let engine_child = engine_git
                                 .as_deref()
                                 .is_some_and(|e| g.exe.as_deref() == Some(e))
-                                && parent_of(g, &by_pid).is_some_and(|p| p.pid == self.own_pid)
+                                && parent_of(g, &by_pid).is_some_and(|p| p.pid == self.own_pid);
+                            daemon_exiting = engine_child && cwd.is_none();
+                            daemon_inert = engine_child
                                 && cwd
                                     .as_deref()
                                     .is_some_and(|c| repo.is_some_and(|r| r.contains(c)))
@@ -1361,6 +1377,7 @@ impl Inner {
                         writes,
                         harmless,
                         daemon_inert,
+                        daemon_exiting,
                     }
                 })
                 .collect();
