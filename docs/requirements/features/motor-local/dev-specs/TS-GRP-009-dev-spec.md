@@ -2,7 +2,7 @@
 id: DS-TS-GRP-009
 title: "Dev Spec — Clase de cliente de la app de escritorio y su perfil de lectura en el daemon"
 type: dev-spec
-status: spec-ready
+status: implemented
 feature: motor-local
 domain: GRP
 created: 2026-11-09
@@ -56,6 +56,8 @@ tags: [motor-local, desktop, canal, perfil-mcp, ascendencia, identidad-por-ruta,
 ---
 
 # DS-TS-GRP-009 · Clase de cliente de la app de escritorio y su perfil de lectura en el daemon
+
+> Implementado en: PR #PRNUM (2026-11-09).
 
 ## Contexto rápido
 

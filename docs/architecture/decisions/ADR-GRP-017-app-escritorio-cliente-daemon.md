@@ -199,7 +199,7 @@ El módulo de presencia de ADR-GRD-008 § 6 aún no existe en el código; lo gat
 | R-4 | El humano aprueba por costumbre un diálogo que provocó un agente | Mitigado: el texto lo arma el daemon con el plan; el código de correlación coincide con el de la app; el texto de la sesión dice "si no abriste tú la app, cancela"; ADR-GRD-008 limita la fatiga |
 | R-5 | Un agente con Accesibilidad lee la ventana (`AXValue`) | Aceptado, riesgo bajo (M-2): solo lectura. `sharingType = .none` corta las capturas de pantalla |
 | R-5b | Un agente reescribe el portapapeles (`pbcopy`) entre "Copiar" y pegar, y el humano pega otra excepción (M-01 de la revisión de DS-US-DSK-007) | Mitigado sin leer el portapapeles (Enmienda 2026-11-09): el comando copiable nunca lleva `--yes`, así que la terminal enseña el plan normalizado y pregunta antes de anunciar; el paso de la app lo advierte (`grd.exc.review`: si aparece `--yes` o una operación distinta, cancélala); si llega una excepción anunciada cuya operación o reglas no son las de la fila copiada, la app muestra `grd.exc.mismatch` con el comando de cancelar (D12 de DS-US-DSK-007). La comparación usa lo que la app recuerda haber copiado, nunca el contenido del portapapeles |
-| R-6 | Con identidad por ruta, un agente deja un binario homónimo en `~/Applications` (escribible por el usuario) y lo lanza con `open -a`: obtiene la lectura completa de la app | Aceptado solo para las alphas sin firma: solo lectura, y escribir sigue pidiendo el factor por acción. En v0.1.0 el daemon fija el cdhash o el requisito de firma del ejecutable de la app de su misma versión (§ 3) |
+| R-6 | Con identidad por ruta, un agente deja un binario homónimo en `~/Applications` (escribible por el usuario) y lo lanza con `open -a`: obtiene la lectura completa de la app | Aceptado solo para las alphas sin firma: solo lectura, y escribir sigue pidiendo el factor por acción. En v0.1.0 el daemon fija el cdhash o el requisito de firma del ejecutable de la app de su misma versión (§ 3). Cubre también G2, G6 y la inyección por `DYLD_INSERT_LIBRARIES`, con el criterio de cierre de la [Enmienda (2026-11-09, TS-GRP-009)](#enmienda-2026-11-09-ts-grp-009-alcance-de-r-6) |
 
 ## Validación (funciones de fitness)
 
@@ -280,6 +280,19 @@ Cierra el hueco G7 de [DS-US-DSK-007](../../requirements/features/desktop/dev-sp
 | El comando de excepción copiable nunca lleva `--yes` | § 5 |
 | Riesgo R-5b (portapapeles reescrito entre "Copiar" y pegar) con su mitigación: D12 (`grd.exc.mismatch`), `grd.exc.review`, sin `--yes`, plan y pregunta en la terminal; la app escribe el portapapeles y nunca lo lee (D10) | Riesgos residuales |
 | `guard_blocks` es el único comando IPC nuevo de US-DSK-007 y es de **solo lectura** (`guard.status` + `guard.log` del daemon). No añade escritura, permiso ni plugin, y V1 a V7 no cambian | § 1, § 2 (sin cambios) |
+
+## Enmienda (2026-11-09, TS-GRP-009): alcance de R-6
+
+Origen: la revisión de seguridad de TS-GRP-009 (security-expert en opus, 2026-11-09: APPROVE WITH CONDITIONS, L-01) y las notas G2 y G6 de [DS-TS-GRP-009](../../requirements/features/motor-local/dev-specs/TS-GRP-009-dev-spec.md). **Decisión del orquestador (2026-11-09), validada por security-expert** y aceptada por el coordinador. No cambia la tabla del § 3. El `status` sigue en `accepted`.
+
+- **R-6 incluye tres casos más**, todos de solo lectura y solo en las alphas sin firma. El tope es lo que ya lee un `raptor` CLI lanzado por el mismo agente, porque el solicitante se resuelve en cada petición:
+  - **G2**: `/Applications` es `root:admin 0775`, así que un usuario administrador (o un proceso suyo, como un agente) puede reemplazar el binario de la app y obtener la identidad por ruta. Es más estrecho que `~/Applications`, que R-6 ya acepta. Otro uid no gana nada por el socket (SEC-01).
+  - **G6**: un agente lanza el binario real en segundo plano (`nohup`, `setsid`, doble fork), y su padre muere antes del `hello` o de una reconexión. El par queda bajo `launchd` con la ascendencia limpia y la identidad por ruta. Por ascendencia no se distingue de `open -a` (SPIKE-DSK-002).
+  - **Inyección**: una alpha sin hardened runtime acepta `DYLD_INSERT_LIBRARIES` (también por `open --env`), así que el código del agente puede correr dentro del binario real y verificar la identidad por ruta.
+- **Criterio de cierre en v0.1.0 (L-01)**, que precisa "fija el cdhash o el requisito de firma":
+  - la verificación es sobre el **proceso conectado** (SecCode por audit token, o `csops` del pid revalidado con su hora de inicio), nunca sobre el archivo;
+  - el bundle se firma con hardened runtime, sin `allow-dyld-environment-variables` ni `disable-library-validation` (como ya pide el § 3 para la identidad firmada);
+  - con eso deja de aceptarse la identidad por ruta.
 
 ## Revisión de seguridad (2026-10-28)
 
