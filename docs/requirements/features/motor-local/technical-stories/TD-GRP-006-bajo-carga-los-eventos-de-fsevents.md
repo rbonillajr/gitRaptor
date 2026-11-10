@@ -2,7 +2,7 @@
 id: TD-GRP-006
 title: "Bajo carga, los eventos de FSEvents del directorio Git llegan tarde o no llegan y us_grp_010 falla también en main"
 type: td
-status: ready
+status: implemented
 feature: motor-local
 domain: GRP
 priority: medium
@@ -20,6 +20,8 @@ tags: [motor-local, deuda-tecnica, observador, fsevents, carga, tests-inestables
 ---
 
 ## TD-GRP-006: Bajo carga, los eventos de FSEvents del directorio Git llegan tarde o no llegan y us_grp_010 falla también en main
+
+**Implementado en: PR #359** (2026-11-10, SIN CERTIFICAR por el modo rápido; 10 de 10 de `us_grp_010` con carga 21–26). Plan: [`td-grp-006-fsevents-under-load.2-plan.md`](../../../../dev-briefs/td-grp-006-fsevents-under-load.2-plan.md).
 
 **Valor**: la Time Machine registra a tiempo los commits aunque la máquina esté cargada, y `us_grp_010` deja de fallar por azar en el CI y en local.
 

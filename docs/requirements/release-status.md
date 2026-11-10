@@ -10,13 +10,13 @@
 
 | Estado | Fichas |
 |---|---|
-| Implementado (`implemented`) | 79 |
+| Implementado (`implemented`) | 80 |
 | Hecho (`done`) | 3 |
 | Implementado en parte (`partially-implemented`) | 27 |
 | Listo (`ready`) | 21 |
-| Borrador (`draft`) | 57 |
+| Borrador (`draft`) | 58 |
 | Bloqueado (`blocked`) | 1 |
-| **Total** | **188** |
+| **Total** | **190** |
 
 ## Por feature
 
@@ -26,7 +26,7 @@
 | [desktop](#desktop) | 6 | 0 | 1 | 16 | 0 | 0 | 23 |
 | [guardrails](#guardrails) | 14 | 0 | 7 | 1 | 3 | 0 | 25 |
 | [mcp](#mcp) | 7 | 0 | 4 | 0 | 9 | 0 | 20 |
-| [motor-local](#motor-local) | 20 | 2 | 9 | 2 | 14 | 0 | 47 |
+| [motor-local](#motor-local) | 21 | 2 | 9 | 2 | 15 | 0 | 49 |
 | [time-machine](#time-machine) | 19 | 1 | 1 | 0 | 13 | 0 | 34 |
 
 ### cockpit
@@ -166,11 +166,12 @@
 
 ### motor-local
 
-47 fichas: 20 implementado, 2 hecho, 9 implementado en parte, 2 listo, 14 borrador.
+49 fichas: 21 implementado, 2 hecho, 9 implementado en parte, 2 listo, 15 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
 | [TD-GRP-005](features/motor-local/technical-stories/TD-GRP-005-muestra-s3-fuera-de-ventana.md) | La muestra S3 de un lote de avisos se sella con el aviso más antiguo y cae fuera de la ventana del evento | Implementado (`implemented`) | #333 | — |
+| [TD-GRP-006](features/motor-local/technical-stories/TD-GRP-006-bajo-carga-los-eventos-de-fsevents.md) | Bajo carga, los eventos de FSEvents del directorio Git llegan tarde o no llegan y us_grp_010 falla también en main | Implementado (`implemented`) | — | — |
 | [TD-GRP-007](features/motor-local/technical-stories/TD-GRP-007-cwd-ilegible-ambiguo-bajo-carga.md) | Bajo carga, un cwd ilegible en la muestra S3 deja la atribución en ambigua aunque el git del agente esté vivo | Implementado (`implemented`) | — | — |
 | [TS-GRP-003](features/motor-local/technical-stories/TS-GRP-003-proceso-motor.md) | Proceso del motor en segundo plano por usuario | Implementado (`implemented`) | #26 | — |
 | [TS-GRP-006](features/motor-local/technical-stories/TS-GRP-006-observacion-por-niveles.md) | Observación por niveles: activo, dormido con centinela y despertar | Implementado (`implemented`) | #164, #167, #173, #178 | — |
@@ -204,9 +205,10 @@
 | [TD-GRP-002](features/motor-local/technical-stories/TD-GRP-002-motor-bajo-rafaga.md) | Frescura y memoria del motor bajo una ráfaga de archivos | Listo (`ready`) | — | — |
 | [TD-GRP-003](features/motor-local/technical-stories/TD-GRP-003-nfr04-maquina-referencia.md) | Presupuesto de NFR-04 sin gate automático: medirlo en una máquina de referencia | Listo (`ready`) | — | — |
 | [TD-GRP-004](features/motor-local/technical-stories/TD-GRP-004-corroborar-ambito-worktree-s3.md) | Corroborar con el reflog de HEAD el ámbito worktree de S3 y blindar la lectura de la redirección | Borrador (`draft`) | — | — |
-| [TD-GRP-006](features/motor-local/technical-stories/TD-GRP-006-bajo-carga-los-eventos-de-fsevents.md) | Bajo carga, los eventos de FSEvents del directorio Git llegan tarde o no llegan y us_grp_010 falla también en main | Borrador (`draft`) | — | — |
 | [TD-GRP-008](features/motor-local/technical-stories/TD-GRP-008-daemon-colgado-del-lanzador-s4.md) | Un daemon lanzado desde una sesión de agente cuelga de ella por el ppid y S4 puede atribuirle sus escrituras | Borrador (`draft`) | — | — |
 | [TD-GRP-009](features/motor-local/technical-stories/TD-GRP-009-cola-consultas-por-solicitante.md) | La cola global de consultas bajo demanda se reparte por solicitante | Borrador (`draft`) | — | — |
+| [TD-GRP-010](features/motor-local/technical-stories/TD-GRP-010-los-tests-de-caja-blanca-del.md) | Los tests de caja blanca del observador esperan un evento FS con cota de pared y fallan si FSEvents lo pierde bajo carga | Borrador (`draft`) | — | — |
+| [TD-GRP-011](features/motor-local/technical-stories/TD-GRP-011-respaldo-adaptativo-del-observador-cuando-fsevents.md) | Respaldo adaptativo del observador cuando FSEvents pierde eventos bajo carga | Borrador (`draft`) | — | — |
 | [TS-GRP-007](features/motor-local/technical-stories/TS-GRP-007-factor-so-reservados-windows.md) | Factor del SO (Windows Hello) para los comandos reservados de alto riesgo en Windows | Borrador (`draft`) | — | — |
 | [US-GRP-006](features/motor-local/user-stories/US-GRP-006-retirar-y-volver-a-anadir.md) | El desarrollador recupera el historial de un repo que retiró y volvió a añadir | Borrador (`draft`) | — | — |
 | [US-GRP-011](features/motor-local/user-stories/US-GRP-011-worktree-compartido.md) | El desarrollador ve todas las sesiones de un worktree compartido | Borrador (`draft`) | — | — |
@@ -449,7 +451,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### Sin hito
 
-39 fichas sin hito asignado.
+41 fichas sin hito asignado.
 
 ## Implementadas en parte: lo que falta
 
