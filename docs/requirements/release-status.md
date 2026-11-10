@@ -10,11 +10,11 @@
 
 | Estado | Fichas |
 |---|---|
-| Implementado (`implemented`) | 80 |
+| Implementado (`implemented`) | 81 |
 | Hecho (`done`) | 3 |
 | Implementado en parte (`partially-implemented`) | 27 |
 | Listo (`ready`) | 21 |
-| Borrador (`draft`) | 58 |
+| Borrador (`draft`) | 57 |
 | Bloqueado (`blocked`) | 1 |
 | **Total** | **190** |
 
@@ -22,7 +22,7 @@
 
 | Feature | Implementado | Hecho | Implementado en parte | Listo | Borrador | Bloqueado | Total |
 |---|---|---|---|---|---|---|---|
-| [cockpit](#cockpit) | 13 | 0 | 5 | 2 | 18 | 1 | 39 |
+| [cockpit](#cockpit) | 14 | 0 | 5 | 2 | 17 | 1 | 39 |
 | [desktop](#desktop) | 6 | 0 | 1 | 16 | 0 | 0 | 23 |
 | [guardrails](#guardrails) | 14 | 0 | 7 | 1 | 3 | 0 | 25 |
 | [mcp](#mcp) | 7 | 0 | 4 | 0 | 9 | 0 | 20 |
@@ -31,7 +31,7 @@
 
 ### cockpit
 
-39 fichas: 13 implementado, 5 implementado en parte, 2 listo, 18 borrador, 1 bloqueado.
+39 fichas: 14 implementado, 5 implementado en parte, 2 listo, 17 borrador, 1 bloqueado.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -47,6 +47,7 @@
 | [US-CKP-006](features/cockpit/user-stories/US-CKP-006-conflictos-previstos.md) | El desarrollador ve qué agentes van a chocar antes de hacer merge | Implementado (`implemented`) | — | — |
 | [US-CKP-007](features/cockpit/user-stories/US-CKP-007-frescura-prediccion.md) | Una predicción vieja nunca se presenta como actual | Implementado (`implemented`) | #339 | — |
 | [US-CKP-008](features/cockpit/user-stories/US-CKP-008-alerta-conflicto-nuevo.md) | El desarrollador se entera en la TUI cuando aparece un conflicto previsto nuevo | Implementado (`implemented`) | #340 | — |
+| [US-CKP-012](features/cockpit/user-stories/US-CKP-012-ver-diff.md) | El desarrollador revisa lo que un agente integraría antes de hacer merge | Implementado (`implemented`) | — | — |
 | [US-CKP-026](features/cockpit/user-stories/US-CKP-026-autoria-en-la-flota.md) | El desarrollador ve en la flota de quién es el último commit de cada worktree y con qué agente | Implementado (`implemented`) | #147 | — |
 | [SPIKE-CKP-001](features/cockpit/technical-stories/SPIKE-CKP-001-prediccion-5s.md) | Predicción de conflictos en ≤ 5 s p95 sin escribir en el repo: merge en memoria frente a almacén en el perfil | Implementado en parte (`partially-implemented`) | #266 | 3 |
 | [US-CKP-002](features/cockpit/user-stories/US-CKP-002-orden-atencion-terminadas.md) | La lista pone primero lo que pide atención y no se llena de sesiones viejas | Implementado en parte (`partially-implemented`) | #284 | — |
@@ -62,7 +63,6 @@
 | [US-CKP-009](features/cockpit/user-stories/US-CKP-009-base-pendiente.md) | Con la rama base sin confirmar, la predicción contra la base queda pendiente | Borrador (`draft`) | — | — |
 | [US-CKP-010](features/cockpit/user-stories/US-CKP-010-kpi-deteccion.md) | El desarrollador sabe qué parte de los conflictos reales se vio antes de ocurrir | Borrador (`draft`) | — | — |
 | [US-CKP-011](features/cockpit/user-stories/US-CKP-011-cli-solo-lectura.md) | El desarrollador consulta la flota y los conflictos desde la línea de comandos | Borrador (`draft`) | — | — |
-| [US-CKP-012](features/cockpit/user-stories/US-CKP-012-ver-diff.md) | El desarrollador revisa lo que un agente integraría antes de hacer merge | Borrador (`draft`) | — | — |
 | [US-CKP-013](features/cockpit/user-stories/US-CKP-013-abrir-en-editor.md) | El desarrollador abre el worktree de un agente en su editor | Borrador (`draft`) | — | — |
 | [US-CKP-014](features/cockpit/user-stories/US-CKP-014-integrar-rama-agente.md) | El desarrollador integra la rama de un agente con una tecla y puede deshacerlo | Borrador (`draft`) | — | — |
 | [US-CKP-015](features/cockpit/user-stories/US-CKP-015-rebasar-rama-agente.md) | El desarrollador pone al día la rama de un agente sobre la base | Borrador (`draft`) | — | — |
@@ -293,7 +293,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### M2
 
-105 fichas: 46 implementado, 3 hecho, 20 implementado en parte, 3 listo, 33 borrador.
+105 fichas: 47 implementado, 3 hecho, 20 implementado en parte, 3 listo, 32 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -314,6 +314,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-CKP-006](features/cockpit/user-stories/US-CKP-006-conflictos-previstos.md) | El desarrollador ve qué agentes van a chocar antes de hacer merge | Implementado (`implemented`) | — | — |
 | [US-CKP-007](features/cockpit/user-stories/US-CKP-007-frescura-prediccion.md) | Una predicción vieja nunca se presenta como actual | Implementado (`implemented`) | #339 | — |
 | [US-CKP-008](features/cockpit/user-stories/US-CKP-008-alerta-conflicto-nuevo.md) | El desarrollador se entera en la TUI cuando aparece un conflicto previsto nuevo | Implementado (`implemented`) | #340 | — |
+| [US-CKP-012](features/cockpit/user-stories/US-CKP-012-ver-diff.md) | El desarrollador revisa lo que un agente integraría antes de hacer merge | Implementado (`implemented`) | — | — |
 | [US-CKP-026](features/cockpit/user-stories/US-CKP-026-autoria-en-la-flota.md) | El desarrollador ve en la flota de quién es el último commit de cada worktree y con qué agente | Implementado (`implemented`) | #147 | — |
 | [US-GRD-002](features/guardrails/user-stories/US-GRD-002-hooks-previos-respetados.md) | Los hooks que el repo ya tenía siguen funcionando al protegerlo | Implementado (`implemented`) | #193 | — |
 | [US-GRD-006](features/guardrails/user-stories/US-GRD-006-excepcion-consciente.md) | El desarrollador hace a conciencia una operación prohibida y queda constancia | Implementado (`implemented`) | #295, #301 | — |
@@ -374,7 +375,6 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-CKP-004](features/cockpit/user-stories/US-CKP-004-selector-repo-preferencias.md) | El desarrollador cambia de repo y la TUI recuerda cómo la dejó | Borrador (`draft`) | — | — |
 | [US-CKP-009](features/cockpit/user-stories/US-CKP-009-base-pendiente.md) | Con la rama base sin confirmar, la predicción contra la base queda pendiente | Borrador (`draft`) | — | — |
 | [US-CKP-010](features/cockpit/user-stories/US-CKP-010-kpi-deteccion.md) | El desarrollador sabe qué parte de los conflictos reales se vio antes de ocurrir | Borrador (`draft`) | — | — |
-| [US-CKP-012](features/cockpit/user-stories/US-CKP-012-ver-diff.md) | El desarrollador revisa lo que un agente integraría antes de hacer merge | Borrador (`draft`) | — | — |
 | [US-CKP-013](features/cockpit/user-stories/US-CKP-013-abrir-en-editor.md) | El desarrollador abre el worktree de un agente en su editor | Borrador (`draft`) | — | — |
 | [US-CKP-014](features/cockpit/user-stories/US-CKP-014-integrar-rama-agente.md) | El desarrollador integra la rama de un agente con una tecla y puede deshacerlo | Borrador (`draft`) | — | — |
 | [US-CKP-015](features/cockpit/user-stories/US-CKP-015-rebasar-rama-agente.md) | El desarrollador pone al día la rama de un agente sobre la base | Borrador (`draft`) | — | — |

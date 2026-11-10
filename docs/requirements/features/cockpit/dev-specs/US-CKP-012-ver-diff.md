@@ -2,9 +2,9 @@
 id: DS-US-CKP-012
 title: "Dev Spec — US-CKP-012: revisar lo que un agente integraría antes del merge"
 type: dev-spec
-status: spec-ready
+status: implemented
 created: 2026-10-27
-updated: 2026-11-09
+updated: 2026-11-10
 story: US-CKP-012
 feature: cockpit
 domain: GRP
@@ -685,3 +685,5 @@ Pendiente de decidir (no lo decide esta revisión):
 - Hecho: R1 a R3 de § Revisión 2026-11-09 decididas por el orquestador (2026-11-09).
 - Pendiente: medir los topes de D4 en el banco (N4). `gitraptor-desktop` (brazo `Reply` en `link.rs`) lo verifica el job `desktop` del CI y, si es viable, `cargo clippy -p gitraptor-desktop` local; no es criterio del contrato.
 - Siguiente paso: T001 en rojo; luego backend, cliente y TUI en paralelo.
+
+Implementado en: PR #360. La corrida de `/implement` se abortó en P0 por el modo rápido y la historia queda **sin certificar**. La revisión de seguridad dejó M-01 (plazo y cancelación) pendiente; M-02 y la ranura de una consulta cancelada se arreglaron en el PR.

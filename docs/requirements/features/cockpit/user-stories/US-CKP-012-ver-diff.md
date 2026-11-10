@@ -2,10 +2,10 @@
 id: US-CKP-012
 title: "El desarrollador revisa lo que un agente integraría antes de hacer merge"
 type: us
-status: draft
+status: implemented
 priority: high
 created: 2026-10-04
-updated: 2026-10-27
+updated: 2026-11-10
 feature: cockpit
 related:
   context:
@@ -85,4 +85,6 @@ Detalle en [DS-US-CKP-012](../dev-specs/US-CKP-012-ver-diff.md), que fija ademá
 ## Diseño y Dev Spec
 
 - **Diseño:** DSYS-GRP-001.
-- **Dev Spec:** [DS-US-CKP-012](../dev-specs/US-CKP-012-ver-diff.md) (`draft`, sin gaps bloqueantes).
+- **Dev Spec:** [DS-US-CKP-012](../dev-specs/US-CKP-012-ver-diff.md) (`implemented`).
+
+Implementado en: PR #360 ([DS-US-CKP-012](../dev-specs/US-CKP-012-ver-diff.md)), sin certificar (modo rápido). Pendiente con dueño: M-01 de la revisión de seguridad (plazo y cancelación en el recorrido de `status` y en el diff de archivos de 8 MiB) y la verificación en Windows y Linux (XP-70).

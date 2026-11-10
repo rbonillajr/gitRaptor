@@ -112,6 +112,7 @@ Todo lo que el criterio de salida necesita construir está en `main`. Lo que fal
 | Ver | TS-GRP-004: N1 a N7 de ADR-CKP-003 § 4 | Must | Implementados (#87). La TS queda en parte por N8 a N11 | Lo que necesita INF-CKP-001; N8 a N11 son Should |
 | Ver | INF-CKP-001 | Must | Implementada (#100, #139, #174) | Esqueleto de la TUI y gate de 100 ms |
 | Ver | US-CKP-001 | Must | Implementada (#118; ajustes en #126, #130, #131, #136) | La flota en vivo en la TUI |
+| Ver | US-CKP-012 | Should | Implementada (#360, sin certificar; falta M-01 y Windows/Linux) | Diff de un agente y consultas bajo demanda |
 | Ver | SPIKE-GRP-001 | Must | En parte (#80, #155, #169): falta la medición en dogfooding | Se valida durante el dogfooding (criterio 2) |
 | Deshacer | TS-TMC-004 | Must | Implementada (#40) | Operación protegida y solicitante |
 | Deshacer | US-TMC-001 | Must | Implementada (#61) | Snapshot previo de las operaciones de GitRaptor |

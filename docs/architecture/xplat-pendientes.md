@@ -531,3 +531,4 @@ Rutas de `docs/requirements/features/` abreviadas (`motor-local/`, `time-machine
 - **XP-66**: crates/core/tests/us_tmc_012.rs (`cfg` macOS y Linux); apps/cli/tests/undo_overlap_process.rs (`cfg` macOS); time-machine/dev-specs/US-TMC-012-solape-otro-actor.md § 9.5
 - **XP-67**: crates/core/tests/us_tmc_010.rs y crates/core/tests/us_tmc_010_review.rs (`cfg` macOS y Linux); apps/cli/tests/us_tmc_010_process.rs (`cfg` macOS); time-machine/dev-specs/US-TMC-010-undo-since.md § 9.5
 - **XP-69**: crates/core/tests/us_tmc_011.rs y crates/core/tests/us_tmc_011_common/mod.rs (`cfg` macOS y Linux); apps/cli/tests/us_tmc_011_process.rs y apps/cli/tests/m2_demo_undo_agent.rs (`cfg` macOS); crates/git/src/changed_paths_tree_diff_tests.rs (`cfg(unix)`); time-machine/dev-specs/US-TMC-011-undo-por-agente.md § 9.5
+- **XP-70**: crates/git/src/diff.rs (`read_worktree` portátil, sin `NOFOLLOW` fuera de Unix); cockpit/dev-specs/US-CKP-012-ver-diff.md (R1)
