@@ -14,9 +14,11 @@ T=aarch64-apple-darwin
 cargo build --release --locked --target $T -p gitraptor-cli -p gitraptor-mcp
 sh tools/desktop/stage-sidecars.sh $T target/$T/release
 pnpm install --frozen-lockfile --ignore-scripts
-pnpm --filter @gitraptor/desktop exec tauri build --target $T --bundles dmg --config src-tauri/tauri.release.conf.json
+CI=true pnpm --filter @gitraptor/desktop exec tauri build --target $T --bundles dmg --config src-tauri/tauri.release.conf.json
 ls target/$T/release/bundle/dmg/
 ```
+
+> En local, `CI=true` es necesario: sin él, `tauri build` maqueta el `.dmg` con un AppleScript de Finder que da *AppleEvent timed out* con la pantalla bloqueada o sin sesión gráfica. En GitHub Actions `CI` ya vale `true` (hallazgo del coordinador, 2026-11-10).
 
 Observar: aparece un `.dmg` sin firmar. Montarlo y comprobar los binarios del motor dentro:
 
