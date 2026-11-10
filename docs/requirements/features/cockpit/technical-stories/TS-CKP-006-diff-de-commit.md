@@ -81,4 +81,4 @@ tags: [cockpit, desktop, dep-dsk-3, consulta-bajo-demanda, diff, solo-lectura, n
 
 > Dev Spec: [`dev-specs/TS-CKP-006-diff-de-commit.md`](../dev-specs/TS-CKP-006-diff-de-commit.md) — `DS-TS-CKP-006` (status: spec-ready; revisión de seguridad 2026-11-10 incorporada; decisiones D1 a D15 pendientes de revisión del coordinador).
 
-Implementado en: PR #PRN. La corrida de `/implement` se abortó en P0 por el modo rápido y la historia queda **sin certificar**; el banco de rendimiento (CKP006-012) se mide a mano en release.
+Implementado en: PR #362. La corrida de `/implement` se abortó en P0 por el modo rápido y la historia queda **sin certificar**; el banco de rendimiento (CKP006-012) se mide a mano en release.
