@@ -407,6 +407,7 @@ Propuesto por el Arquitecto y aceptado por el orquestador:
 | Los dos SO | XP-06, 20, 21, 22, 24, 26, 27 | pendiente |
 | Fichas | SPIKE-GRD-001, SPIKE-GRP-002, TD-GRP-001 | P |
 | Fichas movidas desde M2 (recorte del 2026-11-08) | US-GRD-013, US-TMC-022, US-GRP-016 | Pend |
+| Feature nueva `worktree-lifecycle` (CTX-WTL-001, `draft` hasta la aprobación de Rene; sin historias todavía, no cuenta en el avance) | Must de M3: `raptor new` con copy-on-write desde una semilla, descarte reversible, estado del agente en el cockpit (activo, esperando decisión humana, esperando el CI, colgado, terminado) e interceptación de `WorktreeCreate`/`WorktreeRemove` de Claude Code | Draft |
 | Fichas de M2 con parte multiplataforma | INF-GRP-001, INF-GRP-002, TS-GRP-004 (P); SPIKE-TMC-001 (hecho solo en macOS; se cierra con el gate de CI de US-TMC-020); TD-GRP-003 (ready); INF-TMC-001, SPIKE-GRD-002, INF-MCP-001 (draft) | Se cuentan en M2; su parte de Linux y Windows cierra aquí |
 
 - **Must**: todo lo anterior salvo lo que sigue.
@@ -480,6 +481,7 @@ Todos los canales dependen además de `RELEASE_PUBLISH_CHANNELS=true`. Las prere
 | US-TMC-008 | El timeline refleja las correcciones de atribución (movida desde M2) | Should | Pend | — |
 | US-GRP-006 | Historial de un repo retirado y vuelto a añadir (movida desde M2; el cuerpo de la ficha dice Must y el índice Should, ver Huecos) | Should | Pend | — |
 | US-GRP-013 | Umbral de inactividad por repo (movida desde M2) | Should | Pend | Nivel local que usa US-GRD-018 (abierto) |
+| Feature `worktree-lifecycle` (CTX-WTL-001, `draft`; sin historias todavía, no cuenta en el avance) | Should de M4: semilla mantenida por el daemon, handoff «Traer a mi copia» / «Devolver», limpieza de artefactos por política, hooks de setup aprobados por el humano. Could, después de v0.1.0: `land`, resumen de CI/PR por rama, puerto por worktree | Should | Draft | Aprobación del requerimiento; historias |
 
 Relacionadas, sin contar en el avance: TS-GRP-003 (I: SEC-14 ya rechaza `npx` y `node_modules`, y el autoarranque usa la ruta estable), TD-GRP-001 (P, en M3), TD-GRP-003 (ready, en M2), INF-MCP-001 (draft, en M2) y US-GRP-018 (`raptor doctor`, Could; candidata a entrar aquí como herramienta de soporte del piloto).
 
