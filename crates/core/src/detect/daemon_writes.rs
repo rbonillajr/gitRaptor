@@ -48,6 +48,8 @@ struct Span {
     /// `(refname, value)` the cleared moves of its margin left after it, when it is the latest
     /// window that wrote the ref: the ref's current value as far as the margin knows.
     chain: Vec<(String, String)>,
+    /// Every write of the window returned successfully ([`WriteWindow::complete`]).
+    completed: bool,
 }
 
 impl Span {
@@ -117,7 +119,11 @@ impl WriteWindow {
     /// Marks that every write of the window returned successfully. A window dropped without it
     /// (an error, a refusal, a panic) is a failed one: its final state is unknown, so it never
     /// clears an event (ADR-GRP-012, amendment 2026-11-09).
-    pub fn complete(&self) {}
+    pub fn complete(&self) {
+        if let Some(span) = self.writes.spans().iter_mut().find(|s| s.id == self.id) {
+            span.completed = true;
+        }
+    }
 }
 
 impl Drop for WriteWindow {
@@ -185,6 +191,7 @@ impl DaemonWrites {
             tracked,
             wrote: Vec::new(),
             chain: Vec::new(),
+            completed: false,
         });
         WriteWindow {
             writes: Arc::clone(self),
@@ -203,13 +210,13 @@ impl DaemonWrites {
     /// Whether the daemon's windows make an event of the repo foreign (ADR-GRP-012, amendment
     /// 2026-11-09). Among the windows over a path `in_repo` accepts:
     ///
-    /// - one open at some moment of `[from_ns, to_ns]` makes it foreign;
-    /// - the windows closed less than [`WINDOW_TAIL`] before `from_ns` (the margin) make it
-    ///   foreign unless `moved` clears them all: every one of them is the applier's, the move's
-    ///   old value is known, and it is what the latest window that wrote the ref (by `end_ns`)
-    ///   left there, or the chain after it. Two
-    ///   windows that wrote the ref concurrently, or closed at the same mark, leave the order
-    ///   unknown: foreign. A ref none of them wrote is not checked.
+    /// - one still open when the event is judged makes it foreign;
+    /// - the closed windows that overlap `[from_ns, to_ns]` or closed less than [`WINDOW_TAIL`]
+    ///   before `from_ns` make it foreign unless `moved` clears them all: every one of them is
+    ///   the applier's and completed ([`WriteWindow::complete`]), the move's old value is known,
+    ///   and it is the last value the latest window that wrote the ref (by `end_ns`) left there,
+    ///   or the chain after it. Two windows that wrote the ref concurrently, or closed at the
+    ///   same mark, leave the order unknown: foreign. A ref none of them wrote is not checked.
     ///
     /// Before all that, a move whose new value any kept applier window (closed less than the
     /// retention ago) wrote, on any ref, is a late echo: foreign, in the margin or past it.
@@ -233,10 +240,16 @@ impl DaemonWrites {
                 continue;
             }
             match s.end_ns {
-                // Open, or closed inside the window: foreign always.
+                // Still open while the event is judged: its final state is not known yet.
                 None => return true,
-                Some(end) if end >= from_ns => return true,
-                Some(end) if end.saturating_add(tail) >= from_ns => margin.push(i),
+                // Overlapping the S3 window or in its tail: judged by what it wrote, only if it is
+                // the applier's and every write of it succeeded.
+                Some(end) if end.saturating_add(tail) >= from_ns => {
+                    if !s.tracked || !s.completed {
+                        return true;
+                    }
+                    margin.push(i);
+                }
                 Some(_) => {}
             }
         }
@@ -263,9 +276,6 @@ impl DaemonWrites {
         let Some(old) = m.old else {
             return true;
         };
-        if margin.iter().any(|&i| !spans[i].tracked) {
-            return true;
-        }
         let writers: Vec<usize> = margin
             .into_iter()
             .filter(|&i| spans[i].left(m.refname).is_some())
@@ -321,6 +331,7 @@ mod tests {
             tracked: false,
             wrote: Vec::new(),
             chain: Vec::new(),
+            completed: false,
         };
         let now = 10 * ns(RETENTION);
         let mut spans = vec![
