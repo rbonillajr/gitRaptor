@@ -887,6 +887,25 @@ impl Detector {
             }
         }
         let from = t_recv.saturating_sub(ns(self.inner.config.s3_lead));
+        // A write of the daemon in this repo during the window (or just before it) may have made
+        // the event, even when its `git` already ended: foreign (ADR-GRP-012, amendment
+        // 2026-11-09).
+        let writes = Arc::clone(
+            &self
+                .inner
+                .daemon_writes
+                .lock()
+                .unwrap_or_else(|e| e.into_inner()),
+        );
+        if writes.overlaps(&|p| repo.contains(p), from, t_flush) {
+            return S3Evidence {
+                outcome: S3Outcome::Ambiguous,
+                counts: S3Counts {
+                    daemon_write_window: 1,
+                    ..S3Counts::default()
+                },
+            };
+        }
         let mut sessions: Vec<&str> = Vec::new();
         let mut foreign = false;
         let mut counts = S3Counts::default();
