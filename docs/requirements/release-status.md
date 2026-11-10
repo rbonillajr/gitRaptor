@@ -235,7 +235,7 @@
 | [US-TMC-006](features/time-machine/user-stories/US-TMC-006-timeline-que-cuando-quien.md) | El desarrollador sabe qué cambió en su repo, cuándo y quién lo hizo | Implementado (`implemented`) | #198 | — |
 | [US-TMC-009](features/time-machine/user-stories/US-TMC-009-restaurar-punto-timeline.md) | El desarrollador devuelve su worktree a cualquier punto del timeline | Implementado (`implemented`) | #212, #219 | — |
 | [US-TMC-010](features/time-machine/user-stories/US-TMC-010-undo-since.md) | El desarrollador deshace todo lo ocurrido en su worktree en los últimos minutos | Implementado (`implemented`) | #319 | — |
-| [US-TMC-011](features/time-machine/user-stories/US-TMC-011-undo-por-agente.md) | El desarrollador deshace solo lo que hizo un agente en un periodo | Implementado (`implemented`) | #325, #335 | — |
+| [US-TMC-011](features/time-machine/user-stories/US-TMC-011-undo-por-agente.md) | El desarrollador deshace solo lo que hizo un agente en un periodo | Implementado (`implemented`) | #325, #349, #335 | — |
 | [US-TMC-012](features/time-machine/user-stories/US-TMC-012-solape-otro-actor.md) | Un undo nunca sobrescribe trabajo posterior de otro actor | Implementado (`implemented`) | #316 | — |
 | [US-TMC-013](features/time-machine/user-stories/US-TMC-013-permisos-solicitante.md) | Un agente no puede deshacer trabajo ajeno, aunque lance la CLI desde su propia shell | Implementado (`implemented`) | #219 | — |
 | [US-TMC-019](features/time-machine/user-stories/US-TMC-019-robustez-interrupcion.md) | El repo sigue recuperable aunque GitRaptor muera a mitad de un snapshot o de un undo | Implementado (`implemented`) | #247 | — |
@@ -334,7 +334,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-TMC-006](features/time-machine/user-stories/US-TMC-006-timeline-que-cuando-quien.md) | El desarrollador sabe qué cambió en su repo, cuándo y quién lo hizo | Implementado (`implemented`) | #198 | — |
 | [US-TMC-009](features/time-machine/user-stories/US-TMC-009-restaurar-punto-timeline.md) | El desarrollador devuelve su worktree a cualquier punto del timeline | Implementado (`implemented`) | #212, #219 | — |
 | [US-TMC-010](features/time-machine/user-stories/US-TMC-010-undo-since.md) | El desarrollador deshace todo lo ocurrido en su worktree en los últimos minutos | Implementado (`implemented`) | #319 | — |
-| [US-TMC-011](features/time-machine/user-stories/US-TMC-011-undo-por-agente.md) | El desarrollador deshace solo lo que hizo un agente en un periodo | Implementado (`implemented`) | #325, #335 | — |
+| [US-TMC-011](features/time-machine/user-stories/US-TMC-011-undo-por-agente.md) | El desarrollador deshace solo lo que hizo un agente en un periodo | Implementado (`implemented`) | #325, #349, #335 | — |
 | [US-TMC-012](features/time-machine/user-stories/US-TMC-012-solape-otro-actor.md) | Un undo nunca sobrescribe trabajo posterior de otro actor | Implementado (`implemented`) | #316 | — |
 | [US-TMC-013](features/time-machine/user-stories/US-TMC-013-permisos-solicitante.md) | Un agente no puede deshacer trabajo ajeno, aunque lance la CLI desde su propia shell | Implementado (`implemented`) | #219 | — |
 | [US-TMC-019](features/time-machine/user-stories/US-TMC-019-robustez-interrupcion.md) | El repo sigue recuperable aunque GitRaptor muera a mitad de un snapshot o de un undo | Implementado (`implemented`) | #247 | — |

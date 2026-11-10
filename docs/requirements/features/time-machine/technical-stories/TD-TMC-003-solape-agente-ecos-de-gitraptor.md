@@ -60,7 +60,7 @@ tags: [time-machine, deuda-tecnica, solape, undo-por-agente, redo, nfr-01]
 
 ### Estado de la implementación (2026-11-09)
 
-Implementado en: PR #PRNUM.
+Implementado en: PR #349.
 
 - **Hecho:** `undo_agent::branch_rule_events` filtra los eventos que lee la regla de ramas en las dos fases (`undo_agent::plan` antes de `check_selected` y `UndoStep::check_selected_tail`). Solo descarta el eco **anclado** de un undo o redo `Finished` del worktree que movió únicamente trabajo del conjunto, sin ventana mixta con otra operación y con actor crudo «sin atribuir» o del propio agente. Cualquier otro eco de GitRaptor cuenta como movimiento con el solicitante de su operación como actor; sin ancla, sin terminar o fuera de ventana cuenta tal cual. Si el oplog no se puede leer, el solape queda `overlap-unverified` (falla cerrado). `overlap.rs` no cambia.
 - **Decisiones:** regla de la [Enmienda (2026-11-09, TD-TMC-003) de ADR-TMC-005](../../../../architecture/decisions/ADR-TMC-005-solicitante-permisos-solape.md), decisión del orquestador (2026-11-09) validada por Arquitecto. Sustituye la «opción mínima» del Alcance (descartar todo evento con `caused_by`), que habría ocultado ecos de trabajo de otro actor. Rigor alto por decisión del coordinador.
