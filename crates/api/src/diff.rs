@@ -8,6 +8,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::untrusted::{Untrusted, UntrustedName};
 
+pub mod commit;
+pub mod index;
+
 /// Files per section the daemon returns (⚠️ ASSUMPTION, D4 of DS-US-CKP-012).
 pub const MAX_DIFF_FILES: usize = 1_000;
 /// Diff lines per file (⚠️ ASSUMPTION, D4).

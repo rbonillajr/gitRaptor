@@ -14,6 +14,11 @@ use gix::diff::blob::{Algorithm, Diff, InternedInput};
 
 use crate::{ChangeKind, CommittedFile, NotRegular, ReadError, RefName, RepoReader};
 
+mod commit;
+mod index;
+pub use commit::*;
+pub use index::*;
+
 /// Context lines around a hunk (Git's default).
 const CONTEXT: u32 = 3;
 /// Bytes looked at for a NUL, to call a file binary (Git's heuristic).

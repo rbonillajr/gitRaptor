@@ -115,6 +115,9 @@ const AFTER_FREEZE_FULL: &[&str] = &[
     "connection.desktop",
     "query.cancel",
     "diff.worktree",
+    "diff.commit",
+    "diff.between",
+    "diff.index",
 ];
 const AFTER_FREEZE_MCP: &[&str] = &["mcp.status", "mcp.conflicts", "connection.desktop"];
 

@@ -999,6 +999,20 @@ impl Connection<'_> {
                     self.reply::<()>(&request.id, Err(error));
                 }
             }
+            methods::DIFF_COMMIT | methods::DIFF_BETWEEN => {
+                if let Err(error) =
+                    super::diff::commit::start(self.ctx, &self.queries, &self.outbox, request)
+                {
+                    self.reply::<()>(&request.id, Err(error));
+                }
+            }
+            methods::DIFF_INDEX => {
+                if let Err(error) =
+                    super::diff::index::start(self.ctx, &self.queries, &self.outbox, request)
+                {
+                    self.reply::<()>(&request.id, Err(error));
+                }
+            }
             methods::QUERY_CANCEL => {
                 let result = request
                     .params::<gitraptor_api::query::CancelParams>()
