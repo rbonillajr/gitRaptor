@@ -23,9 +23,9 @@ flowchart LR
 
 ## Convenciones observadas
 
-- Campos del log: `Field::word` para una palabra fija, enteros con `Field::from` (`daemon/log.rs`), repo con `Field::id` (`sessions.rs:ReadNoticeLog`).
+- Campos del log: `Field::word` para una palabra fija, enteros con `Field::from` (`crates/core/src/daemon/log.rs`), repo con `Field::id` (`sessions.rs:ReadNoticeLog`).
 - Tests de contrato del daemon en su propio archivo, incluidos con `#[path]` desde `sessions.rs` (`sessions_s3_tests.rs`).
-- Ganchos de prueba del observador: `simulate_lost_events`, `simulate_poll`, `poll_repo` (`watch/mod.rs`); observador con hooks: `Observer::start_counted` (`tests/suites/observe_tiers.rs`).
+- Ganchos de prueba del observador: `simulate_lost_events`, `simulate_poll`, `poll_repo` (`crates/core/src/watch/mod.rs`); observador con hooks: `Observer::start_counted` (`crates/core/tests/suites/observe_tiers.rs`).
 - Esperas por señal con guarda de cuelgue por intentos (#353, #356).
 
 ## Inventario de reutilización
@@ -68,7 +68,9 @@ El hook `post-commit` escribe un marcador y espera un archivo "go" (guarda acota
 - **GRP006-US010 no necesita código de producto** para pasar: es un arreglo de test. Su rojo es el medido en local antes del cambio (3 de 10 con carga 9–19, TD-GRP-006 § Diagnóstico). Solo el mensaje de fallo usa `via` (T002).
 - **GRP006-VIA-EVENT necesita un evento FS real**: bajo pérdida silenciosa se repite la escritura contando intentos (guarda de cuelgue de 120 s, sin cota de pared en la aserción). Las otras dos tiran los eventos con `simulate_lost_events(true)` y no dependen de FSEvents.
 - **Un `Rescan`** (flag de pérdida del SO) abre una ventana y su `flush` sale como `via=event`. Es raro y la ficha no lo separa.
-- **El `via` del temporizador en un test**: `backup_poll` corto en `WatchConfig` (1 s) solo en GRP006-VIA-BACKUP.
+- **El `via` del temporizador en un test**: `backup_poll` corto en `WatchConfig` (1 s) solo en el caso del temporizador de GRP006-VIA-BACKUP. El caso de `simulate_poll` usa otro observador con el sondeo lejano, como VIA-WAKE, para que el temporizador no gane la carrera (PC-2).
+- **GRP006-VIA-EVENT con el stub**: el stub pasa siempre `Event`, así que el test añade, en el mismo observador, un paso por `poll_repo` que debe dar `Wake`; sin él saldría verde desde el stub (PC-3).
+- **10 de 10 bajo carga** (Plan de Verificación de la ficha, PC-1): no cabe en un `verify` porque la carga no es reproducible. Lo corre el orquestador después de la construcción y antes del PR: `the_time_machine_sees_the_current_attribution` 10 veces seguidas, con `cargo test -p gitraptor-git` corriendo en paralelo, y deja en el PR las cifras y la carga medida. Si no da 10 de 10, el PR lo dice.
 - **Modo rápido** (Rene, 2026-11-08): sin línea base de la suite completa. Los tests del contrato se prueban en rojo de forma dirigida y la entrega queda **SIN CERTIFICAR**. Excepción NFR-01, porque toca el observador que alimenta la Time Machine: `cargo test -p gitraptor-core` completo y los e2e de undo de `apps/cli` antes de subir.
 - **Linux/Windows**: el `via` es igual en todos los SO; la medición de FSEvents es solo de macOS. Pendiente de la validación multiplataforma.
 

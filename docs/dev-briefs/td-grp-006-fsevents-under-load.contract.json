@@ -29,7 +29,7 @@
     },
     {
       "id": "GRP006-VIA-BACKUP",
-      "statement": "Con los eventos FS tirados y backup_poll de 1 s, un commit sin poll_repo produce git_dir_written con ReadVia::Backup; y Observer::simulate_poll tras otro commit también da ReadVia::Backup",
+      "statement": "Con los eventos FS tirados: con backup_poll de 1 s, un commit sin poll_repo ni simulate_poll produce git_dir_written con ReadVia::Backup (el temporizador); y en otro observador con el sondeo de respaldo lejano, un commit seguido de Observer::simulate_poll también da ReadVia::Backup, y ninguno con otro via",
       "verify": "cargo test -p gitraptor-core --test td_grp_006 -- via_backup",
       "layer": "runtime",
       "tests": [
@@ -38,7 +38,7 @@
     },
     {
       "id": "GRP006-VIA-EVENT",
-      "statement": "Con los eventos FS entregados y el sondeo de respaldo lejano, sin poll_repo ni simulate_poll, la lectura que encuentra un commit produce git_dir_written con ReadVia::Event (la escritura se repite contando intentos si el SO pierde el evento)",
+      "statement": "Con los eventos FS entregados y el sondeo de respaldo lejano, sin poll_repo ni simulate_poll, la lectura que encuentra un commit produce git_dir_written con ReadVia::Event (la escritura se repite contando intentos si el SO pierde el evento); en el mismo observador, tras tirar los eventos, un commit seguido de poll_repo da ReadVia::Wake, así que el test no sale verde con un via constante",
       "verify": "cargo test -p gitraptor-core --test td_grp_006 -- via_event",
       "layer": "runtime",
       "tests": [
