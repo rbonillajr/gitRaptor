@@ -58,6 +58,7 @@ use gitraptor_git::{ReaderOptions, RepoReader};
 use super::audit_view;
 use super::authz::{AcceptedPeer, ChainLink, Verdict, check_reserved};
 use super::bus::{Outbox, Subscribed};
+use super::desktop::{self, DesktopDecision};
 use super::mcp_conflicts;
 use super::mcp_status;
 use super::peer::{ProcInfo, peer_cred, process_cwd};
@@ -241,6 +242,7 @@ pub(crate) fn accept(ctx: &Arc<ServerCtx>, stream: Stream) {
                 mcp_last: std::sync::Mutex::new(None),
                 mcp_cursors: std::sync::Mutex::new(super::mcp_status::McpCursors::default()),
                 slot: None,
+                desktop: None,
             };
             conn.serve(reader_stream);
             if let Some(wiring) = &thread_ctx.protected {
@@ -427,6 +429,9 @@ struct Connection<'a> {
     /// The requester slot claimed when `hello` ended (S-03): `None` for the developer and the
     /// hook client. Its key is the one the connection counts for until it closes.
     slot: Option<super::limits::Slot>,
+    /// The profile decision of a desktop-class connection, fixed at `hello`;
+    /// `None` for every other connection.
+    desktop: Option<DesktopDecision>,
 }
 
 /// What a handled request leads to.
@@ -537,18 +542,37 @@ impl Connection<'_> {
             ));
             return After::Close;
         }
-        // The peer's executable, not its claim, decides the MCP profile.
-        let peer_is_mcp = self
-            .info
-            .as_ref()
-            .and_then(|i| i.exe.as_deref())
-            .and_then(|p| p.file_name())
-            .is_some_and(|n| n == "raptor-mcp" || n == "raptor-mcp.exe");
-        self.profile = if peer_is_mcp || hello.client == ClientKind::Mcp {
-            ConnectionProfile::Mcp
+        // The peer's executable, not its claim, decides the class and the
+        // MCP profile.
+        let exe = self.info.as_ref().and_then(|i| i.exe.as_deref());
+        if self.is_desktop_exe(exe) {
+            let checks = self.ctx.checks();
+            let identity = desktop::path_identity(
+                exe,
+                &desktop::system_app_dirs(checks.uid),
+                &desktop::SystemFs,
+                checks.uid,
+            );
+            let decision = desktop::decide(
+                self.peer,
+                &checks,
+                Some(&self.ctx.marks),
+                hello.client,
+                exe,
+                identity,
+            );
+            self.desktop = Some(decision);
+            self.profile = decision.profile;
         } else {
-            ConnectionProfile::Full
-        };
+            let peer_is_mcp = exe
+                .and_then(|p| p.file_name())
+                .is_some_and(|n| n == "raptor-mcp" || n == "raptor-mcp.exe");
+            self.profile = if peer_is_mcp || hello.client == ClientKind::Mcp {
+                ConnectionProfile::Mcp
+            } else {
+                ConnectionProfile::Full
+            };
+        }
         let window = self.ctx.config.min_protocol..=self.ctx.config.protocol;
         if !window.contains(&hello.protocol) {
             self.send(Response::err(
@@ -573,13 +597,30 @@ impl Connection<'_> {
             self.send(Response::err(Some(request.id.clone()), refused));
             return After::Close;
         }
+        if let Some(decision) = self.desktop {
+            // Closed vocabulary only: no path, pid nor client text.
+            let profile = match decision.profile {
+                ConnectionProfile::Full => "full",
+                ConnectionProfile::Mcp => "mcp",
+            };
+            self.ctx.logger.info(
+                "desktop_client",
+                &[
+                    ("class", Field::Text("desktop")),
+                    ("identity", Field::Text(decision.identity.as_str())),
+                    ("profile", Field::Text(profile)),
+                    ("reason", Field::Text(decision.reason.as_str())),
+                ],
+            );
+        }
         // N5: who the daemon sees, for the Cockpit's "you act as". Only for
-        // `cli` clients of protocol 6 on a full connection: the hook client
-        // connects often and does not need the process walk.
+        // `cli` clients of protocol 6 on a full connection, and for the
+        // desktop class whatever its profile: the hook client connects often
+        // and does not need the process walk.
         let requester = (self.has(methods::CAP_REQUESTER.name)
-            && self.profile == ConnectionProfile::Full
-            && hello.client == ClientKind::Cli)
-            .then(|| self.connection_requester());
+            && ((self.profile == ConnectionProfile::Full && hello.client == ClientKind::Cli)
+                || self.desktop.is_some()))
+        .then(|| self.connection_requester());
         let result = HelloResult {
             protocol: self.protocol,
             binary_version: self.ctx.daemon.binary_version.clone(),
@@ -794,8 +835,20 @@ impl Connection<'_> {
 
     fn offered(&self, m: &MethodSpec) -> bool {
         m.name != methods::HELLO
+            && (m.name != methods::CONNECTION_DESKTOP || self.desktop.is_some())
             && m.exists_in(self.protocol)
             && (self.profile == ConnectionProfile::Full || m.mcp)
+    }
+
+    /// Whether the peer's executable makes this connection of the desktop
+    /// class. Never from what the client declares.
+    fn is_desktop_exe(&self, exe: Option<&Path>) -> bool {
+        #[cfg(debug_assertions)]
+        if let Some(names) = &self.ctx.config.test_app_binaries {
+            let names: Vec<&str> = names.iter().map(String::as_str).collect();
+            return desktop::is_app_exe(exe, &names);
+        }
+        desktop::is_app_exe(exe, desktop::APP_BINARIES)
     }
 
     /// The requester and layer of this connection as of now (N5).
@@ -936,6 +989,17 @@ impl Connection<'_> {
             methods::PING => self.reply(&request.id, request.params::<NoParams>().map(|_| "pong")),
             methods::CONNECTION_ACCEPT => {
                 let result = request.params().and_then(|p| self.connection_accept(p));
+                self.reply(&request.id, result);
+            }
+            methods::CONNECTION_DESKTOP => {
+                let result = request.params::<NoParams>().and_then(|_| {
+                    self.desktop
+                        .map(|d| gitraptor_api::desktop::DesktopResult {
+                            reason: d.reason,
+                            identity: d.identity,
+                        })
+                        .ok_or_else(not_found)
+                });
                 self.reply(&request.id, result);
             }
             methods::SCOPE_SNAPSHOT => {
