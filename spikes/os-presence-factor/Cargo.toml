@@ -1,0 +1,28 @@
+[package]
+name = "os-presence-factor"
+version = "0.0.0"
+edition = "2024"
+publish = false
+license = "FSL-1.1-ALv2"
+description = "SPIKE-GRD-002 isolated prototype: OS presence factor (LocalAuthentication) invoked from a daemon"
+
+# Standalone workspace: this prototype is intentionally outside the product workspace,
+# so its `unsafe` FFI does not touch the product's `unsafe_code = "forbid"`.
+[workspace]
+
+
+[[bin]]
+name = "presence-probe"
+path = "src/main.rs"
+
+[dependencies]
+serde_json = "1"
+libc = "0.2"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "=0.6.5"
+block2 = "=0.6.2"
+objc2-foundation = { version = "=0.3.2", default-features = false, features = ["std", "NSString", "NSError", "NSDictionary", "NSData", "NSObject", "NSValue", "NSArray", "NSEnumerator"] }
+objc2-local-authentication = { version = "=0.3.2", default-features = false, features = ["std", "LAContext", "LAError", "LADomainState", "LAEnvironment", "LABiometryType", "block2"] }
+objc2-core-graphics = { version = "=0.3.2", default-features = false, features = ["std", "CGEvent", "CGEventSource", "CGEventTypes", "CGRemoteOperation", "CGWindow", "CGSession", "objc2"] }
+objc2-core-foundation = { version = "=0.3.2", default-features = false, features = ["std", "CFArray", "CFDictionary", "CFString", "CFNumber", "CFBase", "CFRunLoop", "CFMachPort", "CFCGTypes"] }
