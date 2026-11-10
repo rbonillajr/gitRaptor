@@ -181,7 +181,7 @@ Tras la revisión de seguridad 2026-11-10 (opus, CHANGES REQUIRED). Los cambios 
 
 Sin violaciones de la constitución: la app no lee repos ni lanza procesos (ADR-GRP-017 § 1, § 2), no añade plugins salvo `tauri-plugin-dialog`, que V2 ya admite (`tests/tauri_surface.rs:262-275`, `:320-330`), y la única escritura pasa por el daemon con su autorización.
 
-**Depende de**: TS-GRP-009 (`blocked_by`), que hace que `hello.profile` llegue `mcp` del daemon para una ventana abierta por un agente. T001 a T005 se escriben ya contra el `hello` que existe (`profile`, `requester`, `capabilities`); la verificación manual de la ventana abierta por un agente (T007) necesita TS-GRP-009 en `main`. Si DS-TS-DSK-002 T007 (registro de `tauri-plugin-dialog`) no está en `main` cuando empiece T003, T003 lo añade con la misma versión y forma (D7 de DS-TS-DSK-002) y la segunda historia que llegue se lo salta.
+**Depende de**: TS-GRP-009 (`blocked_by`) y DEP-DSK-1 (ficha de motor del factor del SO, dueño Arquitecto, aún sin reservar; bloquea solo T006, ver G1). TS-GRP-009 hace que hace que `hello.profile` llegue `mcp` del daemon para una ventana abierta por un agente. T001 a T005 se escriben ya contra el `hello` que existe (`profile`, `requester`, `capabilities`); la verificación manual de la ventana abierta por un agente (T007) necesita TS-GRP-009 en `main`. Si DS-TS-DSK-002 T007 (registro de `tauri-plugin-dialog`) no está en `main` cuando empiece T003, T003 lo añade con la misma versión y forma (D7 de DS-TS-DSK-002) y la segunda historia que llegue se lo salta.
 
 ---
 
