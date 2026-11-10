@@ -234,6 +234,7 @@ No cambia ninguna decisión. Cómo se aplica el § 3:
 - **Decisión**: cuando falta B, la referencia es un agente y la captura continua tiene pendiente la que puede producirlo, el undo espera esa captura con un plazo propio (`BASE_WAIT`, 2 s, ⚠️ **ASSUMPTION**), avisado por una señal y nunca con `sleep`. Espera sin retener el lock del oplog ni el writer del almacén. Si el plazo vence, o si no hay captura pendiente, responde `overlap-unverified` como hoy. El plazo de 1,5 s de las dos fases empieza después.
 - **Descartado**: usar el previo del undo como B. El previo incluye todo lo posterior al reset, así que haría pasar trabajo ajeno por cambio deshecho (deshacer de más, NFR-01) y dejaría la detección sin intervalos que comparar. Tampoco basta con quedarse como está y que el cliente reintente: obliga a cada agente a saberlo.
 - **Por qué no amplía G4**: el instante de la captura no depende de la espera. B es el mismo que encuentra un reintento.
+- **Precisión (2026-11-09)**, decisión del orquestador validada por Arquitecto: se espera con el cerrojo de escritura del repo ya tomado, sin el lock del oplog ni el writer del almacén; ver TS-TMC-005 § Alcance Técnico.
 - Detalle y criterios: [TS-TMC-005](../../requirements/features/time-machine/technical-stories/TS-TMC-005-undo-espera-punto-base.md).
 
 ## Enmienda (2026-11-09, TD-TMC-003)
