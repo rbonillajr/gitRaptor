@@ -291,16 +291,85 @@ fn daemon_write_window_tail_a_commit_on_the_target_of_a_changed_symbolic_head_go
     assert_tail_cleared(&rig, moved, "commit on the symbolic HEAD's target");
 }
 
+/// Two applier windows that wrote the branch ref one after the other: A left `OLD`, then B left
+/// `OTHER`.
+fn two_sequential_windows(rig: &Rig) {
+    closed_tracked(rig, &[(BRANCH_REF, OLD)]);
+    closed_tracked(rig, &[(BRANCH_REF, OTHER)]);
+}
+
 #[test]
-fn daemon_write_window_tail_an_event_must_clear_every_window_of_its_margin() {
+fn daemon_write_window_tail_the_latest_window_of_a_ref_decides_its_old() {
+    // The latest window (B) left OTHER: an event from OTHER clears the margin.
+    let rig = rig();
+    two_sequential_windows(&rig);
+    assert_tail_cleared(
+        &rig,
+        feat_login(Some(OTHER), NEW),
+        "old equals the value the latest window left",
+    );
+
+    // From the value of the earlier window (A) it does not: B moved the ref after it.
+    let rig = self::rig();
+    two_sequential_windows(&rig);
+    let e = evaluate_in_the_tail(&rig, Some(feat_login(Some(OLD), NEW)));
+    assert_ambiguous_by_window(&e, "tail, old equals the earlier window's value");
+}
+
+#[test]
+fn daemon_write_window_tail_an_executor_window_next_to_a_tracked_one_is_foreign() {
     let rig_ok = rig();
     closed_tracked(&rig_ok, &[(BRANCH_REF, OLD)]);
-    assert_tail_cleared(&rig_ok, feat_login(Some(OLD), NEW), "baseline: one window");
+    assert_tail_cleared(
+        &rig_ok,
+        feat_login(Some(OLD), NEW),
+        "baseline: tracked window alone",
+    );
 
     let rig = rig();
     closed_tracked(&rig, &[(BRANCH_REF, OLD)]);
-    // A second window left the branch at another value: the event starts from OLD, not from it.
-    closed_tracked(&rig, &[(BRANCH_REF, OTHER)]);
+    drop(rig.writes.begin(Path::new("/r")));
     let e = evaluate_in_the_tail(&rig, Some(feat_login(Some(OLD), NEW)));
-    assert_ambiguous_by_window(&e, "tail, two windows, one not cleared");
+    assert_ambiguous_by_window(&e, "tail, tracked window plus an executor window");
+}
+
+#[test]
+fn daemon_write_window_tail_overlapping_windows_of_the_same_ref_are_foreign() {
+    // Baseline: sequential windows, the event from the latest value, is attributed.
+    let rig_ok = rig();
+    two_sequential_windows(&rig_ok);
+    assert_tail_cleared(
+        &rig_ok,
+        feat_login(Some(OTHER), NEW),
+        "baseline: sequential windows",
+    );
+
+    // A opens, B opens, A closes, B closes: the order of their writes is unknown.
+    let rig = rig();
+    let a = rig.writes.begin_tracked(Path::new("/r"));
+    let b = rig.writes.begin_tracked(Path::new("/r"));
+    a.wrote(BRANCH_REF, OLD);
+    b.wrote(BRANCH_REF, OTHER);
+    drop(a);
+    drop(b);
+    let e = evaluate_in_the_tail(&rig, Some(feat_login(Some(OTHER), NEW)));
+    assert_ambiguous_by_window(&e, "tail, overlapping windows, old equals B's value");
+}
+
+#[test]
+fn daemon_write_window_tail_a_late_echo_of_an_earlier_window_is_foreign() {
+    let rig = rig();
+    two_sequential_windows(&rig);
+    // new equals what A wrote, while B is the latest window of the ref.
+    let e = evaluate_in_the_tail(&rig, Some(feat_login(Some(OTHER), OLD)));
+    assert_ambiguous_by_window(&e, "tail, new equals the earlier window's value");
+
+    // The baseline of this setup: a new that nobody wrote is attributed.
+    let rig = self::rig();
+    two_sequential_windows(&rig);
+    assert_tail_cleared(
+        &rig,
+        feat_login(Some(OTHER), NEW),
+        "baseline: new nobody wrote",
+    );
 }
