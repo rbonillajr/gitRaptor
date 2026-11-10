@@ -236,11 +236,19 @@ impl DaemonWrites {
         let mut spans = self.spans();
         let mut margin: Vec<usize> = Vec::new();
         for (i, s) in spans.iter().enumerate() {
-            if s.start_ns > to_ns || !in_repo(&s.path) {
+            if !in_repo(&s.path) {
+                continue;
+            }
+            // Still open while the event is judged: its final state is not known yet, whenever
+            // it started (the batch's refs are read after `to_ns`, so a window that opened
+            // later may still be inside the event).
+            if s.end_ns.is_none() {
+                return true;
+            }
+            if s.start_ns > to_ns {
                 continue;
             }
             match s.end_ns {
-                // Still open while the event is judged: its final state is not known yet.
                 None => return true,
                 // Overlapping the S3 window or in its tail: judged by what it wrote, only if it is
                 // the applier's and every write of it succeeded.
@@ -253,12 +261,12 @@ impl DaemonWrites {
                 Some(_) => {}
             }
         }
-        // A late echo by value: a move to any value a kept applier window wrote, on any ref and
-        // also past the margin, may be the applier's own write seen late.
+        // A late echo by value: a move to any value a kept applier window wrote, on any ref, also
+        // past the margin and whatever its start (the refs are read after `to_ns`), may be the
+        // applier's own write seen late.
         if let Some(m) = moved
             && spans.iter().any(|s| {
                 s.tracked
-                    && s.start_ns <= to_ns
                     && s.end_ns
                         .is_some_and(|e| e.saturating_add(ns(RETENTION)) >= from_ns)
                     && in_repo(&s.path)
