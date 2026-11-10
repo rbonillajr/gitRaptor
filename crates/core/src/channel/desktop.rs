@@ -138,6 +138,11 @@ pub fn path_identity(
     let Some(exe) = exe else {
         return PathIdentity::Unverifiable;
     };
+    // No applications folder (every OS but macOS): no path identity to
+    // prove, so `none` (row 4), not `unverifiable` (D4).
+    if apps.is_empty() {
+        return PathIdentity::Absent;
+    }
     let Ok(exe) = fs.canonicalize(exe) else {
         return PathIdentity::Unverifiable;
     };
@@ -279,4 +284,38 @@ pub fn decide(
 fn is_mcp_exe(exe: Option<&Path>) -> bool {
     exe.and_then(Path::file_name)
         .is_some_and(|n| n == "raptor-mcp" || n == "raptor-mcp.exe")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A file system that cannot read anything, as on Windows.
+    struct Unreadable;
+
+    impl AppFs for Unreadable {
+        fn canonicalize(&self, _path: &Path) -> std::io::Result<PathBuf> {
+            Err(std::io::Error::from(std::io::ErrorKind::Unsupported))
+        }
+
+        fn metadata(&self, _path: &Path) -> std::io::Result<FsMeta> {
+            Err(std::io::Error::from(std::io::ErrorKind::Unsupported))
+        }
+    }
+
+    /// Without applications folders (every OS but macOS) the identity is
+    /// `none`, not `unverifiable`, so row 4 decides (D4).
+    #[test]
+    fn no_applications_folders_means_no_identity() {
+        let exe = Path::new("/opt/GitRaptor.app/Contents/MacOS/GitRaptor");
+        assert_eq!(
+            path_identity(Some(exe), &[], &Unreadable, 501),
+            PathIdentity::Absent
+        );
+        // Without an executable it stays unverifiable.
+        assert_eq!(
+            path_identity(None, &[], &Unreadable, 501),
+            PathIdentity::Unverifiable
+        );
+    }
 }
