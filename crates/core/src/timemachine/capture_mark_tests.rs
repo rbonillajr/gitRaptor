@@ -325,15 +325,16 @@ fn manual_and_hook_prior_captures_confirm_their_mark() {
     );
 }
 
+/// Hang guard for the waits that are asserted by count, not by time.
+const HANG_GUARD: Duration = Duration::from_secs(120);
+
 /// C16: the mark is the repo's, so a sibling worktree's events discard this one's captures. A
 /// bounded burst still lets an observation through before the retries run out; an endless one
 /// gives up once, with `discarded-exhausted`. The sibling's events are injected at each attempt's
-/// mark (the `after_mark` hook), so the burst is counted in attempts, not in time.
+/// mark (the `after_mark` hook), so the burst is counted in attempts, not in time. The waits are
+/// hang guards only: what is asserted is the attempt count, which a slow runner (each attempt
+/// takes far longer on the Windows CI than on a dev machine) cannot change.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "intermittent on the Windows CI runner (also on main, runs 42641394618 and 42714973247); still runs on macOS and Linux; tracked in bitacora as a follow-up like #337"
-)]
 fn sibling_activity_still_lets_an_observation_through_within_a_bound() {
     const BURST: usize = 3;
     let config = CaptureConfig {
@@ -357,7 +358,7 @@ fn sibling_activity_still_lets_an_observation_through_within_a_bound() {
     let started = Instant::now();
     let capture = ContinuousCapture::start(config, r.deps(r.marks(), Some(hook))).unwrap();
     capture.activity(REPO, &r.engine.wt);
-    let bound = SETTLE * MAX_RETRIES;
+    let bound = HANG_GUARD;
     while r.complete_observations() == seeded {
         assert!(
             started.elapsed() < bound,
@@ -385,7 +386,12 @@ fn sibling_activity_still_lets_an_observation_through_within_a_bound() {
         .expect("the seed observation");
     let seeded = r.complete_observations();
     let engine = r.engine.clone();
-    let hook: Hook = Arc::new(move || engine.bump());
+    let calls = Arc::new(AtomicUsize::new(0));
+    let counted = Arc::clone(&calls);
+    let hook: Hook = Arc::new(move || {
+        counted.fetch_add(1, Ordering::SeqCst);
+        engine.bump();
+    });
     let capture = ContinuousCapture::start(config, r.deps(r.marks(), Some(hook))).unwrap();
     capture.activity(REPO, &r.engine.wt);
     let started = Instant::now();
@@ -396,14 +402,21 @@ fn sibling_activity_still_lets_an_observation_through_within_a_bound() {
             "no observation is sealed while the sibling never stops"
         );
         assert!(
-            started.elapsed() < bound * 2,
-            "the retries never ran out:\n{}",
+            started.elapsed() < bound,
+            "the retries never ran out ({} attempts of {}):\n{}",
+            calls.load(Ordering::SeqCst),
+            MAX_RETRIES + 1,
             r.log()
         );
         std::thread::sleep(Duration::from_millis(10));
     }
     capture.stop();
     assert_eq!(r.log().matches("discarded-exhausted").count(), 1);
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        MAX_RETRIES as usize + 1,
+        "the retries are bounded: it gives up after exactly MAX_RETRIES + 1 attempts"
+    );
 }
 
 /// C17: an anchor that cannot be confirmed in its three attempts leaves the operation's echo with
