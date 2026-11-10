@@ -65,3 +65,6 @@ error.snapshot-quota-exceeded = too many manual snapshots for now; try again lat
 error.snapshot-time-limit = the snapshot took too long; nothing was saved
 error.mcp-unavailable = the repo or the worktree cannot be read right now
 error.attribution-rejected = the attribution was not changed
+error.query-busy = another query is already running
+error.query-cancelled = the query was cancelled
+error.diff-unavailable = the diff is not available now

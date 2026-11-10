@@ -65,3 +65,6 @@ error.snapshot-quota-exceeded = demasiados snapshots manuales por ahora; intént
 error.snapshot-time-limit = el snapshot tardó demasiado; no se guardó nada
 error.mcp-unavailable = el repo o el worktree no se pueden leer ahora
 error.attribution-rejected = la atribución no cambió
+error.query-busy = hay otra consulta en curso
+error.query-cancelled = se canceló la consulta
+error.diff-unavailable = el diff no está disponible ahora
