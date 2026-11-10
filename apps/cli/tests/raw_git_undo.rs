@@ -423,6 +423,17 @@ fn an_agent_recovers_its_work_after_a_raw_reset_hard() {
         .filter(|t| t.starts_with("base_wait_ms=") || t.starts_with("result="))
         .collect();
     eprintln!("tm_base_wait: {waits:?}");
+    // Also in the job summary, where CI shows it without `--nocapture`.
+    if let Ok(summary) = std::env::var("GITHUB_STEP_SUMMARY") {
+        use std::io::Write as _;
+        if let Ok(mut f) = std::fs::OpenOptions::new().append(true).open(summary) {
+            let _ = writeln!(
+                f,
+                "- raw_git_undo ({}): tm_base_wait {waits:?}",
+                std::env::consts::OS
+            );
+        }
+    }
 
     // Its own undo is not raw Git: a second one has nothing left, and says
     // so.
