@@ -144,7 +144,7 @@ El código del diff **no está en `main`**: vive en la rama `feat/US-CKP-012-age
 
 ### Decisión del orquestador pendiente
 
-Decisiones nuevas de frontera de esta historia, numeradas a continuación de las P15 a P23 de DS-US-DSK-006. Es solo lectura sobre un método que ya existe en la rama de US-CKP-012, así que la tabla es corta: un comando, qué ve la vista restringida, los límites del lado de la app, el reparto de la única consulta por conexión con el grafo y cómo se parte la entrega. **P24 a P28 aceptadas por el coordinador el 2026-11-10; P29 pendiente** (ver la tabla de veredicto).
+Decisiones nuevas de frontera de esta historia, numeradas a continuación de las P15 a P23 de DS-US-DSK-006. Es solo lectura sobre un método que ya existe en la rama de US-CKP-012, así que la tabla es corta: un comando, qué ve la vista restringida, los límites del lado de la app, el reparto de la única consulta por conexión con el grafo y cómo se parte la entrega. **P24 a P28 aceptadas por el coordinador el 2026-11-10; P29 aceptada (2026-11-10)** (ver la tabla de veredicto).
 
 | # | Decisión | Recomendación | Por qué |
 |---|---|---|---|
@@ -157,7 +157,7 @@ Decisiones nuevas de frontera de esta historia, numeradas a continuación de las
 
 #### Veredicto del orquestador y decisión del coordinador
 
-**Decisión del coordinador (2026-11-10)**: P24 a P28 aceptadas; P26 con la condición de que el cambio de la TUI lleve tests propios (T002), P27 con la enmienda a DS-US-DSK-005 T008 y la nota de `graph.lanes` en DS-US-CKP-022. **P29 sigue pendiente** (el coordinador no la mencionó). Veredicto del orquestador, tras la **revisión de seguridad 2026-11-10** (opus, APROBADA CON COMENTARIOS: 0 crítico o alto, 3 medio, 4 bajo, 2 informativos). Cada hallazgo se comprobó en el código antes de aplicarlo (worktree de US-CKP-012 y `main`); los textos de arriba ya los incorporan. Una precisión al comprobar: el canario de filtros **sí existe** para `diff.worktree`, en `crates/core/tests/diff_git.rs:420`, no en `crates/git/src/diff_tests.rs`; el guard de M-03 se exige igualmente para el diff de un commit y se amplía con `diff.external` en `[diff]` sin subsección.
+**Decisión del coordinador (2026-11-10)**: P24 a P28 aceptadas; P26 con la condición de que el cambio de la TUI lleve tests propios (T002), P27 con la enmienda a DS-US-DSK-005 T008 y la nota de `graph.lanes` en DS-US-CKP-022. **P29 aceptada después (2026-11-10)**: una sola historia con T007 bloqueada por G2. Veredicto del orquestador, tras la **revisión de seguridad 2026-11-10** (opus, APROBADA CON COMENTARIOS: 0 crítico o alto, 3 medio, 4 bajo, 2 informativos). Cada hallazgo se comprobó en el código antes de aplicarlo (worktree de US-CKP-012 y `main`); los textos de arriba ya los incorporan. Una precisión al comprobar: el canario de filtros **sí existe** para `diff.worktree`, en `crates/core/tests/diff_git.rs:420`, no en `crates/git/src/diff_tests.rs`; el guard de M-03 se exige igualmente para el diff de un commit y se amplía con `diff.external` en `[diff]` sin subsección.
 
 | # | Veredicto del orquestador | Cambios | Estado | Aterriza en |
 |---|---|---|---|---|
@@ -166,7 +166,7 @@ Decisiones nuevas de frontera de esta historia, numeradas a continuación de las
 | P26 | Aceptar con cambios | M-02 (marca de corte), L-02 (error de serde sin registrar), L-03 (tope en una pasada), L-04 (`must_escape` ampliado) | Aceptada por el coordinador 2026-11-10, con tests propios de la TUI (`tui_diff_marks_cut_lines`, `tui_diff_escapes_invisible_chars`) | T001, T002, T003, T005 |
 | P27 | Aceptar con cambios | M-01 (pendiente hasta la respuesta del cancelado, plazo y `busy`), I-01 (`graph.lanes` con `mcp: false` o presupuesto propio) | Aceptada por el coordinador 2026-11-10, con la enmienda a DS-US-DSK-005 T008 y la nota en DS-US-CKP-022 | T005 |
 | P28 | Aceptar | — | Aceptada por el coordinador 2026-11-10 | T003 |
-| P29 | Aceptar con cambios | M-03: R1, R3 y R7 de la ficha de motor | **Pendiente** | T007, G2 |
+| P29 | Aceptar con cambios | M-03: R1, R3 y R7 de la ficha de motor | **Aceptada por el coordinador 2026-11-10** (una sola historia, T007 bloqueada) | T007, G2 |
 
 ---
 
@@ -197,7 +197,7 @@ Decisiones nuevas de frontera de esta historia, numeradas a continuación de las
 | ID | Qué falta | Severidad | Alcance | Acción | Owner |
 |----|-----------|-----------|---------|--------|-------|
 | G1 | **El diff del worktree no está en `main`**: `diff.worktree`, `query.cancel`, `query-busy`, `query-cancelled`, los tipos de `gitraptor_api::diff` y `Client::submit` viven en la rama `feat/US-CKP-012-agent-diff` (W147, `evidence[]`). Sin ellos no compila nada del backend de esta entrega | Bloqueante | T004, T005, T006, T008 | Mezclar US-CKP-012 (W147). Si al mezclar cambian nombres o tipos, T004 y T005 los siguen sin cambiar los DTO del webview | Orquestador (W147) |
-| G2 | **El diff de un commit no existe en el motor** (DEP-DSK-3). Ningún método lo sirve; TS-CKP-006 lo enumera (`draft`, `blocked_by: [US-CKP-012]`, sin Dev Spec ni reserva). Requisitos de esta historia para esa ficha, en § [Requisitos para la ficha de motor](#requisitos-para-la-ficha-de-motor-del-diff-de-un-commit-g2) | Bloqueante | T007 | Escribir la Dev Spec de TS-CKP-006 con R1 a R8, reservarla y mezclarla | Arquitecto |
+| G2 | **El diff de un commit no existe en el motor** (DEP-DSK-3). Ningún método lo sirve; TS-CKP-006 lo enumera (`ready`, con Dev Spec DS-TS-CKP-006, `blocked_by: [US-CKP-012]`). Requisitos de esta historia para esa ficha, en § [Requisitos para la ficha de motor](#requisitos-para-la-ficha-de-motor-del-diff-de-un-commit-g2) | Bloqueante | T007 | Escribir la Dev Spec de TS-CKP-006 con R1 a R8, reservarla y mezclarla | Arquitecto |
 Dos huecos que **no bloquean** y no entran en la cuenta (los dos los cierra UX y alcanzan solo a la composición y los colores de T003): **H-UX-1**, DSF-DSK-001 solo esboza el diff (§ 6.1, con staging y commit que no son de esta historia), así que esta spec fija la composición desde ese esbozo y UX la revisa antes de mezclar T003; un cambio de composición no cambia DTO ni comando. **H-UX-2**, los tokens web del diff (`git.added`, `git.removed`, `git.modified`, H-1 de DSF-DSK-001) no tienen valor: mientras, P28, y cuando existan se enmienda ADR-GRP-003 / DSYS-GRP-002.
 
 Sin violaciones de la constitución: la app no lee repos ni lanza procesos (ADR-GRP-017 § 1, § 2), no añade plugins ni permisos `dialog:*`, `fs:*` o `core:event:*`, y no escribe nada. Ningún método nuevo en el motor para las tareas no bloqueadas.
@@ -523,7 +523,7 @@ graph LR
 
 #### Requisitos para la ficha de motor del diff de un commit (G2)
 
-Requisitos de esta historia para la Dev Spec de **TS-CKP-006** (dueño **Arquitecto**, sin reservar). Los nombres que cita TS-CKP-006 (`diff.commit`, `diff.between`, `diff.index`) son una enumeración de una TS en `draft`, **no métodos existentes**: ninguno está en `crates/api/src/methods/` de `main` ni de la rama de US-CKP-012.
+Requisitos de esta historia para la Dev Spec de **TS-CKP-006** (dueño **Arquitecto**; `ready`, con Dev Spec DS-TS-CKP-006). Los nombres que cita TS-CKP-006 (`diff.commit`, `diff.between`, `diff.index`) son una enumeración de una TS `ready`, con Dev Spec DS-TS-CKP-006, **no métodos existentes**: ninguno está en `crates/api/src/methods/` de `main` ni de la rama de US-CKP-012.
 
 - **R1. Una consulta del diff de un commit frente a su primer padre**, en el módulo `diff` que crea US-CKP-012 (archivo propio, ADR-GRP-016), con parámetros `repo_id` y un oid **completo**; sin ruta, sin rango y sin campo de más (`deny_unknown_fields`). El daemon valida el oid como 40 o 64 hex en minúscula y lo convierte con `ObjectId::from_hex`; **prohibido** pasarlo por `rev_parse` o cualquier revspec (`HEAD~`, `@{-1}`, `:/regex`) y rechazado todo valor que empiece por `-` (M-03 de la revisión de seguridad 2026-11-10).
 - **R2. La misma forma de sección** que `diff.worktree` (`DiffSection`, `FileDiff`, `FileBody`, `Hunk`), para que la app no tenga un segundo ingest ni una segunda vista; más `parents` (número) y la marca de merge.
@@ -826,7 +826,7 @@ Ningún error del daemon llega con su texto al webview: el supervisor lo traduce
 - Topes: los del motor y el del DTO (2 MiB); virtualización con DOM acotado.
 - Cancelar y volver a pedir nunca envía con la plaza ocupada (⛔5.6, M-01); una clave que choca falla cerrada (L-01); una línea o ruta cortada se marca con texto (M-02); el error de serde no se registra (L-02); el tope del DTO se aplica en una pasada (L-03); `must_escape` cubre los invisibles de L-04.
 - Diff de un commit (T007): solo cuando la ficha de motor cumpla R1 (oid por `ObjectId::from_hex`, sin revspec ni `-`), R3 (alcanzabilidad acotada, el corte responde como "no existe") y R7 (`RepoReader::open`, sin Git CLI, canario con `diff.external` sin subsección).
-- Revisión de `security-expert`: **hecha el 2026-11-10** (revisión de seguridad 2026-11-10, opus, APROBADA CON COMENTARIOS: 0 crítico o alto, 3 medio, 4 bajo, 2 informativos). M-01 a M-03, L-01 a L-04, I-01 e I-02 incorporados, cada uno comprobado en el código (worktree de US-CKP-012 y `main`). La decisión sobre P24 a P29 está en la [tabla de veredicto](#veredicto-del-orquestador-y-decisión-del-coordinador): P24 a P28 aceptadas por el coordinador el 2026-11-10, P29 pendiente.
+- Revisión de `security-expert`: **hecha el 2026-11-10** (revisión de seguridad 2026-11-10, opus, APROBADA CON COMENTARIOS: 0 crítico o alto, 3 medio, 4 bajo, 2 informativos). M-01 a M-03, L-01 a L-04, I-01 e I-02 incorporados, cada uno comprobado en el código (worktree de US-CKP-012 y `main`). La decisión sobre P24 a P29 está en la [tabla de veredicto](#veredicto-del-orquestador-y-decisión-del-coordinador): P24 a P28 aceptadas por el coordinador el 2026-11-10 y P29 aceptada (2026-11-10).
 
 Corre `/security-review --scope devspec docs/requirements/features/desktop/dev-specs/US-DSK-009-diff-visual.md` antes de mezclar.
 

@@ -38,7 +38,8 @@ tags: [cockpit, desktop, dep-dsk-4, catalogo-operaciones, indice, staging, fragm
   - Clase: no destructiva; el snapshot previo guarda el índice (como `commit`, ADR-TMC-007 § 2).
   - Gobernanza: **no gobernada** (no está en BR-VAL-002), como `abort-in-progress`; las políticas de rutas prohibidas, tamaño y formato se aplican al `commit` (US-GRD-009). Decisión del orquestador (2026-11-08), validada por Arquitecto.
   - Marcas: Cockpit **sí**; MCP **no** (sin herramienta MCP, BR-14).
-- **Validar** la selección en el daemon: rutas relativas literales del worktree del solicitante, con tope; o fragmentos y rangos de líneas identificados como los publica el diff (TS-CKP-006 y `diff.worktree` de US-CKP-012).
+- **Validar** la selección en el daemon: rutas relativas literales del worktree del solicitante, con tope; o fragmentos y rangos de líneas identificados como los publica el diff (los de `diff.index` de TS-CKP-006, DS-TS-CKP-006 D8).
+  - Rehacer cada fragmento en el motor desde el contenido identificado de sus dos lados y su sección (D8 de DS-TS-CKP-006), sin aceptar texto de líneas del cliente; rechazar el de un archivo sin texto, truncado o con alguna línea cortada (L-03 de la revisión de seguridad 2026-11-10).
 - **Fijar** en el plan el contenido esperado de cada archivo en el worktree y de su entrada en el índice; si alguno cambió al ejecutar, el resultado es `rejected` con "el archivo cambió, revísalo de nuevo" y no se prepara nada (US-DSK-011, escenario 3).
 - **Aplicar** solo al índice: el working tree nunca cambia; lo no seleccionado queda igual en el índice y en el worktree.
 - **Preparar** un archivo en conflicto como "resuelto" solo si ya no tiene marcadores de conflicto; si los tiene, `rejected` con el motivo (US-DSK-014).

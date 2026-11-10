@@ -13,25 +13,25 @@
 | Implementado (`implemented`) | 79 |
 | Hecho (`done`) | 3 |
 | Implementado en parte (`partially-implemented`) | 27 |
-| Listo (`ready`) | 20 |
-| Borrador (`draft`) | 56 |
+| Listo (`ready`) | 21 |
+| Borrador (`draft`) | 57 |
 | Bloqueado (`blocked`) | 1 |
-| **Total** | **186** |
+| **Total** | **188** |
 
 ## Por feature
 
 | Feature | Implementado | Hecho | Implementado en parte | Listo | Borrador | Bloqueado | Total |
 |---|---|---|---|---|---|---|---|
-| [cockpit](#cockpit) | 13 | 0 | 5 | 1 | 19 | 1 | 39 |
+| [cockpit](#cockpit) | 13 | 0 | 5 | 2 | 18 | 1 | 39 |
 | [desktop](#desktop) | 6 | 0 | 1 | 16 | 0 | 0 | 23 |
 | [guardrails](#guardrails) | 14 | 0 | 7 | 1 | 3 | 0 | 25 |
 | [mcp](#mcp) | 7 | 0 | 4 | 0 | 9 | 0 | 20 |
-| [motor-local](#motor-local) | 20 | 2 | 9 | 2 | 12 | 0 | 45 |
+| [motor-local](#motor-local) | 20 | 2 | 9 | 2 | 14 | 0 | 47 |
 | [time-machine](#time-machine) | 19 | 1 | 1 | 0 | 13 | 0 | 34 |
 
 ### cockpit
 
-39 fichas: 13 implementado, 5 implementado en parte, 1 listo, 19 borrador, 1 bloqueado.
+39 fichas: 13 implementado, 5 implementado en parte, 2 listo, 18 borrador, 1 bloqueado.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -53,8 +53,8 @@
 | [US-CKP-005](features/cockpit/user-stories/US-CKP-005-terminal-pequena-sin-color.md) | La TUI se puede usar en una terminal pequeña, sin color o en ASCII | Implementado en parte (`partially-implemented`) | #273 | 2 |
 | [US-CKP-020](features/cockpit/user-stories/US-CKP-020-trabajo-de-otro-actor.md) | Tocar el trabajo de otro actor exige confirmar el plan concreto | Implementado en parte (`partially-implemented`) | #220 | 3 |
 | [US-CKP-025](features/cockpit/user-stories/US-CKP-025-tui-repo-no-observado.md) | La TUI ofrece observar el repo en el que se abre y, fuera de un repo, lleva a los ya observados | Implementado en parte (`partially-implemented`) | #165, #170 | 2 |
+| [TS-CKP-006](features/cockpit/technical-stories/TS-CKP-006-diff-de-commit.md) | Consultas del diff de un commit, entre dos commits y del índice de un worktree en el canal | Listo (`ready`) | — | — |
 | [TS-CKP-010](features/cockpit/technical-stories/TS-CKP-010-agentes-en-vivo-por-repo.md) | Recuento de agentes en vivo por repo en el ámbito global | Listo (`ready`) | — | — |
-| [TS-CKP-006](features/cockpit/technical-stories/TS-CKP-006-diff-de-commit.md) | Consultas del diff de un commit, entre dos commits y del índice de un worktree en el canal | Borrador (`draft`) | — | — |
 | [TS-CKP-007](features/cockpit/technical-stories/TS-CKP-007-ramas-y-commits-paginados.md) | Consulta de todas las ramas del repo y de los commits de cualquier rama, paginada y filtrable | Borrador (`draft`) | — | — |
 | [TS-CKP-008](features/cockpit/technical-stories/TS-CKP-008-preparar-y-quitar-del-indice.md) | Operaciones del catálogo para preparar y quitar del índice por archivo, fragmento y línea | Borrador (`draft`) | — | — |
 | [TS-CKP-009](features/cockpit/technical-stories/TS-CKP-009-commit-capa-cockpit.md) | Operación commit del catálogo abierta a la capa cockpit | Borrador (`draft`) | — | — |
@@ -166,7 +166,7 @@
 
 ### motor-local
 
-45 fichas: 20 implementado, 2 hecho, 9 implementado en parte, 2 listo, 12 borrador.
+47 fichas: 20 implementado, 2 hecho, 9 implementado en parte, 2 listo, 14 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -205,6 +205,8 @@
 | [TD-GRP-003](features/motor-local/technical-stories/TD-GRP-003-nfr04-maquina-referencia.md) | Presupuesto de NFR-04 sin gate automático: medirlo en una máquina de referencia | Listo (`ready`) | — | — |
 | [TD-GRP-004](features/motor-local/technical-stories/TD-GRP-004-corroborar-ambito-worktree-s3.md) | Corroborar con el reflog de HEAD el ámbito worktree de S3 y blindar la lectura de la redirección | Borrador (`draft`) | — | — |
 | [TD-GRP-006](features/motor-local/technical-stories/TD-GRP-006-bajo-carga-los-eventos-de-fsevents.md) | Bajo carga, los eventos de FSEvents del directorio Git llegan tarde o no llegan y us_grp_010 falla también en main | Borrador (`draft`) | — | — |
+| [TD-GRP-008](features/motor-local/technical-stories/TD-GRP-008-daemon-colgado-del-lanzador-s4.md) | Un daemon lanzado desde una sesión de agente cuelga de ella por el ppid y S4 puede atribuirle sus escrituras | Borrador (`draft`) | — | — |
+| [TD-GRP-009](features/motor-local/technical-stories/TD-GRP-009-cola-consultas-por-solicitante.md) | La cola global de consultas bajo demanda se reparte por solicitante | Borrador (`draft`) | — | — |
 | [TS-GRP-007](features/motor-local/technical-stories/TS-GRP-007-factor-so-reservados-windows.md) | Factor del SO (Windows Hello) para los comandos reservados de alto riesgo en Windows | Borrador (`draft`) | — | — |
 | [US-GRP-006](features/motor-local/user-stories/US-GRP-006-retirar-y-volver-a-anadir.md) | El desarrollador recupera el historial de un repo que retiró y volvió a añadir | Borrador (`draft`) | — | — |
 | [US-GRP-011](features/motor-local/user-stories/US-GRP-011-worktree-compartido.md) | El desarrollador ve todas las sesiones de un worktree compartido | Borrador (`draft`) | — | — |
@@ -447,7 +449,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### Sin hito
 
-37 fichas sin hito asignado.
+39 fichas sin hito asignado.
 
 ## Implementadas en parte: lo que falta
 
