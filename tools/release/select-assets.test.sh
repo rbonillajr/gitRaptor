@@ -12,18 +12,23 @@ done
 for t in x86_64-pc-windows-msvc aarch64-pc-windows-msvc; do echo data > "$d/raptor-$V-$t.zip"; done
 for c in cli mcp; do echo sbom > "$d/raptor-$V-sbom-$c.cdx.json"; done
 echo script > "$d/install.sh"; echo ps > "$d/install.ps1"
-for f in "$d"/raptor-*; do case "$f" in *.sha256) ;; *) printf 'abc  %s\n' "$(basename "$f")" ;; esac; done | sort > "$d/SHA256SUMS"
+# DSK002-DMG-ASSETS (TS-DSK-002 T008 step 5, critic PC-1): the desktop-app job adds the .dmg, and the
+# assemble job hashes it like the raptor-* files: it has its .sha256 and its line in SHA256SUMS.
+echo dmg > "$d/GitRaptor-$V-aarch64-apple-darwin.dmg"; echo sum > "$d/GitRaptor-$V-aarch64-apple-darwin.dmg.sha256"
+for f in "$d"/raptor-* "$d"/GitRaptor-*.dmg; do case "$f" in *.sha256) ;; *) printf 'abc  %s\n' "$(basename "$f")" ;; esac; done | sort > "$d/SHA256SUMS"
 
 sh "$here/select-assets.sh" "$V" "$d" "$root/out" >/dev/null
 names=$(LC_ALL=C ls "$root/out" | tr '\n' ' ')
-want="SHA256SUMS install.sh raptor-$V-aarch64-apple-darwin.tar.gz raptor-$V-aarch64-apple-darwin.tar.gz.sha256 raptor-$V-sbom-cli.cdx.json raptor-$V-sbom-mcp.cdx.json raptor-$V-x86_64-apple-darwin.tar.gz raptor-$V-x86_64-apple-darwin.tar.gz.sha256 "
+want="GitRaptor-$V-aarch64-apple-darwin.dmg GitRaptor-$V-aarch64-apple-darwin.dmg.sha256 SHA256SUMS install.sh raptor-$V-aarch64-apple-darwin.tar.gz raptor-$V-aarch64-apple-darwin.tar.gz.sha256 raptor-$V-sbom-cli.cdx.json raptor-$V-sbom-mcp.cdx.json raptor-$V-x86_64-apple-darwin.tar.gz raptor-$V-x86_64-apple-darwin.tar.gz.sha256 "
 [ "$names" = "$want" ] || { echo "FAIL alpha asset set: $names"; exit 1; }
-[ "$(wc -l < "$root/out/SHA256SUMS" | tr -d ' ')" = 4 ] || { echo "FAIL SHA256SUMS lines"; exit 1; }
+[ "$(wc -l < "$root/out/SHA256SUMS" | tr -d ' ')" = 5 ] || { echo "FAIL SHA256SUMS lines (2 archives, 2 SBOMs and the .dmg = 5)"; exit 1; }
+grep -q "  GitRaptor-$V-aarch64-apple-darwin.dmg\$" "$root/out/SHA256SUMS" || { echo "FAIL SHA256SUMS lacks the .dmg line"; exit 1; }
 grep -q 'linux\|windows' "$root/out/SHA256SUMS" && { echo "FAIL non-macOS in SHA256SUMS"; exit 1; }
-echo "ok   alpha ships macOS only"
+echo "ok   alpha ships macOS only, with the .dmg"
 
-# A stable version attaches everything.
+# A stable version attaches everything, the .dmg included.
 sh "$here/select-assets.sh" 0.1.0 "$d" "$root/all" >/dev/null
+[ -f "$root/all/GitRaptor-$V-aarch64-apple-darwin.dmg" ] || { echo "FAIL stable set lacks the .dmg"; exit 1; }
 [ "$(ls "$d" | wc -l)" = "$(ls "$root/all" | wc -l)" ] || { echo "FAIL stable set"; exit 1; }
 echo "ok   stable ships everything"
 
