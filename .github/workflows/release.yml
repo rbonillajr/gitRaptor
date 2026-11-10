@@ -293,6 +293,75 @@ jobs:
           path: out/*
           if-no-files-found: error
 
+  # The desktop app (TS-DSK-002 T008): the .dmg carries `raptor` and `raptor-mcp` of this same run.
+  # Unsigned and not notarized, like the alpha archives (ADR-GRP-014, 2026-11-08 amendment).
+  # No secrets, no cache restore (release builds never do).
+  desktop-app:
+    name: desktop app (aarch64-apple-darwin)
+    needs: [plan, build]
+    runs-on: macos-latest
+    permissions:
+      contents: read
+    env:
+      TARGET: aarch64-apple-darwin
+      VERSION: ${{ needs.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: archive-aarch64-apple-darwin
+          path: engine
+      - name: Stage the engine binaries as sidecars
+        run: |
+          mkdir -p engine/bin
+          tar -C engine -xzf "engine/raptor-$VERSION-$TARGET.tar.gz" \
+            "raptor-$VERSION-$TARGET/raptor" "raptor-$VERSION-$TARGET/raptor-mcp"
+          cp "engine/raptor-$VERSION-$TARGET/raptor" "engine/raptor-$VERSION-$TARGET/raptor-mcp" engine/bin/
+          sh tools/desktop/stage-sidecars.sh "$TARGET" engine/bin
+      - uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # v4.2.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      - name: Install (no lifecycle scripts)
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Known vulnerabilities (production)
+        run: pnpm audit --prod
+      - name: Toolchain from rust-toolchain.toml
+        run: |
+          rustup show
+          rustup target add "$TARGET"
+      - name: Build the .dmg
+        run: |
+          pnpm --filter @gitraptor/desktop exec tauri build --target "$TARGET" --bundles dmg \
+            --config src-tauri/tauri.release.conf.json
+      - name: Name the .dmg and check what is inside
+        run: |
+          dmg=$(find target/"$TARGET"/release/bundle/dmg -name '*.dmg' | head -1)
+          [ -n "$dmg" ] || { echo "::error::tauri build produced no .dmg"; exit 1; }
+          mkdir -p out
+          cp "$dmg" "out/GitRaptor-$VERSION-aarch64-apple-darwin.dmg"
+          mnt=$(mktemp -d)
+          hdiutil attach -nobrowse -readonly -mountpoint "$mnt" "out/GitRaptor-$VERSION-aarch64-apple-darwin.dmg"
+          ok=true
+          r=$("$mnt/GitRaptor.app/Contents/MacOS/raptor" --version) || ok=false
+          echo "raptor: $r"
+          case "$r" in *"$VERSION") ;; *) ok=false ;; esac
+          # raptor-mcp has no --version and would start the engine if run (NFR-01): it is never
+          # executed here. Its version is a literal inside the binary (CARGO_PKG_VERSION).
+          mcp="$mnt/GitRaptor.app/Contents/MacOS/raptor-mcp"
+          [ -x "$mcp" ] || ok=false
+          LC_ALL=C grep -a -q -F "$VERSION" "$mcp" || ok=false
+          hdiutil detach "$mnt"
+          $ok || { echo "::error::the sidecars inside the .dmg are not $VERSION"; exit 1; }
+          ls -l out
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: archive-desktop-aarch64-apple-darwin
+          path: out/*
+          if-no-files-found: error
+
   sbom:
     name: sbom
     needs: plan
@@ -326,7 +395,7 @@ jobs:
 
   assemble:
     name: checksums and channels
-    needs: [plan, build, sbom]
+    needs: [plan, build, desktop-app, sbom]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -345,8 +414,9 @@ jobs:
       - name: Checksums
         working-directory: dist
         run: |
-          sha256sum raptor-* | sort -k2 > SHA256SUMS
-          for f in raptor-*; do sha256sum "$f" > "$f.sha256"; done
+          # The desktop .dmg is hashed like the raptor-* files (TS-DSK-002 T008).
+          sha256sum raptor-* GitRaptor-*.dmg | sort -k2 > SHA256SUMS
+          for f in raptor-* GitRaptor-*.dmg; do sha256sum "$f" > "$f.sha256"; done
           cat SHA256SUMS
           sha256sum --check SHA256SUMS
       - name: Install scripts
