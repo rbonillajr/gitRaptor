@@ -1,0 +1,16 @@
+{
+  "feature": "worktree-lifecycle",
+  "context": {
+    "approved": true,
+    "approvedAt": "2026-11-10",
+    "approvedVia": "ask",
+    "ask": {
+      "toolUseId": "toolu_019VHsbA3exizAAcfRgP15b2",
+      "session": "95f70f42-a644-4dde-bb11-024cc35a6cbf",
+      "sha12": "37dba9e063e8",
+      "at": "2026-11-10T20:17:04.905Z",
+      "transcriptPath": "/Users/rbonilla/.claude/projects/-Users-rbonilla-orca-workspaces-gitRaptor-wtlife/95f70f42-a644-4dde-bb11-024cc35a6cbf.jsonl",
+      "transcriptRoot": "/Users/rbonilla/.claude/projects"
+    }
+  }
+}
