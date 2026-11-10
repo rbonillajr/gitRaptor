@@ -183,6 +183,7 @@ fn closed_tracked(rig: &Rig, pairs: &[(&str, &str)]) {
     for (refname, value) in pairs {
         window.wrote(refname, value);
     }
+    window.complete();
     drop(window);
 }
 
@@ -350,6 +351,8 @@ fn daemon_write_window_tail_overlapping_windows_of_the_same_ref_are_foreign() {
     let b = rig.writes.begin_tracked(Path::new("/r"));
     a.wrote(BRANCH_REF, OLD);
     b.wrote(BRANCH_REF, OTHER);
+    a.complete();
+    b.complete();
     drop(a);
     drop(b);
     let e = evaluate_in_the_tail(&rig, Some(feat_login(Some(OTHER), NEW)));
@@ -513,4 +516,109 @@ fn daemon_write_window_the_late_echo_is_foreign_past_the_margin_while_the_window
         &echo,
         "past the margin, new equals a value the window wrote",
     );
+}
+
+// ----- Completed and failed windows -----------------------------------------------------------------
+
+/// Samples at `t_recv` and evaluates the agent's commit with the branch move `moved`.
+fn evaluate_moved(rig: &Rig, t_recv: u64, t_flush: u64, moved: RefMove<'_>) -> S3Evidence {
+    rig.detector.sample_now("r", t_recv);
+    rig.detector.evidence(
+        "r",
+        Path::new(WT),
+        S3Scope::Repo,
+        Some(moved),
+        t_recv,
+        t_flush,
+    )
+}
+
+/// A window closed successfully whose `[start, end]` lies inside the S3 window, evaluated with
+/// `moved`.
+fn completed_in_the_overlap(moved: RefMove<'_>, complete: bool) -> S3Evidence {
+    let rig = self::rig();
+    let t_start = monotonic_ns();
+    let window = rig.writes.begin_tracked(Path::new("/r"));
+    window.wrote(BRANCH_REF, OLD);
+    if complete {
+        window.complete();
+    }
+    drop(window);
+    let t_end = monotonic_ns();
+    evaluate_moved(&rig, t_start, t_end + 1_000_000, moved)
+}
+
+#[test]
+fn daemon_write_window_a_completed_window_in_the_overlap_clears_an_event_from_its_value() {
+    let e = completed_in_the_overlap(feat_login(Some(OLD), NEW), true);
+    assert_attributed_uncounted(&e, "completed window in the overlap, old equals its value");
+}
+
+#[test]
+fn daemon_write_window_a_window_still_open_when_evaluating_is_foreign() {
+    // Positive first: the same sequence with the window closed is attributed.
+    let closed = completed_in_the_overlap(feat_login(Some(OLD), NEW), true);
+    assert_attributed_uncounted(&closed, "baseline: the window closed with success");
+
+    let rig = self::rig();
+    let t_start = monotonic_ns();
+    let window = rig.writes.begin_tracked(Path::new("/r"));
+    window.wrote(BRANCH_REF, OLD);
+    window.complete();
+    let e = evaluate_moved(
+        &rig,
+        t_start,
+        monotonic_ns() + FLUSH_NS,
+        feat_login(Some(OLD), NEW),
+    );
+    assert_ambiguous_by_window(&e, "window alive while evaluating");
+    drop(window);
+}
+
+#[test]
+fn daemon_write_window_a_failed_window_never_clears_an_event() {
+    // Positive first: the same sequence with `complete()` is attributed, in the tail.
+    let ok = self::rig();
+    closed_tracked(&ok, &[(BRANCH_REF, OLD)]);
+    assert_tail_cleared(
+        &ok,
+        feat_login(Some(OLD), NEW),
+        "baseline: completed window",
+    );
+
+    let rig = self::rig();
+    let window = rig.writes.begin_tracked(Path::new("/r"));
+    window.wrote(BRANCH_REF, OLD);
+    // Dropped without `complete()`: a failed window, its final state unknown.
+    drop(window);
+    let e = evaluate_in_the_tail(&rig, Some(feat_login(Some(OLD), NEW)));
+    assert_ambiguous_by_window(&e, "tail, failed window, old equals what it wrote");
+
+    // Also in the overlap.
+    let e = completed_in_the_overlap(feat_login(Some(OLD), NEW), false);
+    assert_ambiguous_by_window(&e, "overlap, failed window");
+}
+
+#[test]
+fn daemon_write_window_a_ref_written_twice_is_left_at_its_last_value() {
+    // V1 = OLD, V2 = OTHER, Y = NEW.
+    let write_twice = || {
+        let rig = self::rig();
+        closed_tracked(&rig, &[(BRANCH_REF, OLD), (BRANCH_REF, OTHER)]);
+        rig
+    };
+    let rig = write_twice();
+    assert_tail_cleared(
+        &rig,
+        feat_login(Some(OTHER), NEW),
+        "old equals the final value",
+    );
+
+    let rig = write_twice();
+    let echo = evaluate_in_the_tail(&rig, Some(feat_login(Some(OLD), OTHER)));
+    assert_ambiguous_by_window(&echo, "tail, V1 -> V2 is the applier's own echo");
+
+    let rig = write_twice();
+    let stale = evaluate_in_the_tail(&rig, Some(feat_login(Some(OLD), NEW)));
+    assert_ambiguous_by_window(&stale, "tail, old is not the final value");
 }
