@@ -202,10 +202,16 @@ fn a_read_notice_cuts_started_before_at_the_write() {
     b.release();
     // The session's `git` (31) started 1 ms ago; this write is 2 s old: past
     // Linux's 1 s start tolerance, within `READ_WRITE_MAX_AGE`.
-    b.hooks.git_dir_written("r", 1_000, wall_us() - 2_000_000);
+    b.hooks.git_dir_written(
+        "r",
+        1_000,
+        wall_us() - 2_000_000,
+        crate::watch::ReadVia::Event,
+    );
     assert_eq!(b.evidence(1_000), S3Outcome::NoSighting);
     // A write after the `git` started: it may have made it.
-    b.hooks.git_dir_written("r", 900_000_000, wall_us());
+    b.hooks
+        .git_dir_written("r", 900_000_000, wall_us(), crate::watch::ReadVia::Event);
     match b.evidence(900_000_000) {
         S3Outcome::Attributed(p) => assert_eq!(p.session_id, "20:2000"),
         other => panic!("{other:?}"),
@@ -227,7 +233,8 @@ fn a_read_notice_of_an_old_write_is_dropped() {
         "/usr/bin/git",
         Some(WT),
     );
-    b.hooks.git_dir_written("r", 1_000, wall_us() - old);
+    b.hooks
+        .git_dir_written("r", 1_000, wall_us() - old, crate::watch::ReadVia::Event);
     assert_eq!(b.evidence(1_000), S3Outcome::NoSighting);
     let (age_ms, kept) = read_write_age(wall_us() - old);
     assert!(!kept && age_ms * 1_000 >= old, "{age_ms}");
@@ -241,6 +248,7 @@ fn a_read_notice_of_a_write_in_the_future_is_dropped() {
     b.release();
     let future = wall_us() + 10_000_000;
     assert!(!read_write_age(future).1);
-    b.hooks.git_dir_written("r", 1_000, future);
+    b.hooks
+        .git_dir_written("r", 1_000, future, crate::watch::ReadVia::Event);
     assert_eq!(b.evidence(1_000), S3Outcome::NoSighting);
 }

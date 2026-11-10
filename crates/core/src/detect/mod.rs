@@ -1520,7 +1520,13 @@ impl ObserverHooks for Hooks {
         self.notice(repo_id, t_recv, wall_us());
     }
 
-    fn git_dir_written(&self, repo_id: &str, t_recv: u64, written_us: u64) {
+    fn git_dir_written(
+        &self,
+        repo_id: &str,
+        t_recv: u64,
+        written_us: u64,
+        _via: crate::watch::ReadVia,
+    ) {
         if read_write_age(written_us).1 {
             // Never later than now: a cut in the future is no cut.
             self.notice(repo_id, t_recv, written_us.min(wall_us()));
