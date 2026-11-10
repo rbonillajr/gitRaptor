@@ -183,22 +183,23 @@ pub struct AncestryTrace {
     pub daemon_descendant: bool,
 }
 
-/// [`resolve`] with what the walk saw.
-pub fn resolve_traced(
-    peer: AcceptedPeer,
-    checks: &Checks<'_>,
-    marks: Option<&super::marks::ExecutorMarks>,
-) -> Result<(Resolution, AncestryTrace), Unverified> {
-    // Stub (TS-GRP-009 T002): the trace is filled by the build.
-    resolve(peer, checks, marks).map(|r| (r, AncestryTrace::default()))
-}
-
 /// Resolves the requester of the peer of a connection, now.
 pub fn resolve(
     peer: AcceptedPeer,
     checks: &Checks<'_>,
     marks: Option<&super::marks::ExecutorMarks>,
 ) -> Result<Resolution, Unverified> {
+    resolve_traced(peer, checks, marks).map(|(r, _)| r)
+}
+
+/// [`resolve`] with what the walk saw up to where it decided. An exit by an
+/// executor mark counts as a daemon descendant: only the daemon's own
+/// operations mark processes.
+pub fn resolve_traced(
+    peer: AcceptedPeer,
+    checks: &Checks<'_>,
+    marks: Option<&super::marks::ExecutorMarks>,
+) -> Result<(Resolution, AncestryTrace), Unverified> {
     let caller = checks.procs.read(peer.pid).map_err(|_| Unverified)?;
     if caller.start_us != peer.start_us
         || caller.start_us > peer.accepted_us
@@ -216,9 +217,9 @@ pub fn resolve(
     // terminal proof exists or orphans escape the marks, refused instead
     // (C-01).
     let trusted = checks.terminal_proof && checks.orphans_marked;
-    let verified = |vouched: bool, r: Resolution| {
+    let verified = |vouched: bool, r: Resolution, t: AncestryTrace| {
         if vouched || trusted {
-            Ok(r)
+            Ok((r, t))
         } else {
             Err(Unverified)
         }
@@ -228,14 +229,24 @@ pub fn resolve(
     let mut server: Option<ProcInfo> = None;
     let mut interpreter = false;
     let mut clean = false;
+    let seen =
+        |interpreter: bool, server: &Option<ProcInfo>, daemon_descendant: bool| AncestryTrace {
+            interpreter,
+            multiplexer: server.is_some(),
+            ended_cleanly: false,
+            daemon_descendant,
+        };
     for _ in 0..MAX_DEPTH {
         if let Some(marked) = marks.and_then(|m| m.lookup(&current)) {
-            return Ok(Resolution {
-                who: marked.who,
-                via: ResolvedVia::Executor,
-                executor_operation: Some(marked.operation_id),
-                confirmable: false,
-            });
+            return Ok((
+                Resolution {
+                    who: marked.who,
+                    via: ResolvedVia::Executor,
+                    executor_operation: Some(marked.operation_id),
+                    confirmable: false,
+                },
+                seen(interpreter, &server, true),
+            ));
         }
         // A descendant of the daemon without a mark: nothing above the
         // daemon speaks for it. If a child is being launched, the caller may
@@ -248,18 +259,26 @@ pub fn resolve(
                 if !m.wait_registered(super::marks::REGISTRATION_WAIT) {
                     return Err(Unverified);
                 }
-                return resolve_after_barrier(peer, checks, m);
+                let trace = seen(interpreter, &server, true);
+                return resolve_after_barrier(peer, checks, m).map(|r| (r, trace));
             }
-            return verified(false, unattributed(ResolvedVia::None, false));
+            return verified(
+                false,
+                unattributed(ResolvedVia::None, false),
+                seen(interpreter, &server, true),
+            );
         }
         match class(&current, checks) {
             ExeClass::ClaudeCode => {
-                return Ok(Resolution {
-                    who: Who::claude(&current),
-                    via: ResolvedVia::Ancestry,
-                    executor_operation: None,
-                    confirmable: false,
-                });
+                return Ok((
+                    Resolution {
+                        who: Who::claude(&current),
+                        via: ResolvedVia::Ancestry,
+                        executor_operation: None,
+                        confirmable: false,
+                    },
+                    seen(interpreter, &server, false),
+                ));
             }
             // May host an agent: never attributed by name, never confirms.
             ExeClass::Interpreter => interpreter = true,
@@ -277,32 +296,41 @@ pub fn resolve(
         }
     }
 
+    let trace = AncestryTrace {
+        ended_cleanly: clean,
+        ..seen(interpreter, &server, false)
+    };
     let mut confirmable = clean && !interpreter;
     if let Some(server) = server {
         match presence(&server, checks) {
-            None => return verified(false, unattributed(ResolvedVia::Multiplexer, false)),
+            None => {
+                return verified(false, unattributed(ResolvedVia::Multiplexer, false), trace);
+            }
             Some(p) if p.under_server.len() == 1 => {
-                return Ok(Resolution {
-                    who: Who::claude(&p.under_server[0]),
-                    via: ResolvedVia::Multiplexer,
-                    executor_operation: None,
-                    confirmable: false,
-                });
+                return Ok((
+                    Resolution {
+                        who: Who::claude(&p.under_server[0]),
+                        via: ResolvedVia::Multiplexer,
+                        executor_operation: None,
+                        confirmable: false,
+                    },
+                    trace,
+                ));
             }
             Some(p) if p.under_server.len() > 1 => {
-                return verified(false, unattributed(ResolvedVia::Multiplexer, false));
+                return verified(false, unattributed(ResolvedVia::Multiplexer, false), trace);
             }
             Some(p) => confirmable &= !p.any_agent,
         }
     }
     let resolution = |confirmable| unattributed(ResolvedVia::None, confirmable);
     if !confirmable {
-        return verified(false, resolution(false));
+        return verified(false, resolution(false), trace);
     }
     // The rest of the reserved checks: terminal, session leader, identity.
     // Without a terminal proof they refuse as `Unsupported` (TQ-14).
     confirmable &= check_reserved(peer, checks).refused.is_none();
-    Ok(resolution(confirmable))
+    Ok((resolution(confirmable), trace))
 }
 
 /// Second walk, once the pending registration completed: a mark found now
