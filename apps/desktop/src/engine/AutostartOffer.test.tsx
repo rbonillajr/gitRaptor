@@ -23,13 +23,12 @@ function control(): HTMLElement {
   return all[0] as HTMLElement;
 }
 
-function nameOf(offer: "offered" | "registered", lang: "en" | "es"): Promise<string> {
-  return setLang(lang).then(() => {
-    const { unmount } = render(<AutostartOffer offer={offer} onChange={() => {}} />);
-    const name = control().textContent?.trim() || control().getAttribute("aria-label") || "";
-    unmount();
-    return name;
-  });
+async function nameOf(offer: "offered" | "registered", lang: "en" | "es"): Promise<string> {
+  await setLang(lang);
+  const { unmount } = render(<AutostartOffer offer={offer} onChange={() => {}} />);
+  const name = control().textContent?.trim() || control().getAttribute("aria-label") || "";
+  unmount();
+  return name;
 }
 
 describe("DSK002-UI AutostartOffer", () => {

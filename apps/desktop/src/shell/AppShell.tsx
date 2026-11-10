@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { call } from "@/client/ipc";
 import { RepoTreeContainer } from "@/fleet/RepoTreeContainer";
 import { EngineBand } from "@/engine/EngineBand";
+import { AutostartSection } from "@/engine/AutostartSection";
 import { EngineCenter } from "@/engine/EngineCenter";
 import { useEngine } from "@/engine/useEngine";
 import { GuardrailsNavRow } from "@/guardrails/GuardrailsNavRow";
@@ -126,6 +127,7 @@ export function AppShell() {
         </Panel>
         <Panel as="main" className="min-w-0 flex-1 overflow-hidden p-0!">
           {engine.view.band ? <EngineBand band={engine.view.band} onRetry={onRetry} pending={retryPending} /> : null}
+          <AutostartSection />
           <EngineCenter
             center={engine.view.center}
             conn={engine.conn}
