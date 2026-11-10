@@ -617,6 +617,17 @@ impl RepoReader {
         ))
     }
 
+    /// The walk of the commits reachable from `tip` and not from `hidden`: what a branch has
+    /// over its base. Every count and list of that set goes through here, so they cannot
+    /// disagree about the commit-graph policy.
+    pub(crate) fn only_in_walk(
+        &self,
+        tip: gix::ObjectId,
+        hidden: gix::ObjectId,
+    ) -> gix::revision::walk::Platform<'_> {
+        self.repo.rev_walk([tip]).with_hidden([hidden])
+    }
+
     fn count_only_in(
         &self,
         tip: gix::ObjectId,
@@ -624,9 +635,7 @@ impl RepoReader {
         limit: u64,
     ) -> Result<Count, ReadError> {
         let walk = self
-            .repo
-            .rev_walk([tip])
-            .with_hidden([hidden])
+            .only_in_walk(tip, hidden)
             .all()
             .map_err(unavailable("rev-walk"))?;
         let mut n = 0;
