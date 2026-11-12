@@ -85,21 +85,26 @@ Para eso: la parte de la ascendencia que hoy vive en `desktop::decide` se extrae
 
 ### Decisión del orquestador (2026-11-12), validada por Arquitecto
 
-Cada fila es una decisión del orquestador (2026-11-12), validada por Arquitecto. Ninguna reabre una decisión aceptada; D6 y D7 precisan el texto de ADR-MCP-001 § 2 y se llevan a sus ADR en T008.
+Cada fila de D1 a D11 es una decisión del orquestador (2026-11-12), validada por Arquitecto. D3-bis y D12 a D15 salen de la implementación y de la revisión de seguridad; cada una es una «Decisión del orquestador (2026-11-12), validada por Arquitecto y security-review (opus), aprobada por el coordinador», como dice su fila. Ninguna reabre una decisión aceptada salvo D14, que enmienda Q-MCP-11 para el redo; D6, D7, D8, D12 y D14 precisan o enmiendan ADR-MCP-001 y se llevan a sus ADR en T008.
 
 | # | Decisión | Por qué |
 |---|---|---|
 | D1 | **Orden de la decisión para toda conexión que no es de la clase `desktop`**, primera regla que aplica: (a) declarado `mcp` o ejecutable `raptor-mcp` → `mcp` (`declared-mcp`); (b) cliente del hook → `full` (`hook-client`); (c) daemon mismo → `full` (`daemon-self`); (d) `resolve` falla → `mcp` (`requester-unverified`); (e) marca del ejecutor o descendiente del daemon → `mcp` (`daemon-descendant`); (f) agente en la ascendencia, directo o por un multiplexor con un único agente → `mcp` (`agent-in-ancestry`); (g) sin atribuir y `confirmable` → `full` (`developer`); (h) sin atribuir con intérprete, multiplexor o final no limpio → `mcp` (`ambiguous-ancestry`); (i) resto (sin terminal, controles 1 a 3 que fallan) → `mcp` (`unconfirmable`). La clase `desktop` sigue con `desktop::decide` | ADR-MCP-001 § 2: "si el solicitante resuelto es un agente, perfil `mcp` sea cual sea el cliente" y "un sin atribuir que pasa los controles 1 a 3 conserva el perfil completo". (g)-(i) es la forma de fallar cerrado de la ficha: sin prueba de que es el desarrollador en su terminal, `mcp`. Sin (i), `(setsid raptor status --json &)` con doble fork esquivaría S-01 desde la shell del agente. (h) cubre Claude Code instalado con npm, que corre como `node` (`ExeClass::Interpreter`, `authz.rs:86`) |
 | D2 | **La ascendencia se comparte, no se duplica**: los pasos (b) a (d) de `desktop::decide` (resolve, descendiente del daemon, agente) pasan a `requester_profile::ancestry`, que usan `desktop::decide` y la decisión nueva. `desktop::decide` da exactamente los mismos resultados (sus tests de TS-GRP-009 siguen en verde sin tocarlos). La regla de `raptor-mcp` también se comparte (`is_mcp_exe`, hoy duplicada en `conn.rs:572-574` y `desktop.rs:285-288`) | Restricción del orquestador. Cada consumidor aplica su cola: la clase `desktop` trata todo multiplexor como ascendencia dudosa y decide con la identidad por ruta; el resto decide con `confirmable` |
 | D3 | **El daemon mismo no es un solicitante (regla c), en producción.** Además, un campo de prueba `test_daemon_children_as_self: bool` en `ChannelConfig` (`#[cfg(debug_assertions)]`, `false` por defecto) trata como daemon mismo a un descendiente **sin marca**; un hijo marcado por el ejecutor sigue en (e). Solo lo fijan los tests con el daemon en proceso que lanzan un cliente hijo y esperan el perfil completo (§ 9.6) | Elegido frente a "solo un campo de prueba": los tests en proceso de `crates/core` se conectan desde el propio daemon (`daemon_id = std::process::id()`, `server.rs:215`); sin (c) salen `daemon-descendant` y en Windows `Unverified` (`ORPHANS_MARKED = false`), y habría que tocar unas 60 suites o poner el campo a `true` por defecto en debug, que deja S-01 apagado en todo build de desarrollo. (c) es sólido en producción: el par sale del kernel y nadie más tiene el `(pid, inicio)` del daemon. El campo cubre los 7 tests de `apps/cli` que lanzan `raptor` como hijo del daemon en proceso; en release no existe |
+| D3-bis | **Modo de prueba de la regla (i), solo en builds de depuración y solo con el matcher de agentes sustituido** (`GITRAPTOR_AGENT_EXECUTABLES` o `AgentMatcher::only`): un sin atribuir `unconfirmable` recibe `full` con el motivo `test-ttyless` (`requester_profile::test_ttyless`, aplicado en el handshake tras `decide`). El resto de reglas no cambia: un agente del matcher, un descendiente del daemon, una ascendencia dudosa o un solicitante no verificado siguen en `mcp`. Lo fija `crates/core/tests/ts_grp_010_debug_only.rs` (`the_ttyless_test_mode_is_debug_only`, junto con el campo de D3 y la lectura del override de D4) | _Decisión del orquestador (2026-11-12), validada por Arquitecto y security-review (opus), aprobada por el coordinador._ `cargo test` no tiene terminal de control, ni en local ni en CI: sin este modo, todo cliente de un daemon lanzado como proceso cae en (i) y recibe `mcp`, y habría que tocar cada suite de `apps/cli`. Con el matcher sustituido, el `claude` real ya no cuenta como agente, así que la regla (i) es la única que separa al test de la vista completa. **Condición de seguridad, fuera de esta TS**: el flujo de release debe rechazar un artefacto compilado con `debug_assertions` (§ Fuera de alcance) |
 | D4 | **Los tests de `apps/cli` que lanzan el daemon como proceso y no fijan `GITRAPTOR_AGENT_EXECUTABLES` lo fijan a `raptor-fake-agent`** (override neutro: no hay ningún ejecutable con ese nombre en su ascendencia, y con el override `node` cuenta como `Other`). Sin vías nuevas: el override ya es solo de debug (`daemon/env.rs:132-145`) y lo propaga `client::debug_overrides` | Un worker que corre la suite bajo Claude Code tiene al `claude` real en la ascendencia del `raptor` del test: sin override recibiría `mcp`. El CI no corre bajo un agente, así que el fallo solo se vería en local |
 | D5 | **El cliente del hook se clasifica antes de S-01 (regla b)** con el mismo predicado de hoy (declara `other` y su ejecutable es el binario instalado) y conserva el perfil completo y su exención de plaza; `limits.rs` no cambia. **`daemon.replace`** está en la allowlist del MCP (`method(DAEMON_REPLACE, false, true)`, `crates/api/src/methods/daemon.rs:17`) y su camino del binario instalado no mira el perfil (`conn.rs:3104-3160`), así que sigue permitido bajo un agente sin cambios | ADR-MCP-001 § 2 (condiciones 2 y 3). `guard.evaluate` no está en la allowlist del MCP (`mcp = false`): si el hook recibiera `mcp`, Guardrails caería al modo degradado bajo el `git` del agente. Hoy `is_hook_client` exige `full`, y con (b) primero lo sigue cumpliendo |
 | D6 | **Multiplexor**: con un único agente bajo el servidor, el resolutor ya atribuye a ese agente (f). Con más de uno, con algún agente vivo en otra parte o con la lista de procesos ilegible, `confirmable` es falso y sale `mcp` (h). Sin agentes vivos y con los controles 1 a 3, `full`. Coste aceptado: el desarrollador en `tmux` mientras corre un agente recibe `mcp` en esa terminal; lo resuelve una terminal fuera del multiplexor. La frase de ADR-MCP-001 "un sin atribuir que pasa los controles 1 a 3 conserva el perfil completo" se precisa como "un sin atribuir que podría confirmar (`confirmable`)" | Un agente que abre un servidor separado (`tmux new -d 'raptor status --json > f'`) deja a `raptor` bajo `launchd`, con terminal de control y un líder de sesión sin agente: **pasa los controles 1 a 3**. Leer la frase al pie de la letra dejaría S-01 abierto por esa vía. Ante la duda, el más restrictivo; "ningún humano pierde capacidades" solo vale para el desarrollador que el daemon puede reconocer |
 | D7 | **El perfil se fija en el `hello` para toda conexión** y no se recalcula; un segundo `hello` ya se rechaza (`already greeted`). El solicitante y la capa se siguen resolviendo en cada petición (M-03, sin cambios) | Generaliza la precisión de la Enmienda (2026-11-09, TS-GRP-009) de ADR-MCP-001. Recalcular solo serviría para endurecer, y no endurece nada: un par no gana antecesores después de conectar (si su padre muere, lo hereda `launchd`, y eso solo ablandaría, que § 2 prohíbe), las marcas del ejecutor existen antes de que el hijo conecte, y la llegada posterior de un agente a otro panel de `tmux` no le da a ese agente la conexión ya abierta del desarrollador. T008 lleva la enmienda a ADR-MCP-001 § 2 y ADR-GRP-005 § 5 |
-| D8 | **Qué sigue al perfil en una conexión estrechada y qué no.** Sigue al perfil `mcp`: métodos ofrecidos, vistas (`engine.snapshot` acotado, `for_mcp`), allowlist, ámbito por cwd, `requester.resolve` sin `via` ni `confirmable` y el cubo de escrituras de la conexión. **No** sigue al perfil: (i) el canal (`request_channel`) es el declarado (`cli`, o `tui` con `surface`), nunca `mcp`; (ii) un comando reservado recibe su propio veredicto (`check_reserved`, con la caminata y su motivo, p. ej. `agent-ancestry`), no el atajo `not-available-to-mcp`; (iii) las lecturas gastan los presupuestos de un cliente que no es MCP; (iv) `hello.requester` se publica si declara `cli`. La clase `desktop` y `raptor-mcp` no cambian | (i) US-MCP-025 E1 cuenta el uso por canal: un `mcp` aquí confundiría la CLI del agente con el MCP. (ii) Los comandos reservados se deciden por ADR-GRP-005 § 6, no por el perfil; con el atajo, la auditoría perdería la ascendencia (`identity_without_walk`) y el motivo real. Un humano en `tmux` con un agente vivo conserva así sus comandos reservados, como hoy. (iii) D9 de ADR-MCP-001 § 6: "consultar el estado desde su shell no lo frena"; la ficha deja fuera S-03. (iv) La CLI pinta "actúas como: agente (capa mcp)"; el perfil ya lo sabe el cliente por `hello.profile` |
+| D8 | **Qué sigue al perfil en una conexión estrechada y qué no.** Sigue al perfil `mcp`: métodos ofrecidos, vistas (`engine.snapshot` acotado, `for_mcp`), allowlist, ámbito por cwd, `requester.resolve` sin `via` ni `confirmable` y el cubo de escrituras de la conexión. **No** sigue al perfil: (i) el canal que se registra (`request_channel`) es el declarado (`cli`, o `tui` con `surface`), nunca `mcp`; el canal que autoriza sí es `mcp` (D12); (ii) un comando reservado recibe su propio veredicto (`check_reserved`, con la caminata y su motivo, p. ej. `agent-ancestry`), no el atajo `not-available-to-mcp`; (iii) las lecturas gastan los presupuestos de un cliente que no es MCP; (iv) `hello.requester` se publica si declara `cli`. La clase `desktop` y `raptor-mcp` no cambian | (i) US-MCP-025 E1 cuenta el uso por canal: un `mcp` aquí confundiría la CLI del agente con el MCP. (ii) Los comandos reservados se deciden por ADR-GRP-005 § 6, no por el perfil; con el atajo, la auditoría perdería la ascendencia (`identity_without_walk`) y el motivo real. Un humano en `tmux` con un agente vivo conserva así sus comandos reservados, como hoy. (iii) D9 de ADR-MCP-001 § 6: "consultar el estado desde su shell no lo frena"; la ficha deja fuera S-03. (iv) La CLI pinta "actúas como: agente (capa mcp)"; el perfil ya lo sabe el cliente por `hello.profile` |
 | D9 | **Log `client_profile`** (nivel info) solo cuando la decisión estrecha (D8): `class` (`cli` u `other`, la clase declarada), `profile` (`mcp`) y `reason`, todos de vocabulario cerrado. Sin rutas, sin pid, sin `client_version`. Mismo patrón que `desktop_client` (`conn.rs:605-620`) | SEC-04, SEC-12. Registrar cada conexión `full` sería ruido: el cliente del hook se conecta a menudo |
-| D10 | **Sin cambio de contrato**: ningún tipo nuevo en `crates/api`, sin método nuevo ni protocolo nuevo. El motivo no se publica: el cliente conoce su perfil por `hello.profile` | ADR-GRP-016. Publicar el motivo a un agente sería un oráculo de evasión, el mismo argumento que oculta `via` y `confirmable` por MCP (`conn.rs:3948-3950`). Cambian valores, no formas: `hello.profile`, `hello.methods` y la presencia de `hello.requester` |
+| D10 | **Sin cambio de contrato** (precisado por D13 y D14: un tipo aditivo, `McpRedoResult`, y `timemachine.redo` con `mcp = true`): sin método nuevo ni protocolo nuevo. El motivo no se publica: el cliente conoce su perfil por `hello.profile` | ADR-GRP-016. Publicar el motivo a un agente sería un oráculo de evasión, el mismo argumento que oculta `via` y `confirmable` por MCP (`conn.rs:3948-3950`). Cambian valores, no formas: `hello.profile`, `hello.methods` y la presencia de `hello.requester` |
 | D11 | **Cliente mínimo**: con `hello.profile == mcp`, `raptor status` llama a `mcp.status` en lugar de `engine.snapshot`; `--json` imprime su resultado tal cual o, si lo rechaza, `{"error": <data>}` con código de salida 1; sin `--json`, una línea de vista restringida (i18n en/es). `raptor daemon status` pinta el estado del motor de la vista acotada y el solicitante, sin lista de repos. La TUI no abre: imprime la misma vista restringida y sale con 0. El sobre versionado (`schema_version`) y los errores JSON del resto de subcomandos son de US-MCP-023 | ADR-GRP-004 (Enmienda 2026-10-05, MCP): "`raptor status` y la TUI muestran la vista acotada del MCP y, en un repo no habilitado, 'repo no habilitado para el MCP'". Sin esto, `raptor status` bajo un agente falla al deserializar `McpSnapshot` como `Snapshot`: no filtra nada, pero es un error opaco. Una TUI acotada completa es trabajo de UX y no lo pide la ficha |
+| D12 | **H-01: el canal que AUTORIZA una petición de una conexión con perfil `mcp` es `mcp`** (`Connection::auth_channel`), también en una conexión estrechada: `require_attributed`, `repo_for` y `scope_for` (para `operation.*` y los comandos por id) reciben `mcp`, así que el ámbito sale del cwd del llamante y de la allowlist. El oplog y `requester.resolve` siguen con el canal declarado (D8 i, `request_channel`). Un solicitante sin atribuir en una conexión estrechada nunca hace undo ni redo (`unattributed-over-mcp`). Test: `crates/core/tests/ts_grp_010_h01.rs` (`an_unattributed_narrowed_cli_never_undoes_nor_redoes`) | _Decisión del orquestador (2026-11-12), validada por Arquitecto y security-review (opus), aprobada por el coordinador._ Hallazgo H-01 de la revisión: con D8 (i) tal cual, la conexión estrechada se autorizaba con `cli`, y un sin atribuir que no puede confirmar (doble fork, servidor `tmux` separado) deshacía por la CLI lo que el MCP le niega (BR-MCP-ELIG-005). Etiquetar y autorizar son dos cosas: la etiqueta sirve a la estadística por canal (US-MCP-025); la autorización sigue al perfil |
+| D13 | **M-01/M-02: la respuesta y el cubo del redo siguen al perfil.** Con perfil `mcp`, `timemachine.redo` responde `McpRedoResult` (`crates/api/src/timemachine.rs`): ids, actor acotado y **solo conteos** (`written`, `removed`, `not_restored`, `kept`), sin rutas ni dueños, como `McpUndoResult`. `mcp_write_bucket` (`Connection::take_mcp_write`) lo gastan el undo y el redo de toda conexión con perfil `mcp`, estrechada o no. Precisa D10: es el único tipo nuevo de `crates/api` y es aditivo | _Decisión del orquestador (2026-11-12), validada por Arquitecto y security-review (opus), aprobada por el coordinador._ M-01: `RedoResult` lleva rutas y dueños que la vista MCP no da (SEC-12). M-02: sin el cubo, un agente repartía undo y redo en conexiones estrechadas fuera del límite de escrituras de ADR-MCP-001 § 6 |
+| D14 | **`timemachine.redo` se ofrece al perfil `mcp`** (`mcp = true` en el catálogo de métodos). Con las reglas que ya tiene `redo_last` (permiso sobre el solicitante del undo y los dueños de lo que deshizo, ADR-TMC-005), un agente solo rehace un undo cuyo solicitante y dueños son de su propia sesión; otro caso responde `other-actor`. `raptor-mcp` **no** gana herramienta: el redo llega por la CLI estrechada (`raptor redo`). Oráculo bajo aceptado: `nothing-to-redo` frente a `other-actor` revela que hay un undo pendiente de otro actor en el propio worktree habilitado, el mismo patrón que el undo | _Decisión del orquestador (2026-11-12), validada por Arquitecto y security-review (opus), aprobada por el coordinador._ Sin D14, el agente que deshace por la CLI no podía rehacer su propio undo (`METHOD_NOT_FOUND`) y tenía que pedírselo al desarrollador. Enmienda Q-MCP-11 y BR-MCP-ELIG-005 solo para el redo de lo propio; restaurar sigue fuera (`mcp = false`). Sin herramienta nueva, el catálogo de ADR-MCP-001 § 4.1 no cambia |
+| D15 | **La CLI bajo perfil `mcp`.** (a) Un helper único en `apps/cli` arma los parámetros de los comandos de worktree sin mandar `worktree` (el daemon lo toma del cwd, D12) y falla con un mensaje i18n si el usuario dio una ruta explícita distinta del worktree del cwd. (b) El predicado `may_call_reserved` (método reservado y presente en el protocolo) deja que la CLI llame a un reservado aunque no esté en `hello.methods` y muestre el rechazo real del daemon (`agent-ancestry`). (c) `raptor restore` sigue sin estar disponible para un agente (`mcp = false`) y lo dice con un mensaje. (d) `repo retire`, `roots` y `guard` no leen `engine.snapshot` completo. (e) El mensaje `not-allowlisted` va dirigido al humano: «pide al desarrollador `raptor mcp enable`». US-MCP-021 (`configure-agents`) lo hará más cómodo | _Decisión del orquestador (2026-11-12), validada por Arquitecto y security-review (opus), aprobada por el coordinador._ Con D12 la CLI estrechada recibía `scope-refused` por mandar `worktree` y un `METHOD_NOT_FOUND` local en lugar del veredicto del daemon. (b) conserva D8 (ii): el motivo real llega al usuario y a la auditoría |
 
 **Consecuencia para US-MCP-023**: su escenario "por la CLI un agente no ve más que por el MCP" queda desbloqueado; US-MCP-023 envuelve la salida de D11 en el sobre de su D1 y da `--json` al resto de subcomandos.
 
@@ -209,7 +214,7 @@ Cuatro frentes y un cierre: esqueleto y tests del contrato en rojo (T001-T002), 
 | T005 | Conectar la decisión al handshake, al log y a las excepciones de D8 | T004 | `crates/core/src/channel/conn.rs` |
 | T006 | Pintar la vista acotada en `raptor status`, `raptor daemon status` y la TUI | T005 | `apps/cli` |
 | T007 | Ajustar los tests existentes que dependían del perfil completo | T005, T006 | `apps/cli/tests`, `crates/core/tests` |
-| T008 | Llevar D6 a D8 a sus ADR, cerrar la ficha y correr el gate | T007 | `docs/` |
+| T008 | Llevar D6 a D8, D12 y D14 a sus ADR y reglas, cerrar la ficha y correr el gate | T007 | `docs/` |
 
 ### En qué orden
 
@@ -351,10 +356,13 @@ graph LR
 3. En `daemon status` (`daemon.rs:157-200`), con `is_restricted`: leer `engine.snapshot` como `McpSnapshot`, pintar el estado del motor y la línea del solicitante (`codes::requester_text`), y no pedir `scope.snapshot` ni recorrer repos.
 4. En la TUI (`tui.rs`), tras conectar: si `is_restricted`, imprimir `restricted.tui` y la vista de `print_status(client, false)` y salir con 0, sin entrar en el modo alternativo de la terminal.
 5. Escribir las claves `restricted.status`, `restricted.not-enabled`, `restricted.tui` en `en` y `es`.
+6. (D15) Añadir en `apps/cli` un helper único para los parámetros de los comandos de worktree bajo perfil `mcp`: no manda `worktree` y, si el usuario dio una ruta explícita distinta del worktree del cwd, falla antes de llamar con un mensaje i18n. Usarlo en `undo`, `redo` y el resto de comandos de worktree.
+7. (D15) Añadir el predicado `may_call_reserved` (reservado y presente en el protocolo) y usarlo donde la CLI mira `hello.methods` antes de llamar, para que un reservado llegue al daemon y la CLI muestre su rechazo (`agent-ancestry`).
+8. (D15) Con perfil `mcp`: `raptor restore` responde con un mensaje de no disponible para agentes sin llamar; `repo retire`, `roots` y `guard` no leen `engine.snapshot` completo; el mensaje de `not-allowlisted` se dirige al humano («pide al desarrollador `raptor mcp enable`»).
 
 - **Depende:** T005
-- **Refs:** D11; ADR-GRP-004 (Enmienda 2026-10-05, MCP); ADR-GRP-005 § 5 (SEC-12)
-- **Aceptación:** `cargo test -p gitraptor-cli --test ts_grp_010_agent_cli` en verde
+- **Refs:** D11, D15; ADR-GRP-004 (Enmienda 2026-10-05, MCP); ADR-GRP-005 § 5 (SEC-12)
+- **Aceptación:** `cargo test -p gitraptor-cli --test ts_grp_010_agent_cli` en verde, con los casos de D15 de § 9.4 (archivo 3)
 - **Guard ⛔1.1:** `raptor_status_under_an_agent_is_the_mcp_view` (worktree con un nombre con escape ANSI no sale crudo)
 
 ### T007 — Ajustar los tests existentes que dependían del perfil completo
@@ -365,8 +373,8 @@ graph LR
 
 **Pasos**
 1. Fijar `test_daemon_children_as_self: true` en el `ChannelConfig` de los 7 tests de `apps/cli` con daemon en proceso y `raptor` hijo (§ 9.6, grupo A).
-2. Fijar `GITRAPTOR_AGENT_EXECUTABLES=raptor-fake-agent` en los tests de § 9.6, grupo B.
-3. Adaptar las aserciones del grupo C como dice § 9.6.
+2. Fijar `GITRAPTOR_AGENT_EXECUTABLES=raptor-fake-agent` en los tests de § 9.6, grupo B. Con el matcher sustituido rige además el modo `test-ttyless` (D3-bis): el cliente sin terminal de `cargo test` recibe `full`.
+3. Adaptar las aserciones del grupo C como dice § 9.6, incluidas las de D12 a D14 (un agente que rehace su propio undo por la CLI; `McpRedoResult` en lugar de `RedoResult` para la conexión estrechada).
 4. Correr `cargo test -p gitraptor-core` y `cargo test -p gitraptor-cli` una vez en local bajo Claude Code y otra con `env -u CLAUDECODE` fuera de él si se puede; un test que falle y no esté en § 9.6 se clasifica con la misma regla (hijo del daemon en proceso → grupo A; daemon como proceso sin override → grupo B; aserción sobre lo que ve un agente → grupo C).
    4.1 ⛔4.1 Si un test afirma que un agente o un descendiente del daemon obtiene el perfil completo fuera de los grupos A y B, no se cambia la aserción: se pregunta al orquestador.
 
@@ -375,24 +383,28 @@ graph LR
 - **Aceptación:** `cargo test --workspace --exclude gitraptor-desktop` en verde
 - **Guard ⛔4.1:** _no comprobable — es una regla de proceso del worker; la revisa el orquestador en el diff de `apps/cli/tests` y `crates/core/tests` antes del merge_
 
-### T008 — Llevar D6 a D8 a sus ADR, cerrar la ficha y correr el gate
+### T008 — Llevar D6 a D8, D12 y D14 a sus ADR y reglas, cerrar la ficha y correr el gate
 
-**Objetivo.** Los ADR dicen lo que hace el código y la ficha queda `implemented`. Ninguna regla nueva.
+**Objetivo.** Los ADR, las reglas y las historias dicen lo que hace el código y la ficha queda `implemented`. Ninguna regla nueva fuera de las de esta Dev Spec.
 
 **Ubicación.**
 - `docs/architecture/decisions/ADR-MCP-001-servidor-mcp-cliente-daemon.md` (**MODIFY**)
 - `docs/architecture/decisions/ADR-GRP-005-forma-motor-proceso-segundo-plano.md` (**MODIFY**)
+- `docs/requirements/features/mcp/business-rules.md` (**MODIFY**, BR-MCP-ELIG-005)
+- `docs/requirements/features/time-machine/user-stories/US-TMC-003-redo.md` (**MODIFY**)
+- `docs/requirements/features/time-machine/dev-specs/US-TMC-003-redo.md` (**MODIFY**)
 - `docs/requirements/features/motor-local/technical-stories/TS-GRP-010-perfil-mcp-por-solicitante.md` (**MODIFY**)
 
 **Pasos**
-1. Añadir a ADR-MCP-001 una "Enmienda (fecha del PR, TS-GRP-010)" con tres viñetas: el perfil se fija en el `hello` para toda conexión (D7); "pasa los controles 1 a 3" se lee como `confirmable` y el porqué del servidor `tmux` separado (D6); qué sigue al perfil en una conexión estrechada y qué no (D8), con la nota de que la lectura del agente por la CLI no gasta el cubo de lecturas compartido (D9 de § 6 sigue). Actualizar en C1 el "Estado en `main`".
-2. Añadir a ADR-GRP-005 una fila en su tabla de la Enmienda (2026-10-05, MCP) o una enmienda corta que remita a la de ADR-MCP-001.
-3. Poner la ficha en `status: implemented` con el PR.
-4. Correr `cargo clippy --workspace --exclude gitraptor-desktop --all-targets -- -D warnings` y `cargo test --workspace --exclude gitraptor-desktop`.
+1. Añadir a ADR-MCP-001 una "Enmienda (2026-11-12, TS-GRP-010)": el perfil se fija en el `hello` para toda conexión (D7); "pasa los controles 1 a 3" se lee como `confirmable` y el porqué del servidor `tmux` separado (D6); qué sigue al perfil en una conexión estrechada y qué no (D8), y que la autorización sí sigue al perfil (D12); redo por el perfil `mcp` solo del propio undo, que enmienda Q-MCP-11 (D14). Actualizar en C1 el "Estado en `main`" y dar por caducados los riesgos residuales de S-01.
+2. Añadir a ADR-GRP-005 una enmienda corta que remita a la de ADR-MCP-001.
+3. Enmendar BR-MCP-ELIG-005 y US-TMC-003 (historia y Dev Spec) con D14.
+4. Poner la ficha en `status: implemented` con el PR (lo hace el worker al final).
+5. Correr `cargo clippy --workspace --exclude gitraptor-desktop --all-targets -- -D warnings` y `cargo test --workspace --exclude gitraptor-desktop`.
 
 - **Depende:** T007
-- **Refs:** `AGENTS.md` (reglas de calidad); D6, D7, D8
-- **Aceptación:** los dos comandos del paso 4 terminan con código 0, y `grep -n 'TS-GRP-010' docs/architecture/decisions/ADR-MCP-001-servidor-mcp-cliente-daemon.md` encuentra la enmienda
+- **Refs:** `AGENTS.md` (reglas de calidad); D6, D7, D8, D12, D14
+- **Aceptación:** los dos comandos del paso 5 terminan con código 0, y `grep -n 'TS-GRP-010' docs/architecture/decisions/ADR-MCP-001-servidor-mcp-cliente-daemon.md docs/requirements/features/mcp/business-rules.md docs/requirements/features/time-machine/user-stories/US-TMC-003-redo.md` encuentra la enmienda en los tres
 
 ---
 
@@ -409,7 +421,12 @@ crates/core/
 │   └── mod.rs                               ← MODIFY (T001)
 └── tests/
     ├── ts_grp_010_requester_profile.rs      ← CREATE (T002)
-    └── ts_grp_010_channel.rs                ← CREATE (T002)
+    ├── ts_grp_010_channel.rs                ← CREATE (T002)
+    ├── ts_grp_010_h01.rs                    ← CREATE (D12)
+    └── ts_grp_010_debug_only.rs             ← CREATE (D3-bis)
+crates/api/src/
+├── timemachine.rs                           ← MODIFY (D13: McpRedoResult)
+└── methods/timemachine.rs                   ← MODIFY (D14: redo con mcp = true)
 apps/cli/
 ├── src/
 │   ├── restricted.rs                        ← CREATE (T006)
@@ -521,7 +538,7 @@ pub(crate) fn print_status(client: &mut Client, json: bool) -> ExitCode;
 
 ## Contrato de API
 
-Canal JSON-RPC local (ADR-GRP-005 § 5). Ningún método, tipo ni capacidad nuevos; ningún mensaje cambia de forma (D10).
+Canal JSON-RPC local (ADR-GRP-005 § 5). Ningún método ni capacidad nuevos; un único tipo aditivo, `McpRedoResult` (D13), y `timemachine.redo` pasa a ofrecerse al perfil `mcp` (D14); ningún mensaje existente cambia de forma (D10).
 
 | Qué cambia | Para quién | Antes | Después |
 |---|---|---|---|
@@ -530,6 +547,8 @@ Canal JSON-RPC local (ADR-GRP-005 § 5). Ningún método, tipo ni capacidad nuev
 | `hello.requester` | Conexión estrechada que declara `cli` | Presente | Presente (D8 iv) |
 | `requester.resolve` | Conexión estrechada | `RequesterView` con `via` y `confirmable` | `McpRequesterView` (`actor`, `channel`), con el canal declarado (D8 i) |
 | Reservados | Conexión estrechada | Veredicto de `check_reserved` | El mismo (D8 ii) |
+| Canal que autoriza | Conexión estrechada | `cli` o `tui` | `mcp` (D12); el oplog sigue con el declarado |
+| `timemachine.redo` | Perfil `mcp` | `METHOD_NOT_FOUND` (`mcp = false`) | Ofrecido (`mcp = true`), solo el propio undo (D14); responde `McpRedoResult` (D13) |
 
 ### Forma del error y del cuerpo de respuesta
 
@@ -561,8 +580,8 @@ _No aplica — esta entrega no persiste nada; el perfil vive en memoria con la c
 
 | Tipo | Cantidad | Tareas dueñas | Herramientas | Cuándo |
 |------|---------:|-------------|---------|------|
-| Unit | 12 | T002 (archivo 1) | `cargo test`, doble `Tree` | PR gate |
-| Integration | 5 | T002 (archivos 2 y 3) | daemon en proceso y como proceso, perfil temporal, agente simulado | PR gate |
+| Unit | 15 | T002 (archivo 1), D3-bis (archivo 5) | `cargo test`, doble `Tree`, lectura del fuente | PR gate |
+| Integration | 6 | T002 (archivos 2 y 3), D12 (archivo 4) | daemon en proceso y como proceso, perfil temporal, agente simulado | PR gate |
 | Security | 0 | — | (los de escalada están contados en Unit e Integration) | — |
 
 ### 9.2 Umbrales de cobertura
@@ -606,6 +625,24 @@ _No aplica — esta entrega no persiste nada; el perfil vive en memoria con la c
 - [ ] `raptor_status_under_an_agent_is_the_mcp_view` — el agente lanza `raptor status --json` en el repo: salida 1, stdout con `repo-not-enabled`, sin la ruta del repo ni el nombre de la rama; tras `raptor mcp enable` del desarrollador bajo `script`, el mismo comando da salida 0 con el nombre del worktree y sin la clave `repos`; un worktree con escape ANSI en el nombre no sale crudo
 - [ ] `developer_in_the_agent_worktree_keeps_the_full_view` — el desarrollador bajo `script`, con el cwd en el worktree donde trabaja el agente: `raptor status --json` con la lista de repos completa, y el agente sigue vivo durante la prueba
 
+**Archivo 4 — `crates/core/tests/ts_grp_010_h01.rs`** (D12 y D13; daemon en proceso, cliente hijo; `#![cfg(all(debug_assertions, any(target_os = "macos", target_os = "linux")))]`)
+
+- [ ] `an_unattributed_narrowed_cli_never_undoes_nor_redoes` — conexión estrechada de un sin atribuir que declara `cli`: `timemachine.undo` y `timemachine.redo` se rechazan con `unattributed-over-mcp` y el repo no cambia
+
+**Archivo 5 — `crates/core/tests/ts_grp_010_debug_only.rs`** (D3, D3-bis, D4; comprobación estática del fuente)
+
+- [ ] `the_daemon_children_knob_is_debug_only` — todo uso de `test_daemon_children_as_self` está tras `#[cfg(debug_assertions)]`
+- [ ] `the_ttyless_test_mode_is_debug_only` — `test_ttyless` y su llamada en el handshake están tras `#[cfg(debug_assertions)]`
+- [ ] `the_agent_executables_override_is_read_only_in_debug_builds` — `GITRAPTOR_AGENT_EXECUTABLES` solo se lee con `cfg!(debug_assertions)`; en release, `None`
+
+**Casos de D14 y D15** (los cubre el worker en el archivo 3 o en las suites de § 9.6, grupo C; sin nombre fijado aquí)
+
+- [ ] Un agente rehace por `raptor redo` su propio undo hecho por la CLI: salida 0 y `McpRedoResult` solo con conteos (D13, D14)
+- [ ] Un agente intenta rehacer el undo de otro actor: `other-actor`, el repo no cambia (D14)
+- [ ] `raptor undo <ruta>` con una ruta distinta del worktree del cwd bajo perfil `mcp`: mensaje i18n y sin llamada al daemon (D15 a)
+- [ ] `raptor mcp enable` bajo un agente: rechazo `agent-ancestry` del daemon, no un error local (D15 b)
+- [ ] `raptor restore` bajo un agente: mensaje de no disponible para agentes (D15 c)
+
 **Mapa criterio → test** (TS-GRP-010 § Plan de Verificación)
 
 | Criterio de la ficha | Tests |
@@ -616,7 +653,10 @@ _No aplica — esta entrega no persiste nada; el perfil vive en memoria con la c
 | Falla cerrada | `unverified_requester_gets_mcp`, `npm_agent_as_interpreter_gets_mcp`, `multiplexer_with_a_live_agent_elsewhere_gets_mcp`, `detached_without_terminal_gets_mcp`, `daemon_descendants_get_mcp` |
 | Sin escalada: no cambia tras el handshake; declarar otra clase no da más | `declared_kind_never_widens`; `profile_is_fixed_at_hello` (TS-GRP-009, sin tocar) |
 | Compatibilidad: hook, `raptor-mcp` y app con las mismas formas y perfiles | `hook_client_keeps_full_under_an_agent`, `daemon_replace_stays_open_to_mcp`, `the_daemon_itself_keeps_todays_rule`, suites `ts_grp_009_*` y del canal (T003, T005), suites del hook de `apps/cli` (T007) |
-| Comandos reservados siguen rechazándose desde un agente | `narrowed_child_keeps_its_channel_and_reserved_verdict`, `channel_process::reserved_commands_from_an_agent_are_refused_and_audited` (sin cambios) |
+| Comandos reservados siguen rechazándose desde un agente | `narrowed_child_keeps_its_channel_and_reserved_verdict`, `channel_process::reserved_commands_from_an_agent_are_refused_and_audited` (sin cambios), caso D15 (b) |
+| La conexión estrechada se autoriza como el MCP (H-01) | `an_unattributed_narrowed_cli_never_undoes_nor_redoes` (D12) |
+| Redo solo del propio undo, con la vista y el cubo del MCP | casos de D14 y D15 de arriba (D13, D14) |
+| Los atajos de prueba no existen en release | archivo 5 (D3, D3-bis, D4) |
 | Log con clase, perfil y motivo, sin rutas ni texto del cliente | `direct_cli_client_under_an_agent_gets_the_mcp_view` |
 
 ### 9.5 Plataformas
@@ -659,7 +699,8 @@ Lista sacada del árbol en `c429e0aa`; el worker la completa con la regla de T00
 
 - El perfil sale solo del par que da el kernel y de su ascendencia; del `hello` solo cuenta `client` para estrechar (`mcp`) o para el cliente del hook junto con el ejecutable instalado (`declared_kind_never_widens`).
 - Ninguna regla da `full` a un agente, a un descendiente del daemon (salvo el campo de prueba de debug) ni a un sin atribuir que no podría confirmar.
-- El campo `test_daemon_children_as_self` no existe en release (`#[cfg(debug_assertions)]`), y `GITRAPTOR_AGENT_EXECUTABLES` ya no se lee en release.
+- El campo `test_daemon_children_as_self` y el modo `test-ttyless` (D3-bis) no existen en release (`#[cfg(debug_assertions)]`), y `GITRAPTOR_AGENT_EXECUTABLES` ya no se lee en release (archivo 5). Su seguridad depende de que nunca se publique un build de depuración (§ Fuera de alcance).
+- Una conexión con perfil `mcp` se autoriza con el canal `mcp` (D12) y su undo y redo gastan `mcp_write_bucket` y responden con la vista MCP (D13).
 - El log `client_profile` no lleva rutas, pid ni `client_version` (SEC-04).
 - La CLI sanea el texto de `mcp.status` antes de imprimirlo (SEC-12).
 - `hello`, `ClientKind`, `HelloResult` y los tipos de `crates/api` no cambian de forma.
@@ -681,6 +722,8 @@ Corre `/security-review --scope devspec docs/requirements/features/motor-local/d
 | Cambios en la clase `desktop` | — | `ts_grp_009_*` en verde sin tocar sus archivos |
 | Agente que lanza con `open -a`, `open x.command`, `tmux send-keys` u otra aplicación del usuario | SPIKE-DSK-002; ADR-GRP-005 Enmienda TS-GRP-004 punto 9 (A-2) | Sin uso de Apple Events en el diff |
 | Windows y Linux | Etapa de validación multiplataforma | § 9.5 |
+| Comprobación en el flujo de release de que el artefacto no se compiló con `debug_assertions` (condición de seguridad de D3-bis) | Flujo de release (por asignar; `.github/workflows/` de release) | Sin cambios en `.github/workflows/` en el diff de esta TS |
+| Herramienta MCP de redo en `raptor-mcp` | — (D14: no se añade) | Sin cambios en `apps/mcp` en el diff |
 
 ---
 
@@ -693,3 +736,4 @@ Corre `/security-review --scope devspec docs/requirements/features/motor-local/d
 | G3 | La TUI con perfil `mcp` solo imprime la vista acotada (D11). Una TUI acotada interactiva ("abierta por un agente: vista restringida", como la app) es trabajo de UX | Proponer historia al PO si algún flujo de agente la necesita | PO |
 | G4 | ADR-GRP-005 Enmienda TS-GRP-004 punto 9 (A-2): un servidor `tmux` separado también da a un agente una terminal limpia para los **comandos reservados**. D6 lo cierra para el perfil, no para los reservados (D8 ii los deja como hoy) | Recordarlo en la revisión de seguridad; sigue pendiente de decisión de Rene antes del release de `repo.retire` y `attribution.correct` | Coordinador |
 | G5 | La Dev Spec está marcada como obsoleta en el contrato vigente de `aadd-architecture` (regla 6); se escribe porque el orquestador la pidió con `/aadd-devspec TS-GRP-010` y la ficha la exige | Ninguna | — |
+| G6 | `apps/cli/tests/tui_conflicts.rs` falla también con el perfil `full` forzado: el fallo es ajeno a esta TS | Abrir su propio arreglo; no se cambia en esta rama | Coordinador |

@@ -4,7 +4,7 @@ title: "Dev Spec — Rehacer el último undo del worktree (raptor redo)"
 type: dev-spec
 status: draft
 created: 2026-10-27
-updated: 2026-11-09
+updated: 2026-11-12
 story: US-TMC-003
 scope: backend
 frontend_surface: false
@@ -262,7 +262,7 @@ flowchart LR
 **Pasos**
 1. Añadir el brazo junto a los de `TM_UNDO` y `TM_RESTORE`; quitar `TM_REDO` de la rama de `tm_command` para la petición sin `operation_id`.
 2. Con `operation_id`: sigue `tm_command` con `"unassigned"` (`NOT_IMPLEMENTED`), como el undo por id.
-3. `check_confirmation_param`, `request_channel`, `named_worktree`, `resolve`, `tm_scope_for` y `tm_confirmation` como `tm_undo`. El método no es MCP (`mcp: false`, Q-MCP-11): por MCP sigue `METHOD_NOT_FOUND`.
+3. `check_confirmation_param`, `request_channel`, `named_worktree`, `resolve`, `tm_scope_for` y `tm_confirmation` como `tm_undo`. El método no es MCP (`mcp: false`, Q-MCP-11): por MCP sigue `METHOD_NOT_FOUND`. _Enmendado: desde TS-GRP-010 D14 se ofrece al perfil `mcp` solo para el undo de la propia sesión ([Enmienda (2026-11-12, TS-GRP-010)](#enmienda-2026-11-12-ts-grp-010))._
 4. Errores con `rejection_data` (y `overlap` con `CAP_TM_OVERLAP`), `PRIOR_SNAPSHOT_FAILED`, `OPERATION_FAILED` e `INTERNAL`, como `undo_error`.
 
 - **Depende:** T004
@@ -434,7 +434,7 @@ impl Cmd { pub(crate) fn run(self, _: &Global) -> ExitCode; }
 
 | Método | Canal | Parámetros | Resultado |
 |---|---|---|---|
-| `timemachine.redo` | CLI/TUI; no MCP | `worktree` (raíz, requerido por la CLI), `surface`, `confirmation`; `operation_id` responde `NOT_IMPLEMENTED` | `RedoResult` |
+| `timemachine.redo` | CLI/TUI; perfil `mcp` solo para el undo de la propia sesión ([Enmienda (2026-11-12, TS-GRP-010)](#enmienda-2026-11-12-ts-grp-010)) | `worktree` (raíz, requerido por la CLI), `surface`, `confirmation`; `operation_id` responde `NOT_IMPLEMENTED` | `RedoResult` |
 
 ### Forma del error y del cuerpo de respuesta
 
@@ -522,7 +522,7 @@ Además: `consecutive_redos_walk_forward` (dos undos y dos redos vuelven al esta
 
 - Toda escritura pasa por la operación protegida con su previo (NFR-01); sin shell ni argv nuevos (NFR-02).
 - Permisos sobre todos los dueños (ADR-TMC-005 § 2); la confirmación usa el mismo reto de un solo uso, ligado al plan del redo (SEC-TMC-03).
-- No MCP (Q-MCP-11). El oplog es entrada no confiable al releerse: el undo que se rehace se valida como cualquier otra fila (SEC-TMC-09) y sus raíces contra los worktrees registrados.
+- No MCP (Q-MCP-11; enmendado por TS-GRP-010 D14: el perfil `mcp` rehace solo el undo de la propia sesión, con `McpRedoResult` y el cubo de escrituras de la conexión). El oplog es entrada no confiable al releerse: el undo que se rehace se valida como cualquier otra fila (SEC-TMC-09) y sus raíces contra los worktrees registrados.
 
 Corre `/security-review --scope devspec docs/requirements/features/time-machine/dev-specs/US-TMC-003-redo.md` antes de mezclar.
 
@@ -533,7 +533,7 @@ Corre `/security-review --scope devspec docs/requirements/features/time-machine/
 | Ítem / no-objetivo | Historia que lo cubre | Gate (cómo se verifica) |
 |---|---|---|
 | Rehacer un undo concreto por id | sin historia asignada | `operation_id` responde `NOT_IMPLEMENTED` con `unassigned` |
-| Redo por MCP | Q-MCP-11 | `mcp: false` en el catálogo sin cambios |
+| Redo por MCP | Q-MCP-11 (enmendado por TS-GRP-010 D14) | `mcp: false` en el catálogo sin cambios en esta historia; lo cambia TS-GRP-010 |
 | Redo desde la TUI | Cockpit (US-CKP-014) | `git diff --stat` sin cambios bajo `apps/cli/src/tui/` |
 | Continuar a pesar del solape | D-TMC-27 | el contrato no tiene parámetro para continuar |
 | Guardrails en el redo | US-TMC-021 | hueco marcado en `redo.rs` |
@@ -605,6 +605,10 @@ Implementado en: PR #335. Decisiones tomadas al implementar. Cada una es una **d
 | I6 | Los escenarios 5 y 6 se prueban en integración con los agentes simulados de US-TMC-011 (`us_tmc_003_agents.rs`), no en el e2e (P1) | El arnés con agentes en integración no existía cuando se escribió la spec |
 | I7 | Revisión de seguridad M-01: una operación deshecha cuya fila del oplog está alterada cuenta como "sin atribuir" entre los dueños del redo | SEC-TMC-09: el oplog leído de vuelta no es de confianza |
 | I8 | Enmiendas de tests autorizadas por el coordinador: `kept` en la forma de cable de `KeptPath` (`untrusted`); S1 y WALK comparan el worktree (tipo, tamaño, contenido y bit de ejecución), `HEAD`, `git status` y las refs, no `.git` entero; GUARD-4.2 lo hace el propio agente (3 escrituras, por la ráfaga de 5); WALK reintenta solo ante `RATE_LIMITED`; el undo simple tras el redo de un undo por agente se comprueba por motivo y destino, no por completarse (el arnés no puede dejar un punto antes de un commit crudo mientras `timemachine.snapshot` siga sin implementar, US-TMC-005) | El aplicador siempre escribe en `.git`; el límite S-03 por solicitante |
+
+## Enmienda (2026-11-12, TS-GRP-010)
+
+**Decisión del orquestador (2026-11-12), validada por Arquitecto y security-review (opus), aprobada por el coordinador** ([DS-TS-GRP-010](../../motor-local/dev-specs/TS-GRP-010-dev-spec.md), D12 a D14). `timemachine.redo` se ofrece al perfil `mcp` (`mcp = true`): con las reglas de permiso de esta historia, un agente solo rehace un undo cuyo solicitante y dueños son de su propia sesión; otro caso da `other-actor`, y un sin atribuir se rechaza con `unattributed-over-mcp`. Con perfil `mcp` la respuesta es `McpRedoResult` (solo conteos) y gasta el cubo de escrituras de la conexión. `raptor-mcp` no tiene herramienta de redo: llega por la CLI que lanza el agente. Enmienda Q-MCP-11 solo para el redo; restaurar sigue fuera del MCP.
 
 ## Notas del autor
 

@@ -69,3 +69,7 @@ tags: [canal, perfil-mcp, ascendencia, solicitante, s-01, sec-mcp-01, seguridad,
 - **Habilita (bloquea hasta su merge)**: US-MCP-023 (escenario «por la CLI un agente no ve más que por el MCP»), la parte CLI de US-MCP-020 y el cierre de los riesgos residuales de ADR-MCP-001 (S-01).
 - **Dev Spec**: sí (`/aadd-devspec TS-GRP-010`); toca el canal y la seguridad. Revisión de `security-expert` antes del merge.
 - **Modelo sugerido para el worker**: Opus (seguridad del canal).
+
+### Notas
+
+- **Revisar con UX** que la vista restringida le diga al humano cómo obtener la vista completa sin delatar la regla que la decide (DS-TS-GRP-010 D6: el desarrollador en `tmux` con un agente vivo recibe `mcp`).

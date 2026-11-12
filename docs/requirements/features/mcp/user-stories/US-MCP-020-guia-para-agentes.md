@@ -6,7 +6,7 @@ status: draft
 priority: high
 milestone: M3
 created: 2026-11-10
-updated: 2026-11-10
+updated: 2026-11-12
 domain: GRP
 epic: E-001
 feature: mcp
@@ -29,8 +29,7 @@ ado:
   id: null
   url: null
 covers: [BR-MCP-CONS-009]
-blocked_by:
-  - TS-GRP-010
+blocked_by: []
 tags: [mcp, agentes, skill, guia, superficie-agentes, hito-m3]
 ---
 
