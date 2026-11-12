@@ -190,8 +190,15 @@ impl Link for ClientLink {
         // An answer read here is kept for `reply` and the wait goes on, so `None` still means
         // that nothing arrived in `timeout` (the supervisor reads it as "idle").
         let deadline = Instant::now() + timeout;
+        let mut first = true;
         loop {
             let left = deadline.saturating_duration_since(Instant::now());
+            // A zero read timeout is an error on Unix sockets: once the window is spent, stop
+            // before reading (the first pass still drains what is already queued).
+            if left.is_zero() && !first {
+                return Ok(None);
+            }
+            first = false;
             match self.client.next_incoming(left).map_err(link_error)? {
                 None => return Ok(None),
                 Some(Incoming::Buffered {
@@ -208,9 +215,6 @@ impl Link for ClientLink {
                         Err(_) => return Err(LinkError::Lost),
                     }
                 }
-            }
-            if left.is_zero() {
-                return Ok(None);
             }
         }
     }
