@@ -9,7 +9,8 @@ use std::process::ExitCode;
 use gitraptor_api::methods;
 use gitraptor_api::rpc::code;
 use gitraptor_api::timemachine::{
-    MAX_SINCE_SECS, NotRestoredReason, TmConfirmData, TmRejectReason, UndoResult, parse_since,
+    MAX_SINCE_SECS, McpUndoResult, NotRestoredReason, TmConfirmData, TmRejectReason, UndoResult,
+    parse_since,
 };
 use gitraptor_api::untrusted::sanitize;
 use gitraptor_core::client::ClientError;
@@ -100,7 +101,7 @@ pub fn run(json_out: bool, since: Option<&str>, agent: Option<&str>) -> ExitCode
         Err(code) => return code,
     };
     notices::show_pending(&mut client, &worktree, CMD);
-    let mut params = json!({ "worktree": worktree.to_string_lossy(), "surface": "cli" });
+    let mut params = crate::restricted::tm_params(&client, &worktree);
     if let Some(since) = since {
         params["since"] = json!(since);
     }
@@ -122,6 +123,29 @@ pub fn run(json_out: bool, since: Option<&str>, agent: Option<&str>) -> ExitCode
             if json_out {
                 println!("{value}");
                 return ExitCode::SUCCESS;
+            }
+            // An agent's CLI (TS-GRP-010): the MCP's counts, never paths.
+            if crate::restricted::is_restricted(&client) {
+                return match serde_json::from_value::<McpUndoResult>(value) {
+                    Ok(result) => {
+                        println!(
+                            "{CMD}: {}",
+                            t(
+                                "restricted.undo-done",
+                                &[
+                                    ("id", &sanitize(&result.undone_operation_id)),
+                                    ("not_restored", &result.not_restored),
+                                    ("kept", &result.kept),
+                                ],
+                            )
+                        );
+                        ExitCode::SUCCESS
+                    }
+                    Err(err) => {
+                        eprintln!("{CMD}: {}", sanitize(&err.to_string()));
+                        ExitCode::FAILURE
+                    }
+                };
             }
             match serde_json::from_value::<UndoResult>(value) {
                 Ok(result) => {
@@ -148,6 +172,10 @@ pub fn run(json_out: bool, since: Option<&str>, agent: Option<&str>) -> ExitCode
                 })
             {
                 println!("{data}");
+                return ExitCode::FAILURE;
+            }
+            if let Some(text) = crate::restricted::refusal_text(&client, &err) {
+                eprintln!("{CMD}: {text}");
                 return ExitCode::FAILURE;
             }
             for line in agent_failure_text(err, &worktree, since, ask.as_ref()).lines() {

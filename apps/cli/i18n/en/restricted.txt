@@ -1,0 +1,10 @@
+# User-facing messages of `raptor`, English (NFR-10, ADR-GRP-003): restricted.
+# The restricted view an agent gets (TS-GRP-010 D11). One `key = text` per line.
+# Placeholders are `{name}`. Every key exists in ../es/restricted.txt too.
+
+restricted.status = restricted view (an agent asks): worktree {worktree}, branch {branch}
+restricted.not-enabled = this repo is not enabled for agents: ask the developer to enable it with raptor mcp enable
+restricted.tui = the cockpit is not available to an agent: restricted view
+restricted.daemon = restricted view (an agent asks): the engine is {state}
+restricted.undo-done = undo done (restricted view): operation {id} undone; {not_restored} paths left as they were, {kept} kept
+restricted.redo-done = redo done (restricted view): undo {id} taken back; {not_restored} paths left as they were, {kept} kept

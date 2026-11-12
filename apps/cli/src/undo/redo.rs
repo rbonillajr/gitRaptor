@@ -7,10 +7,9 @@ use std::process::ExitCode;
 
 use gitraptor_api::methods;
 use gitraptor_api::rpc::code;
-use gitraptor_api::timemachine::{RedoResult, TmConfirmData, TmRejectReason};
+use gitraptor_api::timemachine::{McpRedoResult, RedoResult, TmConfirmData, TmRejectReason};
 use gitraptor_api::untrusted::sanitize;
 use gitraptor_core::client::ClientError;
-use serde_json::json;
 
 use super::{confirm, notices, overlap, path_reason_key, worktree_root};
 use crate::i18n::{Tr, t};
@@ -32,7 +31,7 @@ pub(crate) fn run(json_out: bool) -> ExitCode {
         Err(code) => return code,
     };
     notices::show_pending(&mut client, &worktree, CMD);
-    let params = json!({ "worktree": worktree.to_string_lossy(), "surface": "cli" });
+    let params = crate::restricted::tm_params(&client, &worktree);
     let answer = match confirm::call(
         &mut client,
         methods::TM_REDO,
@@ -48,6 +47,29 @@ pub(crate) fn run(json_out: bool) -> ExitCode {
             if json_out {
                 println!("{value}");
                 return ExitCode::SUCCESS;
+            }
+            // An agent's CLI (TS-GRP-010): the MCP's counts, never paths.
+            if crate::restricted::is_restricted(&client) {
+                return match serde_json::from_value::<McpRedoResult>(value) {
+                    Ok(result) => {
+                        println!(
+                            "{CMD}: {}",
+                            t(
+                                "restricted.redo-done",
+                                &[
+                                    ("id", &sanitize(&result.redone_undo_id)),
+                                    ("not_restored", &result.not_restored),
+                                    ("kept", &result.kept),
+                                ],
+                            )
+                        );
+                        ExitCode::SUCCESS
+                    }
+                    Err(err) => {
+                        eprintln!("{CMD}: {}", sanitize(&err.to_string()));
+                        ExitCode::FAILURE
+                    }
+                };
             }
             match serde_json::from_value::<RedoResult>(value) {
                 Ok(result) => {
@@ -74,6 +96,10 @@ pub(crate) fn run(json_out: bool) -> ExitCode {
                 })
             {
                 println!("{data}");
+                return ExitCode::FAILURE;
+            }
+            if let Some(text) = crate::restricted::refusal_text(&client, &err) {
+                eprintln!("{CMD}: {text}");
                 return ExitCode::FAILURE;
             }
             for line in failure_text(err, &worktree).lines() {

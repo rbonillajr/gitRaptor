@@ -162,6 +162,9 @@ fn daemon_status() -> ExitCode {
         Ok(client) => client,
         Err(code) => return code,
     };
+    if crate::restricted::is_restricted(&client) {
+        return daemon_status_restricted(&mut client);
+    }
     let snapshot = match snapshot(&mut client, CMD) {
         Ok(snapshot) => snapshot,
         Err(code) => return code,
@@ -204,6 +207,31 @@ fn daemon_status() -> ExitCode {
             sanitize(&status::wire(&repo.state)),
             repo.path.sanitized()
         );
+    }
+    ExitCode::SUCCESS
+}
+
+/// `raptor daemon status` on a connection the daemon fixed as `mcp` (an
+/// agent asks, TS-GRP-010 D11): the engine's state of the bounded snapshot
+/// and who the daemon sees, without the list of repos.
+fn daemon_status_restricted(client: &mut gitraptor_core::client::Client) -> ExitCode {
+    let snapshot: gitraptor_api::messages::McpSnapshot =
+        match client.call(gitraptor_api::methods::ENGINE_SNAPSHOT, serde_json::json!({})) {
+            Ok(snapshot) => snapshot,
+            Err(err) => {
+                eprintln!("raptor daemon status: {}", error_text(err));
+                return ExitCode::FAILURE;
+            }
+        };
+    println!(
+        "{}",
+        t(
+            "restricted.daemon",
+            &[("state", &status::wire(&snapshot.engine_state))],
+        )
+    );
+    if let Some(requester) = &client.hello().requester {
+        println!("{}", codes::requester_text(requester));
     }
     ExitCode::SUCCESS
 }
