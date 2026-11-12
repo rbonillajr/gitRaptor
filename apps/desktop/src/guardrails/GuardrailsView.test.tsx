@@ -126,7 +126,7 @@ describe("D7-VIEW GuardrailsView", () => {
     showView({ onBack });
     await flush();
     expect(screen.getByRole("heading", { name: /tienda/ }), "the header names the repo").toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Back to the fleet" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back to the graph" }));
     expect(onBack).toHaveBeenCalledTimes(1);
   });
 
@@ -201,7 +201,7 @@ describe("D7-VIEW GuardrailsView", () => {
     await flush();
     expect(screen.getByText("tienda isn't protected."), "grd.empty.unprotected").toBeInTheDocument();
     expect(document.body.textContent, "it must not claim protection").not.toContain("Protection is on");
-    expect(screen.queryAllByRole("button").map((b) => b.textContent), "protecting is US-DSK-002: only Back").toEqual(["Back to the fleet"]);
+    expect(screen.queryAllByRole("button").map((b) => b.textContent), "protecting is US-DSK-002: only Back").toEqual(["Back to the graph"]);
   });
 
   it("D7-VIEW: before the first read it shows a busy skeleton and never nothing blocked", async () => {

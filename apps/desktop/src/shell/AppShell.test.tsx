@@ -265,12 +265,21 @@ describe("D4 fleet shell", () => {
     expect(within(nav).getByText("Repos"), "the tree header").toBeInTheDocument();
   });
 
-  it("fleet shell: the centre paints the fleet of the open repo and the tree lists its worktrees", async () => {
+  it("the center shows the graph", async () => {
     await mountFleet((client, fleet) => applyEngineBatch(client, [globalWith("tienda", "zeta"), { type: "repo", fleet: fleet.repo }]));
     const main = screen.getByRole("main");
-    await within(main).findByRole("list", { name: "Worktrees of tienda" });
-    expect(within(main).getAllByRole("article"), "one card per worktree").toHaveLength(3);
+    await within(main).findByRole("grid", { name: "Lane graph of tienda" });
+    expect(within(main).queryAllByRole("article"), "the fleet cards are in the detail, not in the center").toHaveLength(0);
     expect(useUiStore.getState().selectedRepoId, "the first repo by name is open by default").toBe("tienda");
+  });
+
+  it("the detail shows agent status with the fleet", async () => {
+    await mountFleet((client, fleet) => applyEngineBatch(client, [globalWith("tienda", "zeta"), { type: "repo", fleet: fleet.repo }]));
+    const aside = screen.getByRole("complementary", { name: "Agent status" });
+    expect(within(aside).getByRole("heading", { level: 2, name: "Agent status" })).toBeInTheDocument();
+    await within(aside).findByRole("list", { name: "Worktrees of tienda" });
+    expect(within(aside).getAllByRole("article"), "one card per worktree").toHaveLength(3);
+    expect(screen.getByRole("button", { name: "Hide agent status" }), "the toggle names what the detail holds").toBeInTheDocument();
   });
 
   it("fleet shell: the open repo defaults to the first by name and fleet_open is called for it", async () => {

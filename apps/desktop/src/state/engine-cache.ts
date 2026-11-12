@@ -7,6 +7,8 @@ import type {
   CandidateDto,
   EngineMessage,
   GlobalDto,
+  GraphDto,
+  GraphUnavailableReason,
   RepoFleet,
   SessionDto,
 } from "@/client/engine-types";
@@ -24,6 +26,12 @@ export type GuardBlocks =
       entries: BlockEntryDto[];
       readAtMs: number | null;
     };
+
+/** The graph of the open repo: the last `graph.lanes` result, and why it could not be refreshed (DS-US-DSK-005 D17). */
+export interface GraphEntry {
+  graph: GraphDto | null;
+  unavailable: GraphUnavailableReason | null;
+}
 
 /** When the last `guardBlocks` of each repo arrived, to tell how old the entries of an unavailable read are. */
 const lastGuardRead = new Map<string, number>();
@@ -169,6 +177,13 @@ export function applyEngineBatch(client: QueryClient, batch: readonly EngineMess
           return { ...f, repo: { ...f.repo, pairs: [...byId.values()], pairsTruncated }, details, lastComputed };
         });
         break;
+      case "graph":
+        client.setQueryData<GraphEntry>(engineKeys.graph(message.repoId), { graph: message.graph, unavailable: null });
+        break;
+      case "graphUnavailable":
+        // The last graph stays: the view keeps the commits it has and says it could not refresh them.
+        client.setQueryData<GraphEntry>(engineKeys.graph(message.repoId), (old) => ({ graph: old?.graph ?? null, unavailable: message.reason }));
+        break;
       case "guardBlocks":
         lastGuardRead.set(message.blocks.repoId, Date.now());
         client.setQueryData<GuardBlocks>(engineKeys.guard(message.blocks.repoId), { state: "ready", ...message.blocks });
@@ -189,6 +204,7 @@ export function applyEngineBatch(client: QueryClient, batch: readonly EngineMess
         client.removeQueries({ queryKey: engineKeys.guard(message.repoId), exact: true });
         useEngineStore.getState().markRepoClosed(message.repoId);
         client.removeQueries({ queryKey: engineKeys.repo(message.repoId), exact: true });
+        client.removeQueries({ queryKey: engineKeys.graph(message.repoId), exact: true });
         if (useUiStore.getState().selectedRepoId === message.repoId) useUiStore.getState().selectRepo(null);
         break;
       case "conn":

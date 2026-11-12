@@ -50,6 +50,14 @@ function matchMedia(query: string): MediaQueryList {
 
 Object.defineProperty(window, "matchMedia", { configurable: true, writable: true, value: matchMedia });
 
+/** jsdom has no layout engine and no `ResizeObserver`: a no-op that never reports, so a size is only ever read at mount. */
+class NoopResizeObserver implements ResizeObserver {
+  observe(): void {}
+  unobserve(): void {}
+  disconnect(): void {}
+}
+if (typeof globalThis.ResizeObserver === "undefined") globalThis.ResizeObserver = NoopResizeObserver;
+
 beforeEach(() => {
   localStorage.clear();
 });

@@ -9,6 +9,8 @@ export interface EngineState {
   resync: ResyncReason | null;
   session: SessionInfo | null;
   lastRepoBatch: RepoBatchMark | null;
+  /** The last batch that carried a `graph` message: `GraphView` measures `gr:graph-delta` from `receivedAt` (T009). */
+  lastGraphBatch: RepoBatchMark | null;
   /** Repos the backend closed (`repoClosed`); skipped by the default choice until the repo list changes. */
   closedRepoIds: ReadonlySet<string>;
   /** The conflicts each repo already knows, so a conflict alerts once (DS-US-DSK-008 D12). Lives all run, in memory. */
@@ -25,6 +27,7 @@ export interface RepoBatchMark {
 
 export interface EngineActions {
   noteRepoBatch: (mark: RepoBatchMark) => void;
+  noteGraphBatch: (mark: RepoBatchMark) => void;
   markRepoClosed: (repoId: string) => void;
   clearClosedRepos: () => void;
   setRepoAlerts: (repoId: string, known: ReadonlyMap<string, "seeded" | "alerted"> | null) => void;
@@ -39,6 +42,7 @@ export const useEngineStore = create<EngineState & EngineActions>()((set) => ({
   resync: null,
   session: null,
   lastRepoBatch: null,
+  lastGraphBatch: null,
   closedRepoIds: new Set<string>(),
   alertState: new Map(),
   seededCounts: null,
@@ -53,6 +57,7 @@ export const useEngineStore = create<EngineState & EngineActions>()((set) => ({
   markRepoClosed: (repoId) => set((s) => ({ closedRepoIds: new Set(s.closedRepoIds).add(repoId) })),
   clearClosedRepos: () => set((s) => (s.closedRepoIds.size === 0 ? s : { closedRepoIds: new Set<string>() })),
   noteRepoBatch: (mark) => set({ lastRepoBatch: mark }),
+  noteGraphBatch: (mark) => set({ lastGraphBatch: mark }),
   apply: (batch) =>
     set((state) => {
       let next: Partial<EngineState> = {};

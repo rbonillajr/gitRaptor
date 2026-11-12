@@ -40,6 +40,8 @@ export function useFleet(): UseQueryResult<RepoFleet> {
 
   useEffect(() => {
     if (selected === null) return;
+    // The start of NFR-13.2: the repo was chosen, its graph is yet to paint.
+    performance.mark("gr:repo-selected");
     call("fleet_open", { repoId: selected }).catch(() => undefined);
   }, [selected]);
 

@@ -160,7 +160,7 @@ describe("engine states", () => {
   it("live data is not dimmed", () => {
     const { container } = show(scenario("content"));
     expect(container.querySelector("[data-center]")).not.toHaveAttribute("data-stale");
-    expect(container.querySelector("[data-fleet]"), "the content state is the fleet (skeleton or list), never empty").not.toBeNull();
+    expect(container.querySelector("[data-graph]"), "the content state is the graph (loading or ready), never empty").not.toBeNull();
   });
 
   it("incompatible engine says how to update, with the stop command and a Copy button", async () => {

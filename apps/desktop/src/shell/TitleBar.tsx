@@ -8,7 +8,7 @@ import { focusConflictPanel } from "@/conflicts/focus";
 import type { EngineView } from "@/engine/engine-view";
 import type { GlobalEntry } from "@/state/engine-cache";
 import { useUiStore, type Theme } from "@/state/ui-store";
-import { Button, IconButton, StatusPill } from "@/ui";
+import { Button, IconButton, StatusPill, Tooltip } from "@/ui";
 
 export interface TitleBarProps {
   sidebarId: string;
@@ -117,14 +117,17 @@ export function TitleBar(props: TitleBarProps) {
       <StatusPill symbol={pill.symbol} tone={pill.tone} label={t(pill.key, pill.values)} />
       <div data-tauri-drag-region className="flex-1 self-stretch" />
       <IconButton label={t(`shell.theme.toggle.${props.theme}`)} icon={<ThemeIcon theme={props.theme} />} onClick={props.onCycleTheme} />
-      <IconButton
-        ref={props.detailButtonRef}
-        label={t("shell.detail.toggle")}
-        icon={<PanelIcon side="right" />}
-        aria-expanded={props.detailOpen}
-        aria-controls={props.detailId}
-        onClick={props.onToggleDetail}
-      />
+      {/* The detail holds the agent status (DS-US-DSK-005 D15): the label names it so it is found without opening it blind. */}
+      <Tooltip content={t(props.detailOpen ? "detail.agents.hide" : "detail.agents.show")}>
+        <IconButton
+          ref={props.detailButtonRef}
+          label={t(props.detailOpen ? "detail.agents.hide" : "detail.agents.show")}
+          icon={<PanelIcon side="right" />}
+          aria-expanded={props.detailOpen}
+          aria-controls={props.detailId}
+          onClick={props.onToggleDetail}
+        />
+      </Tooltip>
       <ConflictPill />
     </header>
   );

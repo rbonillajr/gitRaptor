@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { RepoFleet, SessionDto } from "@/client/engine-types";
+import type { RepoFleet } from "@/client/engine-types";
 import { useEngineStore } from "@/state/engine-store";
 import { CardSkeleton, Panel, WorktreeCard } from "@/ui";
-import { assignSlots } from "./agent-colors";
 import { fleetCards, formatAge } from "./fleet-model";
+import { useAgentSlots } from "./useAgentSlots";
 
 export interface FleetViewProps {
   /** `undefined` until the repo snapshot is in: the view shows skeletons, never "no agents". */
@@ -16,9 +16,6 @@ export interface FleetViewProps {
 }
 
 const MAX_TIMING_ENTRIES = 1000;
-
-const sameSlots = (a: ReadonlyMap<string, number>, b: ReadonlyMap<string, number>) =>
-  a.size === b.size && [...a].every(([k, v]) => b.get(k) === v);
 
 /**
  * After the React commit that applied a batch with repo messages, in the first animation frame: one
@@ -46,8 +43,8 @@ function useFleetDeltaMarks(): void {
 
 /**
  * The fleet of the open repo: one card per worktree in the attention order. Presentational: the data and the
- * clock come in as props. The slot registry and the announcement baseline live in the keyed body, so they
- * reset when the repo changes.
+ * clock come in as props. The colour slots come from `useAgentSlots`; the announcement baseline lives in the keyed body, so it
+ * resets when the repo changes.
  */
 export function FleetView({ fleet, nowMs, activity }: FleetViewProps) {
   const { t } = useTranslation();
@@ -72,10 +69,8 @@ function FleetBody({ fleet, nowMs, activity }: FleetViewProps & { fleet: RepoFle
   const { repo } = fleet;
   const cards = useMemo(() => fleetCards(fleet, nowMs, activity, t), [fleet, nowMs, activity, t]);
 
-  const present = [...fleet.sessions.values()].filter((s: SessionDto) => s.state !== "ended");
-  const [slots, setSlots] = useState<ReadonlyMap<string, number>>(new Map());
-  const nextSlots = assignSlots(slots, present);
-  if (!sameSlots(slots, nextSlots)) setSlots(nextSlots);
+  // The slots are written by `useAgentSlotsSync`, mounted once in `GraphContent` (DS-US-DSK-005 D6).
+  const slots = useAgentSlots();
 
   const attentionKeys = cards.filter((c) => c.group === "attention").map((c) => c.key);
   const attentionSignature = attentionKeys.join("|");
@@ -114,7 +109,7 @@ function FleetBody({ fleet, nowMs, activity }: FleetViewProps & { fleet: RepoFle
             <WorktreeCard
               symbol={c.symbol}
               agentLabel={c.agent.label}
-              colorSlot={c.agent.sessionId === null ? null : (nextSlots.get(c.agent.sessionId) ?? null)}
+              colorSlot={c.agent.sessionId === null ? null : (slots.get(c.agent.sessionId) ?? null)}
               muted={c.agent.muted}
               shared={c.agent.shared}
               stateText={c.stateText}

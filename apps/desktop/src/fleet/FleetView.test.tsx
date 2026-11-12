@@ -13,9 +13,20 @@ import { useUiStore } from "@/state/ui-store";
 import { setViewportWidth } from "../../tests/setup";
 import { FleetView } from "./FleetView";
 import { HOUR, MIN, NOW, counted, pair, ready, session, tienda, worktree } from "./fixtures";
+import { useAgentSlotsSync } from "./useAgentSlots";
 
 const setLang = (l: "en" | "es") => act(async () => void (await i18n.changeLanguage(l)));
-const view = (fleet: RepoFleet | undefined, nowMs = NOW) => <FleetView fleet={fleet} nowMs={nowMs} activity />;
+/** The colour slots have one writer (`GraphContent` in the app); the view only reads them, so the test mounts the writer. */
+function SlotsSync({ fleet }: { fleet: RepoFleet | undefined }) {
+  useAgentSlotsSync(fleet);
+  return null;
+}
+const view = (fleet: RepoFleet | undefined, nowMs = NOW) => (
+  <>
+    <SlotsSync fleet={fleet} />
+    <FleetView fleet={fleet} nowMs={nowMs} activity />
+  </>
+);
 const cardsOf = () => screen.getAllByRole("article");
 const card = (name: RegExp | string) => screen.getByRole("article", { name });
 

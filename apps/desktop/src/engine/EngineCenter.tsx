@@ -1,24 +1,26 @@
 import { skipToken, useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import type { CandidateDto, ConnState } from "@/client/engine-types";
+import type { CandidateDto, ConnState, RepoFleet } from "@/client/engine-types";
 import { engineKeys } from "@/client/queries";
+import { usePredictionView, type ConflictBandModel } from "@/conflicts";
 import { ConflictDetailView } from "@/conflicts/ConflictDetailView";
 import { ConflictPanel } from "@/conflicts/ConflictPanel";
-import { fleetCards } from "@/fleet/fleet-model";
-import { FleetView } from "@/fleet/FleetView";
-import { useFleet } from "@/fleet/useFleet";
-import { useNow } from "@/fleet/useNow";
+import type { CardModel } from "@/fleet/fleet-model";
+import { useAgentSlotsSync } from "@/fleet/useAgentSlots";
+import { conflictLayer } from "@/graph/conflict-layer";
+import { graphModel } from "@/graph/graph-model";
+import { GraphView } from "@/graph/GraphView";
+import { useGraph } from "@/graph/useGraph";
 import { BlockDialog } from "@/guardrails/BlockDialog";
 import { blockRows, operationKey, type BlockRow, type CopiedException } from "@/guardrails/blocks-model";
 import { GuardrailsView } from "@/guardrails/GuardrailsView";
 import { GUARDRAILS_NAV_ID } from "@/guardrails/GuardrailsNavRow";
 import { useGuardAlerts } from "@/guardrails/useGuardAlerts";
 import { useGuardBlocks } from "@/guardrails/useGuardBlocks";
-import type { GlobalEntry } from "@/state/engine-cache";
-import { useEngineStore } from "@/state/engine-store";
+import type { GlobalEntry, GraphEntry } from "@/state/engine-cache";
 import { useUiStore } from "@/state/ui-store";
-import { Button, CopyCommand, Skeleton, StatePanel } from "@/ui";
+import { Button, ConflictBand, CopyCommand, Skeleton, StatePanel } from "@/ui";
 import { cx } from "@/ui/cx";
 import { MIN_GIT, type EngineView } from "./engine-view";
 
@@ -32,7 +34,7 @@ export interface EngineCenterProps {
   onRetry: (start: boolean) => void;
   /** Buttons stay `aria-disabled` until the next connection state arrives. */
   pending?: boolean;
-  /** Overrides the content state; by default it is the `FleetView` of the open repo. */
+  /** Overrides the content state; by default it is the lane graph of the open repo. */
   children?: ReactNode;
 }
 
@@ -147,19 +149,62 @@ function NoRepos({ gitVersion, candidates }: { gitVersion: string | null; candid
   );
 }
 
+/** The badges of a lane (⚡ before ⚠, two at most and "+N" for the rest) and what its rows say about them (D13). */
+const MAX_BADGES = 2;
+
 /**
- * The only place that mounts `useFleet`: it opens the default repo and reads its entry. Only for the content state.
- * The conflict panel sits above the main view (D5); a `pair` destination of the open repo replaces the main view (D7).
+ * The model of the graph for a repo whose snapshot is in. A component of its own because `usePredictionView` needs
+ * the fleet defined, and its bands feed `laneA11y`, which the model needs (DS-US-DSK-005 T006 3.2).
  */
-function FleetContent({ live, copied, onOpenRow }: GuardrailsHandlers & { live: boolean }) {
-  const { t } = useTranslation();
-  const fleet = useFleet().data;
+function GraphMain({ fleet, cards, entry, nowMs, repoName, stale }: { fleet: RepoFleet; cards: readonly CardModel[]; entry: GraphEntry | null; nowMs: number; repoName: string; stale: boolean }) {
+  const { t, i18n } = useTranslation();
+  const view = usePredictionView(fleet, cards, nowMs);
+  const layers = useMemo(() => [conflictLayer(view.bands)], [view.bands]);
+  const bandsOf = useMemo(() => {
+    const byLane = new Map<string, ConflictBandModel[]>();
+    for (const band of view.bands) {
+      for (const side of [band.a, band.b]) {
+        if (side.kind === "base") continue;
+        byLane.set(side.key, [...(byLane.get(side.key) ?? []), band]);
+      }
+    }
+    return byLane;
+  }, [view.bands]);
+  const laneA11y = useCallback((key: string) => bandsOf.get(key)?.map((b) => b.a11yLabel).join(", ") ?? null, [bandsOf]);
+  const laneBadge = useCallback(
+    (key: string) => {
+      const bands = bandsOf.get(key);
+      if (bands === undefined) return null;
+      const ordered = [...bands].sort((x, y) => Number(y.level === "conflict") - Number(x.level === "conflict"));
+      const hidden = ordered.length - MAX_BADGES;
+      return (
+        <>
+          {ordered.slice(0, MAX_BADGES).map((b) => (
+            <ConflictBand key={b.pairId} variant="badge" level={b.level} aLabel={b.aLabel} bLabel={b.bLabel} firstFile={b.firstFile} moreText={b.moreText} freshnessText={b.freshnessText} stale={b.stale} isNew={b.isNew} a11yLabel={b.a11yLabel} />
+          ))}
+          {hidden > 0 ? <span className="text-text-muted [font:var(--gr-type-caption)]">+{hidden}</span> : null}
+        </>
+      );
+    },
+    [bandsOf],
+  );
+  const model = useMemo(() => graphModel({ fleet, cards, entry, t, locale: i18n.language, laneA11y }), [fleet, cards, entry, t, i18n.language, laneA11y]);
+  return <GraphView model={model} repoName={repoName} stale={stale} layers={layers} laneBadge={laneBadge} />;
+}
+
+/**
+ * The only place that mounts `useFleet` (through `useGraph`): it opens the default repo, reads its entry and is the
+ * only writer of the colour slots. Only for the content state. The conflict panel sits above the main view (D5); a
+ * `pair` destination of the open repo replaces the main view (D7).
+ */
+function GraphContent({ live, copied, onOpenRow }: GuardrailsHandlers & { live: boolean }) {
+  const { fleet, cards, entry, nowMs } = useGraph();
+  useAgentSlotsSync(fleet);
   const selected = useUiStore((s) => s.selectedRepoId);
   const repoName = useQuery<GlobalEntry>({ queryKey: engineKeys.global, queryFn: skipToken }).data?.repos.find((r) => r.repoId === selected)?.name ?? "";
-  const nowMs = useNow();
-  const activity = useEngineStore((s) => s.session?.activity ?? false);
   const center = useUiStore((s) => s.center);
-  const cards = useMemo(() => (fleet === undefined ? [] : fleetCards(fleet, nowMs, activity, t)), [fleet, nowMs, activity, t]);
+  const { t, i18n } = useTranslation();
+  const loading = useMemo(() => graphModel({ fleet: undefined, cards: [], entry: null, t, locale: i18n.language }), [t, i18n.language]);
   const pairOpen = fleet !== undefined && center.view === "pair" && center.repoId === fleet.repo.repoId ? center : null;
   if (center.view === "guardrails") {
     const back = () => {
@@ -173,8 +218,10 @@ function FleetContent({ live, copied, onOpenRow }: GuardrailsHandlers & { live: 
       {fleet !== undefined ? <ConflictPanel fleet={fleet} cards={cards} nowMs={nowMs} /> : null}
       {fleet !== undefined && pairOpen !== null ? (
         <ConflictDetailView key={pairOpen.pairId} fleet={fleet} cards={cards} pairId={pairOpen.pairId} nowMs={nowMs} />
+      ) : fleet === undefined ? (
+        <GraphView model={loading} repoName={repoName} stale={!live} />
       ) : (
-        <FleetView fleet={fleet} nowMs={nowMs} activity={activity} />
+        <GraphMain key={fleet.repo.repoId} fleet={fleet} cards={cards} entry={entry} nowMs={nowMs} repoName={repoName} stale={!live} />
       )}
     </div>
   );
@@ -212,7 +259,7 @@ function Body({ center, conn, gitVersion, candidates, onRetry, pending = false, 
     case "no-repos":
       return <NoRepos gitVersion={gitVersion} candidates={candidates} />;
     case "content":
-      return children ?? <FleetContent live={conn.kind === "live"} copied={copied} onOpenRow={onOpenRow} />;
+      return children ?? <GraphContent live={conn.kind === "live"} copied={copied} onOpenRow={onOpenRow} />;
   }
 }
 

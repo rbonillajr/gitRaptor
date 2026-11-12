@@ -321,7 +321,7 @@
       "calculating": "Calculando…",
       "resolved": "Ya no se prevé conflicto entre {{a}} y {{b}} (hace {{age}}).",
       "gone": "Este par ya no se calcula.",
-      "back": "Volver a la flota",
+      "back": "Volver al grafo",
       "todoTitle": "Qué hacer",
       "sideA11y": "{{side}}, {{ranges}}",
       "conflictHint": "Dos ramas cambiaron la misma parte de un archivo; al integrarlas, Git pedirá elegir.",
@@ -520,7 +520,98 @@
     "unlogged": "De {{from}} a {{to}} el motor no estaba en marcha: lo que bloquearon los hooks entonces no está anotado",
     "unverified": "Anotadas sin detalle (demasiadas a la vez)",
     "view": {
-      "back": "Volver a la flota"
+      "back": "Volver al grafo"
+    }
+  },
+  "graph": {
+    "title": "Grafo de carriles de {{repo}}",
+    "column": {
+      "branch": "Rama / Etiqueta",
+      "graph": "Grafo",
+      "message": "Mensaje del commit",
+      "author": "Autor",
+      "date": "Fecha / Hora",
+      "sha": "Sha"
+    },
+    "settings": {
+      "title": "Ajustes de columnas",
+      "alwaysVisible": "Siempre visible",
+      "reset": "Restablecer",
+      "folded": "No cabe con este ancho"
+    },
+    "view": {
+      "label": "Vista del grafo",
+      "graph": "Grafo",
+      "table": "Tabla",
+      "announce": {
+        "graph": "Vista del grafo",
+        "table": "Vista en tabla"
+      },
+      "shortcut": "{{label}} (⌥⌘T)"
+    },
+    "wip_one": "WIP · {{count}} archivo sin commit",
+    "wip_other": "WIP · {{count}} archivos sin commit",
+    "base": {
+      "label": "{{base}} · base",
+      "unconfirmed": "Base {{base}} sin confirmar: confirma la rama base para ver los carriles",
+      "none": "Sin rama base: no calculable",
+      "missing": "Rama base {{base}} no encontrada: no calculable",
+      "missingHint": "Comprueba que esa rama existe en el repo: GitRaptor no dibuja carriles contra otra rama.",
+      "repoUnavailable": "El repo no se puede leer ahora"
+    },
+    "clipped": "El dibujo muestra {{shown}} de {{total}} carriles; la vista en tabla los lista todos.",
+    "empty": {
+      "noLanes": "Las ramas de tus agentes aparecerán cuando hagan su primer commit."
+    },
+    "noAgent": "Sin agente",
+    "lane": {
+      "loading": "cargando commits…",
+      "unborn": "{{name}} (sin commits)",
+      "cut": "no se muestra: demasiados carriles",
+      "gap": {
+        "worktreeUnavailable": "copia no disponible",
+        "noCommits": "sin commits",
+        "noMergeBase": "sin commit común con la base",
+        "tooSlow": "tardó demasiado",
+        "unreadable": "ilegible ahora"
+      }
+    },
+    "more_one": "{{count}} commit más",
+    "more_other": "{{count}} commits más",
+    "moreAtLeast": "al menos {{count}} más",
+    "fork": "sale de {{base}} en {{commit}}",
+    "author": {
+      "unattributed": "Tú u otro (sin atribuir)",
+      "tooltip": "GitRaptor aún no sabe qué agente hizo este commit."
+    },
+    "unsupported": "Este motor no ofrece los commits del grafo; actualiza o reinicia GitRaptor.",
+    "failed": "No se pudieron leer los commits ahora; se ven los últimos.",
+    "cut": "Se ven {{shown}} de {{total}} carriles",
+    "a11y": {
+      "lane": "Carril {{branch}}, {{agent}}, {{state}}, {{sync}}",
+      "commit": "{{branch}}, commit {{sha}}, {{message}}, {{author}}, {{date}}",
+      "wip_one": "{{branch}}, {{count}} archivo sin commit",
+      "wip_other": "{{branch}}, {{count}} archivos sin commit",
+      "more_one": "{{count}} commit más en {{branch}}",
+      "more_other": "{{count}} commits más en {{branch}}",
+      "fork": "{{branch}} sale de {{base}} en el commit {{commit}}",
+      "base": "Rama base {{base}}"
+    },
+    "table": {
+      "label": "Carriles de {{repo}}",
+      "branch": "Rama",
+      "agent": "Agente",
+      "state": "Estado",
+      "sync": "Por delante/detrás",
+      "commits": "Commits",
+      "commitsOf": "{{shown}} de {{total}}"
+    }
+  },
+  "detail": {
+    "agents": {
+      "title": "Estado de Agentes",
+      "show": "Mostrar estado de agentes",
+      "hide": "Ocultar estado de agentes"
     }
   }
 }

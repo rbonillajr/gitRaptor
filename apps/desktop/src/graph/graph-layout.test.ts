@@ -10,7 +10,7 @@ beforeEach(async () => {
 });
 
 /** A repo with `n` lanes named lane-00 …, each with one commit. */
-const gapOf = (g: ReturnType<typeof graphLayout>) => (g.laneX.get("lane-01") ?? 0) - (g.laneX.get("lane-00") ?? 0);
+const gapOf = (g: ReturnType<typeof graphLayout>) => (g.laneX.get("key-lane-01") ?? 0) - (g.laneX.get("key-lane-00") ?? 0);
 
 function manyLanes(n: number) {
   const names = Array.from({ length: n }, (_, i) => `lane-${String(i).padStart(2, "0")}`);
@@ -55,7 +55,7 @@ describe("graphLayout", () => {
 
   it("the gap shrinks to fit the column and the node radius follows below 10 px", () => {
     const ten = graphLayout(manyLanes(10), 175);
-    expect(ten.laneX.get("lane-09")).toBeLessThanOrEqual(175);
+    expect(ten.laneX.get("key-lane-09")).toBeLessThanOrEqual(175);
     expect(gapOf(ten)).toBeLessThan(16);
     expect(ten.nodeRadius).toBe(4);
     expect(graphLayout(manyLanes(18), 175).nodeRadius).toBe(3);

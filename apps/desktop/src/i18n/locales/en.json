@@ -321,7 +321,7 @@
       "calculating": "Calculating…",
       "resolved": "No conflict predicted between {{a}} and {{b}} anymore ({{age}} ago).",
       "gone": "This pair is no longer predicted.",
-      "back": "Back to the fleet",
+      "back": "Back to the graph",
       "todoTitle": "What to do",
       "sideA11y": "{{side}}, {{ranges}}",
       "conflictHint": "Two branches changed the same part of a file; merging them will need a choice.",
@@ -520,7 +520,98 @@
     "unlogged": "From {{from}} to {{to}} the engine wasn't running: what the hooks blocked then isn't logged",
     "unverified": "Logged without detail (too many at once)",
     "view": {
-      "back": "Back to the fleet"
+      "back": "Back to the graph"
+    }
+  },
+  "graph": {
+    "title": "Lane graph of {{repo}}",
+    "column": {
+      "branch": "Branch / Tag",
+      "graph": "Graph",
+      "message": "Commit message",
+      "author": "Author",
+      "date": "Date / Time",
+      "sha": "Sha"
+    },
+    "settings": {
+      "title": "Column settings",
+      "alwaysVisible": "Always visible",
+      "reset": "Reset",
+      "folded": "Doesn't fit at this width"
+    },
+    "view": {
+      "label": "Graph view",
+      "graph": "Graph",
+      "table": "Table",
+      "announce": {
+        "graph": "Graph view",
+        "table": "Table view"
+      },
+      "shortcut": "{{label}} (⌥⌘T)"
+    },
+    "wip_one": "WIP · {{count}} uncommitted file",
+    "wip_other": "WIP · {{count}} uncommitted files",
+    "base": {
+      "label": "{{base}} · base",
+      "unconfirmed": "Base {{base}} not confirmed: confirm the base branch to see the lanes",
+      "none": "No base branch: not computable",
+      "missing": "Base branch {{base}} not found: not computable",
+      "missingHint": "Check that the branch exists in this repo: GitRaptor doesn't draw lanes against another branch.",
+      "repoUnavailable": "The repo can't be read now"
+    },
+    "clipped": "The drawing shows {{shown}} of {{total}} lanes; the table view lists them all.",
+    "empty": {
+      "noLanes": "Your agents' branches will show up when they make their first commit."
+    },
+    "noAgent": "No agent",
+    "lane": {
+      "loading": "loading commits…",
+      "unborn": "{{name}} (no commits)",
+      "cut": "not shown: too many lanes",
+      "gap": {
+        "worktreeUnavailable": "worktree unavailable",
+        "noCommits": "no commits",
+        "noMergeBase": "no common commit with the base",
+        "tooSlow": "took too long",
+        "unreadable": "unreadable now"
+      }
+    },
+    "more_one": "{{count}} more commit",
+    "more_other": "{{count}} more commits",
+    "moreAtLeast": "at least {{count}} more",
+    "fork": "branches off {{base}} at {{commit}}",
+    "author": {
+      "unattributed": "You or another (unattributed)",
+      "tooltip": "GitRaptor doesn't know yet which agent made this commit."
+    },
+    "unsupported": "This engine doesn't offer the graph commits; update or restart GitRaptor.",
+    "failed": "Couldn't read the commits now; showing the last ones.",
+    "cut": "Showing {{shown}} of {{total}} lanes",
+    "a11y": {
+      "lane": "Lane {{branch}}, {{agent}}, {{state}}, {{sync}}",
+      "commit": "{{branch}}, commit {{sha}}, {{message}}, {{author}}, {{date}}",
+      "wip_one": "{{branch}}, {{count}} uncommitted file",
+      "wip_other": "{{branch}}, {{count}} uncommitted files",
+      "more_one": "{{count}} more commit in {{branch}}",
+      "more_other": "{{count}} more commits in {{branch}}",
+      "fork": "{{branch}} branches off {{base}} at commit {{commit}}",
+      "base": "Base branch {{base}}"
+    },
+    "table": {
+      "label": "Lanes of {{repo}}",
+      "branch": "Branch",
+      "agent": "Agent",
+      "state": "State",
+      "sync": "Ahead/behind",
+      "commits": "Commits",
+      "commitsOf": "{{shown}} of {{total}}"
+    }
+  },
+  "detail": {
+    "agents": {
+      "title": "Agent status",
+      "show": "Show agent status",
+      "hide": "Hide agent status"
     }
   }
 }

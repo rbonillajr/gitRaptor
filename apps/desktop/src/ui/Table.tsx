@@ -1,4 +1,4 @@
-import { useRef, useState, type KeyboardEvent, type ReactNode, type Ref } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type Ref } from "react";
 import { useTranslation } from "react-i18next";
 import { cx, type CssVars } from "./cx";
 
@@ -27,6 +27,14 @@ export interface TableProps<Row> {
   onSelect: (id: string) => void;
   onActivate: (id: string) => void;
   wipId?: string;
+  /** More than one WIP row (the graph has one per worktree with changes). */
+  wipIds?: ReadonlySet<string>;
+  /** Absolute index of `rows[0]` in a virtualised list (default 0); `aria-rowindex` counts from it. */
+  firstRowIndex?: number;
+  /** When it changes and that row is painted, the row takes the focus (a virtual list scrolled it into view). */
+  focusId?: string | null;
+  /** A key that moves to a row outside the painted ones; `Home` is 0 and `End` is `totalRows - 1`. */
+  onFocusOutside?: (absoluteIndex: number) => void;
   loading?: boolean;
   /** Engine stopped or disconnected: muted, no hover, keyboard still moves but selects nothing. */
   disabled?: boolean;
@@ -133,6 +141,10 @@ export function Table<Row>({
   onSelect,
   onActivate,
   wipId,
+  wipIds,
+  firstRowIndex = 0,
+  focusId = null,
+  onFocusOutside,
   loading = false,
   disabled = false,
   settings,
@@ -152,6 +164,27 @@ export function Table<Row>({
     if (id === undefined) return;
     setFocusedId(id);
     rowEls.current.get(id)?.focus();
+  };
+  // A row the caller asked to focus (virtual list): focus it once, when it is painted.
+  const focusedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (focusId === null) {
+      focusedFor.current = null;
+      return;
+    }
+    if (focusedFor.current === focusId) return;
+    const el = rowEls.current.get(focusId);
+    if (!el) return;
+    focusedFor.current = focusId;
+    el.focus();
+  });
+  const total = totalRows ?? rows.length;
+  /** Moves to the absolute index `target`: a painted row takes the focus, another one is the caller's to scroll to. */
+  const moveTo = (target: number) => {
+    const absolute = Math.max(0, Math.min(target, total - 1));
+    const local = absolute - firstRowIndex;
+    if (onFocusOutside && (local < 0 || local >= ids.length)) onFocusOutside(absolute);
+    else focusRow(local);
   };
   const choose = (id: string) => {
     if (!disabled) onSelect(id);
@@ -183,27 +216,27 @@ export function Table<Row>({
     switch (e.key) {
       case "ArrowDown":
         e.preventDefault();
-        focusRow(at + 1);
+        moveTo(firstRowIndex + at + 1);
         return;
       case "ArrowUp":
         e.preventDefault();
-        focusRow(at - 1);
+        moveTo(firstRowIndex + at - 1);
         return;
       case "PageDown":
         e.preventDefault();
-        focusRow(at + PAGE);
+        moveTo(firstRowIndex + at + PAGE);
         return;
       case "PageUp":
         e.preventDefault();
-        focusRow(at - PAGE);
+        moveTo(firstRowIndex + at - PAGE);
         return;
       case "Home":
         e.preventDefault();
-        focusRow(0);
+        moveTo(0);
         return;
       case "End":
         e.preventDefault();
-        focusRow(ids.length - 1);
+        moveTo(total - 1);
         return;
       case "Enter":
         e.preventDefault();
@@ -224,7 +257,7 @@ export function Table<Row>({
     <div
       role="grid"
       aria-label={label}
-      aria-rowcount={(totalRows ?? rows.length) + 1}
+      aria-rowcount={total + 1}
       aria-colcount={columns.length}
       aria-busy={loading ? "true" : undefined}
       aria-disabled={disabled ? "true" : undefined}
@@ -256,9 +289,9 @@ export function Table<Row>({
               }}
               id={id}
               label={getRowLabel(row)}
-              rowIndex={i + 2}
+              rowIndex={firstRowIndex + i + 2}
               selected={id === selectedId}
-              wip={id === wipId}
+              wip={id === wipId || wipIds?.has(id) === true}
               tabbable={id === stopId}
               disabled={disabled}
               columns={columns}

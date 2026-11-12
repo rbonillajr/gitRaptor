@@ -4,11 +4,23 @@
 import i18n from "i18next";
 import type { BoundedCountDto, CommitDto, GraphDto, LaneDto, LaneGapReason, RepoFleet } from "@/client/engine-types";
 import { fleetCards, type CardModel } from "@/fleet/fleet-model";
-import { MIN, NOW, counted, ready, tienda, worktree } from "@/fleet/fixtures";
+import { MIN, NOW, counted, ready, tienda as fleetTienda, worktree, type FleetInput } from "@/fleet/fixtures";
 import { graphModel } from "./graph-model";
 import type { GraphEntry, GraphModel } from "./graph-types";
 
-export { HOUR, MIN, NOW, counted, pair, ready, session, tienda, worktree } from "@/fleet/fixtures";
+export { HOUR, MIN, NOW, counted, pair, ready, session, worktree } from "@/fleet/fixtures";
+
+/**
+ * "tienda" of the fleet with the trunk the graph script describes: `main` with 3 uncommitted files. The fleet
+ * fixture keeps its trunk clean (its own tests read "no changes"), so the graph adds the files here.
+ */
+export function tienda(input: FleetInput = {}): RepoFleet {
+  if (input.worktrees !== undefined) return fleetTienda(input);
+  const worktrees = fleetTienda().repo.worktrees.map((w) =>
+    w.main && w.status.state === "ready" ? { ...w, status: { ...w.status, counts: { staged: 0, unstaged: 2, untracked: 1 } } } : w,
+  );
+  return fleetTienda({ ...input, worktrees });
+}
 
 export const MERGE_BASE = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678";
 

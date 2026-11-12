@@ -72,14 +72,14 @@ describe("ConflictDetailView", () => {
     expect(file?.textContent).toContain(`${B} — lines 44–61`);
     expect(screen.getByText("feat-pagos ↔ feat-login · computed 40 s ago"), "folder A ↔ folder B and the age").toBeInTheDocument();
     expect(screen.getByText("What to do")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Back to the fleet" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Back to the graph" })).toBeInTheDocument();
   });
 
   it("the detail has no write buttons and no copy-notice button", () => {
     show(fleetWith([CONFLICT], [detailOf(CONFLICT)]));
     const names = screen.getAllByRole("button").map((b) => b.textContent);
     expect(screen.getByRole("heading", { level: 2, name: /collide/ }), "painted").toBeInTheDocument();
-    expect(names.sort(), "only back and the limits popover").toEqual(["Back to the fleet", "Limits (?)"]);
+    expect(names.sort(), "only back and the limits popover").toEqual(["Back to the graph", "Limits (?)"]);
   });
 
   it("a detail of another rev is not shown", () => {
@@ -104,11 +104,11 @@ describe("ConflictDetailView", () => {
     const resolved = { ...CONFLICT, level: "none" as const };
     const view = show(fleetWith([resolved], [detailOf(resolved)]));
     expect(view.container.textContent).toContain(`No conflict predicted between ${A} and ${B} anymore (40 s ago).`);
-    expect(screen.getByRole("button", { name: "Back to the fleet" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Back to the graph" })).toBeInTheDocument();
     view.unmount();
     show(fleetWith([CONFLICT]), "missing");
     expect(screen.getByText("This pair is no longer predicted.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Back to the fleet" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Back to the graph" })).toBeInTheDocument();
   });
 
   it("Esc goes back and returns focus to the band", () => {
