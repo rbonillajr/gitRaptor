@@ -10,10 +10,10 @@
 
 | Estado | Fichas |
 |---|---|
-| Implementado (`implemented`) | 83 |
+| Implementado (`implemented`) | 84 |
 | Hecho (`done`) | 3 |
 | Implementado en parte (`partially-implemented`) | 27 |
-| Listo (`ready`) | 28 |
+| Listo (`ready`) | 27 |
 | Borrador (`draft`) | 70 |
 | Bloqueado (`blocked`) | 1 |
 | **Total** | **212** |
@@ -26,7 +26,7 @@
 | [desktop](#desktop) | 6 | 0 | 1 | 16 | 0 | 0 | 23 |
 | [guardrails](#guardrails) | 14 | 0 | 7 | 1 | 3 | 0 | 25 |
 | [mcp](#mcp) | 7 | 0 | 4 | 0 | 16 | 0 | 27 |
-| [motor-local](#motor-local) | 21 | 2 | 9 | 3 | 16 | 0 | 51 |
+| [motor-local](#motor-local) | 22 | 2 | 9 | 2 | 16 | 0 | 51 |
 | [time-machine](#time-machine) | 19 | 1 | 1 | 0 | 13 | 0 | 34 |
 | [worktree-lifecycle](#worktree-lifecycle) | 0 | 0 | 0 | 7 | 6 | 0 | 13 |
 
@@ -174,7 +174,7 @@
 
 ### motor-local
 
-51 fichas: 21 implementado, 2 hecho, 9 implementado en parte, 3 listo, 16 borrador.
+51 fichas: 22 implementado, 2 hecho, 9 implementado en parte, 2 listo, 16 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -185,6 +185,7 @@
 | [TS-GRP-006](features/motor-local/technical-stories/TS-GRP-006-observacion-por-niveles.md) | Observación por niveles: activo, dormido con centinela y despertar | Implementado (`implemented`) | #164, #167, #173, #178 | — |
 | [TS-GRP-008](features/motor-local/technical-stories/TS-GRP-008-ambito-git-ajeno-s3.md) | S3 cuenta los `git` ajenos en el ámbito del evento, no en todo el repo | Implementado (`implemented`) | — | — |
 | [TS-GRP-009](features/motor-local/technical-stories/TS-GRP-009-clase-desktop-perfil-lectura.md) | Clase de cliente de la app de escritorio y perfil de lectura mcp con un agente en su ascendencia | Implementado (`implemented`) | — | — |
+| [TS-GRP-010](features/motor-local/technical-stories/TS-GRP-010-perfil-mcp-por-solicitante.md) | Perfil mcp por solicitante: la CLI o la TUI que lanza un agente recibe el perfil mcp | Implementado (`implemented`) | — | — |
 | [US-GRP-001](features/motor-local/user-stories/US-GRP-001-estado-worktrees-repo-anadido.md) | El desarrollador ve el estado de cada worktree del repo que añadió | Implementado (`implemented`) | #46 | — |
 | [US-GRP-002](features/motor-local/user-stories/US-GRP-002-cambios-eventos-en-vivo.md) | El desarrollador ve los cambios y eventos de Git de sus worktrees casi al instante | Implementado (`implemented`) | #57, #75 | — |
 | [US-GRP-003](features/motor-local/user-stories/US-GRP-003-estados-especiales-no-disponible.md) | El desarrollador sabe qué worktree está en un estado especial o ya no existe | Implementado (`implemented`) | — | — |
@@ -212,7 +213,6 @@
 | [TS-GRP-005](features/motor-local/technical-stories/TS-GRP-005-clases-trabajo-ahorro-energia.md) | Clases de trabajo del daemon y mecanismo de ahorro de energía | Implementado en parte (`partially-implemented`) | #298, #323 | — |
 | [TD-GRP-002](features/motor-local/technical-stories/TD-GRP-002-motor-bajo-rafaga.md) | Frescura y memoria del motor bajo una ráfaga de archivos | Listo (`ready`) | — | — |
 | [TD-GRP-003](features/motor-local/technical-stories/TD-GRP-003-nfr04-maquina-referencia.md) | Presupuesto de NFR-04 sin gate automático: medirlo en una máquina de referencia | Listo (`ready`) | — | — |
-| [TS-GRP-010](features/motor-local/technical-stories/TS-GRP-010-perfil-mcp-por-solicitante.md) | Perfil mcp por solicitante: la CLI o la TUI que lanza un agente recibe el perfil mcp | Listo (`ready`) | — | — |
 | [TD-GRP-004](features/motor-local/technical-stories/TD-GRP-004-corroborar-ambito-worktree-s3.md) | Corroborar con el reflog de HEAD el ámbito worktree de S3 y blindar la lectura de la redirección | Borrador (`draft`) | — | — |
 | [TD-GRP-008](features/motor-local/technical-stories/TD-GRP-008-daemon-colgado-del-lanzador-s4.md) | Un daemon lanzado desde una sesión de agente cuelga de ella por el ppid y S4 puede atribuirle sus escrituras | Borrador (`draft`) | — | — |
 | [TD-GRP-009](features/motor-local/technical-stories/TD-GRP-009-cola-consultas-por-solicitante.md) | La cola global de consultas bajo demanda se reparte por solicitante | Borrador (`draft`) | — | — |
@@ -453,14 +453,14 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### M3
 
-15 fichas: 3 implementado en parte, 6 listo, 6 borrador.
+15 fichas: 1 implementado, 3 implementado en parte, 5 listo, 6 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
+| [TS-GRP-010](features/motor-local/technical-stories/TS-GRP-010-perfil-mcp-por-solicitante.md) | Perfil mcp por solicitante: la CLI o la TUI que lanza un agente recibe el perfil mcp | Implementado (`implemented`) | — | — |
 | [SPIKE-GRD-001](features/guardrails/technical-stories/SPIKE-GRD-001-interceptabilidad-hooks.md) | Interceptabilidad, coexistencia y coste de la capa de hooks en los tres SO | Implementado en parte (`partially-implemented`) | #22, #25, #121 | 2 |
 | [SPIKE-GRP-002](features/motor-local/technical-stories/SPIKE-GRP-002-viabilidad-observador.md) | Viabilidad del observador de cambios a escala en los tres SO | Implementado en parte (`partially-implemented`) | #17, #23 | 2 |
 | [TD-GRP-001](features/motor-local/technical-stories/TD-GRP-001-acl-windows.md) | Verificación de ACL en Windows: git.exe (SEC-10) y perfil (SEC-06) | Implementado en parte (`partially-implemented`) | #72 | 2 |
-| [TS-GRP-010](features/motor-local/technical-stories/TS-GRP-010-perfil-mcp-por-solicitante.md) | Perfil mcp por solicitante: la CLI o la TUI que lanza un agente recibe el perfil mcp | Listo (`ready`) | — | — |
 | [US-WTL-001](features/worktree-lifecycle/user-stories/US-WTL-001-worktree-con-copia-desde-semilla.md) | El desarrollador crea un worktree con rama con nombre y artefactos copiados desde una semilla quieta | Listo (`ready`) | — | — |
 | [US-WTL-002](features/worktree-lifecycle/user-stories/US-WTL-002-descarte-reversible-disco.md) | El desarrollador descarta el worktree de un agente terminado, sabe cuánto disco ganó y lo puede restaurar | Listo (`ready`) | — | — |
 | [US-WTL-004](features/worktree-lifecycle/user-stories/US-WTL-004-worktrees-de-claude-code.md) | Los worktrees que Claude Code crea y borra por su cuenta quedan bajo la red de seguridad de GitRaptor | Listo (`ready`) | — | — |
