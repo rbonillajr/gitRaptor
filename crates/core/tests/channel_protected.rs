@@ -28,7 +28,8 @@ use gitraptor_api::catalog::{
 use gitraptor_api::messages::{ClientKind, RefusalReason, RefusedData};
 use gitraptor_api::rpc::code;
 use gitraptor_api::timemachine::{
-    OperationRunResult, PriorFailedData, PriorFailure, RequestChannel, RequesterView, ResolvedVia,
+    McpRequesterView, OperationRunResult, PriorFailedData, PriorFailure, RequestChannel,
+    RequesterView,
 };
 use gitraptor_api::{Actor, PROTOCOL_VERSION, methods};
 use gitraptor_core::channel::{ChannelConfig, ProtectedWiring};
@@ -780,7 +781,6 @@ fn mcp_scope_comes_from_the_caller() {
     ));
     assert_eq!(code, code::SCOPE_REFUSED);
     for method in [
-        methods::TM_REDO,
         methods::TM_RESTORE,
         methods::TM_TIMELINE,
         methods::OPERATION_CANCEL,
@@ -788,9 +788,12 @@ fn mcp_scope_comes_from_the_caller() {
         let (code, _) = rpc_err(m.call(method, json!({})));
         assert_eq!(code, code::METHOD_NOT_FOUND, "{method}");
     }
-    // An unattributed requester cannot undo over MCP (TQ-7 → a).
-    let (code, _) = rpc_err(m.call(methods::TM_UNDO, json!({})));
-    assert_eq!(code, code::SCOPE_REFUSED);
+    // An unattributed requester cannot undo nor redo over MCP (TQ-7 → a; redo is offered over
+    // MCP since TS-GRP-010 D14, for an undo of the caller's own session only).
+    for method in [methods::TM_UNDO, methods::TM_REDO] {
+        let (code, _) = rpc_err(m.call(method, json!({})));
+        assert_eq!(code, code::SCOPE_REFUSED, "{method}");
+    }
     // Over MCP the requester is only the actor.
     let view: Value = m.call(methods::REQUESTER_RESOLVE, json!({})).unwrap();
     let mut keys: Vec<_> = view.as_object().unwrap().keys().cloned().collect();
@@ -864,17 +867,30 @@ fn a_child_of_the_operation_cannot_use_a_reserved_command() {
         serde_json::from_value(prepare_and_run(&mut c, create_worktree("/repos/a")).unwrap())
             .unwrap();
     let answers: Vec<Value> = serde_json::from_slice(&std::fs::read(&out).unwrap()).unwrap();
-    let view: RequesterView = serde_json::from_value(answers[0]["ok"].clone()).unwrap();
-    assert_eq!(view.via, ResolvedVia::Executor);
+    // TS-GRP-010 (D1 e, D10): a child of the operation is narrowed to `mcp`, whose view of the
+    // requester carries neither `via` nor `confirmable` (an oracle for evasion); it still acts as
+    // the operation's requester, and the executor is told by the refusals below.
+    let view: McpRequesterView = serde_json::from_value(answers[0]["ok"].clone()).unwrap();
     assert_eq!(view.actor, result.requester.actor);
-    assert!(!view.confirmable);
     assert_eq!(answers[1]["code"], code::RESERVED_REFUSED);
     let refused: RefusedData = serde_json::from_value(answers[1]["data"].clone()).unwrap();
     assert_eq!(refused.reason, RefusalReason::DaemonDescendant);
-    for answer in &answers[2..] {
-        assert_eq!(answer["code"], code::OPERATION_REJECTED, "{answer}");
-        assert_eq!(answer["data"]["reason"], "executor-descendant", "{answer}");
-    }
+    // Narrowed to `mcp` (TS-GRP-010 D1 e), the child's prepare naming a worktree is refused
+    // even earlier, as over MCP (the worktree comes from the caller's folder); the run and the
+    // run still meets the executor's own refusal; the cancel is not offered over MCP.
+    assert_eq!(answers[2]["code"], code::INVALID_PARAMS, "{}", answers[2]);
+    assert_eq!(
+        answers[3]["code"],
+        code::OPERATION_REJECTED,
+        "{}",
+        answers[3]
+    );
+    assert_eq!(
+        answers[3]["data"]["reason"], "executor-descendant",
+        "{}",
+        answers[3]
+    );
+    assert_eq!(answers[4]["code"], code::METHOD_NOT_FOUND, "{}", answers[4]);
     // The daemon is still running: the stop was refused.
     let mut again = r.client(ClientKind::Cli);
     let _: String = again.call(methods::PING, json!({})).unwrap();

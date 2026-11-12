@@ -30,6 +30,8 @@ impl Fixture {
     fn env(&self) -> Vec<(&'static str, OsString)> {
         vec![
             ("GITRAPTOR_PROFILE_DIR", self.root().into_os_string()),
+            // TS-GRP-010 D4: the Claude Code session that may run the tests is not an agent.
+            ("GITRAPTOR_AGENT_EXECUTABLES", "raptor-fake-agent".into()),
             ("PATH", "/usr/bin:/bin".into()),
             ("LANG", "en_US.UTF-8".into()),
         ]

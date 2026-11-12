@@ -61,7 +61,16 @@ fn rpc_client_entry() {
         Err(ClientError::Rpc(e)) => json!({ "code": e.code, "data": e.data }),
         Err(e) => json!({ "other": e.to_string() }),
     };
-    let prepared = answer(client.call(methods::OPERATION_PREPARE, spec["run"].clone()));
+    // TS-GRP-010 (S-01): under an agent the daemon fixes the `mcp` profile, which takes the
+    // worktree from the caller's working folder and refuses a named one: the client moves there.
+    let mut params = spec["run"].clone();
+    if client.hello().profile == gitraptor_api::messages::ConnectionProfile::Mcp
+        && let Some(p) = params.as_object_mut()
+        && let Some(Value::String(wt)) = p.remove("worktree")
+    {
+        std::env::set_current_dir(wt).unwrap();
+    }
+    let prepared = answer(client.call(methods::OPERATION_PREPARE, params));
     let ran = match prepared.get("ok") {
         Some(plan) => answer(client.call(
             methods::OPERATION_RUN,

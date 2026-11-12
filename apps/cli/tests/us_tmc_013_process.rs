@@ -105,14 +105,20 @@ fn rpc_client_entry() {
     };
     let mut answers = Vec::new();
     if let Some(worktree) = spec["reset"].as_str() {
-        let plan = client.call::<_, PrepareResult>(
-            methods::OPERATION_PREPARE,
-            json!({ "operation": "abort-in-progress", "worktree": worktree, "surface": "tui" }),
-        );
+        // TS-GRP-010 (S-01): under an agent the daemon fixes the `mcp` profile, which takes the
+        // worktree from the caller's working folder and refuses a named one.
+        let mut params = json!({ "operation": "abort-in-progress", "surface": "tui" });
+        if client.hello().profile == gitraptor_api::messages::ConnectionProfile::Mcp {
+            std::env::set_current_dir(worktree).unwrap();
+        } else {
+            params["worktree"] = json!(worktree);
+        }
+        // The `mcp` view of the plan is not `PrepareResult`: only its id and warnings are read.
+        let plan = client.call::<_, Value>(methods::OPERATION_PREPARE, params);
         answers.push(match plan {
             Ok(plan) => answer(client.call(
                 methods::OPERATION_RUN,
-                json!({ "plan_id": plan.plan_id, "accepted_warnings": plan.warnings }),
+                json!({ "plan_id": plan["plan_id"], "accepted_warnings": plan["warnings"] }),
             )),
             Err(e) => answer(Err(e)),
         });
@@ -249,6 +255,8 @@ fn machine(test_confirmation: Option<TestConfirmation>) -> Machine {
         log: LogLimits::default(),
         stop_deadline: None,
         channel: ChannelConfig {
+            // TS-GRP-010 D3: `raptor` runs as a child of this in-process daemon.
+            test_daemon_children_as_self: true,
             agents: AgentMatcher::only(vec![FAKE_AGENT.into()]),
             test_confirmation,
             ..ChannelConfig::default()

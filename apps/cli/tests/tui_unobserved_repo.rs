@@ -394,6 +394,20 @@ impl Pty {
         self.stdin.flush().unwrap();
     }
 
+    /// Everything printed until the process ended on its own, which must succeed.
+    fn finish(mut self) -> String {
+        let status = self.child.wait().unwrap();
+        while let Ok(bytes) = self.rx.recv_timeout(Duration::from_millis(0)) {
+            self.seen.push_str(&String::from_utf8_lossy(&bytes));
+        }
+        drop(self.rx);
+        if let Some(reader) = self.reader.take() {
+            reader.join().unwrap();
+        }
+        assert!(status.success(), "{status:?}: {:?}", self.seen);
+        self.seen
+    }
+
     /// `q`, and everything the TUI painted until it left the alternate screen.
     fn quit(mut self) -> String {
         self.key(b"q");
@@ -507,9 +521,11 @@ fn an_agent_is_never_asked() {
     let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let m = Machine::new(&["shop"]);
     let mut tui = m.tui_as_agent(&m.notes);
-    tui.wait("feat-shop", 1);
+    // TS-GRP-010 (S-01, D11): the agent's TUI gets the `mcp` profile and does not open the
+    // cockpit: it prints the restricted view and leaves, so it never asks anything.
+    tui.wait("restricted view", 1);
     tui.key(b"y");
-    let seen = tui.quit();
+    let seen = tui.finish();
     assert!(!seen.contains("[y/N]"), "{seen:?}");
     assert!(!m.notes_observed(), "{:?}", m.observed());
 }

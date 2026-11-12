@@ -169,7 +169,11 @@ fn machine() -> Machine {
         heartbeat: Duration::from_secs(3600),
         log: LogLimits::default(),
         stop_deadline: None,
-        channel: ChannelConfig::default(),
+        channel: ChannelConfig {
+            // TS-GRP-010 D3: `raptor` runs as a child of this in-process daemon.
+            test_daemon_children_as_self: true,
+            ..ChannelConfig::default()
+        },
         protected: None,
         operations: Some(OperationsWiring {
             catalog: Arc::new(ResetHard {

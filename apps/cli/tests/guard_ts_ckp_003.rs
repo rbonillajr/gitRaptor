@@ -80,15 +80,27 @@ fn rpc_client_entry() {
         Err(ClientError::Rpc(e)) => json!({ "code": e.code, "data": e.data }),
         Err(e) => json!({ "other": e.to_string() }),
     };
+    // TS-GRP-010 (S-01): under an agent the daemon fixes the `mcp` profile, which takes the
+    // worktree from the caller's working folder and refuses a named one: the client moves there.
+    let mcp = client.hello().profile == gitraptor_api::messages::ConnectionProfile::Mcp;
+    let scoped = |mut params: Value| -> Value {
+        if mcp
+            && let Some(p) = params.as_object_mut()
+            && let Some(Value::String(wt)) = p.remove("worktree")
+        {
+            std::env::set_current_dir(wt).unwrap();
+        }
+        params
+    };
     let mut answers = Vec::new();
     for step in spec["steps"].as_array().unwrap() {
         if let Some(call) = step.get("call") {
-            answers.push(answer(
-                client.call(call[0].as_str().unwrap(), call[1].clone()),
-            ));
+            let params = scoped(call[1].clone());
+            answers.push(answer(client.call(call[0].as_str().unwrap(), params)));
             continue;
         }
-        let prepared = answer(client.call(methods::OPERATION_PREPARE, step["run"].clone()));
+        let params = scoped(step["run"].clone());
+        let prepared = answer(client.call(methods::OPERATION_PREPARE, params));
         let ran = match prepared.get("ok") {
             Some(plan) => answer(client.call(
                 methods::OPERATION_RUN,

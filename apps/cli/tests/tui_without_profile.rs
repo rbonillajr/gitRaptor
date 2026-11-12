@@ -39,6 +39,8 @@ fn set_mode(path: &Path, mode: u32) {
 fn raptor(f: &Fixture, args: &[&str]) -> Output {
     let env: Vec<(&str, OsString)> = vec![
         ("GITRAPTOR_PROFILE_DIR", f.profile.clone().into_os_string()),
+        // TS-GRP-010 D4: the Claude Code session that may run the tests is not an agent.
+        ("GITRAPTOR_AGENT_EXECUTABLES", "raptor-fake-agent".into()),
         ("HOME", f.home.clone().into_os_string()),
         ("PATH", "/usr/bin:/bin".into()),
         ("LANG", "en_US.UTF-8".into()),

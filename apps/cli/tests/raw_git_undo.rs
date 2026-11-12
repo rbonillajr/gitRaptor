@@ -29,7 +29,7 @@ use std::time::{Duration, Instant};
 use gitraptor_api::messages::{
     ClientKind, EventsHistoryResult, GitEventKind, GitEventView, Snapshot,
 };
-use gitraptor_api::timemachine::UndoResult;
+use gitraptor_api::timemachine::McpUndoResult;
 use gitraptor_api::{Actor, AgentKind, PROTOCOL_VERSION, methods};
 use gitraptor_core::client::Client;
 use gitraptor_core::daemon::running_pid;
@@ -144,6 +144,14 @@ impl Machine {
         let out = m.developer(
             &m.f.root,
             &["repo", "add", m.f.repo.to_str().unwrap()],
+            "en_US.UTF-8",
+        );
+        assert!(out.status.success(), "{}", text(&out));
+        // TS-GRP-010 (S-01): an agent's `raptor undo` has the `mcp` profile and acts only in a
+        // repo the developer enabled for agents.
+        let out = m.developer(
+            &m.f.root,
+            &["mcp", "enable", m.f.repo.to_str().unwrap()],
             "en_US.UTF-8",
         );
         assert!(out.status.success(), "{}", text(&out));
@@ -352,7 +360,7 @@ fn an_agent_recovers_its_work_after_a_raw_reset_hard() {
     assert!(
         claude.run("printf 'user\\npassword\\n' > login.txt && printf 'fn util() {}\\n' > util.rs")
     );
-    let captured = m.captured("login.txt", WORK);
+    m.captured("login.txt", WORK);
     m.captured("util.rs", UTIL);
 
     // It throws the uncommitted work away with raw Git.
@@ -404,12 +412,10 @@ fn an_agent_recovers_its_work_after_a_raw_reset_hard() {
         "{}",
         std::fs::read_to_string(&report).unwrap_or_default()
     );
-    let undo: UndoResult = serde_json::from_slice(&std::fs::read(&report).unwrap()).unwrap();
-    assert_eq!(
-        undo.undone_subtype.as_ref().map(|s| s.sanitized()),
-        Some("reset".to_owned())
-    );
-    assert_eq!(undo.target_snapshot_id, captured);
+    // TS-GRP-010 (S-01, M-01): the agent's `raptor undo` has the `mcp` profile, whose result
+    // counts and names only the operation; the work is back on disk, which is what matters.
+    let undo: McpUndoResult = serde_json::from_slice(&std::fs::read(&report).unwrap()).unwrap();
+    assert!(!undo.undone_operation_id.is_empty());
     assert_eq!(std::fs::read(m.worktree.join("login.txt")).unwrap(), WORK);
     assert_eq!(std::fs::read(m.worktree.join("util.rs")).unwrap(), UTIL);
     // TS-TMC-005 (T006): how long the undo waited for its base, as the daemon
