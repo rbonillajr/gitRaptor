@@ -25,6 +25,7 @@ use gitraptor_api::catalog::Layer;
 use gitraptor_api::client::transport;
 use gitraptor_api::discovery::{CandidateView, CandidatesResult};
 use gitraptor_api::event::Event;
+use gitraptor_api::graph::{BaseGap, GraphBase, GraphLanes, Lane, LaneCommit, LaneHead, LaneState};
 use gitraptor_api::guard::{
     ExceptionPlanView, GuardLogEntry, GuardLogResult, GuardLogSummary, GuardStatus,
     LoggedOperation, LoggedRef, PendingAction, PendingKind, Permission, ProtectionState, RefChange,
@@ -98,6 +99,18 @@ pub struct Script {
     pub guard_status_fails: bool,
     /// Answer `guard.log` with `INTERNAL` "guardrails unavailable".
     pub guard_log_fails: bool,
+    /// `graph.lanes` result per repo (DS-US-DSK-005 T007). A repo without an entry answers
+    /// `NOT_FOUND`, like the daemon with an unknown repo.
+    pub graph: HashMap<String, GraphLanes>,
+    /// How long a `graph.lanes` takes to answer, in milliseconds. It answers out of order: the
+    /// connection keeps serving requests meanwhile, and one query is in flight per connection.
+    pub graph_delay_ms: u64,
+    /// The engine does not offer `graph.lanes`: `hello.methods` leaves it out.
+    pub graph_hidden: bool,
+    /// Answer `graph.lanes` with this JSON-RPC error code instead of the result.
+    pub graph_refuse: Option<i64>,
+    /// Answer `query-busy` to the first N `graph.lanes` requests, whatever is in flight.
+    pub graph_busy_first: u32,
 }
 
 impl Default for Script {
@@ -139,6 +152,11 @@ impl Default for Script {
             guard_log: None,
             guard_status_fails: false,
             guard_log_fails: false,
+            graph: HashMap::new(),
+            graph_delay_ms: 30,
+            graph_hidden: false,
+            graph_refuse: None,
+            graph_busy_first: 0,
         }
     }
 }
@@ -154,6 +172,10 @@ struct Shared {
     subscriptions: AtomicU32,
     /// The subscription id the fake gave to each scope, so a pushed `scope.event` carries it.
     scope_subscriptions: Mutex<HashMap<Scope, u32>>,
+    /// The JSON-RPC id of every `graph.lanes` request, in arrival order.
+    graph_ids: Mutex<Vec<Id>>,
+    /// Requests answered `query-busy` because another query of the connection was in flight.
+    busy_hits: AtomicU32,
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -197,6 +219,8 @@ impl FakeDaemon {
                 conns: Mutex::new(Vec::new()),
                 subscriptions: AtomicU32::new(0),
                 scope_subscriptions: Mutex::new(HashMap::new()),
+                graph_ids: Mutex::new(Vec::new()),
+                busy_hits: AtomicU32::new(0),
             }),
             listening: Mutex::new(None),
         })
@@ -227,6 +251,24 @@ impl FakeDaemon {
             .filter(|(m, _)| m == method)
             .map(|(_, p)| p)
             .collect()
+    }
+
+    /// The JSON-RPC ids the app gave to its `graph.lanes` requests, in order.
+    pub fn graph_request_ids(&self) -> Vec<Id> {
+        lock(&self.shared.graph_ids).clone()
+    }
+
+    /// How many requests the fake refused with `query-busy` for having another query in flight.
+    pub fn busy_hits(&self) -> u32 {
+        self.shared.busy_hits.load(Ordering::SeqCst)
+    }
+
+    /// Writes an unsolicited response with `id` on the latest connection (a daemon answering a
+    /// request nobody made).
+    pub fn push_response(&self, id: u64, result: impl Serialize) -> bool {
+        let conn = lock(&self.shared.conns).last().cloned();
+        let response = Response::ok(Id::Num(id), result);
+        conn.is_some_and(|conn| write_line(&conn, &response))
     }
 
     /// Waits until `method` was called at least `count` times; `false` at the deadline.
@@ -448,6 +490,9 @@ fn write_line(conn: &Arc<Mutex<UnixStream>>, message: &impl Serialize) -> bool {
 fn serve(shared: &Shared, writer: &Arc<Mutex<UnixStream>>, stream: UnixStream) {
     let mut reader = BufReader::new(stream);
     let mut line = String::new();
+    // The one query of this connection that has not answered yet; cancelling it does not free
+    // the slot, only its answer does (the daemon's rule).
+    let inflight: Arc<Mutex<Option<Inflight>>> = Arc::new(Mutex::new(None));
     loop {
         line.clear();
         match reader.read_line(&mut line) {
@@ -479,11 +524,113 @@ fn serve(shared: &Shared, writer: &Arc<Mutex<UnixStream>>, stream: UnixStream) {
                 }
             }
         }
+        if request.method == methods::GRAPH_LANES {
+            if let Some(response) = graph_lanes(shared, writer, &inflight, &request, params)
+                && !write_line(writer, &response)
+            {
+                return;
+            }
+            continue;
+        }
+        if request.method == methods::QUERY_CANCEL {
+            let response = query_cancel(&inflight, &request, params);
+            if !write_line(writer, &response) {
+                return;
+            }
+            continue;
+        }
         let response = answer(shared, &request, params);
         if !write_line(writer, &response) {
             return;
         }
     }
+}
+
+struct Inflight {
+    id: Id,
+    cancelled: Arc<AtomicBool>,
+}
+
+fn query_cancel(inflight: &Mutex<Option<Inflight>>, request: &Request, params: Value) -> Response {
+    let Ok(p) = serde_json::from_value::<gitraptor_api::query::CancelParams>(params) else {
+        return invalid(&request.id);
+    };
+    let cancelled = lock(inflight).as_ref().is_some_and(|q| {
+        let hit = q.id == p.request;
+        if hit {
+            q.cancelled.store(true, Ordering::SeqCst);
+        }
+        hit
+    });
+    Response::ok(
+        request.id.clone(),
+        gitraptor_api::query::CancelResult { cancelled },
+    )
+}
+
+fn refusal(id: &Id, spec: gitraptor_api::rpc::ErrorSpec, message: &str) -> Response {
+    Response::err(
+        Some(id.clone()),
+        ErrorObject {
+            code: spec.code,
+            message: message.to_owned(),
+            data: None,
+        },
+    )
+}
+
+/// `graph.lanes`: answered at once when it is refused or busy, otherwise by a thread after the
+/// script's delay (`query-cancelled` if it was cancelled meanwhile). `None`: answered later.
+fn graph_lanes(
+    shared: &Shared,
+    writer: &Arc<Mutex<UnixStream>>,
+    inflight: &Arc<Mutex<Option<Inflight>>>,
+    request: &Request,
+    params: Value,
+) -> Option<Response> {
+    let id = request.id.clone();
+    lock(&shared.graph_ids).push(id.clone());
+    let script = lock(&shared.script).clone();
+    let Ok(p) = serde_json::from_value::<gitraptor_api::graph::GraphParams>(params) else {
+        return Some(invalid(&id));
+    };
+    let nth = u32::try_from(lock(&shared.graph_ids).len()).unwrap_or(u32::MAX);
+    if nth <= script.graph_busy_first || lock(inflight).is_some() {
+        if lock(inflight).is_some() {
+            shared.busy_hits.fetch_add(1, Ordering::SeqCst);
+        }
+        return Some(refusal(&id, methods::QUERY_BUSY, "query busy"));
+    }
+    if let Some(code) = script.graph_refuse {
+        return Some(Response::err(Some(id), ErrorObject::new(code, "refused")));
+    }
+    let Some(lanes) = script.graph.get(&p.repo_id).cloned() else {
+        return Some(Response::err(
+            Some(id),
+            ErrorObject::new(code::NOT_FOUND, "not found"),
+        ));
+    };
+    let cancelled = Arc::new(AtomicBool::new(false));
+    *lock(inflight) = Some(Inflight {
+        id: id.clone(),
+        cancelled: Arc::clone(&cancelled),
+    });
+    let writer = Arc::clone(writer);
+    let inflight = Arc::clone(inflight);
+    let delay = Duration::from_millis(script.graph_delay_ms);
+    std::thread::spawn(move || {
+        std::thread::sleep(delay);
+        let response = if cancelled.load(Ordering::SeqCst) {
+            refusal(&id, methods::QUERY_CANCELLED, "query cancelled")
+        } else {
+            Response::ok(id, lanes)
+        };
+        // The slot frees before the answer is written, so a request that follows it never meets
+        // a busy connection.
+        *lock(&inflight) = None;
+        write_line(&writer, &response);
+    });
+    None
 }
 
 fn invalid(id: &Id) -> Response {
@@ -517,7 +664,11 @@ fn answer(shared: &Shared, request: &Request, params: Value) -> Response {
                     daemon_pid: std::process::id(),
                     profile: script.profile,
                     max_message_bytes: 1_048_576,
-                    methods: methods::METHODS.iter().map(|m| m.name.to_owned()).collect(),
+                    methods: methods::METHODS
+                        .iter()
+                        .filter(|m| !(script.graph_hidden && m.name == methods::GRAPH_LANES))
+                        .map(|m| m.name.to_owned())
+                        .collect(),
                     requester: script.requester,
                     capabilities: script.capabilities,
                 },
@@ -1262,4 +1413,114 @@ pub fn script_tienda_guard_log_unavailable(s: &mut Script) {
     script_tienda_and_notas(s);
     s.guard_status = Some(guard_status(ProtectionState::HooksOnly, None));
     s.guard_log_fails = true;
+}
+
+// ------------------------------------------------------------ DS-US-DSK-005 scripts
+
+/// When the fake's graphs were computed.
+pub const GRAPH_COMPUTED: i64 = 1_700_000_400_000;
+/// The merge-base of the lanes of "tienda": the tip of `main`.
+pub const TIENDA_MERGE_BASE: &str = "0123456789abcdef0123456789abcdef01234567";
+pub const PAGOS_TIP: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+pub const PAGOS_FIRST: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+pub const LOGIN_TIP: &str = "cccccccccccccccccccccccccccccccccccccccc";
+
+fn commit(oid: &str, summary: &str, committed_utc_ms: i64) -> LaneCommit {
+    LaneCommit {
+        oid: oid.to_owned(),
+        summary: Untrusted::new(summary),
+        committed_utc_ms,
+        merge: false,
+    }
+}
+
+fn count(count: u64) -> CommitCountView {
+    CommitCountView { count, exact: true }
+}
+
+/// The graph of "tienda": `feat-pagos` with two commits (3 ahead in the fleet, the lane lists the
+/// newest two) and `feat-login` with one, both from `main`.
+pub fn tienda_graph() -> GraphLanes {
+    GraphLanes {
+        computed_at_utc_ms: GRAPH_COMPUTED,
+        base: GraphBase::Ready {
+            name: UntrustedName::new("main"),
+        },
+        lanes: vec![
+            Lane {
+                worktree: Untrusted::new(TIENDA_PAGOS),
+                head: LaneHead::Branch {
+                    name: UntrustedName::new("feat-pagos"),
+                },
+                state: LaneState::Ready {
+                    merge_base: TIENDA_MERGE_BASE.to_owned(),
+                    commits: vec![
+                        commit(PAGOS_TIP, "add the payment form", 1_700_000_300_000),
+                        commit(PAGOS_FIRST, "start payments", 1_700_000_200_000),
+                    ],
+                    total: count(2),
+                },
+            },
+            Lane {
+                worktree: Untrusted::new(TIENDA_LOGIN),
+                head: LaneHead::Branch {
+                    name: UntrustedName::new("feat-login"),
+                },
+                state: LaneState::Ready {
+                    merge_base: TIENDA_MERGE_BASE.to_owned(),
+                    commits: vec![commit(LOGIN_TIP, "add the login page", 1_700_000_250_000)],
+                    total: count(1),
+                },
+            },
+        ],
+        lanes_total: 2,
+        cut: None,
+    }
+}
+
+/// A graph of `base` whose commits cannot be told apart from another repo's by `computed_at`.
+fn empty_graph(base: GraphBase, computed_at_utc_ms: i64) -> GraphLanes {
+    GraphLanes {
+        computed_at_utc_ms,
+        base,
+        lanes: Vec::new(),
+        lanes_total: 0,
+        cut: None,
+    }
+}
+
+/// "tienda" and "notas" of [`script_tienda_and_notas`], each with a `graph.lanes` result, plus
+/// "tienda-develop": a repo whose base `develop` does not exist.
+pub fn script_tienda_graph(s: &mut Script) {
+    script_tienda_and_notas(s);
+    s.graph.insert("tienda".to_owned(), tienda_graph());
+    s.graph.insert(
+        "notas".to_owned(),
+        empty_graph(
+            GraphBase::Ready {
+                name: UntrustedName::new("main"),
+            },
+            GRAPH_COMPUTED + 1,
+        ),
+    );
+    s.graph.insert(
+        "tienda-develop".to_owned(),
+        empty_graph(
+            GraphBase::NotComputable {
+                reason: BaseGap::BaseMissing {
+                    name: UntrustedName::new("develop"),
+                },
+            },
+            GRAPH_COMPUTED + 2,
+        ),
+    );
+    s.repos.insert(
+        "tienda-develop".to_owned(),
+        repo_snapshot(
+            "tienda-develop",
+            "/w/tienda-develop/.git",
+            REPO_SEQ,
+            vec![worktree_view("/w/tienda-develop", true, "main", 0, 0, 0)],
+        ),
+    );
 }

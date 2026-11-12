@@ -728,6 +728,30 @@ pub fn pending(
     })
 }
 
+/// The lanes of `graph.lanes` as a DTO, every untrusted text sanitized.
+///
+/// Placeholder: it reads nothing yet and always answers "repo unavailable", so the tests that pin
+/// the conversion fail on what they check and not on a missing symbol.
+pub fn graph(_lanes: &gitraptor_api::graph::GraphLanes) -> super::wire::GraphDto {
+    super::wire::GraphDto {
+        computed_utc_ms: 0,
+        base: super::wire::GraphBaseDto::NotComputable {
+            reason: super::wire::GraphBaseGap::RepoUnavailable,
+            name: None,
+        },
+        lanes: Vec::new(),
+        lanes_total: 0,
+        cut: None,
+    }
+}
+
+/// Whether `event` is one that makes the graph stale.
+///
+/// Placeholder: never, until the supervisor asks for the graph.
+pub fn graph_trigger(_event: &Event) -> bool {
+    false
+}
+
 #[cfg(test)]
 mod tests {
     use super::repo_name;
