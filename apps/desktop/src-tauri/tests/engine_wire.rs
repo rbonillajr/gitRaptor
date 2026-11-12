@@ -20,6 +20,10 @@ use gitraptor_desktop::engine::wire::{
     NotOffered, OperationDto, PendingExceptionDto, ProtectionDto, ProtectionKind, RefChange,
     RefDto, UnloggedDto,
 };
+use gitraptor_desktop::engine::wire::{
+    CommitDto, GraphBaseDto, GraphBaseGap, GraphCutDto, GraphDto, GraphUnavailableReason, LaneDto,
+    LaneGapDto, LaneHeadDto, LaneStateDto,
+};
 use serde_json::{Map, Value};
 
 fn repo(
@@ -465,6 +469,31 @@ fn examples() -> Vec<(&'static str, EngineMessage)> {
                 },
             },
         ),
+        ("graph", graph_example()),
+        (
+            "graphBaseMissing",
+            EngineMessage::Graph {
+                repo_id: "repo-alpha".to_owned(),
+                graph: GraphDto {
+                    computed_utc_ms: 1_700_000_400_000,
+                    base: GraphBaseDto::NotComputable {
+                        reason: GraphBaseGap::BaseMissing,
+                        name: Some("develop".to_owned()),
+                    },
+                    lanes: Vec::new(),
+                    lanes_total: 0,
+                    cut: None,
+                },
+                perf: FleetPerf { backend_ns: 900_000 },
+            },
+        ),
+        (
+            "graphUnavailable",
+            EngineMessage::GraphUnavailable {
+                repo_id: "repo-alpha".to_owned(),
+                reason: GraphUnavailableReason::Unsupported,
+            },
+        ),
         (
             "repoClosed",
             EngineMessage::RepoClosed {
@@ -483,6 +512,61 @@ fn examples() -> Vec<(&'static str, EngineMessage)> {
             },
         ),
     ]
+}
+
+/// D2-DTO: a ready lane with a merge commit and an inexact total, a lane that is not computable,
+/// and the cut of lanes. The worktree keys are fixed text: only the shape is under test.
+fn graph_example() -> EngineMessage {
+    EngineMessage::Graph {
+        repo_id: "repo-alpha".to_owned(),
+        graph: GraphDto {
+            computed_utc_ms: 1_700_000_400_000,
+            base: GraphBaseDto::Ready {
+                name: "main".to_owned(),
+            },
+            lanes: vec![
+                LaneDto {
+                    worktree_key: "0000000000000001".to_owned(),
+                    head: LaneHeadDto::Branch {
+                        name: "feat-pagos".to_owned(),
+                    },
+                    state: LaneStateDto::Ready {
+                        merge_base: "0123456789abcdef0123456789abcdef01234567".to_owned(),
+                        total: BoundedCountDto {
+                            count: 72,
+                            exact: false,
+                        },
+                        commits: vec![
+                            CommitDto {
+                                oid: "a".repeat(40),
+                                summary: "add the payment form".to_owned(),
+                                committed_utc_ms: 1_700_000_300_000,
+                                merge: false,
+                            },
+                            CommitDto {
+                                oid: "b".repeat(40),
+                                summary: "merge main".to_owned(),
+                                committed_utc_ms: 1_700_000_200_000,
+                                merge: true,
+                            },
+                        ],
+                    },
+                },
+                LaneDto {
+                    worktree_key: "0000000000000002".to_owned(),
+                    head: LaneHeadDto::Detached,
+                    state: LaneStateDto::NotComputable {
+                        reason: LaneGapDto::TooSlow,
+                    },
+                },
+            ],
+            lanes_total: 40,
+            cut: Some(GraphCutDto::Lanes),
+        },
+        perf: FleetPerf {
+            backend_ns: 900_000,
+        },
+    }
 }
 
 /// D7-WIRE: a denial with a copyable command, one without (a commit), an exception, a pending

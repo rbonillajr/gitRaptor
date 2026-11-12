@@ -80,6 +80,15 @@ pub enum EngineMessage {
         filled: bool,
         perf: FleetPerf,
     },
+    Graph {
+        repo_id: String,
+        graph: GraphDto,
+        perf: FleetPerf,
+    },
+    GraphUnavailable {
+        repo_id: String,
+        reason: GraphUnavailableReason,
+    },
     RepoClosed {
         repo_id: String,
     },
@@ -703,4 +712,105 @@ pub enum Autostart {
 /// [`super::shell_command::posix`]); `None` when `path` could act on the terminal it is pasted in.
 pub fn stop_command(path: &str) -> Option<String> {
     super::shell_command::posix(&[path, "daemon", "stop"])
+}
+
+/// The lanes of the open repo: one per worktree, each from its merge-base with the base.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GraphDto {
+    pub computed_utc_ms: i64,
+    pub base: GraphBaseDto,
+    pub lanes: Vec<LaneDto>,
+    pub lanes_total: u32,
+    pub cut: Option<GraphCutDto>,
+}
+
+/// The base the lanes are drawn against; `name` is `None` when the engine has none to name.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "state", rename_all = "kebab-case")]
+pub enum GraphBaseDto {
+    Ready {
+        name: String,
+    },
+    NotComputable {
+        reason: GraphBaseGap,
+        name: Option<String>,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum GraphBaseGap {
+    BaseUnconfirmed,
+    NoBase,
+    BaseMissing,
+    RepoUnavailable,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum GraphCutDto {
+    Lanes,
+    Bytes,
+}
+
+/// One worktree's lane. `worktree_key` is [`super::ingest::key`] of its raw root: the path itself
+/// never reaches the webview.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LaneDto {
+    pub worktree_key: String,
+    pub head: LaneHeadDto,
+    pub state: LaneStateDto,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+pub enum LaneHeadDto {
+    Branch { name: String },
+    Detached,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(
+    tag = "state",
+    rename_all = "kebab-case",
+    rename_all_fields = "camelCase"
+)]
+pub enum LaneStateDto {
+    Ready {
+        merge_base: String,
+        total: BoundedCountDto,
+        commits: Vec<CommitDto>,
+    },
+    NotComputable {
+        reason: LaneGapDto,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LaneGapDto {
+    WorktreeUnavailable,
+    NoCommits,
+    NoMergeBase,
+    TooSlow,
+    Unreadable,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitDto {
+    pub oid: String,
+    pub summary: String,
+    pub committed_utc_ms: i64,
+    pub merge: bool,
+}
+
+/// Why the commits of the graph are not there: the engine lacks `graph.lanes`, or it refused.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum GraphUnavailableReason {
+    Unsupported,
+    Failed,
 }

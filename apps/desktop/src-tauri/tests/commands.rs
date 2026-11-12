@@ -382,6 +382,24 @@ fn the_prediction_detail_adds_no_ipc_command() {
     );
 }
 
+/// D2-CMD (DS-US-DSK-005 D2): the graph travels by the `Channel` the supervisor already has, so no
+/// command name is about the graph or its lanes. It does not pin the absolute list: the tests
+/// above and below do.
+#[test]
+fn the_graph_adds_no_ipc_command() {
+    let about = |name: &String| ["graph", "lane"].iter().any(|w| name.contains(w));
+    let listed: Vec<String> = commands_json().into_iter().filter(about).collect();
+    assert!(
+        listed.is_empty(),
+        "D2-CMD: commands.json names a graph command: {listed:?}"
+    );
+    let declared: Vec<String> = command_fns().into_iter().filter(about).collect();
+    assert!(
+        declared.is_empty(),
+        "D2-CMD: a #[tauri::command] is about the graph: {declared:?}"
+    );
+}
+
 // ---------------------------------------------------------------- D7-WIRE (DS-US-DSK-007 T002)
 
 #[test]
