@@ -4,7 +4,7 @@
 
 > **Archivo generado, no editar a mano.** Sale del frontmatter (`status`) y de la sección "Estado de la implementación" de cada ficha (US, TS, INF, SPIKE y TD) de `docs/requirements/features/`. Para cambiar un estado, edita la ficha y regenera con `node tools/status/release-status.mjs`. El CI (docs-lint) falla si este archivo no coincide con lo que genera el script.
 
-Última actualización de una ficha: 2026-11-10.
+Última actualización de una ficha: 2026-11-12.
 
 ## Totales por estado
 
@@ -14,9 +14,9 @@
 | Hecho (`done`) | 3 |
 | Implementado en parte (`partially-implemented`) | 27 |
 | Listo (`ready`) | 28 |
-| Borrador (`draft`) | 70 |
+| Borrador (`draft`) | 71 |
 | Bloqueado (`blocked`) | 1 |
-| **Total** | **211** |
+| **Total** | **212** |
 
 ## Por feature
 
@@ -26,7 +26,7 @@
 | [desktop](#desktop) | 6 | 0 | 1 | 16 | 0 | 0 | 23 |
 | [guardrails](#guardrails) | 14 | 0 | 7 | 1 | 3 | 0 | 25 |
 | [mcp](#mcp) | 7 | 0 | 4 | 0 | 16 | 0 | 27 |
-| [motor-local](#motor-local) | 21 | 2 | 9 | 3 | 15 | 0 | 50 |
+| [motor-local](#motor-local) | 21 | 2 | 9 | 3 | 16 | 0 | 51 |
 | [time-machine](#time-machine) | 19 | 1 | 1 | 0 | 13 | 0 | 34 |
 | [worktree-lifecycle](#worktree-lifecycle) | 0 | 0 | 0 | 7 | 6 | 0 | 13 |
 
@@ -174,7 +174,7 @@
 
 ### motor-local
 
-50 fichas: 21 implementado, 2 hecho, 9 implementado en parte, 3 listo, 15 borrador.
+51 fichas: 21 implementado, 2 hecho, 9 implementado en parte, 3 listo, 16 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -218,6 +218,7 @@
 | [TD-GRP-009](features/motor-local/technical-stories/TD-GRP-009-cola-consultas-por-solicitante.md) | La cola global de consultas bajo demanda se reparte por solicitante | Borrador (`draft`) | — | — |
 | [TD-GRP-010](features/motor-local/technical-stories/TD-GRP-010-los-tests-de-caja-blanca-del.md) | Los tests de caja blanca del observador esperan un evento FS con cota de pared y fallan si FSEvents lo pierde bajo carga | Borrador (`draft`) | — | — |
 | [TD-GRP-011](features/motor-local/technical-stories/TD-GRP-011-respaldo-adaptativo-del-observador-cuando-fsevents.md) | Respaldo adaptativo del observador cuando FSEvents pierde eventos bajo carga | Borrador (`draft`) | — | — |
+| [TD-GRP-012](features/motor-local/technical-stories/TD-GRP-012-plazo-y-cancelacion-de-status-en-diff-index.md) | El status() del índice de diff.index y diff.worktree respeta el plazo y la cancelación de la consulta | Borrador (`draft`) | — | — |
 | [TS-GRP-007](features/motor-local/technical-stories/TS-GRP-007-factor-so-reservados-windows.md) | Factor del SO (Windows Hello) para los comandos reservados de alto riesgo en Windows | Borrador (`draft`) | — | — |
 | [US-GRP-006](features/motor-local/user-stories/US-GRP-006-retirar-y-volver-a-anadir.md) | El desarrollador recupera el historial de un repo que retiró y volvió a añadir | Borrador (`draft`) | — | — |
 | [US-GRP-011](features/motor-local/user-stories/US-GRP-011-worktree-compartido.md) | El desarrollador ve todas las sesiones de un worktree compartido | Borrador (`draft`) | — | — |
@@ -503,7 +504,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### Sin hito
 
-46 fichas sin hito asignado.
+47 fichas sin hito asignado.
 
 ## Implementadas en parte: lo que falta
 

@@ -667,7 +667,7 @@ Corre `/security-review --scope devspec docs/requirements/features/cockpit/dev-s
 | Reparto de la cola global por solicitante (I-01) | [TD-GRP-009](../../motor-local/technical-stories/TD-GRP-009-cola-consultas-por-solicitante.md), reservada en este PR (dueño Arquitecto) | `crates/core/src/channel/query.rs` sin cambios en el PR |
 | Diff combinado de merge y renombrados | — (D12) | CKP006-003 fija primer padre y `git mv` como dos archivos |
 | Cambiar `neutralize_programs` | TD solo si CKP006-008 fallara (D10) | `crates/git/src/reader.rs` sin cambios en el PR |
-| Plazo y cancelación de `status()` (ya afecta a `diff.worktree`; L-02) | TD por abrir (dueño Arquitecto) | `crates/git/src/reader.rs` sin cambios en el PR |
+| Plazo y cancelación de `status()` (ya afecta a `diff.worktree`; L-02) | [TD-GRP-012](../../motor-local/technical-stories/TD-GRP-012-plazo-y-cancelacion-de-status-en-diff-index.md), reservada el 2026-11-12 (dueño Arquitecto) | `crates/git/src/reader.rs` sin cambios en el PR |
 
 ---
 
