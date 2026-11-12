@@ -74,6 +74,22 @@ impl Link for BundleLink {
     fn daemon_exe(&self) -> Option<&Path> {
         self.daemon_exe.as_deref()
     }
+
+    fn submit(&mut self, method: &str, params: Value) -> Result<u64, LinkError> {
+        self.inner.submit(method, params)
+    }
+
+    fn settle(&mut self, id: u64) {
+        self.inner.settle(id);
+    }
+
+    fn reply(&mut self, id: u64) -> Option<Result<Value, LinkError>> {
+        self.inner.reply(id)
+    }
+
+    fn cancel(&mut self, id: u64) {
+        self.inner.cancel(id);
+    }
 }
 
 impl BundleConnector {
@@ -105,7 +121,7 @@ impl BundleConnector {
         Client::connect_runtime(runtime, ClientKind::Cli, PROTOCOL_VERSION, self.verify_peer)
             .map(|client| {
                 Box::new(BundleLink {
-                    inner: ClientLink(client),
+                    inner: ClientLink::new(client),
                     daemon_exe: self.daemon_exe.clone(),
                 }) as Box<dyn Link>
             })

@@ -8,6 +8,9 @@ use gitraptor_api::clock;
 use gitraptor_api::discovery::{CandidateView, RepoDiscoveredData};
 use gitraptor_api::display::{NAME_MAX_CHARS, TEXT_MAX_CHARS, visible};
 use gitraptor_api::event::{self, Event};
+use gitraptor_api::graph::{
+    BaseGap, GraphBase, GraphCut, GraphLanes, Lane, LaneCommit, LaneGap, LaneHead, LaneState,
+};
 use gitraptor_api::messages::{
     BaseStatusView, CommitCountView, DivergenceView, EngineStateView, EngineView, HeadView,
     OperationKindView, RepoObservationData, RepoStateView, RepoTier, RepoTierData,
@@ -33,13 +36,14 @@ use super::shell_command;
 use super::wire::{
     AgentDto, AttentionDto, Autostart, BaseDto, BaseStatus, BlockActorDto, BlockDetail,
     BlockEntryDto, BlockKind, BlockLayer, BlockRuleDto, BlockWorktreeDto, BoundedCountDto,
-    CandidateDto, ConfirmCommandDto, ConflictFileDto, ConflictFilesDto, ConflictKind, CountDto,
-    CountsDto, DaemonDto, DivergenceDto, EndCause, EngineDto, EngineMessage, EngineStateDto,
-    ExceptionCommandDto, FleetPerf, GlobalDto, GuardBlocksDto, GuardSummaryDto, HeadDto, LimitCode,
-    LineRangeDto, OperationDto, PairDetailDto, PairDto, PairLevel, PairReason, PairState,
-    PendingExceptionDto, ProtectionDto, ProtectionKind, ReadyDto, RefChange, RefDto, RepoFleetDto,
-    RepoStateDto, RepoSummaryDto, SessionDto, SessionOrigin, SessionState, Tier, UnavailableReason,
-    UnloggedDto, WorktreeDto, WorktreeStatusDto,
+    CandidateDto, CommitDto, ConfirmCommandDto, ConflictFileDto, ConflictFilesDto, ConflictKind,
+    CountDto, CountsDto, DaemonDto, DivergenceDto, EndCause, EngineDto, EngineMessage,
+    EngineStateDto, ExceptionCommandDto, FleetPerf, GlobalDto, GraphBaseDto, GraphBaseGap,
+    GraphCutDto, GraphDto, GuardBlocksDto, GuardSummaryDto, HeadDto, LaneDto, LaneGapDto,
+    LaneHeadDto, LaneStateDto, LimitCode, LineRangeDto, OperationDto, PairDetailDto, PairDto,
+    PairLevel, PairReason, PairState, PendingExceptionDto, ProtectionDto, ProtectionKind, ReadyDto,
+    RefChange, RefDto, RepoFleetDto, RepoStateDto, RepoSummaryDto, SessionDto, SessionOrigin,
+    SessionState, Tier, UnavailableReason, UnloggedDto, WorktreeDto, WorktreeStatusDto,
 };
 
 /// The global snapshot as a DTO.
@@ -394,7 +398,7 @@ pub fn pair_details(
 }
 
 /// Time since `recv_ns`, never zero so "no measure" stays distinguishable.
-fn perf(recv_ns: u64) -> FleetPerf {
+pub fn perf(recv_ns: u64) -> FleetPerf {
     FleetPerf {
         backend_ns: clock::monotonic_ns().saturating_sub(recv_ns).max(1),
     }
@@ -730,26 +734,92 @@ pub fn pending(
 
 /// The lanes of `graph.lanes` as a DTO, every untrusted text sanitized.
 ///
-/// Placeholder: it reads nothing yet and always answers "repo unavailable", so the tests that pin
-/// the conversion fail on what they check and not on a missing symbol.
-pub fn graph(_lanes: &gitraptor_api::graph::GraphLanes) -> super::wire::GraphDto {
-    super::wire::GraphDto {
-        computed_utc_ms: 0,
-        base: super::wire::GraphBaseDto::NotComputable {
-            reason: super::wire::GraphBaseGap::RepoUnavailable,
-            name: None,
-        },
-        lanes: Vec::new(),
-        lanes_total: 0,
-        cut: None,
+/// A commit whose id is not a full hex object id, or whose time is negative, is omitted; a lane
+/// whose merge-base is not a full hex object id becomes `not-computable` `unreadable`. The raw
+/// worktree path never leaves: the lane carries its [`key`].
+#[must_use]
+pub fn graph(lanes: &GraphLanes) -> GraphDto {
+    GraphDto {
+        computed_utc_ms: lanes.computed_at_utc_ms,
+        base: graph_base(&lanes.base),
+        lanes: lanes.lanes.iter().map(lane).collect(),
+        lanes_total: lanes.lanes_total,
+        cut: lanes.cut.map(|cut| match cut {
+            GraphCut::Lanes => GraphCutDto::Lanes,
+            GraphCut::Bytes => GraphCutDto::Bytes,
+        }),
     }
 }
 
-/// Whether `event` is one that makes the graph stale.
-///
-/// Placeholder: never, until the supervisor asks for the graph.
-pub fn graph_trigger(_event: &Event) -> bool {
-    false
+fn graph_base(base: &GraphBase) -> GraphBaseDto {
+    match base {
+        GraphBase::Ready { name } => GraphBaseDto::Ready {
+            name: visible(name.raw(), NAME_MAX_CHARS),
+        },
+        GraphBase::NotComputable { reason } => {
+            let (reason, name) = match reason {
+                BaseGap::BaseUnconfirmed { name } => (GraphBaseGap::BaseUnconfirmed, Some(name)),
+                BaseGap::NoBase => (GraphBaseGap::NoBase, None),
+                BaseGap::BaseMissing { name } => (GraphBaseGap::BaseMissing, Some(name)),
+                BaseGap::RepoUnavailable => (GraphBaseGap::RepoUnavailable, None),
+            };
+            GraphBaseDto::NotComputable {
+                reason,
+                name: name.map(|n| visible(n.raw(), NAME_MAX_CHARS)),
+            }
+        }
+    }
+}
+
+fn lane(lane: &Lane) -> LaneDto {
+    let state = match &lane.state {
+        LaneState::Ready {
+            merge_base,
+            commits,
+            total,
+        } if is_object_id(merge_base) => LaneStateDto::Ready {
+            merge_base: merge_base.clone(),
+            total: bounded(*total),
+            commits: commits.iter().filter_map(lane_commit).collect(),
+        },
+        LaneState::Ready { .. } => LaneStateDto::NotComputable {
+            reason: LaneGapDto::Unreadable,
+        },
+        LaneState::NotComputable { reason } => LaneStateDto::NotComputable {
+            reason: match reason {
+                LaneGap::WorktreeUnavailable => LaneGapDto::WorktreeUnavailable,
+                LaneGap::NoCommits => LaneGapDto::NoCommits,
+                LaneGap::NoMergeBase => LaneGapDto::NoMergeBase,
+                LaneGap::TooSlow => LaneGapDto::TooSlow,
+                LaneGap::Unreadable => LaneGapDto::Unreadable,
+            },
+        },
+    };
+    LaneDto {
+        worktree_key: key(lane.worktree.raw()),
+        head: match &lane.head {
+            LaneHead::Branch { name } => LaneHeadDto::Branch {
+                name: visible(name.raw(), NAME_MAX_CHARS),
+            },
+            LaneHead::Detached => LaneHeadDto::Detached,
+        },
+        state,
+    }
+}
+
+fn lane_commit(commit: &LaneCommit) -> Option<CommitDto> {
+    (is_object_id(&commit.oid) && commit.committed_utc_ms >= 0).then(|| CommitDto {
+        oid: commit.oid.clone(),
+        summary: visible(commit.summary.raw(), TEXT_MAX_CHARS),
+        committed_utc_ms: commit.committed_utc_ms,
+        merge: commit.merge,
+    })
+}
+
+/// Whether `event` is one that makes the graph stale: a git change of the repo.
+#[must_use]
+pub fn graph_trigger(event: &Event) -> bool {
+    event.kind == event::GIT_EVENT
 }
 
 #[cfg(test)]
