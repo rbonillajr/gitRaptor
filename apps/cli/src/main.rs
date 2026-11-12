@@ -8,6 +8,7 @@ mod guard;
 mod i18n;
 mod mcp;
 mod resources;
+mod restricted;
 mod sessions;
 mod status;
 mod support;

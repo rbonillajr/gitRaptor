@@ -48,6 +48,10 @@ fn status(json: bool, verbose: bool) -> ExitCode {
         Ok(client) => client,
         Err(code) => return code,
     };
+    // An agent asks (S-01): the MCP's view, never more (TS-GRP-010 D11).
+    if crate::restricted::is_restricted(&client) {
+        return crate::restricted::print_status(&mut client, json);
+    }
     let snapshot = match snapshot(&mut client, CMD) {
         Ok(snapshot) => snapshot,
         Err(code) => return code,

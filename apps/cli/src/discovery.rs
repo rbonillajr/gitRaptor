@@ -16,12 +16,12 @@ use gitraptor_api::untrusted::sanitize;
 use gitraptor_core::client::{Client, ClientError};
 
 use crate::i18n::{t, tn};
-use crate::{command_path, confirm, engine, error_text, offers, refusal_text};
+use crate::{command_path, confirm, engine, error_text, refusal_text};
 
 /// The engine, when it offers `method`: a daemon older than this binary does not know discovery.
 fn engine_with(command: &str, method: &str) -> Result<Client, ExitCode> {
     let client = engine(command)?;
-    if offers(&client, method) {
+    if crate::restricted::may_call(&client, method) {
         Ok(client)
     } else {
         eprintln!("{command}: {}", t("error.not-implemented", &[]));

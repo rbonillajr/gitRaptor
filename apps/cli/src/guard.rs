@@ -1091,24 +1091,36 @@ pub fn uninstall(path: Option<PathBuf>, yes: bool) -> ExitCode {
     let repo = GuardRepoParams {
         path: path.to_string_lossy().into_owned(),
     };
-    let status = match client.call::<_, GuardStatus>(methods::GUARD_STATUS, &repo) {
-        Ok(status) => status,
-        Err(err) => return guard_error(CMD, &path, err),
+    // With the `mcp` profile (an agent asks, TS-GRP-010 D15) the protection's status is not
+    // offered: the reserved command goes straight to the engine, which refuses it and audits.
+    let status = if crate::restricted::is_restricted(&client) {
+        None
+    } else {
+        match client.call::<_, GuardStatus>(methods::GUARD_STATUS, &repo) {
+            Ok(status) => Some(status),
+            Err(err) => return guard_error(CMD, &path, err),
+        }
     };
     // A protection that stopped being active can be removed too (US-GRD-004).
     let inactive = status
-        .hooks
         .as_ref()
+        .and_then(|s| s.hooks.as_ref())
         .is_some_and(|h| h.status == HooksStatus::Inactive);
     // So can a folder left without an active protection: an uninstall whose cleanup stopped,
     // or a folder this profile does not know (the daemon decides whether it is recognizably
     // GitRaptor's).
-    let left = status
-        .hooks
-        .as_ref()
-        .is_some_and(|h| h.status == HooksStatus::Orphaned)
-        || status.diagnostics.contains(&Diagnostic::LeftoverFolder);
-    if !status.state.hooks_installed() && !inactive && !left {
+    let left = status.as_ref().is_some_and(|status| {
+        status
+            .hooks
+            .as_ref()
+            .is_some_and(|h| h.status == HooksStatus::Orphaned)
+            || status.diagnostics.contains(&Diagnostic::LeftoverFolder)
+    });
+    if let Some(status) = &status
+        && !status.state.hooks_installed()
+        && !inactive
+        && !left
+    {
         eprintln!("{CMD}: {}", t("guard.uninstall.not-installed", &[]));
         return ExitCode::FAILURE;
     }

@@ -87,13 +87,22 @@ pub fn exec(yes: bool, argv: Vec<OsString>) -> ExitCode {
     // Only to explain sooner: the daemon decides both again after authorizing (D12).
     // A protection that is there but not fully active is left to the daemon, which tells an
     // old template apart.
-    match client.call::<_, GuardStatus>(methods::GUARD_STATUS, &repo) {
-        Ok(status) if status.diagnostics.contains(&Diagnostic::TemplateOutdated) => {
+    // With the `mcp` profile (an agent asks, TS-GRP-010 D15) the status is not offered: the
+    // exception goes to the engine, which refuses it and records the attempt.
+    let status = if crate::restricted::is_restricted(&client) {
+        Ok(None)
+    } else {
+        client
+            .call::<_, GuardStatus>(methods::GUARD_STATUS, &repo)
+            .map(Some)
+    };
+    match status {
+        Ok(Some(status)) if status.diagnostics.contains(&Diagnostic::TemplateOutdated) => {
             return refused(ExceptionRefusal::OutdatedInstall, &argv);
         }
         // An altered dispatch file may read as unprotected: the daemon tells an old template
         // apart from a repo never protected, so only a repo without any protection stops here.
-        Ok(status)
+        Ok(Some(status))
             if status.state == ProtectionState::Unprotected
                 && status.hooks.is_none()
                 && !status.diagnostics.contains(&Diagnostic::LeftoverFolder) =>

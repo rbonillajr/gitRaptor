@@ -1,0 +1,10 @@
+# Mensajes de `raptor` para el usuario, en español (NFR-10, ADR-GRP-003): restricted.
+# La vista restringida que recibe un agente (TS-GRP-010 D11). Una línea `clave = texto`.
+# Los marcadores son `{nombre}`. Toda clave existe también en ../en/restricted.txt.
+
+restricted.status = vista restringida (lo pide un agente): worktree {worktree}, rama {branch}
+restricted.not-enabled = este repo no está habilitado para agentes: pide al desarrollador que lo habilite con raptor mcp enable
+restricted.tui = el cockpit no está disponible para un agente: vista restringida
+restricted.daemon = vista restringida (lo pide un agente): el motor está {state}
+restricted.undo-done = undo hecho (vista restringida): operación {id} deshecha; {not_restored} rutas quedaron como estaban, {kept} conservadas
+restricted.redo-done = redo hecho (vista restringida): undo {id} rehecho; {not_restored} rutas quedaron como estaban, {kept} conservadas

@@ -107,6 +107,18 @@ fn repo_retire(path: Option<PathBuf>) -> ExitCode {
         Ok(client) => client,
         Err(code) => return code,
     };
+    // An agent asks (TS-GRP-010 D15): the repo is found in the full snapshot, which the `mcp`
+    // profile does not offer. The command goes to the engine without an id: it decides and
+    // audits the attempt, and an agent gets its refusal.
+    if crate::restricted::is_restricted(&client) {
+        let params = RepoRetireParams {
+            repo_id: String::new(),
+        };
+        return match client.call::<_, RepoRetireResult>(methods::REPO_RETIRE, &params) {
+            Ok(_) => ExitCode::FAILURE,
+            Err(err) => repo_error(CMD, &path, err),
+        };
+    }
     let snapshot = match snapshot(&mut client, CMD) {
         Ok(snapshot) => snapshot,
         Err(code) => return code,

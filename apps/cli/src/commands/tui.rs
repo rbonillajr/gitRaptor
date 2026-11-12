@@ -34,6 +34,20 @@ pub(crate) fn tui(display: Display) -> ExitCode {
         eprintln!("raptor: {}", Text::NeedsTerminal.render(Lang::detect()));
         return ExitCode::from(2);
     }
+    // An agent asks (S-01): no cockpit, the MCP's view (TS-GRP-010 D11).
+    // Only a running engine is asked here: the cockpit starts one itself when needed.
+    if let Ok(dirs) = gitraptor_core::profile::ProfileDirs::resolve()
+        && let Ok(mut client) = gitraptor_core::client::Client::connect(
+            &dirs,
+            gitraptor_api::messages::ClientKind::Cli,
+            gitraptor_api::PROTOCOL_VERSION,
+        )
+        && crate::restricted::is_restricted(&client)
+    {
+        println!("{}", crate::i18n::t("restricted.tui", &[]));
+        let _ = crate::restricted::print_status(&mut client, false);
+        return ExitCode::SUCCESS;
+    }
     let connector = match engine_connector() {
         Ok(connector) => connector,
         Err(err) => {
