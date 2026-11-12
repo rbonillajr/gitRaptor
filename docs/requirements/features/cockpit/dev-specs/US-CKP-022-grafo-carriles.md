@@ -175,7 +175,7 @@ sequenceDiagram
     participant G as crates/git lane
     Note over U: panel: carriles desde el stream (T006), sin consulta
     U->>H: Cmd::Graph {ticket, repo_id} al pulsar g (T005)
-    H->>L: link.submit graph.lanes {repo_id}, id 57; Queries guarda (ticket, 57, Query::Graph) (T004)
+    H->>L: link.submit graph.lanes {repo_id}, id 57, y Queries guarda (ticket, 57, Query::Graph) (T004)
     L->>L: graph::start: valida, resuelve base confirmada y worktrees, queries.register (T003)
     L->>P: ctx.query.submit(job) (T003)
     P->>G: dentro de QueryTable::run: lane(head, base_tip, topes, stop) por carril (T002)
