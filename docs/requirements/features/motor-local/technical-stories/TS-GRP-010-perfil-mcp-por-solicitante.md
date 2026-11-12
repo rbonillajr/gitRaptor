@@ -9,12 +9,13 @@ priority: high
 complexity: high
 milestone: M3
 created: 2026-11-10
-updated: 2026-11-10
+updated: 2026-11-12
 blocked_by: []
 related:
   adrs: [ADR-GRP-005, ADR-MCP-001, ADR-GRP-012, ADR-GRP-017, ADR-GRD-007]
   stories: [US-MCP-020, US-MCP-023, TS-GRP-009, US-CKP-011]
   rules: [BR-AUTH-004, BR-CONS-001]
+  specs: [DS-TS-GRP-010]
 ado:
   id: null
   url: null
@@ -26,6 +27,8 @@ tags: [canal, perfil-mcp, ascendencia, solicitante, s-01, sec-mcp-01, seguridad,
 **Valor**: un agente que usa la CLI `raptor` (o habla directo con el socket) no ve ni puede más que por el MCP. Sin esto, la CLI es una puerta lateral que esquiva la allowlist, la vista restringida y el cubo de escrituras, y la guía para agentes no puede enseñarla.
 
 > Es **S-01** (SEC-MCP-01) de [ADR-MCP-001 § 2](../../../../architecture/decisions/ADR-MCP-001-servidor-mcp-cliente-daemon.md) y de la Enmienda 2026-10-05 (MCP) de [ADR-GRP-005](../../../../architecture/decisions/ADR-GRP-005-forma-motor-proceso-segundo-plano.md). Estaba decidido y **no implementado**; tampoco tenía ficha. Decisión del orquestador (2026-11-10), por delegación de Rene Bonilla: pasa de la puerta de M4 a **Must de M3**, porque M3 enseña la CLI a los agentes (US-MCP-020, US-MCP-023).
+
+> Dev Spec: [DS-TS-GRP-010](../dev-specs/TS-GRP-010-dev-spec.md). Precisa el orden de la decisión (hook y daemon mismo antes de S-01; completo solo para un sin atribuir que podría confirmar), el multiplexor ambiguo como `mcp`, el perfil fijo en el `hello` para toda conexión, qué conserva una conexión estrechada (canal declarado, veredicto de reservados, presupuestos de lectura) y la vista acotada mínima de `raptor status` y la TUI. Decisión del orquestador (2026-11-12), validada por Arquitecto.
 
 ### Descripción
 
