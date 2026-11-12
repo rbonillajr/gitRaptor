@@ -5,7 +5,7 @@ type: us
 status: ready
 priority: high
 created: 2026-10-28
-updated: 2026-11-09
+updated: 2026-11-12
 feature: desktop
 source: inline
 decision: "Decisión de Rene del 2026-11-08 (aceptación de las recomendaciones, Q-DSK-7 a Q-DSK-20), ver CTX-DSK-001 § 11"
@@ -44,7 +44,7 @@ tags:
 
 - **Reutiliza**: US-CKP-022 y su Dev Spec DS-US-CKP-022; `graph.lanes` (DEP-CKP-2) y, si existe, `graph.commit-actor`.
 - **Historias**: US-DSK-004 (colores y nombres de agente de la flota).
-- **Qué falta en el motor**: nada propio si US-CKP-022 está implementada; si no, la consulta de carriles llega con ella.
+- **Qué falta en el motor**: nada. US-CKP-022 (`graph.lanes`) y US-CKP-012 (pool de consultas, `query.cancel`, `Client::submit`) están implementadas y en `main` (revisión de DS-US-DSK-005 del 2026-11-12).
 
 ## Criterios de Aceptación
 
@@ -80,4 +80,4 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 ## Diseño y Dev Spec
 
 - **Diseño:** [design-flow.md](../design/design-flow.md) (DSF-DSK-001), grafo de carriles; paleta por carril de DSYS-GRP-001.
-- **Dev Spec:** [DS-US-DSK-005](../dev-specs/US-DSK-005-grafo-de-carriles.md) (`spec-ready`, 2026-11-09).
+- **Dev Spec:** [DS-US-DSK-005](../dev-specs/US-DSK-005-grafo-de-carriles.md) (`spec-ready`, 2026-11-09; revisada contra `main` el 2026-11-12, sin tareas bloqueadas).
