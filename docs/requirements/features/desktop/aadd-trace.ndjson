@@ -62,3 +62,6 @@
 {"v":1,"ts":"2026-11-10T06:36:53.082Z","event":"updated","session":"13987455-cbf1-48e3-a0d7-a2c0287e215e","rel":"user-stories/US-DSK-009-diff-visual.md","id":"US-DSK-009","type":"us","sha":"05fa9123d64cf7f0"}
 {"v":1,"ts":"2026-11-10T06:39:02.438Z","event":"updated","session":"13987455-cbf1-48e3-a0d7-a2c0287e215e","rel":"user-stories/US-DSK-009-diff-visual.md","id":"US-DSK-009","type":"us","sha":"ec1b9d4f54764ba0"}
 {"v":1,"ts":"2026-11-10T06:41:09.630Z","event":"updated","session":"13987455-cbf1-48e3-a0d7-a2c0287e215e","rel":"user-stories/US-DSK-009-diff-visual.md","id":"US-DSK-009","type":"us","sha":"a6b1203373209659"}
+{"v":1,"ts":"2026-11-12T20:57:31.607Z","event":"updated","session":"803d2d3a-6bc1-4278-8bed-d7154cbf20ef","rel":"user-stories/US-DSK-005-grafo-de-carriles.md","id":"US-DSK-005","type":"us","sha":"cab2a781bcfa5bb1"}
+{"v":1,"ts":"2026-11-12T20:57:32.962Z","event":"updated","session":"803d2d3a-6bc1-4278-8bed-d7154cbf20ef","rel":"user-stories/US-DSK-005-grafo-de-carriles.md","id":"US-DSK-005","type":"us","sha":"b40197639aa44d6d"}
+{"v":1,"ts":"2026-11-12T20:57:34.576Z","event":"updated","session":"803d2d3a-6bc1-4278-8bed-d7154cbf20ef","rel":"user-stories/US-DSK-005-grafo-de-carriles.md","id":"US-DSK-005","type":"us","sha":"61e5da30f251c52d"}

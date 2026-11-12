@@ -4,7 +4,7 @@ title: "Dev Spec — El grafo de carriles en la app"
 type: dev-spec
 status: spec-ready
 created: 2026-11-09
-updated: 2026-11-09
+updated: 2026-11-12
 story: US-DSK-005
 feature: desktop
 domain: GRP
@@ -13,7 +13,7 @@ frontend_surface: true
 stack: react
 profile: frontend-feature
 tooling: [cargo, pnpm, node]
-blocked_by: [US-CKP-022, US-CKP-012, US-DSK-008]
+blocked_by: []
 related:
   context: ../context.md
   story: ../user-stories/US-DSK-005-grafo-de-carriles.md
@@ -35,6 +35,7 @@ must_read:
   - ../design/primitives-spec.md
   - ../../cockpit/dev-specs/US-CKP-022-grafo-carriles.md
   - ../../cockpit/dev-specs/US-CKP-012-ver-diff.md
+  - ./US-DSK-009-diff-visual.md
   - ../../cockpit/business-rules.md
   - ../../../../architecture/decisions/ADR-GRP-017-app-escritorio-cliente-daemon.md
   - ../../../../architecture/decisions/ADR-GRP-003-design-system.md
@@ -44,6 +45,10 @@ must_read:
   - ../../../../../crates/api/src/messages.rs
   - ../../../../../crates/api/src/event.rs
   - ../../../../../crates/api/src/client/mod.rs
+  - ../../../../../crates/api/src/graph.rs
+  - ../../../../../crates/api/src/methods/graph.rs
+  - ../../../../../crates/api/src/methods/query.rs
+  - ../../../../../apps/cli/src/client/mod.rs
   - ../../../../../apps/desktop/src-tauri/src/engine/link.rs
   - ../../../../../apps/desktop/src-tauri/src/engine/supervisor.rs
   - ../../../../../apps/desktop/src-tauri/src/engine/ingest.rs
@@ -65,7 +70,7 @@ validation:
   must_read_resolved: true
   gaps_blocking: 0
   ready_to_implement: true
-  blocked_tasks: [T007, T008, T009, T010, T011]
+  blocked_tasks: []
   gaps_release: 1
   ready_to_release: false
 tags: [desktop, ui-1, grafo, carriles, wip, column-settings, canvas, accesibilidad, solo-lectura, dep-ckp-2, banda-de-conflicto]
@@ -75,9 +80,9 @@ tags: [desktop, ui-1, grafo, carriles, wip, column-settings, canvas, accesibilid
 
 ## Contexto rápido
 
-Al terminar, quien abre un repo en la app ve en el centro un grafo con un carril por rama de agente que sale de la rama base, con el nombre y el color de su agente, una fila WIP con lo que cada copia de trabajo aún no ha commiteado y una cabecera cuyas columnas elige con "Column settings" y que la app recuerda. El carril crece solo: cuando un agente hace un commit, el commit aparece sin recargar. Si la rama base no existe, no hay carriles y la vista dice qué rama falta. Hoy no puede: el centro de la app pinta las tarjetas de la flota (DS-US-DSK-004 D1) y el motor no publica los commits de una rama.
+Al terminar, quien abre un repo en la app ve en el centro un grafo con un carril por rama de agente que sale de la rama base, con el nombre y el color de su agente, una fila WIP con lo que cada copia de trabajo aún no ha commiteado y una cabecera cuyas columnas elige con "Column settings" y que la app recuerda. El carril crece solo: cuando un agente hace un commit, el commit aparece sin recargar. Si la rama base no existe, no hay carriles y la vista dice qué rama falta. Hoy no puede: el centro de la app pinta las tarjetas de la flota (DS-US-DSK-004 D1) y, aunque el motor ya ofrece los commits de cada carril (`graph.lanes`, US-CKP-022), la app no los pide y su `Link` tira toda respuesta que no sea de un `call`.
 
-Entra la tercera del orden del orquestador (008 → 007 → 005): el panel de conflictos, la unión `center` de `ui-store`, el `Esc` consumido y `CopyCommand` con su anuncio ya están en `main` con DS-US-DSK-008, y la vista Guardrails con DS-US-DSK-007. La entrega tiene dos niveles. El primero se construye ya con lo que el motor publica hoy en la instantánea del repo: carriles, ↑↓, fila WIP, base ausente o sin confirmar, cabecera configurable y vista en tabla. El segundo pinta los commits de cada carril con la consulta `graph.lanes` de DS-US-CKP-022, que todavía no existe en el motor: sus tareas quedan en `blocked_tasks` hasta que US-CKP-022 y US-CKP-012 estén en `main`. Las reglas del grafo (qué es un carril, qué base cuenta, ventana de 50 commits, "sin atribuir", topes) son las de DS-US-CKP-022 y no se reabren aquí.
+Entra la tercera del orden del orquestador (008 → 007 → 005): el panel de conflictos, la unión `center` de `ui-store`, el `Esc` consumido y `CopyCommand` con su anuncio ya están en `main` con DS-US-DSK-008, y la vista Guardrails con DS-US-DSK-007. La entrega tiene dos niveles. El primero se construye ya con lo que el motor publica hoy en la instantánea del repo: carriles, ↑↓, fila WIP, base ausente o sin confirmar, cabecera configurable y vista en tabla. El segundo pinta los commits de cada carril con la consulta `graph.lanes` de DS-US-CKP-022, que ya está en `main` junto con el pool de consultas y `Client::submit` de DS-US-CKP-012: ninguna tarea queda bloqueada (§ [Revisión contra main](#revisión-contra-main-2026-11-12)). Las reglas del grafo (qué es un carril, qué base cuenta, ventana de 50 commits, "sin atribuir", topes) son las de DS-US-CKP-022 y no se reabren aquí.
 
 | Término | Qué es aquí |
 |---|---|
@@ -93,7 +98,7 @@ Entra la tercera del orden del orquestador (008 → 007 → 005): el panel de co
 
 | # | Decisión | Por qué | Alternativa descartada |
 |---|---|---|---|
-| D1 | **Dos niveles.** Nivel 1, ya: carriles, filas resumen con ↑↓, filas WIP y estados de la base, todo desde `RepoFleet` (instantánea y `worktrees` de DS-US-DSK-004), en vivo por construcción. Nivel 2, bloqueado: los commits de cada carril con `graph.lanes`. La fila resumen se sustituye por los commits del carril cuando llegan | Es D1 de DS-US-CKP-022 llevado a la app: la mitad de los escenarios (1 a nivel de carril, 4, la fila WIP y las columnas) no necesitan la consulta | Esperar a `graph.lanes` para todo: la historia entera quedaría bloqueada por US-CKP-022 y US-CKP-012 |
+| D1 | **Dos niveles.** Nivel 1, ya: carriles, filas resumen con ↑↓, filas WIP y estados de la base, todo desde `RepoFleet` (instantánea y `worktrees` de DS-US-DSK-004), en vivo por construcción. Nivel 2: los commits de cada carril con `graph.lanes` (en `main` desde US-CKP-022). La fila resumen se sustituye por los commits del carril cuando llegan | Es D1 de DS-US-CKP-022 llevado a la app: la mitad de los escenarios (1 a nivel de carril, 4, la fila WIP y las columnas) no necesitan la consulta | Esperar a `graph.lanes` para todo: la historia entera quedaría bloqueada por US-CKP-022 y US-CKP-012 |
 | D2 | **Sin comando IPC nuevo.** El supervisor del backend pide `graph.lanes` del repo abierto y empuja el resultado por el `Channel` como mensaje `graph`. Esta historia no añade comandos a la lista cerrada de ADR-GRP-017 (la de `main` al entrar, con `guard_blocks` de US-DSK-007) | El repo abierto ya lo fija `fleet_open`; el supervisor es quien sabe cuándo el grafo envejece (D3). Menos superficie y la misma disciplina que la flota | Un comando `graph_lanes { repoId }` de petición y respuesta: suma un comando, deja al webview decidir el ritmo de consultas al pool del daemon y duplica el estado del repo abierto |
 | D3 | **Refresco del grafo en el supervisor** (D9 de DS-US-CKP-022): se marca desactualizado al abrir o reabrir el repo, con un `git.event` del repo abierto y con un `worktree.state` que cambie el conjunto de claves, la cabeza o la divergencia de algún worktree. Una sola consulta en vuelo; la siguiente sale cuando han pasado `max(1 s, 2 × duración de la última)`. Al cambiar o cerrar el repo, la consulta en vuelo se cancela con `query.cancel` y su respuesta se descarta. Sin temporizadores si no hay nada pendiente | Coste acotado en el pool de un hilo de DS-US-CKP-012 D4 y NFR-13.8 (sin bucles en reposo). `git.event` es el único aviso de un `--amend` (el stream no lleva el oid de `HEAD`) | Pedir el grafo con cada `worktree.state`: cada archivo guardado por un agente sería una consulta |
 | D4 | **Filas intercaladas por fecha**, como el mock B1 y GitKraken: arriba las filas WIP; después la fila de la base; después las filas resumen (en orden de columna) y los commits de todos los carriles por `committedUtcMs` descendente (empate: columna y posición en el carril). Tras el commit más antiguo mostrado de cada carril van su fila "N commits más" (si hay más) y su fila de salida ("sale de main en a1b2c3d") | Es la forma del grafo de B1 (DSF-DSK-001 § 2.2 y § 4.b) y deja ver qué agente avanzó último | Filas agrupadas por carril: más simple, pero esconde el orden temporal y no se parece al grafo que Rene eligió |
@@ -127,6 +132,7 @@ Entra la tercera del orden del orquestador (008 → 007 → 005): el panel de co
 |---------|-----------|
 | [Contexto rápido](#contexto-rápido) | Qué se construye, glosario y decisiones |
 | [⚠️ Gaps y violaciones de la constitución](#gaps-y-violaciones-de-la-constitución) | Qué impide liberar y de qué depende |
+| [Revisión contra main (2026-11-12)](#revisión-contra-main-2026-11-12) | Qué cambió al contrastar la spec con el código de `main` |
 | [🔭 La forma](#la-forma) | Piezas, flujo y capas |
 | [🚀 Plan de implementación](#plan-de-implementación) | T001…T010, en orden |
 | ↳ [El trabajo de un vistazo](#el-trabajo-de-un-vistazo) | Tareas en tabla y su orden |
@@ -144,15 +150,34 @@ Entra la tercera del orden del orquestador (008 → 007 → 005): el panel de co
 
 | ID | Qué falta | Severidad | Alcance | Acción | Owner |
 |----|-----------|-----------|---------|--------|-------|
-| G1 | NFR-13.4 pide que un commit nuevo aparezca "sin volver a pedir el grafo entero (solo el carril afectado)" (`docs/architecture/non-functional.md:200`), y `graph.lanes` solo acepta `repo_id` (DS-US-CKP-022 § Contrato de API): la app vuelve a pedir todos los carriles. La caché por carril del daemon (D9 de DS-US-CKP-022) solo recorre el carril que cambió, pero la respuesta lleva todos | Bloquea liberación | — | Decidir si NFR-13.4 se lee como "solo se recorre el carril afectado" (enmienda de su texto) o si `graph.lanes` gana un filtro opcional de carriles (enmienda de DS-US-CKP-022, aditiva) antes del gate de rendimiento de la release | Arquitecto |
+| G1 | NFR-13.4 pide que un commit nuevo aparezca "sin volver a pedir el grafo entero (solo el carril afectado)" (`docs/architecture/non-functional.md:200`), y `graph.lanes` solo acepta `repo_id` (`GraphParams { repo_id }`, `crates/api/src/graph.rs:27`, con `deny_unknown_fields`): la app vuelve a pedir todos los carriles. La caché por carril del daemon ya está en `main` (`LaneCache` en `ServerCtx`, `crates/core/src/channel/server.rs:116`; D9 y D17 de DS-US-CKP-022) y solo recorre el carril que cambió, pero la respuesta lleva todos | Bloquea liberación | — | Decidir si NFR-13.4 se lee como "solo se recorre el carril afectado" (enmienda de su texto; la métrica "consultas `graph.lanes` por delta" = 1 se cumple con D3) o si `graph.lanes` gana un filtro de carriles, que por `deny_unknown_fields` solo puede entrar tras una capacidad `graph.lane-filter` (DS-US-CKP-022, nota de evolución) y nunca como campo suelto. Antes del gate de rendimiento de la release; no bloquea implementar | Arquitecto |
 
-**Dependencias de orden (`blocked_by`)**: no son decisiones abiertas; el contrato que se consume ya está fijado en DS-US-CKP-022 (`approved`) y cada pieza tiene dueño y ruta. Mientras no estén en `main`, T007 a T010 (`blocked_tasks`) no empiezan; T001 a T006 sí. T011 (capa de conflictos) espera a US-DSK-008, que el orden del orquestador (008 → 007 → 005) ya pone en `main` antes de esta historia.
+**Dependencias de orden**: ninguna abierta (`blocked_by: []`). US-CKP-022, US-CKP-012 y US-DSK-008 están `implemented` y en `main`; todas las tareas, T001 a T011, pueden empezar en el orden de § En qué orden. Lo que comprobó la revisión está en § [Revisión contra main](#revisión-contra-main-2026-11-12).
 
-- **`graph.lanes` no existe en el motor** (DEP-CKP-2). `crates/api/src/methods/` no tiene `graph.rs` ni `query.rs` (comprobado el 2026-11-09: ningún `"graph.` ni `QueryPool` en `crates/` ni en `apps/`). Lo entregan T002 y T003 de DS-US-CKP-022 (US-CKP-022), que a su vez esperan a T003 de DS-US-CKP-012 (`QueryPool`, `query.cancel`, US-CKP-012). Alcanza a T007 y lo que depende de ella.
-- **La biblioteca cliente no envía sin esperar.** `Client` solo tiene `call` y `next_incoming` (`crates/api/src/client/mod.rs:414`, `:501`) e `Incoming` solo `Buffered` y `Frame` (`:222-231`); el `Link` de la app tira cualquier respuesta leída fuera de un `call` (`apps/desktop/src-tauri/src/engine/link.rs:139`). `Client::submit`/`settle` e `Incoming::Reply` los entrega T004 de DS-US-CKP-012 (US-CKP-012). Alcanza a T008.
-- **US-CKP-022 está en `draft`** aunque su Dev Spec esté `approved`: el PO la pasa a `ready` antes de que su worker arranque (orquestador).
+Verificado en el código el 2026-11-12 (nivel 1): `RepoView.base` con `BaseBranchView { name, status }` (`crates/api/src/messages.rs:152`, `:241-258`); `DivergenceView` (`:267-283`); `CommitCountView` (`:287`); `HeadView` (`:305`); `WorktreeStatus::Ready { head, counts, changes, divergence }` y `ChangeCounts` (`:330-358`); `WorktreeView` (`:368`). La app ya los lleva al webview como `RepoFleetDto`, `WorktreeDto`, `ReadyDto`, `CountsDto`, `BoundedCountDto` y `DivergenceDto` (`apps/desktop/src-tauri/src/engine/wire.rs:288-380`). `git.event` (`crates/api/src/event.rs:117`) es un evento del ámbito del repo que hoy `ingest::repo_event` ignora (`ingest.rs:348`, cae en `_ => None`).
 
-Verificado en el código el 2026-11-09 para el nivel 1: `RepoView.base` con `BaseBranchView { name, status }` (`crates/api/src/messages.rs:152`, `:241-258`); `DivergenceView` con `counted`, `base-missing`, `no-base`, `no-commits` y `unreadable` (`:267-283`); `HeadView` (`:305-313`); `WorktreeStatus::Ready { head, counts, changes, divergence }` y `ChangeCounts` (`:330-358`); `WorktreeView` (`:368-420`). La app ya los lleva al webview como `RepoFleetDto`, `WorktreeDto`, `ReadyDto`, `CountsDto` y `DivergenceDto` (`apps/desktop/src-tauri/src/engine/wire.rs:90-190`). `git.event` es un evento del ámbito del repo (`crates/api/src/event.rs:117`, `:167-174`, `:198`) que hoy `ingest::repo_event` ignora (`ingest.rs:286`).
+---
+
+## Revisión contra main (2026-11-12)
+
+**Decisión del orquestador (2026-11-12), validada por Arquitecto.** La spec se escribió el 2026-11-09, antes de que US-CKP-022, US-CKP-012 y US-DSK-008 entraran en `main`. Contrastada con el código, las decisiones D1 a D22 siguen en pie; cambian dependencias, referencias y tres reglas de T007/T008.
+
+| Qué decía | Qué hay en `main` | Cambio en esta spec |
+|---|---|---|
+| `graph.lanes` no existe (DEP-CKP-2) | `GRAPH_LANES` en `crates/api/src/methods/graph.rs:9`, declarado `method(GRAPH_LANES, false, false).since(CAPABILITIES_PROTOCOL)`: no reservado, `mcp: false`, sin bloque de errores ni presupuesto propio (D2, D14 de DS-US-CKP-022). La app habla el protocolo 9 (`PROTOCOL_VERSION` = `CAPABILITIES_PROTOCOL` = 9), así que lo ve en `hello.methods`. Tipos en `crates/api/src/graph.rs` (`GraphLanes`, `GraphBase`, `BaseGap`, `Lane`, `LaneHead`, `LaneState`, `LaneGap`, `LaneCommit`) y topes en `:14-22` | `blocked_by` y `blocked_tasks` vacíos; T007 sin espera |
+| `Client` solo tiene `call` y `next_incoming` | `Client::submit` (`client/mod.rs:487`, como mucho 8 pendientes), `Client::settle` (`:499`) e `Incoming::Reply` (`:243`). `Reply` solo llega para una respuesta que leyó un `call`; la que lee `next_incoming` llega como `Incoming::Frame` y quien la decodifica llama `settle` | T008 paso 1: `ClientLink` atiende los dos caminos y llama `settle` |
+| El `Link` tira la respuesta en `link.rs:139` | La tira en dos sitios: `Incoming::Reply` (`link.rs:139`) y `ServerMessage::Response` dentro de un `Frame` (`:145`) | Referencias y paso 1.1 |
+| `query-busy` y `query-cancelled` como contrato | `QUERY_BUSY` y `QUERY_CANCELLED` en `crates/api/src/methods/query.rs:16-18` (códigos `.code`); `QUERIES_PER_CONNECTION` = 1 y cola global de 4 (`crates/api/src/diff.rs:25-27`). `GraphFailure` y `graph_failure` viven en la TUI (`apps/cli/src/model.rs:257`, `apps/cli/src/client/mod.rs:433`, D15 de DS-US-CKP-022), no en `gitraptor_api` | T008 paso 5 compara `code` con esas constantes; no importa `GraphFailure` |
+| Rechazos de `graph.lanes` | `INVALID_PARAMS` (id mal formado) y `NOT_FOUND` (repo desconocido con el motor observando); repo no observado o sin worktrees → resultado con `base: not-computable {repo-unavailable}`, no error (D19 de DS-US-CKP-022) | Ambos rechazos → `graphUnavailable { reason: "failed" }` (D17 sin cambio) |
+| Tras cancelar se puede volver a pedir | La plaza de la conexión solo se libera cuando el trabajo cancelado responde (enmienda P27 de DS-US-DSK-009, M-01) | T008 paso 6: tras cambiar o cerrar el repo, la consulta del repo nuevo espera la respuesta del id cancelado o `GRAPH_DEADLINE_MS` + 500 ms; test nuevo en T007 |
+| G12: `query.cancel` aislado por conexión | Cumplido: `query.cancel` actúa sobre `self.queries` de la conexión (`crates/core/src/channel/conn.rs:1024-1028`) | G12 resuelto |
+| US-DSK-008 entra antes | En `main`: `src/conflicts/index.ts` exporta `ConflictBandModel`, `SideRef`, `PredictionViewModel` y `usePredictionView`; `ConflictBand` con `variant: "row" \| "badge"` (`src/ui/ConflictBand.tsx:7`); `center` en `ui-store`; `FleetContent` con `ConflictPanel` (`src/engine/EngineCenter.tsx:154`) | T011 sin cambios de forma; nota sobre `usePredictionView` (pide `fleet` definido) |
+| `useAgentSlots` por crear | No existe: `assignSlots` sigue en `FleetView.tsx:77` | T006 sin cambios |
+| `commands.json` | `["app_info", "engine_watch", "engine_retry", "fleet_open", "guard_blocks"]`; ya hay tests «no añade comando» de 008 y 007 (`tests/commands.rs:367`, `:487`) | D2 sin cambios; T008 sigue el mismo patrón |
+| `ingest` sin ayudas | `is_object_id` (`ingest.rs:230`) y `bounded` (`CommitCountView` → `BoundedCountDto`, saturando a `u32`, `:246`) | T007 las reutiliza |
+| Referencias a líneas | `wire.rs:90-190` → `:288-380`; `ingest.rs:286` → `:348`; `supervisor.rs:117` → `:128`; `client/mod.rs:414`, `:501`, `:222-231` → `:433`, `:551`, `:234-243` | Corregidas |
+
+Los tests de contrato de T001 y T007 ya nombrados siguen siendo válidos: la forma de `GraphDto` es la de la app y se obtiene de `GraphLanes` sin pérdida (el nombre de base de `base-unconfirmed` y `base-missing` viaja dentro de `BaseGap`; `no-base` y `repo-unavailable` no lo llevan, de ahí `name: string | null`). Solo se añade un test (T007/T008) y el de `commands.test.ts` gana dueño (T008).
 
 ---
 
@@ -210,7 +235,7 @@ sequenceDiagram
     S-->>W: graph → el commit nuevo en su carril (T009)
 ```
 
-El paso que no se adivina es el 4: la respuesta llega en otro momento por la misma conexión, y el `Link` de la app hoy la descarta (`link.rs:139`). La frontera publicada que cambia es el `Channel` (mensajes `graph` y `graphUnavailable`); el canal JSON-RPC no cambia por esta historia.
+El paso que no se adivina es el 4: la respuesta llega en otro momento por la misma conexión, y el `Link` de la app hoy la descarta (`link.rs:139` si la leyó un `call`, `:145` si la leyó `next`). La frontera publicada que cambia es el `Channel` (mensajes `graph` y `graphUnavailable`); el canal JSON-RPC no cambia por esta historia.
 
 **Dónde acaba el dato:**
 
@@ -232,11 +257,11 @@ Nombre, color y estado de un agente salen una vez, de `fleetCards` con el regist
 
 ## 🚀 Plan de implementación
 
-> Orden topológico (`Depende:`). Las rutas son relativas a la raíz del repo. T007 a T010 están en `blocked_tasks`: esperan a US-CKP-022 y US-CKP-012 (§ Gaps).
+> Orden topológico (`Depende:`). Las rutas son relativas a la raíz del repo. Ninguna tarea está bloqueada: US-CKP-022, US-CKP-012 y US-DSK-008 están en `main` (§ Revisión contra main).
 
 ### El trabajo de un vistazo
 
-Tres frentes y un cierre: el grafo con lo que ya se publica (T001–T006), la banda ⚡ sobre el modelo de US-DSK-008 (T011), los commits por `graph.lanes` (T007–T009, bloqueados) y la verificación en macOS (T010).
+Tres frentes y un cierre: el grafo con lo que ya se publica (T001–T006), la banda ⚡ sobre el modelo de US-DSK-008 (T011), los commits por `graph.lanes` (T007–T009) y la verificación en macOS (T010).
 
 | # | Tarea | Depende | Aterriza en |
 |---|---|---|---|
@@ -254,7 +279,7 @@ Tres frentes y un cierre: el grafo con lo que ya se publica (T001–T006), la ba
 
 ### En qué orden
 
-Dos ramas desde T001: la del webview (T002 → T003 → T005 → T006, con T004 en paralelo) se construye ya; la del backend (T007 → T008) espera a sus dependencias y se une en T009; la banda ⚡ (T011) sale de T006 y entra en la verificación de T010.
+Dos ramas desde T001: la del webview (T002 → T003 → T005 → T006, con T004 en paralelo) y la del backend (T007 → T008) avanzan en paralelo y se unen en T009; la banda ⚡ (T011) sale de T006 y entra en la verificación de T010.
 
 ```mermaid
 graph LR
@@ -409,7 +434,9 @@ graph LR
 1. Crear `useAgentSlots`: almacén Zustand **sin** `persist` con `{ repoId, slots: Map<sessionId, number> }`; `useAgentSlotsSync(fleet)` lo actualiza con `assignSlots` cuando cambian las sesiones presentes y lo vacía al cambiar de repo; `useAgentSlot(sessionId)` lo lee.
    1.1 ⛔6.1 Montar `useAgentSlotsSync` en un solo sitio (`GraphContent`). Si lo montan también `FleetView` y el grafo, dos escritores reasignan huecos y un agente cambia de color al abrir el cajón.
 2. Cambiar `FleetView` para que tome el hueco de `useAgentSlot` y deje su `useRef` (DS-US-DSK-004 T004).
-3. Crear `useGraph()`: lee `useFleet()` (DS-US-DSK-004), calcula `fleetCards` y `graphModel` con `useMemo` y, hasta T009, `graph: null`.
+3. Crear `useGraph()`: lee `useFleet()` (DS-US-DSK-004), calcula `fleetCards` con `useMemo` y devuelve `{ fleet, cards, entry }`, con `entry: null` hasta T009. `GraphContent` calcula `graphModel` con `useMemo`.
+   3.1 `useFleet` abre el repo (`fleet_open`) y hoy se monta en un solo sitio, `FleetContent` (`EngineCenter.tsx:150-154`). `GraphContent` lo monta solo a través de `useGraph` y reutiliza sus `cards` para `ConflictPanel` y, en T011, para `usePredictionView`; no llama `useFleet` ni `fleetCards` otra vez.
+   3.2 `usePredictionView(fleet, cards, nowMs)` exige `fleet` definido (`src/conflicts/usePredictionView.ts:8`) y un hook no se llama condicionalmente. Por eso `GraphContent` pinta el estado `loading` con `graphModel({ fleet: undefined, … })` mientras no hay flota y, con flota, monta un componente interno (`GraphMain { fleet, cards, entry }`) que calcula el modelo y, desde T011, llama el hook y pasa `laneA11y` a `graphModel`. Sin esto, `laneA11y` (que sale del hook) y el modelo se pedirían el uno al otro. (Revisión 2026-11-12.)
 4. En `EngineCenter`, el estado `content` monta `GraphContent` (`useAgentSlotsSync`, `useGraph`, `GraphView`) en lugar de `FleetContent`. El `ConflictPanel` de US-DSK-008 sigue encima de la vista principal y los destinos `pair` y `guardrails` de `center` siguen sustituyéndola; con `center.view === "main"` el centro pinta el panel y el grafo. `Esc` y `backToMain()` no cambian (los dejó 008; esta tarea no toca `useShortcuts` salvo `⌥⌘T` de T005).
 5. En `AppShell`, el panel de detalle pasa a llevar `heading={t("detail.agents.title")}` (sin lista de pestañas, D15) y `FleetView` del repo abierto; sin repo abierto, nada. Los estados del motor (`EngineBand`) no cambian. El toggle del detalle (`⌥⌘B`) usa `detail.agents.show` / `.hide` como etiqueta y tooltip.
 5.1 Reescribir en `en.json` y `es.json` los textos de `grd.view.back` y `conflicts.detail.back` a "Volver al grafo" / "Back to the graph" (D22).
@@ -423,7 +450,7 @@ graph LR
 
 ### T007 — Escribir en rojo los tests del grafo en el backend y fijar su DTO
 
-**Objetivo.** Los tests de Rust del nivel 2 contra el daemon falso, el DTO del mensaje `graph` y su saneado. Espera a que `gitraptor_api::graph` exista (US-CKP-022).
+**Objetivo.** Los tests de Rust del nivel 2 contra el daemon falso, el DTO del mensaje `graph` y su saneado. `gitraptor_api::graph` y `methods::GRAPH_LANES` ya están en `main` (US-CKP-022).
 
 **Ubicación.**
 - `apps/desktop/src-tauri/src/engine/wire.rs` (**MODIFY**: `Graph`, `GraphUnavailable` y los DTO de § Contratos compartidos)
@@ -435,8 +462,10 @@ graph LR
 
 **Reglas**
 - `ingest::graph(&GraphLanes) -> GraphDto`: `worktreeKey = key(lane.worktree.raw())` (la ruta cruda nunca se manda); rama y base por `visible(…, NAME_MAX_CHARS)`; `summary` por `visible(…, TEXT_MAX_CHARS)`; `oid` y `merge_base` solo si son 40 o 64 dígitos hex: un commit con `oid` inválido se omite, un carril con `merge_base` inválido pasa a `not-computable` `unreadable`. `committed_utc_ms` negativo → el commit se omite.
-- `ingest::graph_trigger(&Event) -> bool`: `true` para `git.event`.
-- El falso de "tienda" responde `graph.lanes` con el `GraphDto` de T001 tras 30 ms, y "tienda-develop" con `base: not-computable base-missing`.
+  - Correspondencia con `crates/api/src/graph.rs`: `GraphBase::Ready { name }` → `base.state: "ready"`; `GraphBase::NotComputable { reason }` → `"not-computable"` con `reason` y `name` sacado de `BaseGap::BaseUnconfirmed { name }` o `BaseMissing { name }` (`null` para `NoBase` y `RepoUnavailable`); `computed_at_utc_ms` → `computedUtcMs`; `LaneState::Ready { merge_base, commits, total }` con `total` (`CommitCountView`) por la `ingest::bounded` existente (`ingest.rs:246`); `LaneHead::Detached` → `{ kind: "detached" }`. Rama y asunto son `UntrustedName` / `Untrusted`: se leen con `.raw()` y pasan por `visible`.
+  - La comprobación de hex reutiliza `is_object_id` (`ingest.rs:230`); no se escribe otra.
+- `ingest::graph_trigger(&Event) -> bool`: `true` para `event::GIT_EVENT` (`crates/api/src/event.rs:117`).
+- El falso de "tienda" responde `graph.lanes` con el `GraphDto` de T001 tras 30 ms, y "tienda-develop" con `base: not-computable base-missing`. Para el test de cambio de repo (T008 paso 6) el falso admite una consulta por conexión, como el daemon (`QUERIES_PER_CONNECTION` = 1): responde `query-busy` a una segunda mientras la primera no haya respondido, y `query-cancelled` a la cancelada solo cuando vence su retardo.
 
 - **Depende:** T001
 - **Refs:** D2, D17; DS-US-CKP-022 § Contratos compartidos y § Contrato de API; SEC-12
@@ -444,28 +473,29 @@ graph LR
 
 ### T008 — Pedir `graph.lanes` desde el supervisor
 
-**Objetivo.** El supervisor pide los carriles del repo abierto sin bloquear el stream y los manda al webview con el ritmo de D3. Espera a `Client::submit`/`settle` e `Incoming::Reply` (US-CKP-012).
+**Objetivo.** El supervisor pide los carriles del repo abierto sin bloquear el stream y los manda al webview con el ritmo de D3. Usa `Client::submit`/`settle` e `Incoming::Reply`, ya en `main` (US-CKP-012; `crates/api/src/client/mod.rs:487`, `:499`, `:243`).
 
 **Ubicación.**
 - `apps/desktop/src-tauri/src/engine/link.rs` (**MODIFY**: `submit`, `reply`, `cancel`)
 - `apps/desktop/src-tauri/src/engine/supervisor.rs` (**MODIFY**)
 - `apps/desktop/src-tauri/tests/commands.rs` (**MODIFY**: test «esta historia no añade comandos»)
+- `apps/desktop/src/client/commands.test.ts` (**MODIFY**: «no command of the command map is about the graph», junto al de predicción, `:83`)
 
 **Pasos**
-1. Añadir a `Link` `submit`, `reply` y `cancel` (§ Firmas del stack) con implementación por defecto: `submit` devuelve `Err(LinkError::Refused { code: rpc::code::METHOD_NOT_FOUND })`, `reply` `None`, `cancel` nada. `ClientLink` las implementa con la API de DS-US-CKP-012 T004; `cancel` llama `query.cancel` e ignora el error.
-   1.1 ⛔8.1 En `next`, una respuesta leída que no sea de un `call` se guarda para `reply` **solo si su id es el de la petición en vuelo** (`GraphTrack`); cualquier otra respuesta se tira (L-01 de security-expert, **Decisión del orquestador (2026-11-09), validada por Arquitecto y security-expert**). Hoy se tiran todas (`link.rs:139`): si se siguiera tirando la buena, la vista se quedaría en "cargando commits…" para siempre; si se guardaran todas, un daemon podría llenar la memoria con ids que nadie pidió.
+1. Añadir a `Link` `submit`, `reply` y `cancel` (§ Firmas del stack) con implementación por defecto: `submit` devuelve `Err(LinkError::Refused { code: rpc::code::METHOD_NOT_FOUND })`, `reply` `None`, `cancel` nada. `ClientLink` las implementa con `Client::submit` (`client/mod.rs:487`) y `Client::settle` (`:499`); `cancel` hace `submit(QUERY_CANCEL, { request: id })` sin esperar (su respuesta se tira por 1.1) e ignora el error. El patrón a copiar es el `Link` de la TUI (`apps/cli/src/client/mod.rs:90-96`, `:473-500`).
+   1.1 ⛔8.1 Una respuesta llega por dos caminos y hoy los dos la tiran: `Incoming::Reply` (la leyó un `call`, `link.rs:139`) e `Incoming::Frame` que decodifica como `ServerMessage::Response` (la leyó `next`, `link.rs:145`). En ambos se guarda para `reply` **solo si su id es el de la petición en vuelo** (`GraphTrack`) o el de la cancelada que se espera (paso 6); al guardarla se llama `Client::settle(id)` (el `Frame` no lo hace solo). Cualquier otra respuesta se tira (L-01 de security-expert, **Decisión del orquestador (2026-11-09), validada por Arquitecto y security-expert**): si se siguiera tirando la buena, la vista se quedaría en "cargando commits…" para siempre; si se guardaran todas, un daemon podría llenar la memoria con ids que nadie pidió.
 2. Añadir al ámbito del repo un `GraphTrack` (§ Ciclos de vida): `stale`, la petición en vuelo con su instante, el último envío, la última duración y la última cabeza y divergencia por clave.
 3. Marcar `stale` con las causas de D3: tras `open_repo` correcto, con `graph_trigger`, y con un `worktree.state` cuyo conjunto de claves o alguna `(head, divergence)` cambie. En vista restringida no se marca nunca.
 4. En cada vuelta del bucle (`READ_SLICE`, 20 ms): si `stale`, sin petición en vuelo y pasado el espaciado, `submit(GRAPH_LANES, { repo_id })` y `stale = false`. Si `hello.methods` no trae `graph.lanes`, manda `graphUnavailable { reason: "unsupported" }` una vez por repo abierto y no pide nada.
-5. Tras cada `next`, `reply(id)` de la petición en vuelo: `Ok` → deserializar `GraphLanes`, `ingest::graph`, mandar `graph` con `perf`; `Refused` con `query-busy` → `stale = true`; con `query-cancelled` → nada; otro `Refused` → `graphUnavailable { reason: "failed" }`; `Lost` → reconexión como hoy.
+5. Tras cada `next`, `reply(id)` de la petición en vuelo: `Ok` → deserializar `GraphLanes`, `ingest::graph`, mandar `graph` con `perf`; `Refused { code }` con `code == methods::QUERY_BUSY.code` → `stale = true`; con `methods::QUERY_CANCELLED.code` → nada; otro `Refused` (`INVALID_PARAMS`, `NOT_FOUND` de D19 de DS-US-CKP-022 u otro) → `graphUnavailable { reason: "failed" }`; `Lost` → reconexión como hoy. Los códigos se comparan con las constantes de `gitraptor_api::methods` (`methods/query.rs:16-18`): `GraphFailure` es de la TUI (`apps/cli`) y la app no depende de ella.
    5.1 ⛔8.2 Una respuesta de un repo que ya no está abierto se descarta: comparar el id de petición con el de `GraphTrack` antes de mandar nada.
-6. Al cambiar de repo, `repoClosed` o reconexión: `cancel` de la petición en vuelo y `GraphTrack` nuevo.
+6. Al cambiar de repo o con `repoClosed`: `cancel` de la petición en vuelo y `GraphTrack` nuevo, que guarda el id cancelado y un plazo de `GRAPH_DEADLINE_MS` + 500 ms (`crates/api/src/graph.rs:20`). Mientras haya id cancelado sin respuesta y sin vencer el plazo, el paso 4 no envía `graph.lanes` del repo nuevo: la plaza de la conexión (`QUERIES_PER_CONNECTION` = 1) solo se libera cuando el trabajo cancelado responde (M-01, P27 de DS-US-DSK-009). La respuesta de ese id, sea `query-cancelled` o el resultado, se descarta. Con reconexión no hay espera: la conexión vieja cerró y el daemon cancela todo (`conn.queries.cancel_all()`), así que solo `GraphTrack` nuevo. (Revisión 2026-11-12.)
 
 - **Depende:** T007
 - **Refs:** D2, D3, D17; DS-US-CKP-022 D9, D11; DS-US-CKP-012 D1, D2, D4
 - **Aceptación:** `cargo test -p gitraptor-desktop --test graph_supervisor --test fleet_supervisor --test engine_supervisor --test commands` en verde; `tests/commands.rs` › `the_graph_adds_no_ipc_command` afirma que esta historia no añade comandos (ningún nombre con `graph` o `lane` en `commands.json` ni en un `#[tauri::command]`), sin fijar la lista absoluta, que sigue fijando el test existente.
 - **Guard ⛔8.1:** `cargo test -p gitraptor-desktop --test graph_supervisor an_async_reply_read_while_waiting_for_events_reaches_the_webview` y `an_unknown_reply_id_is_dropped`
-- **Guard ⛔8.2:** `cargo test -p gitraptor-desktop --test graph_supervisor a_reply_for_a_repo_no_longer_open_is_dropped_and_the_query_is_cancelled`
+- **Guard ⛔8.2:** `cargo test -p gitraptor-desktop --test graph_supervisor a_reply_for_a_repo_no_longer_open_is_dropped_and_the_query_is_cancelled` y `after_a_repo_change_the_next_graph_query_waits_for_query_cancelled`
 
 > **Enmienda aditiva (2026-11-10), por DS-US-DSK-009 P27 y T005; aceptada por el coordinador el 2026-11-10.** El daemon admite **una sola consulta bajo demanda en vuelo por conexión** (`QUERIES_PER_CONNECTION = 1`, DS-US-CKP-012 D4) y `query.cancel` no libera la plaza hasta que el trabajo cancelado responde (M-01 de la revisión de seguridad 2026-11-10 de DS-US-DSK-009). Por eso el supervisor comparte esa plaza entre `graph.lanes` y el diff de US-DSK-009, con estas reglas, que se suman a los pasos 1 a 6 sin cambiarlos:
 >
@@ -474,6 +504,8 @@ graph LR
 > - **Respuestas guardadas (paso 1.1).** `reply` guarda la respuesta del id en vuelo, sea del grafo o del diff, y la del id cancelado que se está esperando; cualquier otra se sigue tirando.
 > - **`query-busy`.** El del grafo sigue como en el paso 5 (`stale = true`); el del diff se reintenta una vez a los 500 ms (DS-US-DSK-009 P27).
 > - **Sin firmas nuevas**: `Link::submit`, `reply` y `cancel` no cambian; la regla vive en el supervisor. Prueba: `a_diff_cancels_the_graph_query_and_the_graph_refreshes_after` y `a_diff_after_cancel_waits_for_query_cancelled_and_never_reports_busy` de DS-US-DSK-009 T005, en `tests/diff_supervisor.rs`. Si esta historia se entrega antes que US-DSK-009, la regla la añade T005 de DS-US-DSK-009.
+>
+> **Estado al 2026-11-12:** US-DSK-009 sigue `ready` y su Dev Spec `spec-ready`, sin diff en `apps/desktop`: esta historia entra antes, así que la prioridad del diff la añade DS-US-DSK-009 T005. Lo que sí trae esta historia es la espera tras cancelar del paso 6 y el guardado del id cancelado (1.1), que esa regla reutiliza.
 
 ### T009 — Guardar el grafo en la caché y pintar los commits
 
@@ -527,7 +559,7 @@ graph LR
 
 **Reglas**
 - `conflictLayer(bands: readonly ConflictBandModel[]): GraphLayer` (pura, `id: "conflicts"`), con el tipo importado de `src/conflicts/index.ts`. Por cada banda `level: "conflict"`: carriles `x` de `a` y `b` en `geometry.laneX` (`SideRef` `base` → la columna de la base); fila = la de la cabeza (o fila resumen) más reciente de los dos en `geometry.rowIndex`; segmento horizontal de `x(a)` a `x(b)` en `colors.danger`, 1,5 px, discontinuo si `stale` o si entre las dos columnas hay otro carril. Un carril sin columna (cortado, D20, o fuera de la flota) no dibuja la línea: la insignia y el panel siguen diciéndolo. `level: "overlap"` no dibuja nada en el lienzo. Solo dentro de `window`.
-- `GraphContent`: `const view = usePredictionView(fleet, cards, nowMs)`; `layers = useMemo(() => [conflictLayer(view.bands)], [view.bands])`; `laneBadge(key)` = un `ConflictBand variant="badge"` por banda cuyo `a` o `b` sea ese carril (⚡ antes que ⚠, como mucho dos y "+N" en texto); `laneA11y(key)` = los `a11yLabel` de esas bandas unidos por ", ". La línea de la base usa `SideRef` `base`.
+- `GraphContent` (en su componente interno con `fleet` definido, T006 paso 3.2): `const view = usePredictionView(fleet, cards, nowMs)`, con las `cards` de `useGraph`; `layers = useMemo(() => [conflictLayer(view.bands)], [view.bands])`; `laneBadge(key)` = un `ConflictBand variant="badge"` por banda cuyo `a` o `b` sea ese carril (⚡ antes que ⚠, como mucho dos y "+N" en texto); `laneA11y(key)` = los `a11yLabel` de esas bandas unidos por ", ". La línea de la base usa `SideRef` `base`.
 - Frontera (D13): ningún archivo de `src/graph/**` importa de `src/conflicts/` otra cosa que `src/conflicts/index.ts`, ni importa `PairDto` de `src/client`. `GraphContent` vive en `src/engine` y es quien llama el hook.
 - Sin animación al aparecer la línea (D16); el lienzo sigue `aria-hidden` y el texto equivalente es el panel de 008 y `laneA11y`.
 
@@ -650,7 +682,7 @@ export function GraphView(props: GraphViewProps): ReactElement;
 // apps/desktop/src/graph/conflict-layer.ts
 export function conflictLayer(bands: readonly ConflictBandModel[]): GraphLayer; // ConflictBandModel de src/conflicts/index.ts (DS-US-DSK-008)
 // apps/desktop/src/graph/useGraph.ts
-export function useGraph(laneA11y?: (key: string) => string | null): { model: GraphModel; fleet: RepoFleet | undefined };
+export function useGraph(): { fleet: RepoFleet | undefined; cards: readonly CardModel[]; entry: GraphEntry | null }; // el modelo lo calcula GraphContent con graphModel (revisión 2026-11-12)
 // apps/desktop/src/fleet/useAgentSlots.ts
 export function useAgentSlotsSync(fleet: RepoFleet | undefined): void;
 export function useAgentSlot(sessionId: string): number | null;
@@ -720,10 +752,11 @@ Ninguno nuevo (D2). Esta historia no añade comandos a la lista cerrada de ADR-G
 | `WorktreeStatus::Ready { head, counts, divergence }` | `messages.rs:330-358` | Carriles nivel 1 y fila WIP (ya llega como `ReadyDto`) |
 | `git.event` en el ámbito del repo | `crates/api/src/event.rs:117`, `:167-174`, `:198` | Disparador de D3 |
 | `hello.methods` | `messages.rs:57` | Saber si el motor ofrece `graph.lanes` (D17) |
-| `graph.lanes { repo_id }` → `GraphLanes` | Contrato fijado por DS-US-CKP-022 § Contrato de API; **aún no en el código** | `graph` (T007, T008) |
-| `query.cancel`, `query-busy`, `query-cancelled` | Contrato de DS-US-CKP-012 D1; **aún no en el código** | D3, D17 |
+| `graph.lanes { repo_id }` → `GraphLanes` | `crates/api/src/methods/graph.rs:9` (no reservado, `mcp: false`, desde el protocolo 9); tipos en `crates/api/src/graph.rs:27-118` | `graph` (T007, T008) |
+| `query.cancel { request }`, `query-busy`, `query-cancelled` | `crates/api/src/methods/query.rs:9-18`; una consulta por conexión y cola global de 4 (`crates/api/src/diff.rs:25-27`) | D3, D17, T008 paso 6 |
+| Rechazos de `graph.lanes` | `INVALID_PARAMS`, `NOT_FOUND` (D19 de DS-US-CKP-022); sin código propio: lo no calculable va en el resultado | `graphUnavailable { reason: "failed" }` |
 
-Ningún método, evento ni capacidad nuevos del canal por esta historia; ninguna escritura. La conexión de la app no es MCP: `mcp: false` de `graph.lanes` no la afecta.
+Ningún método, evento ni capacidad nuevos del canal por esta historia; ninguna escritura. La conexión de la app no es MCP: `mcp: false` de `graph.lanes` no la afecta; como `graph.lanes` no tiene presupuesto propio y comparte la cola global con la TUI, la app nunca tiene más de una consulta en vuelo (D3).
 
 ### Forma del error y del cuerpo de respuesta
 
@@ -745,7 +778,8 @@ Sin errores nuevos hacia el webview: los rechazos de `graph.lanes` se traducen a
 | Commits por carril | 50; el resto como "N más", sin desplegar | DS-US-CKP-022 D12, D13 |
 | Carriles por respuesta | 32 (`cut: lanes`) | DS-US-CKP-022 D12 |
 | Espaciado de consultas | `max(1 s, 2 × duración de la última)`; una en vuelo | D3; DS-US-CKP-022 D9 |
-| Vuelta del supervisor | 20 ms (`READ_SLICE`) | `supervisor.rs:117` |
+| Vuelta del supervisor | 20 ms (`READ_SLICE`) | `supervisor.rs:128` |
+| Plazo de la consulta / espera tras cancelar | 2 s (`GRAPH_DEADLINE_MS`) / 2,5 s | `crates/api/src/graph.rs:20`; T008 paso 6 |
 | Alto de fila / cabecera | `--gr-size-graph-row` (44 px) / `--gr-size-graph-header` (38 px) | primitives-spec § 2.15 |
 | Anchos de columna | Branch 195 px, Graph 175 px, Message `minmax(220px, 1fr)`, Author 190 px, Date 120 px, Sha 84 px | primitives-spec § 2.15 |
 | Plegado de columnas | ancho del centro: Graph + Message (220 px) siempre; luego Sha, Author, Date, Branch en ese orden hasta que quepa | D11; primitives-spec § 2.15 (enmendada el 2026-11-09) |
@@ -767,7 +801,7 @@ Sin errores nuevos hacia el webview: los rechazos de `graph.lanes` se traducen a
 | Tipo | Cantidad | Tareas dueñas | Herramientas | Cuándo |
 |------|---------:|-------------|---------|------|
 | Unit | 31 | T002, T003, T004, T006, T007, T011 | Vitest, `cargo test` | PR gate |
-| Integration | 8 | T008 | `cargo test` con el daemon falso | PR gate |
+| Integration | 9 | T008 | `cargo test` con el daemon falso | PR gate |
 | Contract | 2 | T007, T009 | Fixture dorada Rust ↔ TS | PR gate |
 | E2E | 1 | T010 | macOS con el motor real, manual | merge gate |
 | Security | 3 | T004, T007 | Vitest, `cargo test` | PR gate |
@@ -819,7 +853,7 @@ Sin repos reales salvo T010 (repos temporales, NFR-01).
 | Flota en el detalle (D15) | — | `AppShell.test.tsx` › `the detail shows agent status with the fleet`; `the center shows the graph` |
 | Motor sin `graph.lanes` (D17) | `graph_supervisor` › `an_engine_without_graph_lanes_reports_unsupported_once` | `GraphView.test.tsx` › `an unsupported engine keeps level 1 with its note` |
 | Consulta ocupada o fallida (D17) | `graph_supervisor` › `query_busy_retries_after_the_spacing`; `a_refused_query_reports_failed_and_keeps_the_last_graph` | `engine-cache.test.ts` › `graph unavailable keeps the last graph` |
-| Respuesta asíncrona y repo cambiado | `graph_supervisor` › `an_async_reply_read_while_waiting_for_events_reaches_the_webview`; `a_reply_for_a_repo_no_longer_open_is_dropped_and_the_query_is_cancelled`; `an_unknown_reply_id_is_dropped` (L-01) | — |
+| Respuesta asíncrona y repo cambiado | `graph_supervisor` › `an_async_reply_read_while_waiting_for_events_reaches_the_webview`; `a_reply_for_a_repo_no_longer_open_is_dropped_and_the_query_is_cancelled`; `an_unknown_reply_id_is_dropped` (L-01); `after_a_repo_change_the_next_graph_query_waits_for_query_cancelled` (T008 paso 6, revisión 2026-11-12) | — |
 | Vista restringida | `graph_supervisor` › `a_restricted_session_never_asks_graph_lanes` | — |
 | Solo lectura | `graph_supervisor` › `a_graph_run_never_sends_writes_or_reserved_methods` | — |
 | Esta historia no añade comandos | `tests/commands.rs` › `the_graph_adds_no_ipc_command` (sin fijar la lista absoluta) | `commands.test.ts` › `no command of the command map is about the graph` |
@@ -878,11 +912,11 @@ Corre `/security-review --scope devspec docs/requirements/features/desktop/dev-s
 | G5 | El actor por commit no tiene historia: DS-US-CKP-022 lo deja a motor-local con la capacidad reservada `graph.commit-actor`. Hasta entonces todo commit dice "Tú u otro (sin atribuir)", que es el comportamiento aceptado | Si se quiere, TS por reservar (`actor-por-commit-grafo`) en motor-local | Orquestador |
 | G6 | Archivos compartidos con US-DSK-008 y US-DSK-007: orden y responsabilidad en [Archivos compartidos](#archivos-compartidos-entre-008-007-y-005), tabla idéntica en las tres DS. Esta historia entra tercera: sustituye `FleetContent` por `GraphContent` conservando el panel y los destinos del centro; `src/graph/` es nuevo y propio. `useShortcuts.ts` lo toca también US-DSK-018 | Integrar en el orden 008 → 007 → 005 y rebasar | Orquestador |
 | G7 | Los carriles con ↑0 se listan (D3 de DS-US-CKP-022: todo worktree salvo el tronco es carril) y, si ninguno tiene commits propios, se añade el texto del estado "vacío · sin carriles" de DSF § 4.b. Se deduce de la DS aprobada; no es hueco | Ninguna | — |
-| G8 | US-CKP-022 sigue en `draft` con su Dev Spec `approved` | Pasarla a `ready` antes de su worker | PO |
-| G9 | El `Link` asíncrono de T008 replica en la app lo que DS-US-CKP-012 T005 hace en la TUI (`Link::submit`, `offers`). Si DS-US-CKP-012 deja `Client::submit` con otra forma, T008 la adapta sin cambiar las firmas de `Link` de esta spec | Ninguna | Worker de T008 |
+| G8 | **Resuelto (2026-11-12)**: US-CKP-022 y su Dev Spec están `implemented` | Ninguna | — |
+| G9 | **Resuelto (2026-11-12)**: `Client::submit` quedó con la forma esperada (`Result<u64, ClientError>`, `client/mod.rs:487`) más `settle` (`:499`); las firmas de `Link` de esta spec no cambian. El `Link` de la TUI (`apps/cli/src/client/mod.rs:90-96`) es el modelo | Ninguna | — |
 | G10 | El detalle ("Estado de Agentes") es un cajón cerrado entre 1000 y 1359 px (D15): la flota con sus ⛔, ⚡ y terminadas queda a un toggle de distancia. Si Rene quiere la flota siempre a la vista, el detalle abierto por defecto exige centro de 788 px o menos (D11 ya lo soporta) | Decidir tras el primer prototipo | Rene |
 | G11 | **Resuelto (2026-11-09)**: la banda ⚡ del grafo la monta esta historia en T011 (capa `conflictLayer` en `layers`, `ConflictBand variant="badge"` en `laneBadge`, `laneA11y`), sobre el modelo público que fija DS-US-DSK-008 (D6), que entra antes. **Decisión del orquestador (2026-11-09), validada por Arquitecto** | Ninguna | — |
-| G12 | **Requisito para DS-US-CKP-012** (verify de security-expert): `query.cancel` solo puede cancelar consultas enviadas por la misma conexión; un id de otra conexión responde como desconocido, sin cancelar nada ni revelar que existe. T008 llama `query.cancel` al cambiar de repo y da por hecho ese aislamiento | Añadir la regla y su test a DS-US-CKP-012 (D1 y su contrato de `query.cancel`) antes de que su worker arranque | Arquitecto |
+| G12 | **Resuelto (2026-11-12), verificado en el código**: `query.cancel` solo actúa sobre las consultas de su propia conexión (`self.queries.cancel(&p.request)`, `crates/core/src/channel/conn.rs:1024-1028`); un id de otra conexión no cancela nada | Ninguna | — |
 | G13 | I-01 de security-expert: la clave del carril (FNV-1a de 64 bits de la ruta cruda, DS-US-DSK-004) no resiste colisiones fabricadas. Solo casa carriles, tarjetas, filas WIP y bandas en la pantalla: una colisión puede pintar un carril con el agente o la banda de otro, nunca autoriza ni escribe nada | Ninguna; cambiar a un hash resistente si la clave llegara a usarse para algo más que pintar | — |
 
 ### Archivos compartidos entre 008, 007 y 005
