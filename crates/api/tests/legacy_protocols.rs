@@ -69,6 +69,9 @@ const MCP: &[&str] = &[
     "operation.run",
     "requester.resolve",
     "timemachine.undo",
+    // TS-GRP-010 D14: redo is offered to the `mcp` profile, for an undo of the caller's own
+    // session only. Additive: an older MCP client ignores a method it does not call.
+    "timemachine.redo",
 ];
 
 fn set(parts: &[&[&'static str]]) -> BTreeSet<&'static str> {
