@@ -31,6 +31,7 @@ pub mod peer;
 #[cfg(any(unix, windows))]
 mod query;
 pub mod requester;
+pub mod requester_profile;
 #[cfg(any(unix, windows))]
 mod server;
 pub mod transport;
@@ -125,6 +126,13 @@ pub struct ChannelConfig {
     #[cfg(debug_assertions)]
     #[doc(hidden)]
     pub test_app_binaries: Option<Vec<String>>,
+    /// Tests only: a descendant of the daemon that no executor mark resolves
+    /// counts as the daemon itself (TS-GRP-010 D3), so an in-process daemon's
+    /// child client keeps the full profile. It does not exist in a release
+    /// build and is `false` in production.
+    #[cfg(debug_assertions)]
+    #[doc(hidden)]
+    pub test_daemon_children_as_self: bool,
     /// Tests only: the deadline of on-demand queries (`diff.worktree`, `graph.lanes`) in place of
     /// their own constants, so a slow debug runner does not turn a files cut into a time cut and
     /// a time cut can be provoked with a few milliseconds. It does not exist in a release build.
@@ -161,6 +169,8 @@ impl Default for ChannelConfig {
             test_confirmation: None,
             #[cfg(debug_assertions)]
             test_app_binaries: None,
+            #[cfg(debug_assertions)]
+            test_daemon_children_as_self: false,
             #[cfg(debug_assertions)]
             test_diff_deadline: None,
         }
