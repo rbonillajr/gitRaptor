@@ -10,11 +10,9 @@ use std::path::{Component, Path, PathBuf};
 use gitraptor_api::desktop::{DesktopIdentity, DesktopReason};
 use gitraptor_api::messages::{ClientKind, ConnectionProfile};
 
-use gitraptor_api::timemachine::ResolvedVia;
-
 use super::authz::{AcceptedPeer, Checks, check_reserved};
 use super::marks::ExecutorMarks;
-use super::requester::resolve_traced;
+use super::requester_profile::{Ancestry, ancestry, is_mcp_exe};
 
 /// File names of the app's main binary inside `GitRaptor.app/Contents/MacOS` (D4).
 pub const APP_BINARIES: &[&str] = &["GitRaptor", "gitraptor-desktop"];
@@ -251,15 +249,12 @@ pub fn decide(
     if declared == ClientKind::Mcp || is_mcp_exe(exe) {
         return mcp(DesktopReason::DeclaredMcp);
     }
-    let Ok((resolution, trace)) = resolve_traced(peer, checks, marks) else {
-        return mcp(DesktopReason::RequesterUnverified);
+    let trace = match ancestry(peer, checks, marks) {
+        Ancestry::Unverified => return mcp(DesktopReason::RequesterUnverified),
+        Ancestry::DaemonDescendant { .. } => return mcp(DesktopReason::DaemonDescendant),
+        Ancestry::Agent => return mcp(DesktopReason::AgentInAncestry),
+        Ancestry::Unattributed { trace, .. } => trace,
     };
-    if resolution.via == ResolvedVia::Executor || trace.daemon_descendant {
-        return mcp(DesktopReason::DaemonDescendant);
-    }
-    if resolution.who.is_agent() {
-        return mcp(DesktopReason::AgentInAncestry);
-    }
     if trace.interpreter || trace.multiplexer || !trace.ended_cleanly {
         return mcp(DesktopReason::AmbiguousAncestry);
     }
@@ -277,13 +272,6 @@ pub fn decide(
             with(profile, DesktopReason::NoIdentity)
         }
     }
-}
-
-/// The MCP server's executable, the same rule the handshake applies to any
-/// connection.
-fn is_mcp_exe(exe: Option<&Path>) -> bool {
-    exe.and_then(Path::file_name)
-        .is_some_and(|n| n == "raptor-mcp" || n == "raptor-mcp.exe")
 }
 
 #[cfg(test)]
