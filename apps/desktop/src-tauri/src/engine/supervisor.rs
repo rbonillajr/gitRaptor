@@ -1,5 +1,6 @@
 //! The connection loop between the app and the engine, on its own thread.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, TryRecvError};
 use std::thread::{self, JoinHandle};
@@ -9,11 +10,13 @@ use gitraptor_api::actor::Actor;
 use gitraptor_api::clock;
 use gitraptor_api::discovery::CandidatesResult;
 use gitraptor_api::display::{NAME_MAX_CHARS, TEXT_MAX_CHARS, visible};
-use gitraptor_api::event::RESERVED_AUDIT;
+use gitraptor_api::event::{self, RESERVED_AUDIT};
+use gitraptor_api::graph::{GRAPH_DEADLINE_MS, GraphLanes, GraphParams};
 use gitraptor_api::guard::{GuardLogParams, GuardLogResult, GuardRepoParams, GuardStatus};
 use gitraptor_api::messages::{
     ConnectionProfile, HelloResult, McpSnapshot, ResyncNotification, ResyncReason as ApiResync,
-    SessionsListParams, SessionsListResult, Snapshot, UnsubscribeParams,
+    SessionsListParams, SessionsListResult, Snapshot, UnsubscribeParams, WorktreeStateData,
+    WorktreeStatus, WorktreeView,
 };
 use gitraptor_api::methods::{self, CAP_DISCOVERY_EVENTS, CAP_SCOPE_ACTIVITY};
 use gitraptor_api::prediction::{
@@ -37,8 +40,8 @@ use super::prediction::PredictionTracker;
 use super::seq::{SeqTrack, Verdict};
 use super::shell_command;
 use super::wire::{
-    CandidateDto, ConnState, EngineMessage, GuardUnavailableCause, IncompatibleAction,
-    IncompatibleWhich, ResyncReason, StoppedReason, stop_command,
+    CandidateDto, ConnState, EngineMessage, GraphUnavailableReason, GuardUnavailableCause,
+    IncompatibleAction, IncompatibleWhich, ResyncReason, StoppedReason, stop_command,
 };
 
 /// Where the supervisor delivers its messages.
@@ -162,6 +165,8 @@ struct Ctx {
     open: Option<String>,
     /// Raw paths of the repos of the last global snapshot.
     global_roots: Vec<PathBuf>,
+    /// Whether the engine of the current connection lists `graph.lanes` in `hello.methods`.
+    graph_offered: bool,
 }
 
 /// The open repo's scope on one connection.
@@ -188,6 +193,78 @@ struct RepoScope {
     last_guard_read: Option<Instant>,
     /// When the one joined read of the `reserved.audit` events that arrived meanwhile is due.
     guard_reread_after: Option<Instant>,
+    /// What is known of the lanes graph of the open repo.
+    graph: GraphTrack,
+}
+
+/// Least time between two `graph.lanes` queries.
+const GRAPH_MIN_GAP: Duration = Duration::from_secs(1);
+
+/// Extra wait, past the daemon's own deadline, for the answer of a cancelled query.
+const GRAPH_CANCEL_GRACE: Duration = Duration::from_millis(500);
+
+/// The lanes graph of the open repo: one query at a time, spaced by the time the last one took,
+/// and the connection's single query slot kept until a cancelled query answers.
+#[derive(Default)]
+struct GraphTrack {
+    /// The graph may have changed since it was last asked.
+    stale: bool,
+    /// The request in flight and when it was sent.
+    inflight: Option<(u64, Instant)>,
+    /// A request cancelled when the window left its repo, and until when its answer is awaited:
+    /// the daemon frees the connection's slot only when it answers.
+    awaiting: Option<(u64, Instant)>,
+    last_sent: Option<Instant>,
+    last_duration: Duration,
+    /// Head and divergence of each worktree, by key, as the last snapshot or event said.
+    heads: BTreeMap<String, String>,
+    unsupported_told: bool,
+}
+
+impl GraphTrack {
+    /// Least time between the last send and the next one: `max(1 s, 2 x last duration)`.
+    fn spacing(&self) -> Duration {
+        (self.last_duration * 2).max(GRAPH_MIN_GAP)
+    }
+
+    /// The track of what comes next (another repo, or the same one taken again): the request in
+    /// flight is cancelled and its answer awaited, so the next query never meets `query-busy`.
+    fn abandon(self, link: &mut dyn Link) -> Self {
+        let mut awaiting = self.awaiting;
+        if let Some((id, _)) = self.inflight {
+            link.cancel(id);
+            let wait = Duration::from_millis(GRAPH_DEADLINE_MS) + GRAPH_CANCEL_GRACE;
+            awaiting = Some((id, Instant::now() + wait));
+        }
+        Self {
+            awaiting,
+            ..Self::default()
+        }
+    }
+
+    /// Takes `worktrees` as the known heads; whether they differ from the ones known before.
+    fn heads_changed(&mut self, worktrees: &[WorktreeView]) -> bool {
+        let heads = lane_heads(worktrees);
+        let changed = heads != self.heads;
+        self.heads = heads;
+        changed
+    }
+}
+
+/// The part of each worktree that decides its lane: head and divergence, by worktree key.
+fn lane_heads(worktrees: &[WorktreeView]) -> BTreeMap<String, String> {
+    worktrees
+        .iter()
+        .map(|w| {
+            let signature = match &w.status {
+                WorktreeStatus::Ready {
+                    head, divergence, ..
+                } => serde_json::to_string(&(head, divergence, &w.detached_at)),
+                WorktreeStatus::Unavailable { .. } => Ok(String::new()),
+            };
+            (ingest::key(w.path.raw()), signature.unwrap_or_default())
+        })
+        .collect()
 }
 
 /// Least time between two guard reads asked by the window.
@@ -327,6 +404,7 @@ fn run(
         last_incompat: None,
         open: None,
         global_roots: Vec::new(),
+        graph_offered: false,
     };
     let mut attempt: u32 = 0;
     // The engine is started only when the app opens and when the user asks (D5).
@@ -520,6 +598,7 @@ fn session(link: &mut dyn Link, ctx: &mut Ctx, rx: &Receiver<HubCmd>) -> End {
         }));
     }
     let restricted = is_restricted(&hello);
+    ctx.graph_offered = hello.methods.iter().any(|m| m == methods::GRAPH_LANES);
     ctx.send(EngineMessage::Session {
         daemon_version: visible(&hello.binary_version, NAME_MAX_CHARS),
         protocol: hello.protocol,
@@ -682,6 +761,9 @@ fn stream(
         if due && let Some(end) = fetch_prediction(link, ctx, (track, repo)) {
             return end;
         }
+        if !restricted && let Some(end) = pump_graph(link, ctx, repo) {
+            return end;
+        }
     }
 }
 
@@ -835,7 +917,7 @@ fn apply(
                 }
                 Scope::Repo { repo_id } if ctx.open.as_deref() == Some(repo_id) => {
                     if note.reason == ApiResync::ScopeClosed {
-                        close_repo(ctx, repo);
+                        close_repo(link, ctx, repo);
                         None
                     } else {
                         reopen(link, ctx, repo)
@@ -1002,6 +1084,16 @@ fn apply_repo_event(
             {
                 repo.tracker.apply(&changed);
             }
+            if ingest::graph_trigger(&event.event) {
+                repo.graph.stale = true;
+            }
+            if event.event.kind == event::WORKTREE_STATE
+                && let Ok(data) =
+                    serde_json::from_value::<WorktreeStateData>(event.event.data.clone())
+                && repo.graph.heads_changed(&data.worktrees)
+            {
+                repo.graph.stale = true;
+            }
             if let Some(msg) = ingest::repo_event(&event.event, recv_ns) {
                 ctx.send(msg);
             }
@@ -1017,10 +1109,10 @@ fn reopen(link: &mut dyn Link, ctx: &mut Ctx, repo: &mut RepoScope) -> Option<En
     open_repo(link, ctx, repo).err().map(|_| End::Reconnect)
 }
 
-/// The window no longer follows the repo: tell it and forget it. It cancels nothing: after a
-/// `scope-closed` the engine closed the scope itself, and after a refusal the caller already
-/// left the subscription.
-fn close_repo(ctx: &mut Ctx, repo: &mut RepoScope) {
+/// The window no longer follows the repo: tell it and forget it. It cancels no subscription:
+/// after a `scope-closed` the engine closed the scope itself, and after a refusal the caller
+/// already left it. The graph query in flight is cancelled.
+fn close_repo(link: &mut dyn Link, ctx: &mut Ctx, repo: &mut RepoScope) {
     if let Some(repo_id) = ctx.open.take() {
         ctx.send(EngineMessage::RepoClosed {
             repo_id: visible(&repo_id, NAME_MAX_CHARS),
@@ -1028,6 +1120,7 @@ fn close_repo(ctx: &mut Ctx, repo: &mut RepoScope) {
     }
     *repo = RepoScope {
         generation: repo.generation.wrapping_add(1),
+        graph: std::mem::take(&mut repo.graph).abandon(link),
         ..RepoScope::default()
     };
 }
@@ -1039,12 +1132,17 @@ fn open_repo(link: &mut dyn Link, ctx: &mut Ctx, repo: &mut RepoScope) -> Result
     let Some(repo_id) = ctx.open.clone() else {
         return Ok(());
     };
+    repo.graph = std::mem::take(&mut repo.graph).abandon(link);
     leave_repo(link, repo)?;
     match take_repo(link, ctx, repo, &repo_id) {
+        Ok(()) => {
+            repo.graph.stale = true;
+            Ok(())
+        }
         // The engine may have kept a subscription taken before the refusal: cancel it.
         Err(LinkError::Refused { .. }) => {
             leave_repo(link, repo)?;
-            close_repo(ctx, repo);
+            close_repo(link, ctx, repo);
             Ok(())
         }
         other => other,
@@ -1097,6 +1195,7 @@ fn take_repo(
             &watched,
         )
     };
+    repo.graph.heads = lane_heads(&snapshot.repo.worktrees);
     repo.raw_path = Some(snapshot.repo.path.raw().to_owned());
     repo.raptor.clone_from(&raptor);
     repo.last_guard_read = None;
@@ -1134,6 +1233,91 @@ fn list_sessions(link: &mut dyn Link, ctx: &mut Ctx, repo_id: &str) -> Result<()
         sessions: list.sessions.iter().filter_map(ingest::session).collect(),
     });
     Ok(())
+}
+
+/// Asks for the lanes of the open repo when they may have changed, never more than one query at a
+/// time and never closer than [`GraphTrack::spacing`], and tells the window what came back; `Some`
+/// when the link is lost. A reply is taken only for the request in flight or the cancelled one
+/// still awaited: nothing else the link holds is for this repo.
+fn pump_graph(link: &mut dyn Link, ctx: &mut Ctx, repo: &mut RepoScope) -> Option<End> {
+    let repo_id = ctx.open.clone()?;
+    repo.raw_path.as_ref()?;
+    let graph = &mut repo.graph;
+    if let Some((id, until)) = graph.awaiting
+        && (link.reply(id).is_some() || Instant::now() >= until)
+    {
+        graph.awaiting = None;
+    }
+    if let Some((id, sent)) = graph.inflight
+        && let Some(answer) = link.reply(id)
+    {
+        graph.inflight = None;
+        graph.last_duration = sent.elapsed();
+        match answer {
+            Ok(value) => {
+                let started = clock::monotonic_ns();
+                match serde_json::from_value::<GraphLanes>(value) {
+                    Ok(lanes) => {
+                        let dto = ingest::graph(&lanes);
+                        ctx.send(EngineMessage::Graph {
+                            repo_id: visible(&repo_id, NAME_MAX_CHARS),
+                            graph: dto,
+                            perf: ingest::perf(started),
+                        });
+                    }
+                    Err(_) => graph_unavailable(ctx, &repo_id, GraphUnavailableReason::Failed),
+                }
+            }
+            Err(LinkError::Refused { code }) if code == methods::QUERY_BUSY.code => {
+                graph.stale = true;
+            }
+            Err(LinkError::Refused { code }) if code == methods::QUERY_CANCELLED.code => {}
+            Err(LinkError::Refused { .. }) => {
+                graph_unavailable(ctx, &repo_id, GraphUnavailableReason::Failed);
+            }
+            Err(LinkError::Lost) => return Some(End::Reconnect),
+        }
+    }
+    if !graph.stale {
+        return None;
+    }
+    if !ctx.graph_offered {
+        graph.stale = false;
+        if !std::mem::replace(&mut graph.unsupported_told, true) {
+            graph_unavailable(ctx, &repo_id, GraphUnavailableReason::Unsupported);
+        }
+        return None;
+    }
+    if graph.inflight.is_some()
+        || graph.awaiting.is_some()
+        || graph
+            .last_sent
+            .is_some_and(|sent| sent.elapsed() < graph.spacing())
+    {
+        return None;
+    }
+    let params = to_value(&GraphParams {
+        repo_id: repo_id.clone(),
+    })
+    .ok()?;
+    let now = Instant::now();
+    graph.last_sent = Some(now);
+    graph.stale = false;
+    match link.submit(methods::GRAPH_LANES, params) {
+        Ok(id) => graph.inflight = Some((id, now)),
+        Err(LinkError::Refused { .. }) => {
+            graph_unavailable(ctx, &repo_id, GraphUnavailableReason::Failed);
+        }
+        Err(LinkError::Lost) => return Some(End::Reconnect),
+    }
+    None
+}
+
+fn graph_unavailable(ctx: &mut Ctx, repo_id: &str, reason: GraphUnavailableReason) {
+    ctx.send(EngineMessage::GraphUnavailable {
+        repo_id: visible(repo_id, NAME_MAX_CHARS),
+        reason,
+    });
 }
 
 /// Takes the global scope again and goes back to `live`.

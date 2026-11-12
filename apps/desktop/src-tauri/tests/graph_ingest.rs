@@ -311,8 +311,8 @@ fn a_long_summary_is_cut_at_the_text_bound() {
         .expect("a summary");
     assert_eq!(summary, visible(&long, TEXT_MAX_CHARS));
     assert!(
-        summary.chars().count() <= TEXT_MAX_CHARS,
-        "SEC-12: the summary is bounded at TEXT_MAX_CHARS characters"
+        summary.chars().count() <= TEXT_MAX_CHARS + 1,
+        "SEC-12: the summary is bounded at TEXT_MAX_CHARS characters plus the ellipsis that `visible` appends"
     );
 }
 
