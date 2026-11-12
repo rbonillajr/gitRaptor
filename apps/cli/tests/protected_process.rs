@@ -17,7 +17,7 @@ use std::process::{Command, Stdio};
 
 use gitraptor_api::messages::ClientKind;
 use gitraptor_api::rpc::code;
-use gitraptor_api::timemachine::{RequestChannel, RequesterView, ResolvedVia};
+use gitraptor_api::timemachine::{McpRequesterView, RequestChannel, RequesterView};
 use gitraptor_api::{Actor, AgentKind, PROTOCOL_VERSION, methods};
 use gitraptor_core::client::{Client, ClientError};
 use gitraptor_core::daemon::running_pid;
@@ -181,12 +181,17 @@ fn a_client_under_an_agent_is_that_agent_by_cli_and_mcp() {
     let fx = Fixture::new();
     let resolve = json!([[methods::REQUESTER_RESOLVE, {}]]);
 
+    // TS-GRP-010 (S-01, D8 i, D10): the CLI under an agent gets the `mcp` profile, whose view
+    // of the requester carries neither `via` nor `confirmable`; its channel is the declared one.
     let cli = fx.ask(ClientKind::Cli, resolve.clone(), true);
-    let view: RequesterView = serde_json::from_value(cli[0]["ok"].clone()).unwrap();
+    let view: McpRequesterView = serde_json::from_value(cli[0]["ok"].clone()).unwrap();
     assert!(is_claude(&view.actor), "{view:?}");
-    assert_eq!(view.via, ResolvedVia::Ancestry);
     assert_eq!(view.channel, RequestChannel::Cli);
-    assert!(!view.confirmable);
+    assert!(
+        cli[0]["ok"].get("via").is_none() && cli[0]["ok"].get("confirmable").is_none(),
+        "{}",
+        cli[0]
+    );
 
     let mcp = fx.ask(ClientKind::Mcp, resolve, true);
     assert!(is_claude(

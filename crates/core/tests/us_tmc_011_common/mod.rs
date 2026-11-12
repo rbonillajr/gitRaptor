@@ -63,12 +63,22 @@ fn role_entry() {
     }
     let dirs = ProfileDirs::under_root(PathBuf::from(spec["root"].as_str().unwrap()));
     let mut client = Client::connect(&dirs, ClientKind::Cli, PROTOCOL_VERSION).unwrap();
+    // S-01 (TS-GRP-010): under an agent the daemon fixes the `mcp` profile, which takes the
+    // worktree from the caller's working folder (the agent's, the worktree) and refuses a named one.
+    let mcp = client.hello().profile == gitraptor_api::messages::ConnectionProfile::Mcp;
     let answers: Vec<Value> = spec["calls"]
         .as_array()
         .unwrap()
         .iter()
+        .map(|call| {
+            let mut params = call[1].clone();
+            if mcp && let Some(p) = params.as_object_mut() {
+                p.remove("worktree");
+            }
+            (call[0].clone(), params)
+        })
         .map(
-            |call| match client.call::<_, Value>(call[0].as_str().unwrap(), call[1].clone()) {
+            |(method, params)| match client.call::<_, Value>(method.as_str().unwrap(), params) {
                 Ok(v) => json!({ "ok": v }),
                 Err(ClientError::Rpc(e)) => json!({ "code": e.code, "data": e.data }),
                 Err(e) => json!({ "other": e.to_string() }),
@@ -196,6 +206,9 @@ pub struct World {
     confirmation: Option<TestConfirmation>,
     booted: Option<Booted>,
     out_n: std::cell::Cell<u32>,
+    /// Whether the developer enabled the repo for agents (TS-GRP-010: an agent's client has the
+    /// `mcp` profile and acts only in an enabled repo).
+    mcp_enabled: std::cell::Cell<bool>,
 }
 
 pub fn world() -> World {
@@ -279,6 +292,7 @@ fn boot_world(engine: bool) -> World {
         confirmation: Some(TestConfirmation::Eligible),
         booted: None,
         out_n: std::cell::Cell::new(0),
+        mcp_enabled: std::cell::Cell::new(false),
     };
     w.boot();
     if engine {
@@ -420,6 +434,7 @@ impl World {
     /// A new simulated Claude Code working in the worktree; returns when `sessions.list` shows
     /// its session as a detected Claude Code one (its owner is asserted here, never assumed).
     pub fn spawn_agent(&self) -> Agent {
+        self.enable_for_agents();
         let known: Vec<String> = self.sessions().into_iter().map(|s| s.session_id).collect();
         let spec = json!({"role": "shell", "root": self.tp.root.path().join("profile")});
         let exe = std::env::current_exe().unwrap();
@@ -548,6 +563,22 @@ impl World {
             "calls": calls.iter().map(|(m, p)| json!([m, p])).collect::<Vec<_>>(),
             "out": out,
         })
+    }
+
+    /// The developer enables the repo for agents once (`mcp.enable`, reserved): under S-01 an
+    /// agent's client has the `mcp` profile and acts only in an enabled repo (TS-GRP-010).
+    pub fn enable_for_agents(&self) {
+        if self.mcp_enabled.replace(true) {
+            return;
+        }
+        let answer = self.as_developer(
+            methods::MCP_ENABLE,
+            json!({ "path": self.fx.repo.to_string_lossy() }),
+        );
+        assert!(
+            answer.get("ok").is_some(),
+            "the developer must enable the repo for agents: {answer}"
+        );
     }
 
     /// A reserved call by the developer: the test binary under `script`, so it has a controlling

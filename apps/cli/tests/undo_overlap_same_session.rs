@@ -136,6 +136,14 @@ impl Machine {
             "en_US.UTF-8",
         );
         assert!(out.status.success(), "{}", text(&out));
+        // TS-GRP-010 (S-01): an agent's `raptor undo` has the `mcp` profile and acts only in a
+        // repo the developer enabled for agents.
+        let out = m.developer(
+            &m.f.root,
+            &["mcp", "enable", m.f.repo.to_str().unwrap()],
+            "en_US.UTF-8",
+        );
+        assert!(out.status.success(), "{}", text(&out));
         m
     }
 

@@ -90,7 +90,14 @@ fn direct_attempt(dirs: &ProfileDirs, kind: &str) -> Value {
     let mut params = json!({"operation": "snapshot", "args": {"label": "direct client"}});
     if kind != ClientKind::Mcp {
         params["surface"] = json!("cli");
-        params["worktree"] = json!(std::env::var(DIRECT_WORKTREE).unwrap());
+        // TS-GRP-010 (S-01): under an agent the daemon fixes the `mcp` profile, which takes the
+        // worktree from the caller's working folder and refuses a named one.
+        let worktree = std::env::var(DIRECT_WORKTREE).unwrap();
+        if client.hello().profile == gitraptor_api::messages::ConnectionProfile::Mcp {
+            std::env::set_current_dir(&worktree).unwrap();
+        } else {
+            params["worktree"] = json!(worktree);
+        }
     }
     let failed = |stage: &str, e: ClientError| match e {
         ClientError::Rpc(e) => json!({"stage": stage, "code": e.code, "data": e.data}),

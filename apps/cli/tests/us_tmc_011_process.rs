@@ -157,6 +157,8 @@ fn machine() -> Machine {
         log: LogLimits::default(),
         stop_deadline: None,
         channel: ChannelConfig {
+            // TS-GRP-010 D3: `raptor` runs as a child of this in-process daemon.
+            test_daemon_children_as_self: true,
             agents: AgentMatcher::only(vec!["raptor-fake-agent".into()]),
             ..ChannelConfig::default()
         },

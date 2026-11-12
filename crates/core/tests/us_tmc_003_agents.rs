@@ -98,14 +98,11 @@ fn a_later_unattributed_change_stops_the_agents_redo() {
         "TMC003-S5: the redo must be served: {answer}"
     );
     assert_eq!(reason(&answer), "overlap", "TMC003-S5: {answer}");
-    let overlap = answer["data"]["overlap"].to_string();
+    // TS-GRP-010 (S-01, M-01): the agent's client has the `mcp` profile, which gets the overlap
+    // without its detail (SEC-12): never the path another actor changed.
     assert!(
-        overlap.contains("b.rs"),
-        "TMC003-S5: the overlap names b.rs: {overlap}"
-    );
-    assert!(
-        overlap.contains("unattributed"),
-        "TMC003-S5: the overlap names the unattributed actor: {overlap}"
+        answer["data"].get("overlap").is_none() && !answer.to_string().contains("b.rs"),
+        "TMC003-S5: the agent's overlap carries no path: {answer}"
     );
     assert_intact(&w, &before);
     assert_eq!(
@@ -304,21 +301,14 @@ fn assert_kept_docs(w: &World, redone: &Value, with_work: &str) {
         with_work,
         "TMC003-KEPT: the redo brought the agent's work back"
     );
-    let kept = redone["kept"]
-        .as_array()
-        .unwrap_or_else(|| panic!("TMC003-KEPT: the result lists the kept paths: {redone}"));
+    // TS-GRP-010 (S-01, M-01): the agent's client has the `mcp` profile, whose result counts the
+    // kept paths and never lists them (SEC-12).
     assert!(
-        kept.iter()
-            .any(|k| k["path"].to_string().contains("docs.md")),
-        "TMC003-KEPT: docs.md is in kept: {redone}"
+        redone["kept"].as_u64().is_some_and(|n| n >= 1),
+        "TMC003-KEPT: the result counts the kept path: {redone}"
     );
-    // `kept_total` is only there when `kept` is cut; either way it is not less than what is listed.
-    let total = redone
-        .get("kept_total")
-        .and_then(Value::as_u64)
-        .unwrap_or(0);
     assert!(
-        total == 0 || total >= kept.len() as u64,
-        "TMC003-KEPT: kept_total is 0 (omitted) or the whole count: {redone}"
+        !redone.to_string().contains("docs.md"),
+        "TMC003-KEPT: no path in the agent's result: {redone}"
     );
 }

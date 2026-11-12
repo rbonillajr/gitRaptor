@@ -18,7 +18,7 @@ use std::time::{Duration, Instant};
 use gitraptor_api::messages::{
     ClientKind, EventsHistoryResult, GitEventKind, GitEventView, Snapshot,
 };
-use gitraptor_api::timemachine::UndoResult;
+use gitraptor_api::timemachine::McpUndoResult;
 use gitraptor_api::{Actor, AgentKind, PROTOCOL_VERSION, methods};
 use gitraptor_core::client::Client;
 use gitraptor_core::daemon::running_pid;
@@ -135,6 +135,14 @@ impl Machine {
         let out = m.developer(
             &m.f.root,
             &["repo", "add", m.f.repo.to_str().unwrap()],
+            "en_US.UTF-8",
+        );
+        assert!(out.status.success(), "{}", text(&out));
+        // TS-GRP-010 (S-01): an agent's `raptor undo` has the `mcp` profile and acts only in a
+        // repo the developer enabled for agents.
+        let out = m.developer(
+            &m.f.root,
+            &["mcp", "enable", m.f.repo.to_str().unwrap()],
             "en_US.UTF-8",
         );
         assert!(out.status.success(), "{}", text(&out));
@@ -394,14 +402,12 @@ fn an_agents_own_edit_without_git_counts_as_another_actor() {
     let (ok, said) = agent_undo(&m, &mut claude, "LANG=en_US.UTF-8", "");
 
     assert!(!ok, "the undo stops: {said}");
+    // TS-GRP-010 (S-01, M-01): the agent's `raptor undo` has the `mcp` profile, which gets the
+    // overlap and the kept paths as counts, never which path (SEC-12).
     let said = said.to_lowercase();
     assert!(
-        said.contains("api.rs"),
-        "the conflicting file is named: {said}"
-    );
-    assert!(
-        said.contains("no agent"),
-        "the later change reads 'no agent': {said}"
+        said.contains("another actor") && !said.contains("api.rs"),
+        "the overlap is said without naming the file: {said}"
     );
     assert!(said.contains("nothing changed"), "{said}");
     for word in ["force", "continue anyway"] {
@@ -426,9 +432,11 @@ fn a_developers_edit_in_the_same_file_overlaps() {
     let (ok, said) = agent_undo(&m, &mut claude, "LANG=en_US.UTF-8", "");
 
     assert!(!ok, "{said}");
+    // TS-GRP-010 (S-01, M-01): the agent's `raptor undo` has the `mcp` profile, which gets the
+    // overlap and the kept paths as counts, never which path (SEC-12).
     let said = said.to_lowercase();
     assert!(
-        said.contains("api.rs") && said.contains("no agent"),
+        said.contains("another actor") && !said.contains("api.rs"),
         "{said}"
     );
     assert!(said.contains("nothing changed"), "{said}");
@@ -449,12 +457,14 @@ fn a_developers_edit_in_another_file_is_kept() {
 
     let (ok, said) = agent_undo(&m, &mut claude, "LANG=es_ES.UTF-8", "");
 
+    // TS-GRP-010 (S-01, M-01): the agent's `raptor undo` has the `mcp` profile, which gets the
+    // overlap and the kept paths as counts, never which path (SEC-12).
     assert!(ok, "{said}");
     assert!(
-        said.contains("se dejó como estaba 1 ruta"),
-        "the kept path is announced in Spanish, in the singular: {said}"
+        said.contains("1 conservadas"),
+        "the kept path is counted in Spanish: {said}"
     );
-    assert!(said.contains("other.rs"), "and listed: {said}");
+    assert!(!said.contains("other.rs"), "and never named: {said}");
     assert_eq!(std::fs::read(m.worktree.join("api.rs")).unwrap(), WORK);
     assert_eq!(
         std::fs::read(m.worktree.join("other.rs")).unwrap(),
@@ -478,11 +488,11 @@ fn json_prints_the_daemons_data() {
 
     assert!(ok, "{said}");
     let value: serde_json::Value = serde_json::from_str(said.trim()).expect("the daemon's JSON");
-    let done: UndoResult = serde_json::from_value(value.clone()).unwrap();
-    assert!(
-        done.kept.iter().any(|k| k.path.raw() == "other.rs"),
-        "{value}"
-    );
+    // TS-GRP-010 (S-01, M-01): the agent's `raptor undo` has the `mcp` profile, which gets the
+    // overlap and the kept paths as counts, never which path (SEC-12).
+    let done: McpUndoResult = serde_json::from_value(value.clone()).unwrap();
+    assert_eq!(done.kept, 1, "{value}");
+    assert!(!value.to_string().contains("other.rs"), "{value}");
     assert!(
         value.get("kept").is_some(),
         "the data is not reformatted: {value}"
@@ -514,8 +524,10 @@ fn json_on_an_overlap_prints_the_daemons_rejection() {
         data.reason,
         gitraptor_api::timemachine::TmRejectReason::Overlap
     );
-    let overlap = data.overlap.expect("the detail");
-    assert!(!overlap.conflicts.is_empty());
+    // TS-GRP-010 (S-01, M-01): the agent's `raptor undo` has the `mcp` profile, which gets the
+    // overlap and the kept paths as counts, never which path (SEC-12).
+    assert!(data.overlap.is_none(), "no detail for the agent: {line}");
+    assert!(!line.contains("api.rs"), "{line}");
     assert_eq!(m.state(), before);
     drop(claude);
     m.stop();
