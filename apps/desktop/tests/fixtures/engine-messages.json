@@ -536,6 +536,86 @@
     "repoId": "repo-alpha",
     "type": "repoAttention"
   },
+  "graph": {
+    "graph": {
+      "base": {
+        "name": "main",
+        "state": "ready"
+      },
+      "computedUtcMs": 1700000400000,
+      "cut": "lanes",
+      "lanes": [
+        {
+          "head": {
+            "kind": "branch",
+            "name": "feat-pagos"
+          },
+          "state": {
+            "commits": [
+              {
+                "committedUtcMs": 1700000300000,
+                "merge": false,
+                "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "summary": "add the payment form"
+              },
+              {
+                "committedUtcMs": 1700000200000,
+                "merge": true,
+                "oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "summary": "merge main"
+              }
+            ],
+            "mergeBase": "0123456789abcdef0123456789abcdef01234567",
+            "state": "ready",
+            "total": {
+              "count": 72,
+              "exact": false
+            }
+          },
+          "worktreeKey": "0000000000000001"
+        },
+        {
+          "head": {
+            "kind": "detached"
+          },
+          "state": {
+            "reason": "too-slow",
+            "state": "not-computable"
+          },
+          "worktreeKey": "0000000000000002"
+        }
+      ],
+      "lanesTotal": 40
+    },
+    "perf": {
+      "backendNs": 900000
+    },
+    "repoId": "repo-alpha",
+    "type": "graph"
+  },
+  "graphBaseMissing": {
+    "graph": {
+      "base": {
+        "name": "develop",
+        "reason": "base-missing",
+        "state": "not-computable"
+      },
+      "computedUtcMs": 1700000400000,
+      "cut": null,
+      "lanes": [],
+      "lanesTotal": 0
+    },
+    "perf": {
+      "backendNs": 900000
+    },
+    "repoId": "repo-alpha",
+    "type": "graph"
+  },
+  "graphUnavailable": {
+    "reason": "unsupported",
+    "repoId": "repo-alpha",
+    "type": "graphUnavailable"
+  },
   "repoClosed": {
     "repoId": "repo-beta",
     "type": "repoClosed"

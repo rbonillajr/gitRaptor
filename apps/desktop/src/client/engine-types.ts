@@ -187,6 +187,42 @@ export interface RepoFleetDto {
   confirmCommand: ConfirmCommandDto;
 }
 
+/** A count that may be a lower bound (`exact: false`); the backend saturates it to `u32`. */
+export interface BoundedCountDto {
+  count: number;
+  exact: boolean;
+}
+
+export type GraphBaseGap = "base-unconfirmed" | "no-base" | "base-missing" | "repo-unavailable";
+export type LaneGapReason = "worktree-unavailable" | "no-commits" | "no-merge-base" | "too-slow" | "unreadable";
+
+export interface CommitDto {
+  /** 40 or 64 hex digits; the backend drops a commit with any other oid. */
+  oid: string;
+  summary: string;
+  committedUtcMs: number;
+  merge: boolean;
+}
+
+/** One lane of `graph.lanes`, keyed by the worktree key (DS-US-DSK-005 § Contratos compartidos). */
+export interface LaneDto {
+  worktreeKey: string;
+  head: { kind: "branch"; name: string } | { kind: "detached" };
+  state:
+    | { state: "ready"; mergeBase: string; total: BoundedCountDto; commits: CommitDto[] }
+    | { state: "not-computable"; reason: LaneGapReason };
+}
+
+export interface GraphDto {
+  computedUtcMs: number;
+  base: { state: "ready"; name: string } | { state: "not-computable"; reason: GraphBaseGap; name: string | null };
+  lanes: LaneDto[];
+  lanesTotal: number;
+  cut: "lanes" | "bytes" | null;
+}
+
+export type GraphUnavailableReason = "unsupported" | "failed";
+
 /** Backend time spent on a delta (DS-US-DSK-004 T006). */
 export interface FleetPerf {
   backendNs: number;
@@ -219,6 +255,8 @@ export type EngineMessage =
   | { type: "repoSession"; repoId: string; session: SessionDto; perf: FleetPerf }
   | { type: "prediction"; repoId: string; pairs: PairDto[]; removed: string[]; perf: FleetPerf }
   | { type: "pairDetails"; repoId: string; details: PairDetailDto[]; filled: boolean; perf: FleetPerf }
+  | { type: "graph"; repoId: string; graph: GraphDto; perf: FleetPerf }
+  | { type: "graphUnavailable"; repoId: string; reason: GraphUnavailableReason }
   | { type: "guardBlocks"; blocks: GuardBlocksDto }
   | { type: "guardBlocksUnavailable"; repoId: string; cause: GuardUnavailableCause; protection: ProtectionDto | null }
   | { type: "repoClosed"; repoId: string };
