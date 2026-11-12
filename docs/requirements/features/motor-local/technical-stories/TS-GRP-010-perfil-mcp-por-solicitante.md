@@ -2,7 +2,7 @@
 id: TS-GRP-010
 title: "Perfil mcp por solicitante: la CLI o la TUI que lanza un agente recibe el perfil mcp"
 type: ts
-status: ready
+status: implemented
 feature: motor-local
 domain: GRP
 priority: high
@@ -29,6 +29,8 @@ tags: [canal, perfil-mcp, ascendencia, solicitante, s-01, sec-mcp-01, seguridad,
 > Es **S-01** (SEC-MCP-01) de [ADR-MCP-001 § 2](../../../../architecture/decisions/ADR-MCP-001-servidor-mcp-cliente-daemon.md) y de la Enmienda 2026-10-05 (MCP) de [ADR-GRP-005](../../../../architecture/decisions/ADR-GRP-005-forma-motor-proceso-segundo-plano.md). Estaba decidido y **no implementado**; tampoco tenía ficha. Decisión del orquestador (2026-11-10), por delegación de Rene Bonilla: pasa de la puerta de M4 a **Must de M3**, porque M3 enseña la CLI a los agentes (US-MCP-020, US-MCP-023).
 
 > Dev Spec: [DS-TS-GRP-010](../dev-specs/TS-GRP-010-dev-spec.md). Precisa el orden de la decisión (hook y daemon mismo antes de S-01; completo solo para un sin atribuir que podría confirmar), el multiplexor ambiguo como `mcp`, el perfil fijo en el `hello` para toda conexión, qué conserva una conexión estrechada (canal declarado, veredicto de reservados, presupuestos de lectura) y la vista acotada mínima de `raptor status` y la TUI. Decisión del orquestador (2026-11-12), validada por Arquitecto.
+
+Implementado en: PR #368 (2026-11-12). Pendientes del security-review con dueño a asignar: M-01 (rechazo en el release de binarios con `debug_assertions`), L-01 (ADR del cliente del hook), L-02 (canal que autoriza en `permission`).
 
 ### Descripción
 

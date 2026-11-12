@@ -2,7 +2,7 @@
 id: DS-TS-GRP-010
 title: "Dev Spec — Perfil mcp por solicitante para toda conexión del canal"
 type: dev-spec
-status: draft
+status: implemented
 feature: motor-local
 domain: GRP
 created: 2026-11-12
@@ -62,6 +62,8 @@ tags: [motor-local, canal, perfil-mcp, ascendencia, solicitante, s-01, sec-mcp-0
 ---
 
 # DS-TS-GRP-010 · Perfil `mcp` por solicitante para toda conexión del canal
+
+Implementado en: PR #368 (2026-11-12).
 
 ## Contexto rápido
 
