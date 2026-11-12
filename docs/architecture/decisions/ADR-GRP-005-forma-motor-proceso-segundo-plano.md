@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-03
 created: 2026-10-03
-updated: 2026-11-08
+updated: 2026-11-12
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
@@ -364,3 +364,13 @@ Origen: [ADR-GRP-017](./ADR-GRP-017-app-escritorio-cliente-daemon.md) § 3 y § 
 | **Factor por acción** para todo comando reservado pedido desde la app (incluidos los de la tabla de Guardrails que en la terminal no lo exigen) y para todo efecto remoto o no recuperable, incluidos `push`, `pull` y `fetch`, que la presencia de sesión nunca cubre (ajuste 2026-11-08: Decisión del orquestador (2026-11-08), validada por el Arquitecto). La **presencia de sesión** (solo con identidad firmada, v0.1.0) da la capa `cockpit` únicamente para operaciones del catálogo que se revierten en local (ADR-CKP-002 § 4) y **nunca** cumple el punto 3 para un comando reservado | § 6 |
 | **Sin factor**, la app de escritorio no pasa el punto 3: solo lee y muestra el comando de terminal equivalente (ADR-GRP-017 § 5) | § 6 |
 | **Riesgo residual**: un agente puede abrir la app con `open -a` y obtener ascendencia limpia (A-2), o conducir la ventana con Accesibilidad. Lo acota que la única confirmación es el diálogo del SO con el texto que arma el daemon (ADR-GRP-017 § 4, R-1 y R-4) | § 6, riesgo residual |
+
+## Enmienda (2026-11-12, TS-GRP-010: perfil `mcp` por solicitante)
+
+Origen: [DS-TS-GRP-010](../../requirements/features/motor-local/dev-specs/TS-GRP-010-dev-spec.md). **Decisión del orquestador (2026-11-12), validada por Arquitecto y security-review (opus), aprobada por el coordinador.** El `status` sigue en `accepted`. El detalle está en la [Enmienda (2026-11-12, TS-GRP-010) de ADR-MCP-001](./ADR-MCP-001-servidor-mcp-cliente-daemon.md#enmienda-2026-11-12-ts-grp-010-perfil-mcp-por-solicitante); aquí solo lo que toca a este ADR.
+
+| Cambio | Dónde |
+|---|---|
+| **Precisa la fila "Perfil `mcp` por solicitante" de la Enmienda (2026-10-05, MCP)**: el perfil se decide una vez, en el `hello`, para toda conexión (no "al conectar y en cada llamada"); el solicitante y la capa se siguen resolviendo en cada petición. Un sin atribuir conserva el perfil completo solo si podría confirmar (`confirmable`), no solo por pasar los controles 1 a 3 (D6, D7) | § 5 |
+| **Una conexión estrechada por su solicitante** registra el canal que declara, pero se **autoriza** con el canal `mcp` (D8, D12) | § 5 |
+| **Comandos reservados sin cambios**: una conexión estrechada recibe el veredicto de `check_reserved` con su motivo (p. ej. `agent-ancestry`), no el atajo `not-available-to-mcp`, y la auditoría conserva la ascendencia (D8 ii) | § 6 |

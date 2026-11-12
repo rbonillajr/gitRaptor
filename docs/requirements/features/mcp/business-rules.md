@@ -4,7 +4,7 @@ title: "Reglas de Negocio — Servidor MCP"
 type: business-rules
 status: draft
 created: 2026-10-04
-updated: 2026-11-10
+updated: 2026-11-12
 domain: GRP
 epic: E-001
 feature: mcp
@@ -341,7 +341,7 @@ IF rama existe OR ruta existe OR ruta no válida → rechazo + motivo
 
 ### BR-MCP-ELIG-005: `snapshot` y `undo`
 
-**Descripción**: `snapshot` toma un snapshot manual del worktree del llamante con una etiqueta corta, sujeto a una cuota y un rate limit propios. `undo` deshace la última operación propia del solicitante en su worktree (pila por worktree); si toca trabajo de otro actor, se detiene y lo informa. Un solicitante "sin atribuir" nunca hace `undo`. Redo y restaurar no existen por MCP.
+**Descripción**: `snapshot` toma un snapshot manual del worktree del llamante con una etiqueta corta, sujeto a una cuota y un rate limit propios. `undo` deshace la última operación propia del solicitante en su worktree (pila por worktree); si toca trabajo de otro actor, se detiene y lo informa. Un solicitante "sin atribuir" nunca hace `undo` ni `redo`. Restaurar no existe por MCP; `redo` solo del `undo` de la propia sesión (TS-GRP-010 D14: Decisión del orquestador (2026-11-12), validada por Arquitecto y security-review (opus), aprobada por el coordinador). No hay herramienta de `redo` en el MCP: el perfil `mcp` lo recibe por la CLI que lanza el agente.
 
 **Criticidad**: Alta
 
@@ -355,6 +355,11 @@ undo: op = última operación del worktree del llamante
   IF solicitante sin atribuir → rechazo (TQ-7)
   IF actor(op) ≠ solicitante → rechazo "no es tuya"
   IF solape con otro actor → se detiene + informa (D-TMC-13)
+redo (perfil mcp): undo = último undo pendiente del worktree del llamante
+  IF solicitante sin atribuir → rechazo
+  IF solicitante(undo) ≠ sesión del llamante OR algún dueño de lo deshecho ≠ sesión del llamante → rechazo "other-actor"
+  IF no hay undo pendiente → "nothing-to-redo"
+restaurar (perfil mcp): no existe
 ```
 
 **Ejemplo**: claude-1 pide `undo` y la última operación del worktree es un commit de claude-3 → "la última operación es de claude-3; solo puedes deshacer lo tuyo".
@@ -1042,3 +1047,4 @@ Cada regla tendrá al menos un escenario Gherkin, incluido uno negativo, en su h
 | 0.5 | 2026-10-27 | PO (AADD) | Enmienda por DS-US-MCP-009 y DS-US-MCP-010, decisión del orquestador (2026-10-21), validada por Arquitecto/PO. BR-MCP-TIME-001: excepción de `safe_commit` (espera el desenlace, 380 s como suma de constantes; acción ante un reintento o un corte). BR-MCP-VAL-003: 16 KiB, `\t` permitido, bidi y anchura cero son "texto no válido". BR-MCP-WF-001: S-11, una segunda escritura del mismo agente se rechaza sin encolarse. BR-MCP-VAL-001: archivos, no carpetas ni submódulos; relativas a la raíz del worktree, nunca al cwd; tope real de 256; `\` y unidad rechazados en todas las plataformas; alias de `.git`. BR-MCP-EDGE-003: sesión = de otro agente, viva; el desarrollador no cuenta; ilegible = compartido. BR-MCP-EDGE-010: un archivo nuevo se nombra uno a uno; una carpeta no lo añade. Sin reglas nuevas: siguen 48. |
 | 0.6 | 2026-11-10 | PO (AADD) | Propuesta, pendiente de validar por Rene Bonilla: superficie para agentes (enfoque aprobado por Rene el 2026-11-10). Nuevas BR-MCP-WF-008 (`raptor configure-agents`), BR-MCP-CONS-007 (bloque en archivos del usuario), BR-MCP-CONS-008 (contrato `--json` de la CLI), BR-MCP-CONS-009 (guía para agentes) y BR-MCP-CONS-010 (uso por canal). Pasan de 48 a 53 reglas. Las cubren US-MCP-020 a US-MCP-026. |
 | 0.7 | 2026-11-10 | PO (AADD) | Rene Bonilla aprueba la ampliación desde el menú y decide prioridad e hito (P-MCP-32): Must M3 para CONS-008 y CONS-009; Should M4 para WF-008, CONS-007 y CONS-010; partes Could después de v0.1.0 en US-MCP-024 y 026. BR-MCP-WF-008: un agente no puede lanzar `configure-agents` (P-MCP-35). Historias US-MCP-020 a 026 escritas (ver [user-stories.md](./user-stories.md)). Sin reglas nuevas: siguen 53. |
+| 0.8 | 2026-11-12 | Arquitecto (AADD) | Enmienda por DS-TS-GRP-010 D14, Decisión del orquestador (2026-11-12), validada por Arquitecto y security-review (opus), aprobada por el coordinador. BR-MCP-ELIG-005: "Redo y restaurar no existen por MCP" pasa a "restaurar no existe por MCP; `redo` solo del `undo` de la propia sesión" (enmienda Q-MCP-11); un sin atribuir tampoco hace `redo`. Sin reglas nuevas. |
