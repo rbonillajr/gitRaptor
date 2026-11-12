@@ -7,4 +7,5 @@ export const engineKeys = {
   discovered: ["engine", "discovered"] as const,
   guard: (id: string) => ["engine", "guard", id] as const,
   repo: (id: string) => ["engine", "repo", id] as const,
+  graph: (id: string) => ["engine", "graph", id] as const,
 };

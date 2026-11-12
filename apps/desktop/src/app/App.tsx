@@ -48,6 +48,8 @@ export function App() {
       applyEngineBatch(queryClient, batch);
       const n = batch.filter((m) => REPO_TYPES.has(m.type)).length;
       if (n > 0) useEngineStore.getState().noteRepoBatch({ receivedAt, n });
+      const graphs = batch.filter((m) => m.type === "graph").length;
+      if (graphs > 0) useEngineStore.getState().noteGraphBatch({ receivedAt, n: graphs });
       if (!marked && isFinal()) {
         marked = true;
         // One frame later: the commit of this batch has painted.

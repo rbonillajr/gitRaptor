@@ -67,13 +67,13 @@ afterEach(() => {
 });
 
 describe("EngineCenter conflicts", () => {
-  it("the conflict panel sits above the main view and not inside the fleet", () => {
+  it("the conflict panel sits above the main view and not inside the graph", () => {
     mount();
     const panel = screen.getByRole("region", { name: "Predicted conflicts" });
-    const fleet = screen.getByRole("list", { name: "Worktrees of tienda" });
-    expect(panel.compareDocumentPosition(fleet) & Node.DOCUMENT_POSITION_FOLLOWING, "the panel comes before the fleet").toBeTruthy();
-    expect(panel.contains(fleet), "the fleet is not inside the panel").toBe(false);
-    expect(fleet.contains(panel), "the panel is not inside the fleet list").toBe(false);
+    const fleet = screen.getByRole("grid", { name: "Lane graph of tienda" });
+    expect(panel.compareDocumentPosition(fleet) & Node.DOCUMENT_POSITION_FOLLOWING, "the panel comes before the graph").toBeTruthy();
+    expect(panel.contains(fleet), "the graph is not inside the panel").toBe(false);
+    expect(fleet.contains(panel), "the panel is not inside the graph").toBe(false);
     expect(within(panel).getByText("pagos.rs"), "the panel paints the file of the conflict").toBeInTheDocument();
   });
 
@@ -81,7 +81,7 @@ describe("EngineCenter conflicts", () => {
     useUiStore.setState({ center: { view: "pair", repoId: "tienda", pairId: "c1" } });
     mount();
     expect(screen.getByRole("heading", { level: 2, name: /are going to collide/ }), "the detail of the pair").toBeInTheDocument();
-    expect(screen.queryByRole("list", { name: "Worktrees of tienda" }), "the fleet gives way to the detail").toBeNull();
-    expect(screen.getByRole("button", { name: "Back to the fleet" })).toBeInTheDocument();
+    expect(screen.queryByRole("grid", { name: "Lane graph of tienda" }), "the graph gives way to the detail").toBeNull();
+    expect(screen.getByRole("button", { name: "Back to the graph" })).toBeInTheDocument();
   });
 });

@@ -187,3 +187,83 @@ describe("TS003-TREE-TABLE Table accessibility", () => {
   });
 });
 
+
+// DS-US-DSK-005 T005 (D12): the additive props of a virtualised list.
+describe("Table virtual window props", () => {
+  interface WindowProps { first?: number; outside?: (index: number) => void; focusId?: string | null; wipIds?: ReadonlySet<string> }
+  function Window({ first = 10, outside, focusId, wipIds }: WindowProps) {
+    const rows = ROWS.slice(first, first + 10);
+    return (
+      <Table<Row>
+        label="Commit graph"
+        columns={COLUMNS}
+        rows={rows}
+        totalRows={ROWS.length}
+        firstRowIndex={first}
+        getRowId={(r: Row) => r.id}
+        getRowLabel={(r: Row) => `${r.msg} by Ana`}
+        renderCell={(r: Row, col: string) => (col === "msg" ? r.msg : col)}
+        selectedId={null}
+        onSelect={() => undefined}
+        onActivate={() => undefined}
+        {...(outside ? { onFocusOutside: outside } : {})}
+        {...(focusId !== undefined ? { focusId } : {})}
+        {...(wipIds ? { wipIds } : {})}
+      />
+    );
+  }
+
+  it("firstRowIndex offsets aria-rowindex", () => {
+    render(<Window />);
+    expect(row(11)).toHaveAttribute("aria-rowindex", "12");
+    expect(row(20)).toHaveAttribute("aria-rowindex", "21");
+    expect(screen.getByRole("grid")).toHaveAttribute("aria-rowcount", "31");
+  });
+
+  it("focus outside the window asks the caller", () => {
+    const asked: number[] = [];
+    render(<Window outside={(i) => asked.push(i)} />);
+    focusRow(11);
+    press("ArrowUp");
+    expect(asked, "above the painted rows").toEqual([9]);
+    focusRow(20);
+    press("ArrowDown");
+    press("PageDown");
+    expect(asked.slice(1), "below the painted rows").toEqual([20, 29]);
+    press("Home");
+    press("End");
+    expect(asked.slice(3), "Home is 0 and End is the last row of the list").toEqual([0, 29]);
+  });
+
+  it("inside the window the arrows move the focus without asking", () => {
+    const asked: number[] = [];
+    render(<Window outside={(i) => asked.push(i)} />);
+    focusRow(12);
+    press("ArrowDown");
+    expect(document.activeElement).toBe(row(13));
+    expect(asked).toEqual([]);
+  });
+
+  it("without onFocusOutside the keys stay inside the painted rows", () => {
+    render(<Window />);
+    focusRow(11);
+    press("ArrowUp");
+    expect(document.activeElement).toBe(row(11));
+    press("End");
+    expect(document.activeElement).toBe(row(20));
+  });
+
+  it("focusId focuses the row once it is painted", () => {
+    const { rerender } = render(<Window focusId="c25" />);
+    expect(document.activeElement).not.toBe(row(11));
+    rerender(<Window first={20} focusId="c25" />);
+    expect(document.activeElement).toBe(row(25));
+  });
+
+  it("wipIds marks every listed row as WIP", () => {
+    render(<Window wipIds={new Set(["c11", "c13"])} />);
+    expect(row(11)).toHaveClass("bg-accent-glow");
+    expect(row(13)).toHaveClass("bg-accent-glow");
+    expect(row(12)).not.toHaveClass("bg-accent-glow");
+  });
+});

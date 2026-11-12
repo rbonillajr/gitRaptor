@@ -33,6 +33,8 @@ const VARIANTS = [
   "repoSession",
   "prediction",
   "pairDetails",
+  "graph",
+  "graphUnavailable",
   "guardBlocks",
   "guardBlocksUnavailable",
   "repoClosed",
@@ -61,8 +63,11 @@ const store = () => useEngineStore.getState();
 
 describe("D3-CACHE golden fixture", () => {
   it("D3-CACHE: the fixture has one example of every EngineMessage variant, tagged with its type", () => {
-    expect(Object.keys(F).sort()).toEqual([...VARIANTS].sort());
+    // A second example of a variant (a `graph` whose base is missing) has its own key and names the variant it shows.
+    const extra: Record<string, Variant> = { graphBaseMissing: "graph" };
+    expect(Object.keys(F).filter((key) => !(key in extra)).sort()).toEqual([...VARIANTS].sort());
     for (const key of VARIANTS) expect(F[key].type, `fixture[${key}].type`).toBe(key);
+    for (const [key, variant] of Object.entries(extra)) expect((fixture as unknown as Record<string, EngineMessage>)[key]?.type, `fixture[${key}].type`).toBe(variant);
   });
 
   it("D3-CACHE: conn sets the connection, the stale time and the resync reason in the store only", () => {

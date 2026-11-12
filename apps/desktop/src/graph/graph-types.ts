@@ -1,13 +1,10 @@
 /** Shared types of the lane graph (DS-US-DSK-005 § Contratos compartidos). Types only. */
-import type { BoundedCountDto, GraphDto, GraphUnavailableReason } from "@/client/engine-types";
+import type { BoundedCountDto } from "@/client/engine-types";
+import type { GraphEntry } from "@/state/engine-cache";
+
+export type { GraphEntry };
 
 export type GraphColumnId = "branch" | "graph" | "message" | "author" | "date" | "sha";
-
-/** Cache entry of `engineKeys.graph(id)`; T009 moves it to `state/engine-cache.ts` and re-exports it here. */
-export interface GraphEntry {
-  graph: GraphDto | null;
-  unavailable: GraphUnavailableReason | null;
-}
 
 /** `laneKey` is the worktree key, or `"base"`. Every row carries the sentence that names it for assistive tech. */
 export type GraphRow = { a11yLabel: string } & (

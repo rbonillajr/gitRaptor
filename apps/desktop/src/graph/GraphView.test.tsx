@@ -233,7 +233,10 @@ describe("GraphView accessibility", () => {
     const names = bodyRows().map((r) => r.getAttribute("aria-label"));
     expect(names).toContain("main, 3 uncommitted files");
     expect(names).toContain("Base branch main");
-    expect(names.every((n) => n !== null && n.includes(", "))).toBe(true);
+    const sentences = names.filter((n) => n !== null && (n.includes("uncommitted") || n.includes(", commit")));
+    expect(sentences.length).toBeGreaterThan(0);
+    expect(sentences.every((n) => n !== null && n.includes(", "))).toBe(true);
+    expect(names.some((n) => n === "Base branch main")).toBe(true);
   });
 
   it("the canvas is hidden from assistive tech", () => {

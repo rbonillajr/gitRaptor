@@ -86,6 +86,13 @@ describe("D8-CMD (DS-US-DSK-008 D1)", () => {
   });
 });
 
+describe("D5-CMD (DS-US-DSK-005 D2)", () => {
+  it("no command of the command map is about the graph", () => {
+    const about = [...COMMANDS].filter((name) => /graph|lane/.test(name));
+    expect(about, "the graph travels by the channel (`graph` messages), not by a command").toEqual([]);
+  });
+});
+
 describe("D7-WIRE guard_blocks (DS-US-DSK-007 T003)", () => {
   it("D7-WIRE: guard_blocks joins the closed list of five commands", () => {
     expect([...COMMANDS].sort(), "the closed list has exactly the five commands").toEqual(["app_info", "engine_retry", "engine_watch", "fleet_open", "guard_blocks"]);

@@ -1,19 +1,38 @@
+import { skipToken, useQuery } from "@tanstack/react-query";
 import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { useTranslation } from "react-i18next";
+import type { RepoFleet } from "@/client/engine-types";
 import { call } from "@/client/ipc";
+import { engineKeys } from "@/client/queries";
+import { FleetView } from "@/fleet/FleetView";
+import { useNow } from "@/fleet/useNow";
 import { RepoTreeContainer } from "@/fleet/RepoTreeContainer";
 import { EngineBand } from "@/engine/EngineBand";
 import { EngineCenter } from "@/engine/EngineCenter";
 import { useEngine } from "@/engine/useEngine";
 import { GuardrailsNavRow } from "@/guardrails/GuardrailsNavRow";
 import { useGuardUnseen } from "@/guardrails/unseen-store";
+import { useEngineStore } from "@/state/engine-store";
 import { useUiStore } from "@/state/ui-store";
 import { Panel } from "@/ui/Panel";
 import { TitleBar } from "./TitleBar";
 import { useLayout } from "./useLayout";
 import { useShortcuts } from "./useShortcuts";
 import { useTheme } from "./useTheme";
+
+/**
+ * The fleet of the open repo in the detail (DS-US-DSK-005 D15). It only reads the cache entry: `GraphContent` in the
+ * center opens the repo and is the one writer of the colour slots.
+ */
+function AgentStatus() {
+  const selected = useUiStore((s) => s.selectedRepoId);
+  const fleet = useQuery<RepoFleet>({ queryKey: engineKeys.repo(selected ?? ""), queryFn: skipToken, enabled: selected !== null }).data;
+  const nowMs = useNow();
+  const activity = useEngineStore((s) => s.session?.activity ?? false);
+  if (selected === null) return null;
+  return <FleetView fleet={fleet} nowMs={nowMs} activity={activity} />;
+}
 
 const FOCUSABLE = "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])";
 
@@ -139,17 +158,19 @@ export function AppShell() {
           as="aside"
           ref={detail}
           id={detailId}
-          aria-label={t("shell.detail.label")}
-          heading={t("shell.detail.label")}
+          aria-label={t("detail.agents.title")}
+          heading={t("detail.agents.title")}
           hidden={!detailVisible}
           tabIndex={-1}
           onKeyDown={trapFocus}
           className={
             wide
-              ? "w-(--gr-size-detail) shrink-0 focus:outline-none"
-              : "absolute top-0 right-(--gr-window-margin) bottom-(--gr-window-margin) z-(--gr-z-drawer) w-(--gr-size-detail) shadow-(--gr-shadow-popover) focus:outline-none"
+              ? "w-(--gr-size-detail) shrink-0 overflow-y-auto focus:outline-none"
+              : "absolute top-0 right-(--gr-window-margin) bottom-(--gr-window-margin) z-(--gr-z-drawer) w-(--gr-size-detail) overflow-y-auto shadow-(--gr-shadow-popover) focus:outline-none"
           }
-        />
+        >
+          <AgentStatus />
+        </Panel>
       </div>
     </div>
   );
