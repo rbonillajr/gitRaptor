@@ -51,12 +51,14 @@ const fn time_machine(
 }
 
 pub(super) const GROUP: Group = Group {
-    // Redo, restore and the full timeline are not offered over MCP
-    // (Q-MCP-11); the hook snapshot is a CLI command (US-TMC-005).
+    // Restore and the full timeline are not offered over MCP (Q-MCP-11);
+    // redo is, for an undo of the caller's own session only (TS-GRP-010 D14,
+    // the permission rule of `redo_last`); the hook snapshot is a CLI command
+    // (US-TMC-005).
     methods: &[
         time_machine(TM_SNAPSHOT, false, RepoWrite::None, "US-TMC-005"),
         time_machine(TM_UNDO, true, RepoWrite::TimeMachine, "US-TMC-002"),
-        time_machine(TM_REDO, false, RepoWrite::TimeMachine, "US-TMC-003"),
+        time_machine(TM_REDO, true, RepoWrite::TimeMachine, "US-TMC-003"),
         time_machine(TM_RESTORE, false, RepoWrite::TimeMachine, "US-TMC-009"),
         time_machine(TM_TIMELINE, false, RepoWrite::None, "US-TMC-006"),
         time_machine(TM_NOTICES, false, RepoWrite::None, "US-TMC-019").since(CAPABILITIES_PROTOCOL),

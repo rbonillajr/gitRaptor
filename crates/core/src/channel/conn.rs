@@ -63,6 +63,7 @@ use super::mcp_conflicts;
 use super::mcp_status;
 use super::peer::{ProcInfo, peer_cred, process_cwd};
 use super::requester::{self, Resolution};
+use super::requester_profile;
 use super::transport::Stream;
 use super::validate;
 use super::{ServerCtx, file_id};
@@ -243,6 +244,7 @@ pub(crate) fn accept(ctx: &Arc<ServerCtx>, stream: Stream) {
                 mcp_cursors: std::sync::Mutex::new(super::mcp_status::McpCursors::default()),
                 slot: None,
                 desktop: None,
+                narrowed: false,
                 queries: super::query::QueryTable::default(),
             };
             conn.serve(reader_stream);
@@ -435,6 +437,10 @@ struct Connection<'a> {
     /// The profile decision of a desktop-class connection, fixed at `hello`;
     /// `None` for every other connection.
     desktop: Option<DesktopDecision>,
+    /// `mcp` by its requester, not by what it declared (S-01, TS-GRP-010 D8):
+    /// it keeps its declared channel, its own reserved verdict and the read
+    /// budgets of a client that is not MCP. Fixed at `hello`.
+    narrowed: bool,
     /// The on-demand queries of this connection that are in flight (N8).
     queries: super::query::QueryTable,
 }
@@ -547,9 +553,10 @@ impl Connection<'_> {
             ));
             return After::Close;
         }
-        // The peer's executable, not its claim, decides the class and the
-        // MCP profile.
+        // The peer's executable, not its claim, decides the class; its
+        // requester decides the profile (S-01).
         let exe = self.info.as_ref().and_then(|i| i.exe.as_deref());
+        let mut narrowed_by = None;
         if self.is_desktop_exe(exe) {
             let checks = self.ctx.checks();
             let identity = desktop::path_identity(
@@ -569,14 +576,27 @@ impl Connection<'_> {
             self.desktop = Some(decision);
             self.profile = decision.profile;
         } else {
-            let peer_is_mcp = exe
-                .and_then(|p| p.file_name())
-                .is_some_and(|n| n == "raptor-mcp" || n == "raptor-mcp.exe");
-            self.profile = if peer_is_mcp || hello.client == ClientKind::Mcp {
-                ConnectionProfile::Mcp
-            } else {
-                ConnectionProfile::Full
-            };
+            // S-01: the profile follows the requester, whatever the client.
+            #[cfg(debug_assertions)]
+            let children_as_self = self.ctx.config.test_daemon_children_as_self;
+            #[cfg(not(debug_assertions))]
+            let children_as_self = false;
+            let decision = requester_profile::decide(
+                self.peer,
+                &self.ctx.checks(),
+                Some(&self.ctx.marks),
+                hello.client,
+                exe,
+                self.installed_exe(),
+                children_as_self,
+            );
+            // D3-bis: only in debug builds, under a test's agent matcher.
+            #[cfg(debug_assertions)]
+            let decision =
+                requester_profile::test_ttyless(decision, self.ctx.config.agents.is_override());
+            self.profile = decision.profile;
+            self.narrowed = decision.narrowed();
+            narrowed_by = decision.narrowed().then_some(decision.reason);
         }
         let window = self.ctx.config.min_protocol..=self.ctx.config.protocol;
         if !window.contains(&hello.protocol) {
@@ -618,12 +638,29 @@ impl Connection<'_> {
                 ],
             );
         }
+        if let Some(reason) = narrowed_by {
+            // Closed vocabulary only: no path, pid nor client text.
+            let class = if hello.client == ClientKind::Cli {
+                "cli"
+            } else {
+                "other"
+            };
+            self.ctx.logger.info(
+                "client_profile",
+                &[
+                    ("class", Field::Text(class)),
+                    ("profile", Field::Text("mcp")),
+                    ("reason", Field::Text(reason.as_str())),
+                ],
+            );
+        }
         // N5: who the daemon sees, for the Cockpit's "you act as". Only for
         // `cli` clients of protocol 6 on a full connection, and for the
         // desktop class whatever its profile: the hook client connects often
         // and does not need the process walk.
         let requester = (self.has(methods::CAP_REQUESTER.name)
-            && ((self.profile == ConnectionProfile::Full && hello.client == ClientKind::Cli)
+            && ((hello.client == ClientKind::Cli
+                && (self.profile == ConnectionProfile::Full || self.narrowed))
                 || self.desktop.is_some()))
         .then(|| self.connection_requester());
         let result = HelloResult {
@@ -657,17 +694,10 @@ impl Connection<'_> {
     /// S-03: the requester slot of this connection, claimed once at the end of `hello` with the
     /// requester `resolve` gives now; the answer that refuses it at the cap.
     fn claim_slot(&mut self, client: ClientKind) -> Option<ErrorObject> {
-        let installed = || {
-            let exe = self.info.as_ref().and_then(|i| i.exe.as_deref());
-            let launch = &self.ctx.launch;
-            exe.and_then(file_id).is_some_and(|caller| {
-                launch.file == Some(caller) || file_id(&launch.path) == Some(caller)
-            })
-        };
         let hook_client = super::limits::is_hook_client(
             self.profile,
             client,
-            client == ClientKind::Other && installed(),
+            client == ClientKind::Other && self.installed_exe(),
         );
         let resolution = if hook_client {
             None
@@ -698,6 +728,16 @@ impl Connection<'_> {
                 )
             }
         }
+    }
+
+    /// Whether the peer's executable is the binary the daemon was launched
+    /// from (the installed `raptor`).
+    fn installed_exe(&self) -> bool {
+        let exe = self.info.as_ref().and_then(|i| i.exe.as_deref());
+        let launch = &self.ctx.launch;
+        exe.and_then(file_id).is_some_and(|caller| {
+            launch.file == Some(caller) || file_id(&launch.path) == Some(caller)
+        })
     }
 
     /// Whether the connection understands the shape `capability` names.
@@ -862,7 +902,9 @@ impl Connection<'_> {
             Ok(r) => ConnectionRequester::Resolved {
                 actor: r.who.actor.clone(),
                 layer: self.layer(&r),
-                confirmable: r.confirmable,
+                // A narrowed connection never learns whether it could confirm: the same oracle
+                // `requester.resolve` hides over `mcp` (D10; security review L-04).
+                confirmable: r.confirmable && !self.narrowed,
             },
             Err(_) => ConnectionRequester::Unverified,
         }
@@ -920,7 +962,7 @@ impl Connection<'_> {
         // hold no slot, so spend none.
         if !reserved_like {
             let write = write_route(spec.name).is_some();
-            let mcp = self.is_mcp();
+            let mcp = self.is_mcp_client();
             let shared = write || (mcp && spec.mcp);
             let limits = &self.ctx.requester_limits;
             let allowed = (!mcp || write || self.mcp_read_bucket.take())
@@ -2069,6 +2111,12 @@ impl Connection<'_> {
         request: &Request,
     ) -> Result<RepoRetireResult, ErrorObject> {
         let params: RepoRetireParams = request.params()?;
+        // A connection narrowed by its requester (TS-GRP-010 D15) cannot read the repo ids:
+        // its attempt is decided and audited first, without an id, so an agent's CLI meets the
+        // engine's refusal. It only refuses earlier; nothing else changes.
+        if self.narrowed && !valid_repo_id(&params.repo_id) {
+            self.reserved(spec, None)?;
+        }
         if !valid_repo_id(&params.repo_id) {
             return Err(ErrorObject::new(code::INVALID_PARAMS, "invalid repo_id"));
         }
@@ -3226,7 +3274,7 @@ impl Connection<'_> {
     /// ADR-GRP-005 § 6: the daemon decides, audits every attempt and only
     /// then answers. A command whose audit cannot be written does not run.
     fn reserved(&self, spec: &MethodSpec, repo_id: Option<String>) -> Result<(), ErrorObject> {
-        let verdict = if self.profile == ConnectionProfile::Mcp {
+        let verdict = if self.is_mcp_client() {
             Verdict {
                 client: self.identity_without_walk(),
                 chain: Vec::new(),
@@ -3266,7 +3314,7 @@ impl Connection<'_> {
     /// [`Self::reserved`] for a call without effect: the same refusal, audited, but an accepted
     /// call leaves no audit row.
     fn reserved_quiet(&self, spec: &MethodSpec) -> Result<(), ErrorObject> {
-        let refused = self.profile == ConnectionProfile::Mcp
+        let refused = self.is_mcp_client()
             || check_reserved(self.peer, &self.ctx.checks())
                 .refused
                 .is_some();
@@ -3903,14 +3951,54 @@ impl Connection<'_> {
         self.profile == ConnectionProfile::Mcp
     }
 
+    /// An `mcp` connection that is an MCP client (or the app restricted), not
+    /// a CLI narrowed by its requester (TS-GRP-010 D8): only it labels its
+    /// requests `mcp`, takes the reserved shortcut and spends MCP read budgets.
+    fn is_mcp_client(&self) -> bool {
+        self.is_mcp() && !self.narrowed
+    }
+
+    /// The channel that AUTHORIZES a request (H-01, TS-GRP-010 D12): `mcp` for every
+    /// connection with the `mcp` profile, so a CLI narrowed by its requester meets the MCP's
+    /// rules (an unattributed requester never undoes, the scope comes from the caller's working
+    /// folder and the allowlist). The oplog still records the declared channel (D8 i).
+    fn auth_channel(&self, declared: RequestChannel) -> RequestChannel {
+        if self.is_mcp() {
+            RequestChannel::Mcp
+        } else {
+            declared
+        }
+    }
+
+    /// The connection's write budget (ADR-MCP-001 § 6), spent by every write of an `mcp`
+    /// connection: catalog writes, undo and redo (M-02).
+    fn take_mcp_write(&self) -> Result<(), ErrorObject> {
+        if self.is_mcp()
+            && !self
+                .mcp_write_bucket
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .take()
+        {
+            return Err(ErrorObject::new(code::RATE_LIMITED, "rate limited"));
+        }
+        Ok(())
+    }
+
     /// The channel of a request: an MCP connection is always `mcp` and may
     /// not label itself.
     fn request_channel(&self, surface: Option<Surface>) -> Result<RequestChannel, ErrorObject> {
-        match (self.is_mcp(), surface) {
+        match (self.is_mcp_client(), surface) {
             (true, None) => Ok(RequestChannel::Mcp),
             (true, Some(_)) => Err(ErrorObject::new(
                 code::INVALID_PARAMS,
                 "surface: not accepted over MCP",
+            )),
+            // A connection narrowed by its requester labels itself `cli` or `tui`, never the
+            // hook's channel (TS-GRP-010 D8 i; security review L-03).
+            (false, Some(Surface::Hook)) if self.narrowed => Err(ErrorObject::new(
+                code::INVALID_PARAMS,
+                "surface: not accepted for this requester",
             )),
             (false, s) => Ok(s.map_or(RequestChannel::Cli, RequestChannel::from)),
         }
@@ -4119,16 +4207,7 @@ impl Connection<'_> {
             manual::precheck(&oplog, &store, session_id, &key, now)
                 .map_err(|hit| quota_error(&hit, now))?;
         }
-        if self.is_mcp()
-            && !self
-                .mcp_write_bucket
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .take()
-        {
-            return Err(ErrorObject::new(code::RATE_LIMITED, "rate limited"));
-        }
-        Ok(())
+        self.take_mcp_write()
     }
 
     /// `operation.prepare`: the plan, without effects (ADR-CKP-002 § 2).
@@ -4156,7 +4235,7 @@ impl Connection<'_> {
         let wiring = self.wiring()?;
         let layer = self.layer(&r);
         let repo = self
-            .repo_for(channel, named.as_deref())
+            .repo_for(self.auth_channel(channel), named.as_deref())
             .expect("wiring checked above")?;
         self.write_admission(&r, &repo, p.operation)?;
         let refusal = super::requester::confirmation_refusal(
@@ -4428,7 +4507,7 @@ impl Connection<'_> {
         let channel = self.request_channel(p.surface)?;
         let named = self.named_worktree(p.worktree.as_deref())?;
         let r = self.resolve()?;
-        require_attributed(channel, r.who.is_agent()).map_err(scope_refused)?;
+        require_attributed(self.auth_channel(channel), r.who.is_agent()).map_err(scope_refused)?;
         let Some(tm) = &self.ctx.time_machine else {
             return Err(ErrorObject::new(code::NOT_IMPLEMENTED, "no repo layer")
                 .with_data(serde_json::json!({ "implemented_by": "US-TMC-002" })));
@@ -4445,6 +4524,7 @@ impl Connection<'_> {
             cwd.as_deref(),
         )
         .map_err(scope_refused)?;
+        self.take_mcp_write()?;
         let env = UndoEnv {
             marks: &self.ctx.marks,
             procs: self.ctx.procs.as_ref(),
@@ -4505,9 +4585,10 @@ impl Connection<'_> {
         value.map_err(|_| ErrorObject::new(code::INTERNAL, "serialization"))
     }
 
-    /// `timemachine.redo` (US-TMC-003): the last undo of the named worktree taken back, as one
-    /// protected operation of the Time Machine. `operation_id` has no story yet. Not offered over
-    /// MCP (the catalog answers `METHOD_NOT_FOUND` there).
+    /// `timemachine.redo` (US-TMC-003): the last undo of the worktree taken back, as one
+    /// protected operation of the Time Machine. `operation_id` has no story yet. Over the `mcp`
+    /// profile (TS-GRP-010) the worktree is the caller's and the permission rule lets an agent
+    /// redo only an undo of its own session.
     fn tm_redo(
         &self,
         spec: &MethodSpec,
@@ -4522,7 +4603,7 @@ impl Connection<'_> {
         let channel = self.request_channel(p.surface)?;
         let named = self.named_worktree(p.worktree.as_deref())?;
         let r = self.resolve()?;
-        require_attributed(channel, r.who.is_agent()).map_err(scope_refused)?;
+        require_attributed(self.auth_channel(channel), r.who.is_agent()).map_err(scope_refused)?;
         let Some(tm) = &self.ctx.time_machine else {
             return Err(ErrorObject::new(code::NOT_IMPLEMENTED, "no repo layer")
                 .with_data(serde_json::json!({ "implemented_by": "US-TMC-003" })));
@@ -4539,6 +4620,7 @@ impl Connection<'_> {
             cwd.as_deref(),
         )
         .map_err(scope_refused)?;
+        self.take_mcp_write()?;
         let env = UndoEnv {
             marks: &self.ctx.marks,
             procs: self.ctx.procs.as_ref(),
@@ -4558,12 +4640,18 @@ impl Connection<'_> {
         let with_detail = !self.is_mcp() && self.has(methods::CAP_TM_OVERLAP.name);
         let done = redo_last(&repo, &r.who, oplog_channel(channel), &confirm, &env)
             .map_err(|e| redo_error(e, &confirm, with_detail))?;
-        serde_json::to_value(redo_result(
+        // Over MCP only counts travel (`for_mcp`, SEC-12).
+        let result = redo_result(
             done,
             self.requester_view(&r, channel),
-            with_detail,
-        ))
-        .map_err(|_| ErrorObject::new(code::INTERNAL, "serialization"))
+            with_detail || self.is_mcp(),
+        );
+        let value = if self.is_mcp() {
+            serde_json::to_value(result.for_mcp())
+        } else {
+            serde_json::to_value(result)
+        };
+        value.map_err(|_| ErrorObject::new(code::INTERNAL, "serialization"))
     }
 
     /// `timemachine.restore` (US-TMC-009): the named worktree back to a
@@ -4580,13 +4668,13 @@ impl Connection<'_> {
         let channel = self.request_channel(p.surface)?;
         let named = self.named_worktree(p.worktree.as_deref())?;
         let r = self.resolve()?;
-        require_attributed(channel, r.who.is_agent()).map_err(scope_refused)?;
+        require_attributed(self.auth_channel(channel), r.who.is_agent()).map_err(scope_refused)?;
         // A prefix is resolved below, inside the scoped repo; a full id is checked here first.
         let full_id =
             gitraptor_api::timemachine::check_oplog_id("snapshot_id", &p.snapshot_id).is_ok();
         // An id of another repo is "not found", like an unknown one.
         if full_id
-            && let Some(Ok(repo)) = self.repo_for(channel, named.as_deref())
+            && let Some(Ok(repo)) = self.repo_for(self.auth_channel(channel), named.as_deref())
             && snapshot_in(&repo, &p.snapshot_id).is_none()
         {
             return Err(not_found_id());
@@ -4898,7 +4986,8 @@ impl Connection<'_> {
         let named = self.named_worktree(worktree.as_deref())?;
         let r = self.resolve()?;
         if matches!(spec.name, methods::TM_UNDO | methods::TM_RESTORE) {
-            require_attributed(channel, r.who.is_agent()).map_err(scope_refused)?;
+            require_attributed(self.auth_channel(channel), r.who.is_agent())
+                .map_err(scope_refused)?;
         }
         // SECURITY: a command that names no id skips scope resolution only because every branch
         // below answers NOT_IMPLEMENTED and touches nothing. The story that implements the
@@ -4906,7 +4995,7 @@ impl Connection<'_> {
         // Only a request that names an id has a repo to look it up in; the selectors stay with
         // their stories and are not scoped here.
         if (snapshot_id.is_some() || operation_id.is_some())
-            && let Some(repo) = self.repo_for(channel, named.as_deref())
+            && let Some(repo) = self.repo_for(self.auth_channel(channel), named.as_deref())
         {
             let repo = repo?;
             if let Some(id) = &snapshot_id

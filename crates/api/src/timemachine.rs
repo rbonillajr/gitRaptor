@@ -551,6 +551,41 @@ impl UndoResult {
     }
 }
 
+/// `timemachine.redo` result for an `mcp` connection (TS-GRP-010 M-01): counts, never paths
+/// (SEC-12), the actor capped as in every MCP view.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct McpRedoResult {
+    pub operation_id: String,
+    pub prior_snapshot_id: String,
+    pub redone_undo_id: String,
+    pub actor: Actor,
+    /// How many paths were written back.
+    pub written: u64,
+    /// How many paths were removed.
+    pub removed: u64,
+    /// How many paths were left as they were.
+    pub not_restored: u64,
+    /// How many paths another actor changed afterwards were kept (never which: SEC-12).
+    #[serde(default)]
+    pub kept: u64,
+}
+
+impl RedoResult {
+    pub fn for_mcp(&self) -> McpRedoResult {
+        McpRedoResult {
+            operation_id: self.operation_id.clone(),
+            prior_snapshot_id: self.prior_snapshot_id.clone(),
+            redone_undo_id: self.redone_undo_id.clone(),
+            actor: cap_actor(&self.requester.actor),
+            written: self.written,
+            removed: self.removed,
+            not_restored: self.not_restored.len() as u64,
+            kept: self.kept_total.max(self.kept.len() as u64),
+        }
+    }
+}
+
 /// `timemachine.restore` result (US-TMC-009). Not offered over MCP.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
