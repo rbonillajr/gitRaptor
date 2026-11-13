@@ -2,7 +2,7 @@
 id: DS-US-DSK-005
 title: "Dev Spec — El grafo de carriles en la app"
 type: dev-spec
-status: spec-ready
+status: implemented
 created: 2026-11-09
 updated: 2026-11-12
 story: US-DSK-005
@@ -77,6 +77,8 @@ tags: [desktop, ui-1, grafo, carriles, wip, column-settings, canvas, accesibilid
 ---
 
 # DS-US-DSK-005 · El grafo de carriles en la app
+
+Implementado en: PR #369.
 
 ## Contexto rápido
 

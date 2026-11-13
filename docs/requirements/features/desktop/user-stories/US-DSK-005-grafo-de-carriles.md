@@ -2,7 +2,7 @@
 id: US-DSK-005
 title: "El usuario ve crecer la rama de cada agente como un carril sobre la rama base"
 type: us
-status: ready
+status: implemented
 priority: high
 created: 2026-10-28
 updated: 2026-11-12
@@ -80,4 +80,6 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 ## Diseño y Dev Spec
 
 - **Diseño:** [design-flow.md](../design/design-flow.md) (DSF-DSK-001), grafo de carriles; paleta por carril de DSYS-GRP-001.
-- **Dev Spec:** [DS-US-DSK-005](../dev-specs/US-DSK-005-grafo-de-carriles.md) (`spec-ready`, 2026-11-09; revisada contra `main` el 2026-11-12, sin tareas bloqueadas).
+- **Dev Spec:** [DS-US-DSK-005](../dev-specs/US-DSK-005-grafo-de-carriles.md) (`implemented`, 2026-11-12; revisada contra `main` el 2026-11-12).
+
+Implementado en: PR #369.
