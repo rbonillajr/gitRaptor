@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { HEADER_PX } from "./graph-layout";
 import { readGraphColors } from "./canvas/colors";
 import { createPainter, paint } from "./canvas/paint";
@@ -32,10 +32,19 @@ function useGraphColors(): GraphColors {
   return colors;
 }
 
+/** What `paint` reads of the model: the row ids and merges and the lane columns and colours, never the text. */
+function shapeKeyOf(model: GraphModel, geometry: GraphGeometry): string {
+  const rows = model.rows.map((r) => (r.kind === "commit" && r.merge ? `${r.id}+` : r.id)).join("\u0000");
+  const lanes = model.lanes.map((l) => `${l.key}:${l.column}:${l.colorSlot ?? "-"}:${l.muted ? 1 : 0}`).join("\u0000");
+  return `${model.state}|${geometry.graphWidth}|${geometry.rowHeight}|${rows}|${lanes}`;
+}
+
 /**
  * The lane drawing of the Graph column (D12): one `<canvas>` over the painted rows, outside React's tree of
- * nodes. It repaints in one animation frame when the model, the window, the width, the layers or the theme change,
- * and runs no loop otherwise (NFR-13.8). It is hidden from assistive tech: the rows say everything in text.
+ * nodes. It repaints in one animation frame when the shape of the model (not its text or its identity), the window,
+ * the width, the layers or the theme change, and runs no loop otherwise (NFR-13.8): the one-second clock of the
+ * fleet rebuilds the model and the layers with the same content and must not repaint. `layers` must keep its
+ * identity while its content does not. It is hidden from assistive tech: the rows say everything in text.
  */
 export function GraphCanvas({ model, geometry, window: rows, layers, leftPx }: GraphCanvasProps) {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -63,10 +72,17 @@ export function GraphCanvas({ model, geometry, window: rows, layers, leftPx }: G
     return () => painter.current?.cancel();
   }, []);
 
+  const shapeKey = useMemo(() => shapeKeyOf(model, geometry), [model, geometry]);
+  const colorsKey = useMemo(() => JSON.stringify(colors), [colors]);
+
+  // Keep what the next frame reads current without asking for a frame.
   useEffect(() => {
     latest.current = { model, geometry, rows: { first: rows.first, last: rows.last }, layers, colors };
+  });
+
+  useEffect(() => {
     painter.current?.request();
-  }, [model, geometry, rows.first, rows.last, layers, colors]);
+  }, [shapeKey, colorsKey, rows.first, rows.last, layers]);
 
   return (
     <canvas

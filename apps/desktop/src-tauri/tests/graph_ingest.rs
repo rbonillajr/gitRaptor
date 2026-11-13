@@ -558,3 +558,24 @@ fn only_a_git_event_is_a_graph_trigger() {
         );
     }
 }
+
+#[test]
+fn the_protocol_bounds_of_lanes_and_commits_are_enforced_here_too() {
+    let commits: Vec<LaneCommit> = (0..80)
+        .map(|i| commit(OID_A, "c", 1_700_000_000_000 + i, false))
+        .collect();
+    let lanes: Vec<Lane> = (0..40)
+        .map(|i| {
+            lane(
+                &format!("/r/wt{i}"),
+                "b",
+                ready(MERGE_BASE, commits.clone(), 80, true),
+            )
+        })
+        .collect();
+    let dto = wire(&graph_of(main_base(), lanes));
+    let lanes = dto["lanes"].as_array().expect("lanes");
+    assert_eq!(lanes.len(), 32, "at most MAX_GRAPH_LANES lanes");
+    let shown = lanes[0]["state"]["commits"].as_array().expect("commits");
+    assert_eq!(shown.len(), 50, "at most MAX_LANE_COMMITS commits per lane");
+}
