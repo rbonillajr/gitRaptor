@@ -159,7 +159,10 @@ const MAX_BADGES = 2;
 function GraphMain({ fleet, cards, entry, nowMs, repoName, stale }: { fleet: RepoFleet; cards: readonly CardModel[]; entry: GraphEntry | null; nowMs: number; repoName: string; stale: boolean }) {
   const { t, i18n } = useTranslation();
   const view = usePredictionView(fleet, cards, nowMs);
-  const layers = useMemo(() => [conflictLayer(view.bands)], [view.bands]);
+  // The bands are rebuilt every second (their age text); the layer draws only these fields, so it keeps its identity.
+  const bandsKey = view.bands.map((b) => (b.level === "conflict" ? `${b.pairId}:${b.stale ? 1 : 0}:${JSON.stringify(b.a)}:${JSON.stringify(b.b)}` : "")).join("|");
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the fields the layer draws
+  const layers = useMemo(() => [conflictLayer(view.bands)], [bandsKey]);
   const bandsOf = useMemo(() => {
     const byLane = new Map<string, ConflictBandModel[]>();
     for (const band of view.bands) {

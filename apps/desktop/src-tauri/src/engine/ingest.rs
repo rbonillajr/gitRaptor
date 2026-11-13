@@ -10,6 +10,7 @@ use gitraptor_api::display::{NAME_MAX_CHARS, TEXT_MAX_CHARS, visible};
 use gitraptor_api::event::{self, Event};
 use gitraptor_api::graph::{
     BaseGap, GraphBase, GraphCut, GraphLanes, Lane, LaneCommit, LaneGap, LaneHead, LaneState,
+    MAX_GRAPH_LANES, MAX_LANE_COMMITS,
 };
 use gitraptor_api::messages::{
     BaseStatusView, CommitCountView, DivergenceView, EngineStateView, EngineView, HeadView,
@@ -742,7 +743,12 @@ pub fn graph(lanes: &GraphLanes) -> GraphDto {
     GraphDto {
         computed_utc_ms: lanes.computed_at_utc_ms,
         base: graph_base(&lanes.base),
-        lanes: lanes.lanes.iter().map(lane).collect(),
+        lanes: lanes
+            .lanes
+            .iter()
+            .take(MAX_GRAPH_LANES as usize)
+            .map(lane)
+            .collect(),
         lanes_total: lanes.lanes_total,
         cut: lanes.cut.map(|cut| match cut {
             GraphCut::Lanes => GraphCutDto::Lanes,
@@ -780,7 +786,11 @@ fn lane(lane: &Lane) -> LaneDto {
         } if is_object_id(merge_base) => LaneStateDto::Ready {
             merge_base: merge_base.clone(),
             total: bounded(*total),
-            commits: commits.iter().filter_map(lane_commit).collect(),
+            commits: commits
+                .iter()
+                .take(MAX_LANE_COMMITS)
+                .filter_map(lane_commit)
+                .collect(),
         },
         LaneState::Ready { .. } => LaneStateDto::NotComputable {
             reason: LaneGapDto::Unreadable,

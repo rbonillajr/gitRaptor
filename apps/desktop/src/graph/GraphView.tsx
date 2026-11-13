@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useShortcuts } from "@/shell/useShortcuts";
 import { useEngineStore } from "@/state/engine-store";
@@ -151,11 +152,15 @@ export function GraphView({ model, repoName, stale, layers = NO_LAYERS, laneBadg
     void useGraphPrefs.persist.rehydrate();
   }, []);
 
-  const toggleView = () => {
-    const next = prefs.view === "graph" ? "table" : "graph";
-    setView(next);
+  // The swap unmounts the focused row; the focus must not fall to the body (D21), so it lands on the scroller.
+  const switchView = (next: "graph" | "table") => {
+    const el = scroller.current;
+    const hadFocus = el !== null && el.contains(document.activeElement);
+    flushSync(() => setView(next));
+    if (hadFocus && el !== null && !el.contains(document.activeElement)) el.focus({ preventScroll: true });
     setAnnouncement(t(`graph.view.announce.${next}`));
   };
+  const toggleView = () => switchView(prefs.view === "graph" ? "table" : "graph");
   useShortcuts({ onToggleGraphView: toggleView });
 
   const measured = size.width > 0;
@@ -273,8 +278,7 @@ export function GraphView({ model, repoName, stale, layers = NO_LAYERS, laneBadg
               value={prefs.view}
               onChange={(next) => {
                 if (next === prefs.view) return;
-                setView(next);
-                setAnnouncement(t(`graph.view.announce.${next}`));
+                switchView(next);
               }}
             />
           </span>
@@ -296,7 +300,8 @@ export function GraphView({ model, repoName, stale, layers = NO_LAYERS, laneBadg
       <div
         ref={scroller}
         onScroll={(e) => setTop(Math.floor(e.currentTarget.scrollTop / ROW_PX))}
-        className="min-h-0 flex-1 overflow-auto"
+        tabIndex={-1}
+        className="min-h-0 flex-1 scroll-pt-(--gr-size-graph-header) overflow-auto gr-ring"
       >
         {prefs.view === "table" ? (
           <LaneTable model={model} repoName={repoName} stale={stale} {...(laneBadge ? { laneBadge } : {})} />
