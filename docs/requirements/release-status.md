@@ -10,10 +10,10 @@
 
 | Estado | Fichas |
 |---|---|
-| Implementado (`implemented`) | 84 |
+| Implementado (`implemented`) | 85 |
 | Hecho (`done`) | 3 |
 | Implementado en parte (`partially-implemented`) | 27 |
-| Listo (`ready`) | 27 |
+| Listo (`ready`) | 26 |
 | Borrador (`draft`) | 70 |
 | Bloqueado (`blocked`) | 1 |
 | **Total** | **212** |
