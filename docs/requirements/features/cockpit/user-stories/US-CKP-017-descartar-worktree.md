@@ -2,10 +2,12 @@
 id: US-CKP-017
 title: "El desarrollador descarta el trabajo de un agente sin miedo a perderlo"
 type: us
-status: draft
+status: ready
 priority: high
+blocked_by:
+  - US-CKP-014
 created: 2026-10-04
-updated: 2026-10-28
+updated: 2026-11-21
 feature: cockpit
 related:
   context:
@@ -15,6 +17,7 @@ related:
   stories:
     - US-CKP-014
     - US-TMC-002
+    - US-WTL-002
   specs:
     - DS-US-CKP-017
 tags:
@@ -33,6 +36,8 @@ tags:
 
 **Valor**: BR-07 (Must); NFR-01. Mitiga R-CKP-6.
 
+**Alcance frente a US-WTL-002**: esta historia es la base del descarte (snapshot previo, borrado, confirmación, lista de lo no recuperable, Deshacer inmediato y tecla `D` en la TUI). US-WTL-002 la amplía sin repetirla: protección por los cinco estados del agente de US-WTL-003 en lugar de «cualquier sesión presente», informe del disco ganado, retención en la confirmación, restauración dentro de la retención, rechazo de worktrees ajenos y la CLI con salida JSON.
+
 ## Reglas cubiertas
 
 BR-CKP-ELIG-004 · BR-CKP-EDGE-008 · BR-CKP-AUTH-003 (confirmación del plan con trabajo de un agente) · BR-CKP-ELIG-001 (columna descartar) · BR-CKP-EDGE-002 (HEAD separado) — ver [business-rules.md](../business-rules.md)
@@ -41,6 +46,8 @@ BR-CKP-ELIG-004 · BR-CKP-EDGE-008 · BR-CKP-AUTH-003 (confirmación del plan co
 
 - **Historias**: US-CKP-014 (flujo de escritura); US-TMC-002 (Deshacer).
 - **Técnicas**: TS-CKP-002, TS-CKP-003.
+- **Bloqueo**: US-CKP-014; DS-US-CKP-017 depende de T002, T005 y T007 de DS-US-CKP-014 (G1) para T001 a T003 y T005 a T007. T004 y T009 pueden empezar ya.
+- **La amplía**: US-WTL-002 (cambia la regla de sesión presente por los estados de US-WTL-003).
 
 ## Criterios de Aceptación
 
@@ -73,7 +80,7 @@ Entonces "Descartar" aparece desactivado con su motivo, y el bloqueado nunca se 
 
 **Escenario: HEAD separado, solo el worktree**
 
-Dado "feat-tmp" con HEAD separado y sin cambios
+Dado "feat-tmp", creado por GitRaptor, con HEAD separado y sin cambios
 Cuando el desarrollador descarta "feat-tmp"
 Entonces se borra el worktree y no se borra ninguna rama
 

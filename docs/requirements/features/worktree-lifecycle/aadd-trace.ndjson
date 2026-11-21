@@ -45,3 +45,8 @@
 {"v":1,"ts":"2026-11-10T20:21:19.441Z","event":"generated","session":"95f70f42-a644-4dde-bb11-024cc35a6cbf","rel":"user-stories/US-WTL-011-resumen-ci-pr-por-rama.md","id":"US-WTL-011","type":"us","sha":"bbaaab1d0561fa68"}
 {"v":1,"ts":"2026-11-10T20:21:26.525Z","event":"generated","session":"95f70f42-a644-4dde-bb11-024cc35a6cbf","rel":"user-stories/US-WTL-012-puerto-por-worktree.md","id":"US-WTL-012","type":"us","sha":"cedf04ab63c19edf"}
 {"v":1,"ts":"2026-11-10T20:21:33.071Z","event":"updated","session":"95f70f42-a644-4dde-bb11-024cc35a6cbf","rel":"user-stories/US-WTL-010-integrar-en-local.md","id":"US-WTL-010","type":"us","sha":"6ec1cb6b932d5888"}
+{"v":1,"ts":"2026-11-21T16:00:35.304Z","event":"updated","session":"9c33ef55-a09b-462a-8b1f-48e9b97b9196","rel":"user-stories/US-WTL-003-estado-real-del-agente.md","id":"US-WTL-003","type":"us","sha":"78126dca68ff7420"}
+{"v":1,"ts":"2026-11-21T16:01:40.396Z","event":"updated","session":"9c33ef55-a09b-462a-8b1f-48e9b97b9196","rel":"user-stories/US-WTL-002-descarte-reversible-disco.md","id":"US-WTL-002","type":"us","sha":"bc2e423ed14ae20e"}
+{"v":1,"ts":"2026-11-21T16:02:41.414Z","event":"updated","session":"9c33ef55-a09b-462a-8b1f-48e9b97b9196","rel":"context.md","id":"CTX-WTL-001","type":"context","sha":"04f03a40b8d1d597"}
+{"v":1,"ts":"2026-11-21T16:02:43.135Z","event":"updated","session":"9c33ef55-a09b-462a-8b1f-48e9b97b9196","rel":"context.md","id":"CTX-WTL-001","type":"context","sha":"086481b4e42299e0"}
+{"v":1,"ts":"2026-11-21T16:02:44.462Z","event":"updated","session":"9c33ef55-a09b-462a-8b1f-48e9b97b9196","rel":"context.md","id":"CTX-WTL-001","type":"context","sha":"d5466ac3af9c74b8"}
