@@ -1,7 +1,7 @@
 //! Freshness, scale and footprint bench of the engine (INF-GRP-002, ADR-GRP-011 § 4, NFR HUELLA).
 //!
 //! Runs the engine as an isolated daemon process over a temporary profile: this same bench
-//! binary (release, as `cargo bench` builds it) re-executed with `--daemon-root`, which calls
+//! binary (release, as `cargo bench` builds it, plus `CARGO_PROFILE_BENCH_DEBUG_ASSERTIONS=true`: S-01 gives the full view only through the debug-only test path of TS-GRP-010) re-executed with `--daemon-root`, which calls
 //! `daemon::run_process` as `raptor daemon` does. The `raptor` release binary cannot be used: it
 //! ignores `GITRAPTOR_PROFILE_DIR` (SEC-06) and would run on the real profile. It observes a clone of the 100K-commit reference repo (profile `H` of
 //! `repogen`) with 10 worktrees. A headless subscriber records `t_client_recv` on the common
