@@ -1,7 +1,7 @@
 ---
 mode: bulk
 generated: 2026-10-04T00:00Z
-updated: 2026-10-28
+updated: 2026-11-21
 generator: product-owner
 total_artifacts: 26
 expanded: 26
@@ -58,7 +58,7 @@ blocked:
 | [US-CKP-014](./user-stories/US-CKP-014-integrar-rama-agente.md) | El desarrollador integra la rama de un agente con una tecla y puede deshacerlo | 2 | Must | TS-TMC-004 → TS-CKP-002 → TS-CKP-003, TS-CKP-005 | expanded |
 | [US-CKP-015](./user-stories/US-CKP-015-rebasar-rama-agente.md) | El desarrollador pone al día la rama de un agente sobre la base | 3 | Must | TS-CKP-002, TS-CKP-003, TS-CKP-005 | expanded |
 | [US-CKP-016](./user-stories/US-CKP-016-operacion-detenida.md) | Un merge o rebase que choca queda detenido y el desarrollador decide cómo salir | 4 | Must | TS-CKP-002, DEP-CKP-14, TS-CKP-005 | expanded |
-| [US-CKP-017](./user-stories/US-CKP-017-descartar-worktree.md) | El desarrollador descarta el trabajo de un agente sin miedo a perderlo | 3 | Must | TS-CKP-002, TS-CKP-003, TS-CKP-005 | expanded |
+| [US-CKP-017](./user-stories/US-CKP-017-descartar-worktree.md) | El desarrollador descarta el trabajo de un agente sin miedo a perderlo | 3 | Must | TS-CKP-002, TS-CKP-003, TS-CKP-005; blocked_by US-CKP-014 (G1 de DS-US-CKP-017) | ready ([DS](./dev-specs/US-CKP-017-descartar-worktree.md), DS-US-CKP-017, approved 2026-10-28); base del descarte, la amplía US-WTL-002 |
 | [US-CKP-018](./user-stories/US-CKP-018-crear-worktree.md) | El desarrollador prepara un worktree para un agente nuevo | 3 | Must | US-MCP-019, US-CKP-014, US-CKP-017, TS-CKP-002, TS-CKP-003, TS-CKP-005 | ready, bloqueada por G1 y G2 de su DS ([DS](./dev-specs/US-CKP-018-crear-worktree.md), DS-US-CKP-018, 2026-10-28); se mantiene como superficie TUI de preparar sin lanzar (decisión del orquestador, 2026-11-21, validada por PO) |
 | [US-CKP-019](./user-stories/US-CKP-019-denegada-excepcion-consciente.md) | El desarrollador entiende por qué Guardrails frena una acción y puede hacer una excepción consciente | 3 | Must | TS-CKP-003 (DEP-CKP-10), TS-CKP-005 | expanded ([DS](./dev-specs/US-CKP-019-denegada-excepcion-consciente.md), DS-US-CKP-019, 2026-10-28); depende de US-GRD-006 (PR-A), de DS-US-CKP-014 y de US-GRD-016 (escenario 5, Q-CKP-52) |
 | [US-CKP-020](./user-stories/US-CKP-020-trabajo-de-otro-actor.md) | Tocar el trabajo de otro actor exige confirmar el plan concreto | 3 | Must | TS-TMC-004, TS-CKP-002, TS-CKP-005 | expanded |
@@ -195,3 +195,4 @@ Ninguna decisión de este índice cambia una decisión del requerimiento. Todas:
 | 1.2 | 2026-10-28 | PO (AADD); decisión del orquestador (2026-10-28), validada por el PO | US-CKP-019 tiene Dev Spec (DS-US-CKP-019), dependiente de US-GRD-006 (PR-A), de DS-US-CKP-014 y de US-GRD-016; Status sigue en `expanded`. Su escenario 5 pasa a esquema por solicitante (Q-CKP-52) y la subida de la fila ⛔ queda en la TUI que pidió la acción (Q-CKP-53) |
 | 1.3 | 2026-10-28 | PO (AADD); decisiones del orquestador (2026-10-28), validadas por Arquitecto y PO | US-CKP-013 tiene Dev Spec (DS-US-CKP-013; Q-CKP-54 a Q-CKP-56). US-CKP-018 tiene Dev Spec (DS-US-CKP-018; Q-CKP-57 y Q-CKP-58). US-CKP-021 tiene Dev Spec (DS-US-CKP-021), dependiente de DS-US-CKP-012 (consulta con ticket), DS-US-CKP-014 (`OpRequest::Undo`), DS-US-CKP-017 T004 (selector `operation_id`), DS-US-TMC-012 (solape) y DS-US-TMC-016 T010 (entrega del aviso de purga); DEP-CKP-5 cerrado en el MVP (Q-CKP-60), Q-CKP-59. Status sigue en `expanded` |
 | 1.4 | 2026-10-28 | PO (AADD); decisiones del orquestador (2026-10-28), validadas por Arquitecto y PO | US-CKP-004 tiene Dev Spec (DS-US-CKP-004; Q-CKP-61 a Q-CKP-64). La tabla de contratos dice que la vista recordada gana fuera de un repo y que en un repo no observado la pregunta de US-CKP-025 va primero (Q-CKP-62). Status sigue en `expanded` |
+| 1.5 | 2026-11-21 | PO (AADD); recomendación del orquestador validada por el PO | US-CKP-017 pasa a `ready` (Dev Spec aprobada) con `blocked_by: US-CKP-014`. Queda como base del descarte; US-WTL-002 es el delta (protección por los estados de US-WTL-003, disco ganado, retención, restauración, ajenos y CLI). Escenario 5 precisa «creado por GitRaptor» (BR-WTL-011) |

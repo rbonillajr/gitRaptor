@@ -71,3 +71,8 @@
 {"v":1,"ts":"2026-11-10T19:38:24.823Z","event":"updated","session":"726da47d-0840-4870-89e9-bfb8fba4a048","rel":"user-stories/US-CKP-022-grafo-carriles.md","id":"US-CKP-022","type":"us","sha":"7d4f93f77f874e3c"}
 {"v":1,"ts":"2026-11-21T15:59:01.469Z","event":"updated","session":"88e891ad-51e7-404b-86d3-7a272f76e36f","rel":"user-stories/US-CKP-018-crear-worktree.md","id":"US-CKP-018","type":"us","sha":"e0ae19a1113d82fc"}
 {"v":1,"ts":"2026-11-21T15:59:06.692Z","event":"updated","session":"88e891ad-51e7-404b-86d3-7a272f76e36f","rel":"user-stories/US-CKP-018-crear-worktree.md","id":"US-CKP-018","type":"us","sha":"e2d30a6a24c878d4"}
+{"v":1,"ts":"2026-11-21T16:01:46.717Z","event":"updated","session":"9c33ef55-a09b-462a-8b1f-48e9b97b9196","rel":"user-stories/US-CKP-017-descartar-worktree.md","id":"US-CKP-017","type":"us","sha":"f67ee57bf8262715"}
+{"v":1,"ts":"2026-11-21T16:01:48.091Z","event":"updated","session":"9c33ef55-a09b-462a-8b1f-48e9b97b9196","rel":"user-stories/US-CKP-017-descartar-worktree.md","id":"US-CKP-017","type":"us","sha":"41574076e2a17b77"}
+{"v":1,"ts":"2026-11-21T16:01:54.312Z","event":"updated","session":"9c33ef55-a09b-462a-8b1f-48e9b97b9196","rel":"user-stories/US-CKP-017-descartar-worktree.md","id":"US-CKP-017","type":"us","sha":"2d5e2d79488ca74d"}
+{"v":1,"ts":"2026-11-21T16:01:55.279Z","event":"updated","session":"9c33ef55-a09b-462a-8b1f-48e9b97b9196","rel":"user-stories/US-CKP-017-descartar-worktree.md","id":"US-CKP-017","type":"us","sha":"f5c971d496afeb4d"}
+{"v":1,"ts":"2026-11-21T16:01:55.848Z","event":"updated","session":"9c33ef55-a09b-462a-8b1f-48e9b97b9196","rel":"user-stories/US-CKP-017-descartar-worktree.md","id":"US-CKP-017","type":"us","sha":"94c0e24052bdaf80"}
