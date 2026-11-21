@@ -543,6 +543,8 @@ Códigos que emite la CLI (`CliErrorCode::ALL`) y su familia de salida:
 | `command-failed` (`params.reason`, `params.detail?`) | solo CLI | 1 |
 | `invalid-args` (`params.kind`, `params.argument?`) | solo CLI | 2 |
 
+Motivos locales (no vienen del canal): `raptor guard exec --json` emite `command-failed` con `params.reason` = `no-folder`, `cancelled`, `declined`, `interrupted` o `git-failed`; y `invalid-args` con `params.kind` = `invalid-utf8` cuando un argumento no es UTF-8 (el mismo nombre que da clap). Un daemon sin la capacidad de la excepción da `command-unavailable` con `params.reason` = `engine-version`.
+
 ### Forma de la configuración
 
 _No aplica — esta entrega no lee configuración. La única variable es `GITRAPTOR_BLESS_CLI_CONTRACT=1`, que solo usa la prueba de T002 para regenerar la instantánea y la referencia._

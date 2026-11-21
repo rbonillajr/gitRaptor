@@ -226,7 +226,7 @@ fn usage_of(args: &[&str]) -> (clap::Error, String) {
         .err()
         .expect("a usage error");
     let params = {
-        let mut params = json!({ "kind": kebab(&format!("{:?}", err.kind())) });
+        let mut params = json!({ "kind": kind_name(err.kind()) });
         if let Some(argument) = defined_argument(&err) {
             params["argument"] = json!(argument);
         }
@@ -252,6 +252,7 @@ fn a_usage_error_names_the_kind_and_never_the_typed_value() {
 
 #[test]
 fn kebab_case_of_a_kind() {
-    assert_eq!(kebab("UnknownArgument"), "unknown-argument");
-    assert_eq!(kebab("Io"), "io");
+    assert_eq!(kind_name(ErrorKind::UnknownArgument), "unknown-argument");
+    assert_eq!(kind_name(ErrorKind::InvalidUtf8), "invalid-utf8");
+    assert_eq!(kind_name(ErrorKind::Io), "io");
 }
