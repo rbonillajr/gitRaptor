@@ -50,4 +50,4 @@ tags: [cockpit, deuda-tecnica, canal, consultas, tests-inestables]
 - Unitario: `cancel_announces_before_the_token_is_set` (la respuesta sale con el token aún sin poner).
 - Integración: `ckp006_007_a_full_queue_is_busy` y `cancel_answers_now_and_the_query_gets_query_cancelled` 40 de 40 con 24 procesos `yes` de carga.
 
-Implementado en: PR pendiente de número (rama `fix/query-queue-flaky-tests`).
+Implementado en: PR #373
