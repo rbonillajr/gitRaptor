@@ -1,0 +1,6 @@
+{"schema":"nassa.plan-critic.v1","round":2,"planSha":"","contractSha":"","verdict":"APROBABLE","findings":[
+{"id":"PC-6","kind":"contrato","blocking":false,"evidence":"docs/requirements/features/worktree-lifecycle/dev-specs/US-WTL-005-convivencia-worktrees-ajenos.md:484","ask":"T011 fuera de certificacion; anotar el grep en el PR.","toHuman":false},
+{"id":"PC-7","kind":"alcance","blocking":false,"evidence":"docs/requirements/features/worktree-lifecycle/dev-specs/US-WTL-005-convivencia-worktrees-ajenos.md:824","ask":"PO: confirmar locked y unreadable en hands_off (G4).","toHuman":true},
+{"id":"PC-8","kind":"indeciso","blocking":false,"evidence":"docs/requirements/features/worktree-lifecycle/dev-specs/US-WTL-005-convivencia-worktrees-ajenos.md:116","ask":"Rene: aceptar Riesgo 7 (G1) antes del merge.","toHuman":true},
+{"id":"PC-9","kind":"alcance","blocking":false,"evidence":"docs/requirements/features/worktree-lifecycle/dev-specs/US-WTL-005-convivencia-worktrees-ajenos.md:442","ask":"Listar engine_link.rs, engine_launcher.rs y fixtures.ts en la topologia.","toHuman":false},
+{"id":"PC-10","kind":"contradiccion","blocking":false,"evidence":"docs/requirements/features/worktree-lifecycle/dev-specs/US-WTL-005-convivencia-worktrees-ajenos.md:385","ask":"La pagina MCP la certifica O4.","toHuman":false}]}
