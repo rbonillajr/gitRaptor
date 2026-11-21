@@ -326,7 +326,8 @@ jobs:
           curl -fsSLo /tmp/git.tar.xz "https://mirrors.edge.kernel.org/pub/software/scm/git/git-$GIT_MIN_VERSION.tar.xz"
           echo "$GIT_MIN_SHA256  /tmp/git.tar.xz" | sha256sum -c -
           tar -xJf /tmp/git.tar.xz -C /tmp
-          make -C "/tmp/git-$GIT_MIN_VERSION" -j"$(nproc)" prefix="$HOME/git-min" \
+          # GCC 15 defaults to C23, whose stddef.h defines unreachable() and breaks Git 2.38's reflog.c.
+          make -C "/tmp/git-$GIT_MIN_VERSION" -j"$(nproc)" prefix="$HOME/git-min" CFLAGS="-O2 -std=gnu17" \
             NO_TCLTK=1 NO_GETTEXT=1 NO_CURL=1 NO_EXPAT=1 NO_PERL=1 NO_PYTHON=1 all install >/dev/null
       - name: Guardrails suites
         run: |
