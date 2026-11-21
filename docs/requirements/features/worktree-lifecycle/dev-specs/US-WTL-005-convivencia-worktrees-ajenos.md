@@ -828,3 +828,9 @@ Corre `/security-review --scope devspec docs/requirements/features/worktree-life
 | G8 | Un worktree cuya carpeta se borra sin `git worktree remove` sigue registrado y sale `unavailable { missing }` hasta que Git lo poda (contrato actual, `api-contract-ipc.md` § Estado de un worktree). No es un error | Ninguna | — |
 | G9 | Ramas en paralelo que tocan lo mismo: US-WTL-001 y US-WTL-002 (worktrees `wtlcreate`, `wtldiscard`) deben consumir `refuses_destructive`; US-MCP-023 toca el JSON de `status.rs`. `messages.rs` sigue compartido: mergear en serie | Coordinar el orden de merge | Orquestador |
 | G10 | T002 edita 24 ficheros solo para añadir `origin: None`. Un constructor de `WorktreeView` para tests ahorraría esto la próxima vez | Fuera de alcance; anotar como TD si se repite | Arquitecto |
+
+## Notas de certificación (ronda 3 del crítico)
+
+- **T009 y T010 fuera del contrato firmado:** sus pruebas (`apps/desktop/src-tauri/tests/worktree_origin.rs` y `apps/desktop/src/fleet/fleet-model.test.ts`) no entran en el examen firmado porque la suite nextest excluye `gitraptor-desktop` y vitest no escribe el informe JUnit por ruta. Las corren el job `desktop` del CI y la verificación local de FAST MODE; el resultado se anota en el PR, igual que el `grep` de T011.
+- **Topología de pruebas existentes que cambian:** `apps/desktop/src-tauri/tests/engine_link.rs`, `engine_launcher.rs` y `apps/desktop/src/fleet/fixtures.ts` (por `REQUIRED_CAPABILITIES` y `origin: null`).
+- **Página del MCP:** la certifica O4 (`crates/core/tests/worktree_origin_capability.rs`).
