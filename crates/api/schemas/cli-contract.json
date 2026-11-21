@@ -1,0 +1,1334 @@
+{
+  "codes": [
+    {
+      "code": "engine-unavailable",
+      "exit": 1
+    },
+    {
+      "code": "repo-not-enabled",
+      "exit": 1
+    },
+    {
+      "code": "not-in-observed-worktree",
+      "exit": 1
+    },
+    {
+      "code": "repo-unavailable",
+      "exit": 1
+    },
+    {
+      "code": "identity-unverified",
+      "exit": 1
+    },
+    {
+      "code": "rate-limited",
+      "exit": 1
+    },
+    {
+      "code": "confirmation-required",
+      "exit": 1
+    },
+    {
+      "code": "aborted",
+      "exit": 1
+    },
+    {
+      "code": "internal",
+      "exit": 1
+    },
+    {
+      "code": "command-unavailable",
+      "exit": 1
+    },
+    {
+      "code": "reserved-command",
+      "exit": 1
+    },
+    {
+      "code": "command-failed",
+      "exit": 1
+    },
+    {
+      "code": "invalid-args",
+      "exit": 2
+    }
+  ],
+  "outputs": {
+    "agent-register": {
+      "$defs": {
+        "Untrusted1024": {
+          "additionalProperties": false,
+          "properties": {
+            "lossy": {
+              "type": "boolean"
+            },
+            "truncated": {
+              "type": "boolean"
+            },
+            "untrusted": {
+              "maxLength": 1024,
+              "type": "string"
+            }
+          },
+          "required": [
+            "untrusted"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "`raptor agent register --json`.",
+      "properties": {
+        "agent": {
+          "type": "string"
+        },
+        "agent_name": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Untrusted1024"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "origin": {
+          "type": "string"
+        },
+        "outcome": {
+          "type": "string"
+        },
+        "repo_id": {
+          "type": "string"
+        },
+        "session_id": {
+          "type": "string"
+        },
+        "support": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "repo_id",
+        "session_id",
+        "outcome",
+        "agent",
+        "origin",
+        "support"
+      ],
+      "title": "AgentRegisterView",
+      "type": "object"
+    },
+    "agent-withdraw": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "repo_id": {
+          "type": "string"
+        },
+        "session_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "repo_id",
+        "session_id"
+      ],
+      "title": "RegistrationWithdrawResult",
+      "type": "object"
+    },
+    "daemon-status@agent": {
+      "$defs": {
+        "Actor": {
+          "description": "Who an event is attributed to.",
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "actor": {
+                  "const": "agent",
+                  "type": "string"
+                },
+                "kind": {
+                  "$ref": "#/$defs/AgentKind"
+                },
+                "name": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/Untrusted1024"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Declared name of an \"other agent\" (text from an agent)."
+                },
+                "origin": {
+                  "$ref": "#/$defs/AgentOrigin"
+                }
+              },
+              "required": [
+                "actor",
+                "kind",
+                "origin"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "actor": {
+                  "const": "unattributed",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "actor"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "AgentKind": {
+          "enum": [
+            "claude-code",
+            "other"
+          ],
+          "type": "string"
+        },
+        "AgentOrigin": {
+          "enum": [
+            "detected",
+            "registered"
+          ],
+          "type": "string"
+        },
+        "ConnectionRequester": {
+          "description": "Who the daemon sees on a connection (N5). UX only: the daemon resolves\nthe requester again on every request (ADR-CKP-002 § 3).",
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "actor": {
+                  "$ref": "#/$defs/Actor",
+                  "description": "\"Agent X\" or \"unattributed\"."
+                },
+                "confirmable": {
+                  "description": "Whether the daemon would issue a confirmation challenge.",
+                  "type": "boolean"
+                },
+                "layer": {
+                  "$ref": "#/$defs/Layer",
+                  "description": "The layer the daemon fixes (ADR-CKP-002 § 4): what this\nconnection may run."
+                },
+                "state": {
+                  "const": "resolved",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "state",
+                "actor",
+                "layer",
+                "confirmable"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "description": "The caller's identity could not be verified: no writes.",
+              "properties": {
+                "state": {
+                  "const": "unverified",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "state"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "EngineStateView": {
+          "description": "Availability state of the engine (BR-WF-002).",
+          "enum": [
+            "waiting-for-git",
+            "no-repos",
+            "observing"
+          ],
+          "type": "string"
+        },
+        "Layer": {
+          "description": "Who the daemon says is asking, for Guardrails and for what is offered\n(ADR-CKP-002 § 4, M-03). Never declared by the client.",
+          "oneOf": [
+            {
+              "const": "cockpit",
+              "description": "An unattributed caller that passes the reserved checks 1 to 3.",
+              "type": "string"
+            },
+            {
+              "const": "mcp",
+              "description": "An agent, or anyone who does not pass those checks.",
+              "type": "string"
+            }
+          ]
+        },
+        "Untrusted1024": {
+          "additionalProperties": false,
+          "properties": {
+            "lossy": {
+              "type": "boolean"
+            },
+            "truncated": {
+              "type": "boolean"
+            },
+            "untrusted": {
+              "maxLength": 1024,
+              "type": "string"
+            }
+          },
+          "required": [
+            "untrusted"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "`raptor daemon status --json` on a connection the daemon fixed as `mcp`.",
+      "properties": {
+        "engine_state": {
+          "$ref": "#/$defs/EngineStateView"
+        },
+        "requester": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConnectionRequester"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "engine_state"
+      ],
+      "title": "McpDaemonStatusView",
+      "type": "object"
+    },
+    "redo@agent": {
+      "$defs": {
+        "Actor": {
+          "description": "Who an event is attributed to.",
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "actor": {
+                  "const": "agent",
+                  "type": "string"
+                },
+                "kind": {
+                  "$ref": "#/$defs/AgentKind"
+                },
+                "name": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/Untrusted1024"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Declared name of an \"other agent\" (text from an agent)."
+                },
+                "origin": {
+                  "$ref": "#/$defs/AgentOrigin"
+                }
+              },
+              "required": [
+                "actor",
+                "kind",
+                "origin"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "actor": {
+                  "const": "unattributed",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "actor"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "AgentKind": {
+          "enum": [
+            "claude-code",
+            "other"
+          ],
+          "type": "string"
+        },
+        "AgentOrigin": {
+          "enum": [
+            "detected",
+            "registered"
+          ],
+          "type": "string"
+        },
+        "Untrusted1024": {
+          "additionalProperties": false,
+          "properties": {
+            "lossy": {
+              "type": "boolean"
+            },
+            "truncated": {
+              "type": "boolean"
+            },
+            "untrusted": {
+              "maxLength": 1024,
+              "type": "string"
+            }
+          },
+          "required": [
+            "untrusted"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "`timemachine.redo` result for an `mcp` connection (TS-GRP-010 M-01): counts, never paths\n(SEC-12), the actor capped as in every MCP view.",
+      "properties": {
+        "actor": {
+          "$ref": "#/$defs/Actor"
+        },
+        "kept": {
+          "default": 0,
+          "description": "How many paths another actor changed afterwards were kept (never which: SEC-12).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "not_restored": {
+          "description": "How many paths were left as they were.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "operation_id": {
+          "type": "string"
+        },
+        "prior_snapshot_id": {
+          "type": "string"
+        },
+        "redone_undo_id": {
+          "type": "string"
+        },
+        "removed": {
+          "description": "How many paths were removed.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "written": {
+          "description": "How many paths were written back.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "operation_id",
+        "prior_snapshot_id",
+        "redone_undo_id",
+        "actor",
+        "written",
+        "removed",
+        "not_restored"
+      ],
+      "title": "McpRedoResult",
+      "type": "object"
+    },
+    "status@agent": {
+      "$defs": {
+        "Actor": {
+          "description": "Who an event is attributed to.",
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "actor": {
+                  "const": "agent",
+                  "type": "string"
+                },
+                "kind": {
+                  "$ref": "#/$defs/AgentKind"
+                },
+                "name": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/Untrusted1024"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Declared name of an \"other agent\" (text from an agent)."
+                },
+                "origin": {
+                  "$ref": "#/$defs/AgentOrigin"
+                }
+              },
+              "required": [
+                "actor",
+                "kind",
+                "origin"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "actor": {
+                  "const": "unattributed",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "actor"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "AgentKind": {
+          "enum": [
+            "claude-code",
+            "other"
+          ],
+          "type": "string"
+        },
+        "AgentOrigin": {
+          "enum": [
+            "detected",
+            "registered"
+          ],
+          "type": "string"
+        },
+        "Diagnostic": {
+          "description": "A diagnostic that does not change the state (ADR-GRD-005 § 1).",
+          "oneOf": [
+            {
+              "const": "template-outdated",
+              "description": "The dispatchers come from an older template: still active, refreshed by installing again.",
+              "type": "string"
+            },
+            {
+              "const": "base-unconfirmed",
+              "description": "The base branch was not confirmed (a team configuration without a confirmation).",
+              "type": "string"
+            },
+            {
+              "const": "config-unreadable",
+              "description": "Git's configuration could not be read: the check could not tell, and says so instead of\nreporting a loss.",
+              "type": "string"
+            },
+            {
+              "const": "leftover-folder",
+              "description": "No active protection, but a `gitraptor/` folder is left in the repo (an uninstall whose\ncleanup stopped after the key went back, or a folder this profile does not know).\n`raptor guard uninstall` removes what GitRaptor wrote in it. Only with `guard.recovery`.",
+              "type": "string"
+            },
+            {
+              "const": "base-change-pending",
+              "description": "A base branch different from the confirmed one reached the main branch: both are\nprotected until the developer confirms it. Only with `guard.team-confirmation`.",
+              "type": "string"
+            },
+            {
+              "const": "base-change-pending-invalid",
+              "description": "The main branch declares an invalid base branch over a confirmed one: the team has to fix\nit. Only with `guard.team-confirmation`.",
+              "type": "string"
+            },
+            {
+              "const": "floor-relax-pending",
+              "description": "The team settings relax the confirmed ones: they only harden until the developer\nconfirms them. Only with `guard.team-confirmation`.",
+              "type": "string"
+            }
+          ]
+        },
+        "LossCause": {
+          "description": "Why the hook layer stopped being active (ADR-GRD-005 § 1, H2 to H4). English codes of the\nADR's names; the client puts the text.",
+          "oneOf": [
+            {
+              "const": "hookspath-changed",
+              "description": "`core.hooksPath` is not Guardrails' folder any more (`hookspath-cambiado`).",
+              "type": "string"
+            },
+            {
+              "const": "repo-moved",
+              "description": "The repo moved: the key still names the old folder (`repo-movido`).",
+              "type": "string"
+            },
+            {
+              "const": "folder-missing",
+              "description": "`<common>/gitraptor/hooks` is gone (`carpeta-ausente`).",
+              "type": "string"
+            },
+            {
+              "const": "dispatcher-missing",
+              "description": "A dispatcher is gone.",
+              "type": "string"
+            },
+            {
+              "const": "dispatcher-altered",
+              "description": "A dispatcher differs from the integrity reference of the journal (`dispatcher-alterado`).",
+              "type": "string"
+            },
+            {
+              "const": "dispatcher-not-executable",
+              "description": "A dispatcher lost its execute permission: Git skips it.",
+              "type": "string"
+            },
+            {
+              "const": "binary-missing",
+              "description": "The installed `raptor` the dispatchers start is gone (`binario-ausente`).",
+              "type": "string"
+            }
+          ]
+        },
+        "McpBase": {
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Untrusted1024"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "state": {
+              "$ref": "#/$defs/McpBaseState"
+            }
+          },
+          "type": "object"
+        },
+        "McpBaseState": {
+          "description": "Whether the base branch is the one the developer confirmed.",
+          "oneOf": [
+            {
+              "enum": [
+                "unconfirmed",
+                "pending",
+                "invalid"
+              ],
+              "type": "string"
+            },
+            {
+              "const": "confirmed",
+              "description": "Left out of the answer.",
+              "type": "string"
+            }
+          ]
+        },
+        "McpEngineState": {
+          "description": "What the engine is doing with the repo; absent means observing.",
+          "enum": [
+            "reconciling",
+            "dormant",
+            "waiting-for-git"
+          ],
+          "type": "string"
+        },
+        "McpGap": {
+          "additionalProperties": false,
+          "description": "A period the engine did not observe, in seconds before the answer.",
+          "properties": {
+            "from_s_ago": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "to_s_ago": {
+              "description": "Absent: the gap is still open.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "from_s_ago"
+          ],
+          "type": "object"
+        },
+        "McpHere": {
+          "additionalProperties": false,
+          "description": "The situation of one worktree. `ahead` and `behind` are left out at 0.",
+          "properties": {
+            "ahead": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "at_least": {
+              "description": "The counts are lower bounds.",
+              "type": "boolean"
+            },
+            "behind": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "changes": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/McpListRef"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "sessions": {
+              "items": {
+                "$ref": "#/$defs/McpSession"
+              },
+              "type": "array"
+            },
+            "sessions_total": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "uncounted": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/McpUncounted"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "McpListRef": {
+          "additionalProperties": false,
+          "description": "A list the answer does not include: how many there are and the cursor to\nask for them.",
+          "properties": {
+            "cursor": {
+              "type": "string"
+            },
+            "total": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "total",
+            "cursor"
+          ],
+          "type": "object"
+        },
+        "McpPage": {
+          "additionalProperties": false,
+          "description": "One page of a list: other worktrees, or the paths of one worktree.",
+          "properties": {
+            "cursor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "of": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Untrusted1024"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The worktree whose paths these are; only in a page of paths."
+            },
+            "paths": {
+              "items": {
+                "$ref": "#/$defs/Untrusted4096"
+              },
+              "type": "array"
+            },
+            "total": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "truncated": {
+              "description": "There is more after this page.",
+              "type": "boolean"
+            },
+            "worktrees": {
+              "items": {
+                "$ref": "#/$defs/McpWorktree"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "total"
+          ],
+          "type": "object"
+        },
+        "McpProtectionState": {
+          "description": "The protection of the repo as the MCP layer sees it.",
+          "enum": [
+            "mcp-only",
+            "full"
+          ],
+          "type": "string"
+        },
+        "McpRepo": {
+          "additionalProperties": false,
+          "description": "The repo as a whole.",
+          "properties": {
+            "base": {
+              "$ref": "#/$defs/McpBase"
+            },
+            "diagnostics": {
+              "items": {
+                "$ref": "#/$defs/Diagnostic"
+              },
+              "type": "array"
+            },
+            "engine": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/McpEngineState"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "fetch_age_s": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "gaps": {
+              "items": {
+                "$ref": "#/$defs/McpGap"
+              },
+              "type": "array"
+            },
+            "gaps_total": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "protection": {
+              "$ref": "#/$defs/McpProtectionState"
+            },
+            "protection_lost": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/LossCause"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "sessions_unknown": {
+              "description": "Sessions cannot be detected on this system: \"unknown\", not \"none\".",
+              "type": "boolean"
+            },
+            "worktrees": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/McpListRef"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "base",
+            "protection"
+          ],
+          "type": "object"
+        },
+        "McpSession": {
+          "additionalProperties": false,
+          "description": "A present session of a worktree; never an ended one.",
+          "properties": {
+            "actor": {
+              "$ref": "#/$defs/Actor"
+            },
+            "state": {
+              "$ref": "#/$defs/SessionStateView"
+            }
+          },
+          "required": [
+            "actor",
+            "state"
+          ],
+          "type": "object"
+        },
+        "McpStatusAction": {
+          "description": "What an `mcp.status` caller can do next.",
+          "oneOf": [
+            {
+              "const": "register-to-write",
+              "description": "\"Unattributed\" reads, but must register to write (BR-MCP-ELIG-006).",
+              "type": "string"
+            }
+          ]
+        },
+        "McpUncounted": {
+          "description": "Why a worktree's ahead/behind is not given.",
+          "enum": [
+            "base-missing",
+            "no-base",
+            "no-commits",
+            "unreadable"
+          ],
+          "type": "string"
+        },
+        "McpWorktree": {
+          "description": "Another worktree of the repo, in a page.",
+          "properties": {
+            "ahead": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "at_least": {
+              "description": "The counts are lower bounds.",
+              "type": "boolean"
+            },
+            "behind": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "branch": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Untrusted1024"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "changes": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/McpListRef"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "main": {
+              "type": "boolean"
+            },
+            "name": {
+              "$ref": "#/$defs/Untrusted1024"
+            },
+            "sessions": {
+              "items": {
+                "$ref": "#/$defs/McpSession"
+              },
+              "type": "array"
+            },
+            "sessions_total": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "unavailable": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/UnavailableReason"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "uncounted": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/McpUncounted"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "type": "object"
+        },
+        "RepoStateView": {
+          "oneOf": [
+            {
+              "enum": [
+                "observed"
+              ],
+              "type": "string"
+            },
+            {
+              "const": "unavailable",
+              "description": "In the profile but its store or its Git directory cannot be opened now.",
+              "type": "string"
+            }
+          ]
+        },
+        "SessionStateView": {
+          "description": "State of an agent session (BR-WF-001).",
+          "oneOf": [
+            {
+              "const": "active",
+              "description": "Present, with activity in its worktree within the threshold.",
+              "type": "string"
+            },
+            {
+              "const": "inactive",
+              "description": "Present, without activity for the threshold.",
+              "type": "string"
+            },
+            {
+              "const": "ended",
+              "description": "No longer present. Never reopened (Q41).",
+              "type": "string"
+            }
+          ]
+        },
+        "UnavailableReason": {
+          "description": "Why a worktree could not be read. What each one means for the developer\nand the special states belong to US-GRP-003.",
+          "oneOf": [
+            {
+              "const": "missing",
+              "description": "Its folder is not there (BR-EDGE-001).",
+              "type": "string"
+            },
+            {
+              "const": "untrusted",
+              "description": "Git's `safe.directory` rules do not trust it (SEC-11).",
+              "type": "string"
+            },
+            {
+              "const": "unreadable",
+              "description": "It is there but could not be read now.",
+              "type": "string"
+            }
+          ]
+        },
+        "Untrusted1024": {
+          "additionalProperties": false,
+          "properties": {
+            "lossy": {
+              "type": "boolean"
+            },
+            "truncated": {
+              "type": "boolean"
+            },
+            "untrusted": {
+              "maxLength": 1024,
+              "type": "string"
+            }
+          },
+          "required": [
+            "untrusted"
+          ],
+          "type": "object"
+        },
+        "Untrusted4096": {
+          "additionalProperties": false,
+          "properties": {
+            "lossy": {
+              "type": "boolean"
+            },
+            "truncated": {
+              "type": "boolean"
+            },
+            "untrusted": {
+              "maxLength": 4096,
+              "type": "string"
+            }
+          },
+          "required": [
+            "untrusted"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "`mcp.status` result (SEC-12: a field allowlist, no paths).",
+      "properties": {
+        "action": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/McpStatusAction"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What the caller can do next; absent for an attributed agent."
+        },
+        "branch": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Untrusted1024"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The branch of that worktree; absent with a detached `HEAD`, a\nworktree that cannot be read, and for a connection without\n[`CAP_MCP_STATUS_BRANCH`]."
+        },
+        "here": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/McpHere"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The caller's worktree; absent when there is nothing to say."
+        },
+        "main": {
+          "description": "Whether it is the repo's main worktree.",
+          "type": "boolean"
+        },
+        "page": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/McpPage"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "A page asked for with a cursor."
+        },
+        "repo": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/McpRepo"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The repo."
+        },
+        "repo_id": {
+          "type": "string"
+        },
+        "repo_state": {
+          "$ref": "#/$defs/RepoStateView"
+        },
+        "requester": {
+          "$ref": "#/$defs/Actor"
+        },
+        "worktree": {
+          "$ref": "#/$defs/Untrusted1024",
+          "description": "Name of the folder of the worktree the caller acts in, never its path."
+        }
+      },
+      "required": [
+        "repo_id",
+        "repo_state",
+        "worktree",
+        "main",
+        "requester"
+      ],
+      "title": "McpStatus",
+      "type": "object"
+    },
+    "undo@agent": {
+      "$defs": {
+        "Actor": {
+          "description": "Who an event is attributed to.",
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "actor": {
+                  "const": "agent",
+                  "type": "string"
+                },
+                "kind": {
+                  "$ref": "#/$defs/AgentKind"
+                },
+                "name": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/Untrusted1024"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Declared name of an \"other agent\" (text from an agent)."
+                },
+                "origin": {
+                  "$ref": "#/$defs/AgentOrigin"
+                }
+              },
+              "required": [
+                "actor",
+                "kind",
+                "origin"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "actor": {
+                  "const": "unattributed",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "actor"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "AgentKind": {
+          "enum": [
+            "claude-code",
+            "other"
+          ],
+          "type": "string"
+        },
+        "AgentOrigin": {
+          "enum": [
+            "detected",
+            "registered"
+          ],
+          "type": "string"
+        },
+        "Untrusted1024": {
+          "additionalProperties": false,
+          "properties": {
+            "lossy": {
+              "type": "boolean"
+            },
+            "truncated": {
+              "type": "boolean"
+            },
+            "untrusted": {
+              "maxLength": 1024,
+              "type": "string"
+            }
+          },
+          "required": [
+            "untrusted"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "`timemachine.undo` result for an MCP connection: no paths (SEC-12).",
+      "properties": {
+        "actor": {
+          "$ref": "#/$defs/Actor"
+        },
+        "kept": {
+          "default": 0,
+          "description": "How many paths another actor changed afterwards were kept (never which: SEC-12).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "not_restored": {
+          "description": "How many paths were left as they were.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "operation_id": {
+          "type": "string"
+        },
+        "prior_snapshot_id": {
+          "type": "string"
+        },
+        "undone_count": {
+          "description": "How many operations a `since` undo took back; 0 (omitted) otherwise. Never their ids.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "undone_operation_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "operation_id",
+        "prior_snapshot_id",
+        "undone_operation_id",
+        "actor",
+        "not_restored"
+      ],
+      "title": "McpUndoResult",
+      "type": "object"
+    }
+  },
+  "schema_version": "1.0"
+}
