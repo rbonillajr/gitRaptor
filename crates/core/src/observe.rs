@@ -29,6 +29,7 @@ use gitraptor_policy::team::{BaseBranch, BaseStatus, Confirmed, DEFAULT_BRANCH};
 use sha2::{Digest, Sha256};
 
 use crate::profile::{KnownState, WriteOp};
+use crate::worktree_origin::{OriginEnv, origin_of};
 
 /// Finds the Git common directory of the repo or worktree at `path`, which
 /// must be its root or its Git directory: nothing is searched upwards.
@@ -727,18 +728,33 @@ pub fn read_worktree(
     main: bool,
     admin_name: Option<&str>,
 ) -> WorktreeRead {
-    let view = |status, detached_at, operation, unmerged_paths| WorktreeView {
-        path: Untrusted::from_os(path.as_os_str()),
-        main,
-        admin_name: admin_name.map(UntrustedName::new),
-        status,
-        last_activity_utc_ms: None,
-        last_activity_in_gap: false,
-        detached_at,
-        operation,
-        unmerged_paths,
-        changes_actor: None,
-        origin: None,
+    // The origin is set on the `ready` and the `unavailable` view alike: a foreign worktree that
+    // cannot be read must still be marked hands off. It is never stored (BR-WTL-011).
+    let env = OriginEnv::from_process();
+    let view = |status, detached_at, operation, unmerged_paths| {
+        let mut view = WorktreeView {
+            path: Untrusted::from_os(path.as_os_str()),
+            main,
+            admin_name: admin_name.map(UntrustedName::new),
+            status,
+            last_activity_utc_ms: None,
+            last_activity_in_gap: false,
+            detached_at,
+            operation,
+            unmerged_paths,
+            changes_actor: None,
+            origin: None,
+        };
+        view.origin = origin_of(
+            common_dir,
+            path,
+            main,
+            admin_name,
+            false,
+            &view.status,
+            &env,
+        );
+        view
     };
     let read =
         || -> Result<(HeadView, Option<String>, Status, Option<OperationKindView>), ReadError> {
