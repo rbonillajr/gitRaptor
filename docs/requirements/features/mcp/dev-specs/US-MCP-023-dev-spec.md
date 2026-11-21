@@ -216,7 +216,7 @@ graph LR
 
 **Ubicación.**
 - `crates/api/src/cli_contract.rs` (**CREATE**)
-- `crates/api/src/cli_contract_tests.rs` (**CREATE**)
+- `crates/api/tests/us_mcp_023_cli_contract.rs` (**CREATE**, compartido con T002: las pruebas de contrato viven en tests de integración y no en `src`, por la regla de contratos de `/implement`)
 - `crates/api/src/lib.rs` (**MODIFY**)
 
 **Reglas**
@@ -230,7 +230,7 @@ graph LR
 
 - **Depende:** —
 - **Refs:** ADR-MCP-001 Enmienda 2026-11-10 § D1-D4; D1, D2, D9, D16
-- **Aceptación:** `crates/api/src/cli_contract_tests.rs::removing_or_renaming_the_branch_needs_a_major`, `::adding_a_field_needs_a_minor`, `::the_version_constants_agree`, `::cli_only_codes_are_kebab_and_disjoint_from_the_mcp_codes`
+- **Aceptación:** `crates/api/tests/us_mcp_023_cli_contract.rs::compat_removing_or_renaming_a_field_is_breaking`, `::compat_adding_a_field_is_additive`, `::compat_narrowing_a_type_or_making_optional_is_breaking`, `::compat_removing_an_enum_value_is_breaking`, `::the_version_constants_agree`, `::cli_only_codes_are_kebab_and_disjoint_from_the_mcp_codes`
 
 ### T002 — Crear la instantánea de esquemas, la prueba de compatibilidad y la referencia
 
@@ -271,7 +271,9 @@ graph LR
 - `from_client_error` traduce así: conexión o arranque fallido, y `profile_dirs` fallido → `engine-unavailable`; `SCOPE_REFUSED` con `NotAllowlisted` → `repo-not-enabled`, con otro motivo → `not-in-observed-worktree`; `RATE_LIMITED` → `rate-limited`; `MCP_UNAVAILABLE` → `repo-unavailable`; `RESERVED_REFUSED` → `reserved-command` (o `identity-unverified` si el `RefusalReason` es `IdentityUnverified`); `METHOD_NOT_FOUND`/`NOT_IMPLEMENTED` → `command-unavailable`; `INVALID_PARAMS` → `invalid-args`; `PRIOR_SNAPSHOT_FAILED` → `aborted`; solape de `OPERATION_REJECTED` → `confirmation-required` (D17); respuesta que no deserializa → `internal`; cualquier otro error RPC → `command-failed` con `params.reason` = nombre estable del `ErrorCode` (`crates/api/src/rpc.rs:197`).
 - `restricted::refusal_name` pasa a llamar a `from_client_error` (misma tabla, sin copia).
 
-> **Nota técnica.** El cwd fuera de un worktree (`undo.not-in-worktree`) es `not-in-observed-worktree`: no hay ningún dato del repo que devolver.
+> **Nota técnica.** Las pruebas de T003 son unitarias, en `src` y fuera del contrato firmado: `json_out` es `pub(crate)` de un crate binario y ninguna prueba de integración lo alcanza; los criterios V4, V5 y V8 miden el comportamiento desde fuera.
+>
+> El cwd fuera de un worktree (`undo.not-in-worktree`) es `not-in-observed-worktree`: no hay ningún dato del repo que devolver.
 
 - **Depende:** T001
 - **Refs:** D2-D4, D12, D15-D17; DS-US-MCP-005 D1, D4
@@ -310,15 +312,15 @@ graph LR
 
 **Pasos**
 1. `restricted::print_status`: el éxito pasa de `to_string_pretty` a `json_out::ok(&McpStatus)` y el error, de `{"error": name}` a `json_out::fail`.
-2. `status` completo (`commands/status.rs:89`): `json_out::ok(&status::json(..))`. Usar `json_out::engine(CMD, json)` en lugar de `engine(CMD)`.
+2. `status` completo (`commands/status.rs:90`): `json_out::ok(&status::json(..))`. Usar `json_out::engine(CMD, json)` en lugar de `engine(CMD)`.
 3. `undo`/`redo`: deserializar el `Value` en `McpUndoResult`/`McpRedoResult` (perfil `mcp`) o en `UndoResult`/`RedoResult`, y `json_out::ok`. En JSON, no llamar a `notices::show_pending`.
    3.1 ⛔5.1 No reimprimir el `Value` del daemon tal cual (`println!("{value}")`, `undo/mod.rs:124`, `redo.rs:48`). Un campo nuevo del daemon cambiaría el contrato sin pasar por la instantánea.
-4. `agent register`: sustituir el `json!` (`agent.rs:83`) por `AgentRegisterView`. Los errores salen por `json_out::fail`.
+4. `agent register`: sustituir el `json!` (`agent.rs:84`) por `AgentRegisterView`. Los errores salen por `json_out::fail`.
 5. `daemon status`: añadir `#[arg(long)] json: bool` a `DaemonAction::Status`. Con perfil `mcp`, `McpDaemonStatusView`; si no, `DaemonStatusView`.
 
 - **Depende:** T003
 - **Refs:** D4, D5, D13, D15, D17; TS-GRP-010 D11
-- **Aceptación:** `apps/cli/tests/us_mcp_023_cli_json.rs::every_agent_subcommand_declares_the_contract_version`
+- **Aceptación:** `apps/cli/tests/us_mcp_023_cli_json.rs::every_agent_subcommand_declares_the_contract_version` (incluye daemon status del agente)
 - **Guard ⛔5.1:** `apps/cli/tests/us_mcp_023_cli_json.rs::agent_outputs_deserialize_into_their_contract_type`
 
 ### T006 — Modificar el resto de salidas `--json` y añadir las que faltan
@@ -330,7 +332,8 @@ graph LR
 - `apps/cli/src/commands/events.rs` (**MODIFY**)
 - `apps/cli/src/commands/timeline.rs` (**MODIFY**)
 - `apps/cli/src/commands/restore.rs` (**MODIFY**)
-- `apps/cli/src/commands/agent.rs` (**MODIFY**)
+- `apps/cli/src/commands/agent.rs` (**MODIFY**: la bandera `--json` de `withdraw`)
+- `apps/cli/src/agent.rs` (**MODIFY**: T005 hace `register`; T006 hace `correct`, `uncorrect` y el éxito de `withdraw`)
 - `apps/cli/src/commands/guard.rs` (**MODIFY**)
 - `apps/cli/src/guard.rs` (**MODIFY**)
 - `apps/cli/src/guard/exec.rs` (**MODIFY**)
@@ -338,8 +341,8 @@ graph LR
 **Pasos**
 1. Migrar cada sitio a `json_out::ok`/`fail`, sin cambiar los campos de `data`:
    - `sessions` (`commands/sessions.rs:55`), `events` (`commands/events.rs:100`) y `status --resources` (`commands/status.rs:186`): de formateado a compacto;
-   - `timeline` (`commands/timeline.rs:82`, `TimelineResult`) y `restore` (`commands/restore.rs:70`, `RestoreResult`, error de uso → `invalid-args`, salida 2);
-   - `agent correct`/`uncorrect` (`agent.rs:196`, `agent.rs:232`);
+   - `timeline` (`commands/timeline.rs:83`, `TimelineResult`) y `restore` (`commands/restore.rs:71`, `RestoreResult`, error de uso → `invalid-args`, salida 2);
+   - `agent correct`/`uncorrect` (`agent.rs:197`, `agent.rs:233`);
    - `guard status` (`guard.rs:1027`, `GuardStatus`) y `guard log` (`guard.rs:1635`, `GuardLogResult`).
 2. Antes de la primera llamada al motor de `sessions`, `events`, `timeline`, `restore`, `guard status` y `guard log`, y solo con `--json`, llamar a `json_out::require(&client, <método que ya llama el subcomando>)` (D12).
 3. `agent withdraw`: añadir `--json` a `AgentAction::Withdraw` (`commands/agent.rs:33`). El éxito es `RegistrationWithdrawResult`; el rechazo sale de `fail`.
@@ -348,7 +351,7 @@ graph LR
 
 - **Depende:** T003
 - **Refs:** D5, D7, D12, D13; ADR-MCP-001 Enmienda § C3; ADR-GRD-007 § 1
-- **Aceptación:** `apps/cli/tests/us_mcp_023_cli_json.rs::outside_the_agent_view_is_a_json_refusal`, `::the_developer_withdraws_with_json`
+- **Aceptación:** `apps/cli/tests/us_mcp_023_cli_json.rs::outside_the_agent_view_is_a_json_refusal`, `::the_developer_withdraws_with_json`, `::the_developer_reads_daemon_status_and_runs_guard_exec_with_json` (T005 construye el --json de daemon status y T006 el de guard exec)
 - **Guard ⛔6.1:** `apps/cli/tests/us_mcp_023_cli_json.rs::an_agent_guard_exec_is_a_reserved_command_refusal`
 
 ### T007 — Modificar las pruebas y herramientas que leen el JSON antiguo
@@ -397,8 +400,7 @@ graph LR
 crates/api/
 ├── src/
 │   ├── lib.rs                          ← MODIFY (una línea pub mod)
-│   ├── cli_contract.rs                 ← CREATE
-│   └── cli_contract_tests.rs           ← CREATE
+│   └── cli_contract.rs                 ← CREATE
 ├── schemas/
 │   └── cli-contract.json               ← CREATE (instantánea, se regenera con bless)
 └── tests/
@@ -593,10 +595,10 @@ _No aplica — esta entrega no persiste nada. La instantánea `cli-contract.json
 | Toda salida JSON declara la versión (`status`, `undo`, `redo`, `agent register "Claude Code"`, `daemon status`) | `apps/cli/tests/us_mcp_023_cli_json.rs::every_agent_subcommand_declares_the_contract_version` |
 | Fuera de la vista: `sessions`, `timeline`, `guard log` → `command-unavailable`; `agent withdraw`, `guard exec -- git commit` → `reserved-command`; salida ≠ 0, stderr vacío, una línea | `apps/cli/tests/us_mcp_023_cli_json.rs::outside_the_agent_view_is_a_json_refusal` |
 | Un agente que lanza `guard exec --json` recibe `reserved-command` del motor, no `command-unavailable` (⛔6.1) | `apps/cli/tests/us_mcp_023_cli_json.rs::an_agent_guard_exec_is_a_reserved_command_refusal` |
-| El desarrollador retira con `--json` | `apps/cli/tests/us_mcp_023_cli_json.rs::the_developer_withdraws_with_json` |
+| El desarrollador retira con `--json`; lee `daemon status --json` y corre `guard exec --json` | `apps/cli/tests/us_mcp_023_cli_json.rs::the_developer_withdraws_with_json`, `::the_developer_reads_daemon_status_and_runs_guard_exec_with_json` |
 | Motor caído → `engine-unavailable` en JSON | `apps/cli/tests/us_mcp_023_cli_json.rs::an_engine_that_cannot_start_answers_in_json` |
 | Repo no habilitado → `repo-not-enabled`, sin datos de «otro» | `apps/cli/tests/us_mcp_023_cli_json.rs::a_repo_not_enabled_gives_no_data_in_json` |
-| Cambio incompatible sube el mayor; añadir sigue en 1 | `crates/api/src/cli_contract_tests.rs::removing_or_renaming_the_branch_needs_a_major`, `::adding_a_field_needs_a_minor`, `crates/api/tests/us_mcp_023_cli_contract.rs::the_schemas_match_the_snapshot_for_this_version` |
+| Cambio incompatible sube el mayor; añadir sigue en 1 | `crates/api/tests/us_mcp_023_cli_contract.rs::compat_removing_or_renaming_a_field_is_breaking`, `::compat_adding_a_field_is_additive`, `::the_schemas_match_the_snapshot_for_this_version` |
 | Contrato documentado para agentes | `crates/api/tests/us_mcp_023_cli_contract.rs::the_agent_reference_is_generated_from_the_schemas`, `::every_agent_output_lists_fields_version_and_codes` |
 | Errores de clap en JSON (D6) | `apps/cli/tests/us_mcp_023_cli_json.rs::a_usage_error_with_json_is_json`, `::a_usage_error_does_not_echo_the_typed_value` |
 | Texto del repo como dato (SEC-12) | `apps/cli/tests/us_mcp_023_cli_json.rs::hostile_names_arrive_escaped_in_json` |
