@@ -25,6 +25,7 @@ related:
     - US-GRD-014
     - US-CKP-018
     - US-WTL-001
+    - US-GRP-024
   technical:
     - TS-CKP-002
     - TS-CKP-003
@@ -58,7 +59,8 @@ BR-MCP-ELIG-004 (`create_worktree`: desde la base confirmada, nunca reutilizar, 
 - **Dueña de la operación del catálogo**: esta historia construye `create-worktree` para producción. US-CKP-018 (crear desde la TUI) y US-WTL-001 (`raptor new` con copia desde la semilla) la reutilizan y dependen de esta (decisión del orquestador, 2026-11-21, validada por PO).
 - **Externas**: ADR-CKP-002 (aceptado): `create_worktree` → `create-worktree` **solo con la plantilla de ruta del desarrollador** (hallazgo de seguridad H-02). ADR-MCP-001 (aceptado).
 - **Regla enmendada**: BR-MCP-VAL-001 y BR-MCP-ELIG-004 (BR-MCP-001 v0.2) ya dicen que por MCP no hay ruta, solo la plantilla del desarrollador. Q-MCP-7 ("ruta opcional") queda estrechada por esa enmienda.
-- **Decisión del orquestador (2026-11-21), validada por PO**: pasa a `ready` con `milestone: M3`, porque es prerrequisito de US-WTL-001 y US-CKP-018, Must de M3. Se añaden los escenarios de reutilizar una rama, copia desde la semilla y ruta pedidas por un agente que habla el protocolo completo (DS-US-WTL-001 D14). la cuota de worktrees por agente está decidida en DS-US-MCP-019 D14 (tope de 8 por sesión de agente y repo); la construye una historia aparte, pendiente de abrir.
+- **Decisión del orquestador (2026-11-21), validada por PO**: pasa a `ready` con `milestone: M3`, porque es prerrequisito de US-WTL-001 y US-CKP-018, Must de M3. Se añaden los escenarios de reutilizar una rama, copia desde la semilla y ruta pedidas por un agente que habla el protocolo completo (DS-US-WTL-001 D14). La cuota de worktrees por agente está decidida en DS-US-MCP-019 D14 (tope de 8 por sesión de agente y repo) y la construye US-GRP-024.
+- **Condición de salida de M3: US-GRP-024** (tope de worktrees por agente, security-review H-01): criterio 12 de salida de M3 en [release-plan.md](../../../release-plan.md). No se añade a `blocked_by`: US-GRP-024 extiende esta operación y está bloqueada por esta historia, así que el bloqueo inverso crearía un ciclo.
 
 ## Criterios de Aceptación
 
@@ -130,7 +132,7 @@ Dado el repo "shop" con el techo de worktrees de agentes alcanzado, o con el esp
 Cuando "claude-1" pide `create_worktree` con la rama "feat/otro"
 Entonces la petición se rechaza con el motivo "límite de worktrees alcanzado" o "sin espacio libre", con su acción para el desarrollador
   Y no se crea ninguna rama ni worktree
-  Y el tope es condición de salida de M3 (DS-US-MCP-019 D14, D18 y G9; su historia aparte está pendiente de abrir)
+  Y el tope por sesión de agente lo añade US-GRP-024, condición de salida de M3 (DS-US-MCP-019 D14, D18 y G9)
 
 **Escenario: El agente no puede elegir dónde se crea el worktree**
 

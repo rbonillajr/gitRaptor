@@ -4,7 +4,7 @@ title: "Reglas de Negocio — Servidor MCP"
 type: business-rules
 status: draft
 created: 2026-10-04
-updated: 2026-11-12
+updated: 2026-11-21
 domain: GRP
 epic: E-001
 feature: mcp
@@ -89,9 +89,10 @@ IF número de rutas > tope → rechazo "demasiadas rutas"
 ```
 IF nombre no cumple las reglas de nombres de Git OR empieza por "-" OR longitud > tope
    OR contiene sintaxis de revisión → rechazo "nombre de rama no válido"
+IF solicitante es agente (capa mcp o perfil mcp) AND (nombre con caracteres fuera de [A-Za-z0-9._/-] OR bajo "gitraptor/") → rechazo "nombre de rama no válido"
 ```
 
-**Ejemplo**: `create_worktree` con rama `--upload-pack=evil` → "nombre de rama no válido". Con `feat..pagos` → igual. Con `feat/pagos` → continúa con BR-MCP-ELIG-004.
+**Ejemplo**: `create_worktree` con rama `--upload-pack=evil` → "nombre de rama no válido". Con `feat..pagos` → igual. Un agente con `gitraptor/seed` o con `feat/pagos-é` → igual (D17 y D20 de DS-US-MCP-019). Con `feat/pagos` → continúa con BR-MCP-ELIG-004.
 
 **Fuentes**: Q-MCP-7, Q-CKP-13; BRD BR-16; BR-CKP-VAL-001.
 
@@ -270,7 +271,7 @@ página = min(solicitado, tope), por defecto 50, tope 200; un tamaño mayor se r
 | `expect_worktree` coincide, si se indica | — | — | — | — | — | Exige | Exige | Exige | Exige | Exige |
 | Base confirmada | No (estado declarado) | No ("pendiente") | No | No | No | No | Exige | Exige | No | No |
 | Working tree limpio | — | — | — | — | — | — | Exige | — | — | — |
-| Sin operación en curso | — | — | — | — | — | Exige | Exige | — | Exige | Exige |
+| Sin operación en curso | — | — | — | — | — | Exige | Exige | Exige (en el worktree del llamante) | Exige | Exige |
 | Sin otra sesión presente en el worktree | — | — | — | — | — | Sí; en compartido solo rutas explícitas | Exige | — | — | Solape → se detiene |
 | Worktree disponible | Exige | Exige | Exige | Exige | Exige | Exige | Exige | Exige | Exige | Exige |
 | Decisión de Guardrails | — | — | — | — | — | Exige permitir | Exige permitir | Exige permitir | No (no gobernada; BR-VAL-002) | No en el MVP (US-TMC-021, Fase 2); rige ADR-TMC-005: solo lo propio, solape → se detiene |
@@ -331,8 +332,10 @@ IF rama = rama base → decisión de Guardrails (BR-MCP-AUTH-001)
 **Regla formal**:
 ```
 IF base no confirmada → rechazo + acción
-IF rama existe OR ruta existe OR ruta no válida → rechazo + motivo
-→ BR-MCP-WF-001; respuesta = {ruta creada, rama, "esta sesión sigue en <worktree del llamante>"}
+IF rama existe (o choca con el nombre) OR ruta existe OR ruta no válida → rechazo + motivo
+→ BR-MCP-WF-001; respuesta = {ruta creada, rama, worktree de la sesión (dato), aviso fijo "esta sesión sigue en su worktree; para trabajar en el nuevo, abre una sesión del agente en esa carpeta"}
+IF llamada con ruta, reuse_branch o seed_copy desde capa mcp o perfil mcp → rechazo "no disponible para un agente" (esos argumentos son de la capa cockpit)
+IF sin espacio libre OR techo de worktrees de agentes alcanzado (por solicitante o por repo) → rechazo + motivo + acción (US-GRP-024)
 ```
 
 **Ejemplo**: rama `feat/pagos` → worktree `/code/shop-feat-pagos` creado. "Para trabajar ahí, abre una sesión del agente en esa carpeta."
@@ -889,7 +892,7 @@ primera llamada a herramienta AND daemon no corre → arrancarlo (entorno limpio
 
 **Criticidad**: Alta
 
-**Ejemplo**: base pendiente → `safe_commit` funciona; `safe_rebase` → "la rama base está pendiente de confirmar".
+**Ejemplo**: base pendiente → `safe_commit` funciona; `safe_rebase` → "la rama base está pendiente de confirmar". Base confirmada pero sin rama local (solo `refs/remotes`) → `create_worktree` se rechaza con "la rama base no existe en local" y la acción "el desarrollador la crea o la revisa en GitRaptor"; nunca se usa la rama remota (DS-US-MCP-019 D11).
 
 **Fuentes**: Q-MCP-22; Q-GRD-5, Q-GRD-23; Q-CKP-27.
 
@@ -1048,3 +1051,4 @@ Cada regla tendrá al menos un escenario Gherkin, incluido uno negativo, en su h
 | 0.6 | 2026-11-10 | PO (AADD) | Propuesta, pendiente de validar por Rene Bonilla: superficie para agentes (enfoque aprobado por Rene el 2026-11-10). Nuevas BR-MCP-WF-008 (`raptor configure-agents`), BR-MCP-CONS-007 (bloque en archivos del usuario), BR-MCP-CONS-008 (contrato `--json` de la CLI), BR-MCP-CONS-009 (guía para agentes) y BR-MCP-CONS-010 (uso por canal). Pasan de 48 a 53 reglas. Las cubren US-MCP-020 a US-MCP-026. |
 | 0.7 | 2026-11-10 | PO (AADD) | Rene Bonilla aprueba la ampliación desde el menú y decide prioridad e hito (P-MCP-32): Must M3 para CONS-008 y CONS-009; Should M4 para WF-008, CONS-007 y CONS-010; partes Could después de v0.1.0 en US-MCP-024 y 026. BR-MCP-WF-008: un agente no puede lanzar `configure-agents` (P-MCP-35). Historias US-MCP-020 a 026 escritas (ver [user-stories.md](./user-stories.md)). Sin reglas nuevas: siguen 53. |
 | 0.8 | 2026-11-12 | Arquitecto (AADD) | Enmienda por DS-TS-GRP-010 D14, Decisión del orquestador (2026-11-12), validada por Arquitecto y security-review (opus), aprobada por el coordinador. BR-MCP-ELIG-005: "Redo y restaurar no existen por MCP" pasa a "restaurar no existe por MCP; `redo` solo del `undo` de la propia sesión" (enmienda Q-MCP-11); un sin atribuir tampoco hace `redo`. Sin reglas nuevas. |
+| 0.9 | 2026-11-21 | PO (AADD) | Enmiendas E1, E2, E3 y F7 de DS-US-MCP-019, Decisión del orquestador (2026-11-21), validada por PO, Arquitecto y security-review (opus). BR-MCP-ELIG-004: aviso fijo con el worktree como dato, argumentos de la capa cockpit rechazados para un agente y rechazos por espacio y techo (US-GRP-024). BR-MCP-ELIG-001: `create_worktree` exige que no haya operación en curso en el worktree del llamante. BR-MCP-EDGE-002: base sin rama local. BR-MCP-VAL-002: juego de caracteres y espacio `gitraptor/` reservado para agentes. |
