@@ -355,6 +355,10 @@ pub struct McpWorktree {
     pub main: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unavailable: Option<UnavailableReason>,
+    /// Who created the worktree and whether to leave it alone. Absent for
+    /// the main worktree and without `observation.worktree-origin`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<crate::worktree_origin::WorktreeOriginView>,
     #[serde(flatten)]
     pub state: McpHere,
 }

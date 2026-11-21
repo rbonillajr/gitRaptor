@@ -797,6 +797,9 @@ impl Connection<'_> {
         self.outbox.set_without_change_attribution(
             !self.has(methods::CAP_OBSERVATION_CHANGE_ATTRIBUTION.name),
         );
+        // Nor the origin of each worktree without `observation.worktree-origin`.
+        self.outbox
+            .set_without_worktree_origin(!self.has(methods::CAP_OBSERVATION_WORKTREE_ORIGIN.name));
         // Nor the cause `worktree-removed` without `sessions.worktree-removed`.
         self.outbox
             .set_without_worktree_removed(!self.has(methods::CAP_SESSIONS_WORKTREE_REMOVED.name));
@@ -1730,6 +1733,10 @@ impl Connection<'_> {
                     self.has(methods::CAP_OBSERVATION_CHANGE_ATTRIBUTION.name),
                     std::slice::from_mut(&mut result.repo),
                 );
+                shape_worktree_origin(
+                    self.has(methods::CAP_OBSERVATION_WORKTREE_ORIGIN.name),
+                    std::slice::from_mut(&mut result.repo),
+                );
                 self.kept_temps(std::slice::from_mut(&mut result.repo));
                 result
             })
@@ -2501,6 +2508,11 @@ impl Connection<'_> {
         let Some(page) = status.page.as_mut() else {
             return Ok(());
         };
+        if !self.has(methods::CAP_OBSERVATION_WORKTREE_ORIGIN.name) {
+            for item in &mut page.worktrees {
+                item.origin = None;
+            }
+        }
         for (item, root) in page.worktrees.iter_mut().zip(listed.iter().map(root_of)) {
             if let (Some(changes), Some(root)) = (item.state.changes.as_mut(), root) {
                 changes.cursor = self.mint_cursor(mcp_status::CursorEntry::Paths {
@@ -2776,6 +2788,10 @@ impl Connection<'_> {
                     self.has(methods::CAP_OBSERVATION_CHANGE_ATTRIBUTION.name),
                     &mut snapshot.repos,
                 );
+                shape_worktree_origin(
+                    self.has(methods::CAP_OBSERVATION_WORKTREE_ORIGIN.name),
+                    &mut snapshot.repos,
+                );
                 self.kept_temps(&mut snapshot.repos);
                 // The ahead/behind as of now (US-GRP-012, D5).
                 crate::observe::refresh_divergence(
@@ -2903,6 +2919,10 @@ impl Connection<'_> {
                 );
                 shape_change_attribution(
                     self.has(methods::CAP_OBSERVATION_CHANGE_ATTRIBUTION.name),
+                    std::slice::from_mut(&mut repo),
+                );
+                shape_worktree_origin(
+                    self.has(methods::CAP_OBSERVATION_WORKTREE_ORIGIN.name),
                     std::slice::from_mut(&mut repo),
                 );
                 self.kept_temps(std::slice::from_mut(&mut repo));
@@ -5162,6 +5182,15 @@ fn shape_special_states(accepted: bool, repos: &mut [gitraptor_api::messages::Re
         repos
             .iter_mut()
             .for_each(gitraptor_api::messages::RepoView::without_special_states);
+    }
+}
+
+/// Same as [`shape_special_states`] for `observation.worktree-origin`.
+fn shape_worktree_origin(accepted: bool, repos: &mut [gitraptor_api::messages::RepoView]) {
+    if !accepted {
+        repos
+            .iter_mut()
+            .for_each(gitraptor_api::messages::RepoView::without_worktree_origin);
     }
 }
 
