@@ -14,6 +14,7 @@ use gitraptor_api::messages::{
     SessionView, Snapshot, UnavailableReason, WorktreeStatus, WorktreeView,
 };
 use gitraptor_api::timemachine::KeptTempsView;
+use gitraptor_api::worktree_origin::WorktreeOriginView;
 use gitraptor_api::{Actor, Untrusted};
 use serde::Serialize;
 
@@ -218,6 +219,9 @@ fn worktree_text(out: &mut String, w: &WorktreeView, base: &str, verbose: bool, 
                 UnavailableReason::Unreadable => "status.wt-unreadable",
             };
             let _ = writeln!(out, "    {}", tr.t(key, &[]));
+            if let Some(line) = origin_text(w, tr) {
+                let _ = writeln!(out, "    {line}");
+            }
             false
         }
         WorktreeStatus::Ready {
@@ -227,6 +231,9 @@ fn worktree_text(out: &mut String, w: &WorktreeView, base: &str, verbose: bool, 
             divergence,
         } => {
             let _ = writeln!(out, "    {}", head_text(head, tr));
+            if let Some(line) = origin_text(w, tr) {
+                let _ = writeln!(out, "    {line}");
+            }
             if let Some(op) = w.operation {
                 let key = match op {
                     OperationKindView::Rebase => "status.operation-rebase",
@@ -341,6 +348,32 @@ fn summary_text<'a>(
     )
 }
 
+/// The origin line of a linked worktree: the "do not touch" mark when there is one (with the
+/// tool when it is known), else the origin as certain, probable or unknown. Only closed enums
+/// reach the text: nothing to sanitize. `None` for the main worktree and for an engine without
+/// `observation.worktree-origin`.
+fn origin_text(w: &WorktreeView, tr: Tr) -> Option<String> {
+    let origin = w.origin.as_ref()?;
+    let tool = origin.tool.label();
+    if let Some(reason) = origin.hands_off {
+        let mark = tr.t(&format!("status.hands-off-{}", wire(&reason)), &[]);
+        let key = if origin.is_likely() {
+            "status.hands-off-by-likely"
+        } else {
+            "status.hands-off-by"
+        };
+        return Some(match tool {
+            Some(tool) => tr.t(key, &[("mark", &mark), ("tool", &tool)]),
+            None => mark,
+        });
+    }
+    Some(match tool {
+        Some(tool) if origin.is_likely() => tr.t("status.origin-likely", &[("tool", &tool)]),
+        Some(tool) => tr.t("status.origin", &[("tool", &tool)]),
+        None => tr.t("status.origin-unknown", &[]),
+    })
+}
+
 fn head_text(head: &HeadView, tr: Tr) -> String {
     match head {
         HeadView::Branch { name } => tr.t("status.branch", &[("name", &name.sanitized())]),
@@ -448,6 +481,10 @@ struct WorktreeJson {
     /// without changes or from a daemon without `observation.change-attribution`.
     #[serde(skip_serializing_if = "Option::is_none")]
     changes_actor: Option<Actor>,
+    /// Who created the worktree, as the engine sends it; absent for the main worktree and from
+    /// a daemon without `observation.worktree-origin`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    origin: Option<WorktreeOriginView>,
 }
 
 fn is_zero(n: &u32) -> bool {
@@ -547,6 +584,7 @@ fn worktree_json(w: &WorktreeView) -> WorktreeJson {
         operation: w.operation.as_ref().map(wire),
         unmerged_paths: w.unmerged_paths,
         changes_actor: w.changes_actor.clone(),
+        origin: w.origin.clone(),
     };
     match &w.status {
         WorktreeStatus::Unavailable { reason } => out.unavailable_reason = Some(wire(reason)),
