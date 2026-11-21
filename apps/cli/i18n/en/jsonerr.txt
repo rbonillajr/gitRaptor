@@ -1,0 +1,30 @@
+# Fixed texts of the rejections of `raptor ... --json` (the `message` and `action` of the error).
+# One `key = text` per line: jsonerr.<code>.message and jsonerr.<code>.action, one pair for each
+# code of CliErrorCode::ALL. Every key exists in ../es/jsonerr.txt too.
+
+jsonerr.engine-unavailable.message = GitRaptor is not running and could not be started.
+jsonerr.engine-unavailable.action = Check the GitRaptor installation.
+jsonerr.repo-not-enabled.message = This repo is not enabled for agents.
+jsonerr.repo-not-enabled.action = Ask the developer to enable it with raptor mcp enable.
+jsonerr.not-in-observed-worktree.message = This folder is not inside a worktree GitRaptor observes.
+jsonerr.not-in-observed-worktree.action = Run the command inside an observed repo.
+jsonerr.repo-unavailable.message = GitRaptor cannot read this repo now.
+jsonerr.repo-unavailable.action = Ask the developer to check the repo in GitRaptor.
+jsonerr.identity-unverified.message = GitRaptor could not verify who is calling.
+jsonerr.identity-unverified.action = Retry later.
+jsonerr.rate-limited.message = Too many calls on this connection.
+jsonerr.rate-limited.action = Wait a few seconds and retry.
+jsonerr.confirmation-required.message = This action requires the developer's confirmation.
+jsonerr.confirmation-required.action = Tell the developer: the decision is theirs. Retrying gets the same answer.
+jsonerr.aborted.message = The prior snapshot could not be taken; nothing was changed.
+jsonerr.aborted.action = Ask the developer to free up space or check GitRaptor, and retry.
+jsonerr.internal.message = GitRaptor could not answer this command.
+jsonerr.internal.action = Retry later.
+jsonerr.command-unavailable.message = This command is not available here.
+jsonerr.command-unavailable.action = Use a command of the agent view (status, undo, redo, agent register, daemon status), or ask the developer.
+jsonerr.reserved-command.message = This command is reserved to the developer.
+jsonerr.reserved-command.action = Ask the developer to run it.
+jsonerr.command-failed.message = The engine refused the command.
+jsonerr.command-failed.action = Check params.reason, fix the cause and retry, or ask the developer.
+jsonerr.invalid-args.message = The arguments of the command are not valid.
+jsonerr.invalid-args.action = Check params.kind and params.argument, and run raptor --help.
