@@ -380,17 +380,19 @@ describe("accessible name and catalogs", () => {
 // US-WTL-005 (T010): the card shows who created a linked worktree, or "Foreign · do not touch".
 describe("worktree origin (US-WTL-005)", () => {
   const origin = (tool: OriginDto["tool"], evidence: OriginDto["evidence"], handsOff: OriginDto["handsOff"] = null): OriginDto => ({ tool, evidence, handsOff });
+  // `origin` is not in `WorktreeDto` until T010 adds it: typed loosely so the criterion test compiles before the code.
+  const withOrigin = (o: OriginDto): Partial<WorktreeDto> => ({ origin: o }) as unknown as Partial<WorktreeDto>;
   const withOrigins = () =>
     tienda({
       worktrees: [
         worktree("tienda", { main: true }),
-        worktree("w-orca", { origin: origin("orca", "admin-marker") }),
-        worktree("w-codex", { origin: origin("codex", "path-pattern") }),
-        worktree("w-claude", { origin: origin("claude-code", "path-pattern") }),
-        worktree("w-manual", { origin: origin("unknown", "none") }),
-        worktree("w-detached", { origin: origin("unknown", "none", "detached") }),
-        worktree("w-locked", { origin: origin("codex", "path-pattern", "locked") }),
-        worktree("w-unreadable", { origin: origin("unknown", "none", "unreadable") }),
+        worktree("w-orca", withOrigin(origin("orca", "admin-marker"))),
+        worktree("w-codex", withOrigin(origin("codex", "path-pattern"))),
+        worktree("w-claude", withOrigin(origin("claude-code", "path-pattern"))),
+        worktree("w-manual", withOrigin(origin("unknown", "none"))),
+        worktree("w-detached", withOrigin(origin("unknown", "none", "detached"))),
+        worktree("w-locked", withOrigin(origin("codex", "path-pattern", "locked"))),
+        worktree("w-unreadable", withOrigin(origin("unknown", "none", "unreadable"))),
         worktree("w-plain"),
       ],
       sessions: [],
