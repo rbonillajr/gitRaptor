@@ -16,6 +16,7 @@ use gitraptor_api::attribution::{
     AttributionChangeResult, AttributionCorrectParams, AttributionRejectedData,
     AttributionRejection, AttributionWithdrawParams, SessionCandidate,
 };
+use gitraptor_api::cli_contract::AgentRegisterView;
 use gitraptor_api::messages::{
     AgentSupport, DeclaredAgent, RegistrationOutcome, RegistrationRegisterParams,
     RegistrationRegisterResult, RegistrationRejectedData, RegistrationRejection,
@@ -25,12 +26,11 @@ use gitraptor_api::methods;
 use gitraptor_api::rpc::{InvalidData, code};
 use gitraptor_api::untrusted::sanitize;
 use gitraptor_core::client::ClientError;
-use serde_json::json;
 
 use crate::events::{actor_name, local_time};
 use crate::i18n::t;
 use crate::status::wire;
-use crate::{command_path, engine, error_text, refusal_text};
+use crate::{command_path, error_text, json_out, refusal_text};
 
 /// Claude Code by any of its usual names; anything else is the declared
 /// name of an "other agent" (BR-VAL-001).
@@ -60,7 +60,7 @@ fn shown(agent: &DeclaredAgent) -> String {
 pub fn register(agent: &str, worktree: Option<PathBuf>, json: bool) -> ExitCode {
     const CMD: &str = "raptor agent register";
     let agent = declared(agent);
-    let mut client = match engine(CMD) {
+    let mut client = match json_out::engine(CMD, json) {
         Ok(client) => client,
         Err(code) => return code,
     };
@@ -71,32 +71,27 @@ pub fn register(agent: &str, worktree: Option<PathBuf>, json: bool) -> ExitCode 
     };
     match client.call::<_, RegistrationRegisterResult>(methods::REGISTRATION_REGISTER, &params) {
         Ok(result) if json => {
-            let (agent, agent_name, origin) = match &result.actor {
-                gitraptor_api::Actor::Agent { kind, name, origin } => (
-                    wire(kind),
-                    name.as_ref().map(|n| n.raw().to_owned()),
-                    wire(origin),
-                ),
+            let (agent_kind, agent_name, origin) = match &result.actor {
+                gitraptor_api::Actor::Agent { kind, name, origin } => {
+                    (wire(kind), name.clone(), wire(origin))
+                }
                 gitraptor_api::Actor::Unattributed => (String::new(), None, String::new()),
             };
-            println!(
-                "{}",
-                json!({
-                    "repo_id": result.repo_id,
-                    "session_id": result.session_id,
-                    "outcome": wire(&result.outcome),
-                    "agent": agent,
-                    "agent_name": agent_name,
-                    "origin": origin,
-                    "support": wire(&result.support),
-                })
-            );
-            ExitCode::SUCCESS
+            json_out::ok(&AgentRegisterView {
+                repo_id: result.repo_id,
+                session_id: result.session_id,
+                outcome: wire(&result.outcome),
+                agent: agent_kind,
+                agent_name,
+                origin,
+                support: wire(&result.support),
+            })
         }
         Ok(result) => {
             println!("{}", register_text(&agent, &result));
             ExitCode::SUCCESS
         }
+        Err(err) if json => json_out::fail_client(&client, &err),
         Err(err) => fail(CMD, &agent, err),
     }
 }
@@ -115,11 +110,11 @@ fn register_text(agent: &DeclaredAgent, result: &RegistrationRegisterResult) -> 
     out
 }
 
-/// `raptor agent withdraw <agent> [--worktree <path>]`: reserved.
-pub fn withdraw(agent: &str, worktree: Option<PathBuf>) -> ExitCode {
+/// `raptor agent withdraw <agent> [--worktree <path>] [--json]`: reserved.
+pub fn withdraw(agent: &str, worktree: Option<PathBuf>, json: bool) -> ExitCode {
     const CMD: &str = "raptor agent withdraw";
     let agent = declared(agent);
-    let mut client = match engine(CMD) {
+    let mut client = match json_out::engine(CMD, json) {
         Ok(client) => client,
         Err(code) => return code,
     };
@@ -128,10 +123,12 @@ pub fn withdraw(agent: &str, worktree: Option<PathBuf>) -> ExitCode {
         agent: agent.clone(),
     };
     match client.call::<_, RegistrationWithdrawResult>(methods::REGISTRATION_WITHDRAW, &params) {
+        Ok(result) if json => json_out::ok(&result),
         Ok(_) => {
             println!("{}", t("agent.withdrawn", &[("agent", &shown(&agent))]));
             ExitCode::SUCCESS
         }
+        Err(err) if json => json_out::fail_client(&client, &err),
         Err(err) => fail(CMD, &agent, err),
     }
 }
@@ -187,31 +184,29 @@ pub fn correct(
         worktree: command_path(worktree).to_string_lossy().into_owned(),
         session_id: session.clone(),
     };
-    let mut client = match engine(CMD) {
+    let mut client = match json_out::engine(CMD, json) {
         Ok(client) => client,
         Err(code) => return code,
     };
     match client.call::<_, AttributionChangeResult>(methods::ATTRIBUTION_CORRECT, &params) {
+        Ok(result) if json => json_out::ok(&result),
         Ok(result) => {
-            if json {
-                println!("{}", json!(result));
-            } else {
-                println!(
-                    "{}",
-                    t(
-                        "correction.done",
-                        &[
-                            ("previous", &actor_name(&result.previous)),
-                            ("actor", &actor_name(&result.actor)),
-                        ],
-                    )
-                );
-                if result.matches_detected {
-                    println!("{}", t("correction.hint-uncorrect", &[]));
-                }
+            println!(
+                "{}",
+                t(
+                    "correction.done",
+                    &[
+                        ("previous", &actor_name(&result.previous)),
+                        ("actor", &actor_name(&result.actor)),
+                    ],
+                )
+            );
+            if result.matches_detected {
+                println!("{}", t("correction.hint-uncorrect", &[]));
             }
             ExitCode::SUCCESS
         }
+        Err(err) if json => json_out::fail_client(&client, &err),
         Err(err) => correction_fail(CMD, Some(&agent), session.as_deref(), err),
     }
 }
@@ -223,25 +218,23 @@ pub fn uncorrect(worktree: Option<PathBuf>, session: Option<String>, json: bool)
         worktree: command_path(worktree).to_string_lossy().into_owned(),
         session_id: session.clone(),
     };
-    let mut client = match engine(CMD) {
+    let mut client = match json_out::engine(CMD, json) {
         Ok(client) => client,
         Err(code) => return code,
     };
     match client.call::<_, AttributionChangeResult>(methods::ATTRIBUTION_WITHDRAW, &params) {
+        Ok(result) if json => json_out::ok(&result),
         Ok(result) => {
-            if json {
-                println!("{}", json!(result));
-            } else {
-                println!(
-                    "{}",
-                    t(
-                        "correction.withdrawn",
-                        &[("actor", &actor_name(&result.actor))]
-                    )
-                );
-            }
+            println!(
+                "{}",
+                t(
+                    "correction.withdrawn",
+                    &[("actor", &actor_name(&result.actor))]
+                )
+            );
             ExitCode::SUCCESS
         }
+        Err(err) if json => json_out::fail_client(&client, &err),
         Err(err) => correction_fail(CMD, None, session.as_deref(), err),
     }
 }
