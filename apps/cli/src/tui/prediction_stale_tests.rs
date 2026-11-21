@@ -49,6 +49,7 @@ fn wt(path: &str, main: bool) -> WorktreeView {
         status: WorktreeStatus::Unavailable {
             reason: UnavailableReason::Missing,
         },
+        origin: None,
     }
 }
 

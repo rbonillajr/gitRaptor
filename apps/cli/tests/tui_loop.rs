@@ -204,6 +204,7 @@ fn worktree_event(scope_seq: u64) -> Event {
             status: WorktreeStatus::Unavailable {
                 reason: UnavailableReason::Missing,
             },
+            origin: None,
         })
         .collect();
     Event {

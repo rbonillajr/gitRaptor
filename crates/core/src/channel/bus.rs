@@ -885,6 +885,7 @@ mod tests {
                 operation: Some(OperationKindView::Rebase),
                 unmerged_paths: 2,
                 changes_actor: None,
+                origin: None,
             }],
             fetched_utc_ms: None,
         };

@@ -26,6 +26,7 @@ fn worktree(operation: Option<OperationKindView>, unmerged_paths: u32) -> Worktr
         operation,
         unmerged_paths,
         changes_actor: None,
+        origin: None,
     }
 }
 

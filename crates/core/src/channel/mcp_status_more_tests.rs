@@ -41,6 +41,7 @@ fn view(root: &str, main: bool) -> WorktreeView {
         operation: None,
         unmerged_paths: 0,
         changes_actor: None,
+        origin: None,
     }
 }
 

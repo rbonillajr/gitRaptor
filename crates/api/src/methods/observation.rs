@@ -18,11 +18,17 @@ pub const CAP_OBSERVATION_SPECIAL_STATES: Capability =
 pub const CAP_OBSERVATION_CHANGE_ATTRIBUTION: Capability =
     Capability::new("observation.change-attribution");
 
+/// `WorktreeView::origin` and `McpWorktree::origin`. A connection without it
+/// never sees them.
+pub const CAP_OBSERVATION_WORKTREE_ORIGIN: Capability =
+    Capability::new("observation.worktree-origin");
+
 pub(super) const GROUP: Group = Group {
     capabilities: &[
         CAP_OBSERVATION_TIERS,
         CAP_OBSERVATION_SPECIAL_STATES,
         CAP_OBSERVATION_CHANGE_ATTRIBUTION,
+        CAP_OBSERVATION_WORKTREE_ORIGIN,
     ],
     ..Group::new("observation")
 };

@@ -601,6 +601,7 @@ mod tests {
             main,
             admin_name: None,
             status,
+            origin: None,
         };
         Snapshot {
             run_id: "r".into(),

@@ -44,6 +44,7 @@ fn wt(i: usize) -> WorktreeView {
         status: WorktreeStatus::Unavailable {
             reason: UnavailableReason::Missing,
         },
+        origin: None,
     }
 }
 
