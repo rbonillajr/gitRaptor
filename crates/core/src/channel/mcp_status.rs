@@ -397,6 +397,7 @@ pub(crate) fn worktrees_page(
                 WorktreeStatus::Unavailable { reason } => Some(*reason),
                 WorktreeStatus::Ready { .. } => None,
             },
+            origin: view.origin.clone(),
             state: situation(view, ctx, None),
         })
         .collect();
@@ -527,6 +528,10 @@ mod tests;
 #[cfg(test)]
 #[path = "mcp_status_more_tests.rs"]
 mod more_tests;
+
+#[cfg(test)]
+#[path = "mcp_status_origin_tests.rs"]
+mod origin_tests;
 
 /// The protection of the MCP view from the daemon's own `ProtectionState::of`. The view exists
 /// only for a repo in the allowlist, whose MCP half is on: only the hooks half is read.
