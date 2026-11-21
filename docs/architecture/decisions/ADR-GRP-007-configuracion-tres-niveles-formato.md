@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-28
+updated: 2026-11-21
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
@@ -53,6 +53,7 @@ Un solo documento JSON con secciones de primer nivel:
 - `engine`: valores del motor. Los define este ADR.
 - `permissions` (`allow` / `ask` / `deny`) y `policies`: su semántica es de Guardrails (ADR-GRD-003 § 1 y § 2, ADR-GRD-004 § 2). Sus tipos viven en `crates/policy`, llevan `x-gitraptor-levels` como las claves de `engine` y el motor no los interpreta (Enmienda 2026-10-04).
 - `cockpit`: claves del Cockpit (Enmienda 2026-10-04, Cockpit; ver la sección final).
+- `worktree`: claves de la creación de worktrees, solo personales (Enmienda 2026-11-21, US-GRP-024 y US-WTL-001; ver la sección final).
 
 Claves de la sección `engine`:
 
@@ -124,7 +125,7 @@ Valor efectivo de una clave = el del nivel **más específico, entre los que la 
 | `watcher.degradedPollSeconds` | la usa | ignorada, con diagnóstico | **la usa y gana** | local, si no perfil, si no `2` |
 | `watcher.backend` | **la usa** | ignorada, con diagnóstico | ignorada, con diagnóstico | perfil, si no `fsevents` |
 
-Las claves de la sección `cockpit` siguen la misma tabla con perfil y local, y equipo ignorado (Enmienda 2026-10-04, Cockpit; ver la sección final).
+Las claves de la sección `cockpit` siguen la misma tabla con perfil y local, y equipo ignorado (Enmienda 2026-10-04, Cockpit; ver la sección final). Las de la sección `worktree`, igual (Enmienda 2026-11-21, US-GRP-024 y US-WTL-001).
 
 La regla de que un nivel personal no relaja una prohibición del equipo se aplica a `permissions` y `policies`. Es de Guardrails y este ADR no la redefine: la combinación (mínimo ∪ suelo, endurecido por el worktree, el perfil y el local) está en ADR-GRD-004 § 2 y la evaluación en ADR-GRD-003 § 1.
 
@@ -318,3 +319,28 @@ La regla de solo lectura (Validación 9) no cambia: el sondeo abre los archivos 
 **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO** (Q-CKP-55). Origen: [DS-US-CKP-013](../../requirements/features/cockpit/dev-specs/US-CKP-013-abrir-en-editor.md) K6. Precisa la sección `cockpit` (Enmienda 2026-10-04, Cockpit). El `status` sigue en `accepted`.
 
 - El "Valor que no sirve" de `cockpit.editor` lo aplica el daemon al usarlo (el cargador de `crates/policy` no depende de `crates/api`), por nivel: un local rechazado deja paso al perfil.
+
+## Enmienda (2026-11-21, US-GRP-024)
+
+**Decisión del orquestador (2026-11-21), validada por Arquitecto/Seguridad** (security-review de DS-US-GRP-024 del 2026-11-21). Origen: [DS-US-GRP-024](../../requirements/features/mcp/dev-specs/US-GRP-024-dev-spec.md) E4 y D9; [DS-US-MCP-019](../../requirements/features/mcp/dev-specs/US-MCP-019-dev-spec.md) T002 y D18 (`agentRepoLimit`); y, en la misma tabla, [DS-US-WTL-001](../../requirements/features/worktree-lifecycle/dev-specs/US-WTL-001-dev-spec.md) E4 y D6 (`seedBuild`, P-WTL-21 cerrada el 2026-11-21). No cambia el formato, los nombres de archivo, la precedencia ni las demás secciones. El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| Sección nueva `worktree` con tres claves, admitidas solo en perfil y local personal; en el equipo se ignoran con diagnóstico | Estructura; Precedencia | DS-US-GRP-024 D9; DS-US-WTL-001 D6 (a) |
+
+**Claves de la sección `worktree`**. Sus tipos viven en `crates/policy` con `x-gitraptor-levels = ["profile", "local"]`, como las demás. Las consume el daemon al crear worktrees (`create-worktree`, ADR-CKP-002) y la CLI al compilar la semilla; el motor no las interpreta.
+
+| Clave | Tipo | Niveles admitidos | Por defecto | Regla |
+|---|---|---|---|---|
+| `worktree.agentLimit` | entero, de 1 a 64 | Perfil y local | `8` | Tope de worktrees que una sesión de agente tiene a la vez en un repo (US-GRP-024; DS-US-GRP-024 D9) |
+| `worktree.agentRepoLimit` | entero, de 1 a 256 | Perfil y local | `32` | Techo de worktrees de agentes por repo, contando sesiones cerradas mientras sus worktrees existan (DS-US-MCP-019 D18; DS-US-GRP-024 D9) |
+| `worktree.seedBuild` | lista de argv: hasta 8 órdenes, cada una de 1 a 64 elementos, cada elemento de 1 a 4096 bytes y sin `\0` | Perfil y local | Sin valor: la semilla queda `unbuilt` y no se copia nada | Orden que la CLI ejecuta en primer plano, sin shell y con cwd en la semilla; nunca el daemon ni el MCP; con perfil `mcp`, `reserved-refused` (DS-US-WTL-001 D6; ADR-GRD-007, Enmienda 2026-11-10) |
+
+- **Por qué nunca en el equipo**: un repo clonado no puede subir los topes que protegen el disco de quien lo clona (H-01), ni hacer que GitRaptor ejecute su orden de compilación en la máquina de cada miembro. En `.gitraptor/settings.json` cada clave se ignora con diagnóstico: «`worktree.<clave>` del archivo del equipo se ignora: solo se lee del perfil personal o de la configuración local personal.» / «`worktree.<clave>` in the team file is ignored: it is only read from the personal profile or the personal local settings.»
+- **Ninguna la escribe un agente**: ningún método del canal ni herramienta MCP escribe configuración, y los niveles personales viven en el perfil, fuera del repo. Un agente con shell del mismo usuario puede editar el perfil: es el riesgo residual que DS-US-GRP-024 y DS-US-MCP-019 D16 aceptan (no gana un privilegio que su shell no tuviera).
+- **Precedencia**: local, si no perfil, si no el valor por defecto.
+- **Valor que no sirve**: no invalida el nivel. Un entero fuera de rango o de otro tipo se descarta con diagnóstico y rige el valor por defecto, sin recortarlo al extremo (`agentLimit` 0 o 65 → 8): «`worktree.agentLimit` debe ser un entero de 1 a 64; se usa 8.» / «`worktree.agentLimit` must be an integer from 1 to 64; using 8.» (`agentRepoLimit`, igual con «1 a 256» y «32»). Un `seedBuild` que no cumple los límites se descarta con diagnóstico y la semilla queda sin orden.
+- **Lectura**: el daemon lee `agentLimit` y `agentRepoLimit` en cada comprobación, sin reiniciar (relectura de los niveles personales, Enmienda 2026-10-28, US-GRP-013). Bajar un tope por debajo de lo que ya existe no borra nada: solo rechaza las creaciones siguientes.
+- **No es configurable**: el suelo de espacio libre de SEC-TMC-12 (el mayor de 5 GiB y el 5 % del volumen). Ninguna clave lo baja (DS-US-GRP-024 D7).
+
+**Validación añadida** (definida en DS-US-GRP-024 y DS-US-WTL-001; tests por implementar): `agent_limit_levels_and_range`, `agent_repo_limit_levels_and_range` y `the_team_file_cannot_raise_the_limits` (equipo con 64 y 256 → rigen 8 y 32), en `crates/policy/src/settings/worktree_limits_tests.rs`; `worktree_tests::the_team_level_never_sets_the_seed_build`; el schema generado incluye la sección `worktree` con sus niveles.

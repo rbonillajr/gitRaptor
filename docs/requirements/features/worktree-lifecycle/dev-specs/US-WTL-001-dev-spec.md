@@ -20,11 +20,12 @@ related:
   adrs: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-007, ADR-GRP-008, ADR-GRP-012, ADR-GRP-015, ADR-GRP-016, ADR-CKP-002, ADR-TMC-005, ADR-TMC-007, ADR-GRD-007, ADR-MCP-001]
   api_spec: null
   design_spec: null
-  contracts: [../../mcp/dev-specs/US-MCP-019-dev-spec.md, ../../cockpit/dev-specs/US-CKP-018-crear-worktree.md]
+  contracts: [../../mcp/dev-specs/US-MCP-019-dev-spec.md, ../../cockpit/dev-specs/US-CKP-018-crear-worktree.md, ../../mcp/dev-specs/US-GRP-024-dev-spec.md]
 must_read:
   - ../user-stories/US-WTL-001-worktree-con-copia-desde-semilla.md
   - ../context.md
   - ../../mcp/dev-specs/US-MCP-019-dev-spec.md
+  - ../../mcp/dev-specs/US-GRP-024-dev-spec.md
   - ../../cockpit/dev-specs/US-CKP-018-crear-worktree.md
   - ../../../../architecture/decisions/ADR-GRP-001-stack-tecnologico.md
   - ../../../../architecture/decisions/ADR-GRP-002-monorepo-nx.md
@@ -54,8 +55,8 @@ lineage:
 constitution_gates: []
 validation:
   must_read_resolved: true
-  gaps_blocking: 1
-  blocked_tasks: [T007, T008, T010, T011, T012]
+  gaps_blocking: 2
+  blocked_tasks: [T007, T008, T010, T011, T012, T013]
   ready_to_implement: true
   gaps_release: 2
   ready_to_release: false
@@ -153,6 +154,7 @@ Todas son **Decisión del orquestador (2026-11-21), validada por Arquitecto**. L
 | D12 | **Sin copy-on-write** (Pregunta 11): **no se copia y se avisa**, como dice el supuesto provisional. `ENOTSUP` (volumen que no es APFS) → `no-cow`; `EXDEV` (semilla y worktree en volúmenes distintos) → `cross-device`; Linux y Windows → `unsupported-platform` sin intentar nada. Se detecta en la primera entrada, así que no queda nada a medias. Un error posterior (`ENOSPC`, `EACCES`) para la copia, deja lo ya clonado (son clones, no ocupan) y devuelve `partial` con el motivo. **Semilla de otro toolchain** (Pregunta 5b): el worktree se crea sin copia y se avisa de `raptor seed refresh` (D8). En ningún caso el fallo de la copia deshace la creación del worktree | Una copia normal de ~10 GiB por worktree es justo el problema de disco que la feature resuelve (BRD, 2026-11-08): copiar sin reflink no debe pasar en silencio. Crear el worktree sin copia sigue siendo útil: cargo compila desde cero. Copia normal con aviso: descartada para M3; se puede añadir con un `--full-copy` explícito tras la etapa multiplataforma |
 | D13 | **NFR-01.** La creación va por el ejecutor con su previo garantizado (DS-MCP-019 G6) y no destruye nada: rama nueva o rama reutilizada sin mover ninguna ref. `seed-advance` es un avance rápido de una rama de GitRaptor con previo. **Deshacer la creación** es descartar el worktree creado (DS-CKP-018 C5): `raptor new` termina con "para deshacerlo: D en su fila de la TUI" hasta que exista el descarte por CLI (US-WTL-002). Con una rama **reutilizada**, el descarte de US-CKP-017 borra también la rama, con snapshot y confirmación si tiene trabajo no integrado (restaurable 30 días); la salida lo advierte. Los ignorados copiados no entran en ningún snapshot (D-TMC-16): el original sigue en la semilla. **BRD § 6.4**: aquí no se lanza ningún agente ni se instala ninguna skill (eso es US-WTL-013, operación reservada) | La copia solo crea entradas que no existían en un worktree recién creado: no puede pisar trabajo de nadie. G2 deja constancia de que, hasta US-CKP-017, deshacer desde la CLI no existe |
 | D14 | **El MCP no cambia** (escenario 6). `McpCreateWorktreeArgs` no gana campos; el ejecutor rechaza `reuse_branch` y `seed_copy` para toda capa distinta de `cockpit` **y para toda conexión con perfil `mcp`** (`not-available-for-layer`), igual que la ruta explícita (DS-CKP-018 C3). **Alineado el 2026-11-21 con DS-US-MCP-019 D12**: los dos campos de `CreateWorktreeArgs` y la regla de capa (`cockpit_only_args`, en `Executor::prepare` antes de `parse`) los construye DS-MCP-019 T001 y T004; esta DS solo sirve su comportamiento (T007). `created.reused` y `created.seed` solo viajan con la capacidad nueva `operation.create-worktree-seed`, que `raptor-mcp` no pide; para el MCP la forma de `OperationRunResult` no cambia | Defensa en profundidad: hoy solo el esquema del MCP quita campos, y un agente que hablara el protocolo completo podría pedir la copia o reutilizar una rama |
+| D15 | **Decisión del orquestador (2026-11-21), validada por Arquitecto. El suelo se recomprueba antes de copiar.** El escenario «Poco espacio libre, no se crea el worktree» ya lo cubre el brazo común: rechazo `no-free-space` **antes de crear**, al preparar y en el replan bajo el cerrojo (DS-US-GRP-024 D6 paso 3, D8 y D15; aplica también al desarrollador). Esta decisión cubre el hueco siguiente: que el espacio se agote **entre crear y copiar** (el propio checkout, la compilación de otro agente). En el paso, después de la verificación posterior (D4) y de la segunda comprobación de semilla quieta (D7), y antes del primer `clone_path`: (1) `seed::copy::select` recorre los ignorados que se copiarían (`.worktreeinclude` menos `NEVER_COPY`, el mismo recorrido de D11) y suma su **tamaño lógico** con `symlink_metadata`, sin leer contenidos ni seguir enlaces: es la reserva de la copia; (2) `floor_crossed(probe, ruta_nueva, reserva)` de DS-US-GRP-024 (misma sonda del `WorktreeSite`, mismo suelo máx(5 GiB, 5 %) de SEC-TMC-12, no configurable); (3) si cruza el suelo, o si la sonda no lee el volumen (falla cerrado, DS-US-GRP-024 D7), **no se copia nada**: `SeedCopyStatus::Skipped` con el motivo nuevo `SeedSkipReason::NoFreeSpace` (`no-free-space`), el worktree **queda creado** con su rama y `HEAD` simbólico, la operación termina bien y la salida avisa «libera espacio en ese disco». Sin pérdida: no se deshace ni se borra nada (⛔7.1, D12). La comprobación corre dentro del paso, bajo el cerrojo del repo y el cerrojo global de `create-worktree` (DS-US-GRP-024 D15), así que dos creaciones no ven el mismo espacio libre. No suma la reserva del previo: el previo de la operación ya se tomó | `clonefile` ocupa casi 0 bytes al copiar (−1002 a +72 MB en 25 clones), pero los bloques clonados divergen en cuanto la compilación los reescribe (entre 1,8 y 24,3 GB por historia, Contexto rápido); el tamaño lógico es la cota conservadora de esa divergencia, estimada desde metadatos como la del checkout (DS-US-GRP-024 D15). **Descartados**: (a) no recomprobar: el suelo pasado al preparar no cuenta el checkout ya escrito ni lo que otros consumieron después; (b) recomprobar con reserva 0: deja el volumen justo en el suelo antes de la primera compilación; (c) rechazar y deshacer el worktree: la creación ya está registrada y D12 y ⛔7.1 prohíben que la copia la deshaga. **Coste aceptado (punto de sensibilidad)**: con espacio libre entre «suelo + checkout» y «suelo + checkout + tamaño lógico» (~10 GiB en GitRaptor), el worktree sale sin copia y cargo compila desde cero, que ocupa lo mismo o más; el aviso pide liberar espacio. Ese crecimiento posterior lo cubre la limpieza por política (US-WTL-008), no esta historia (riesgo residual de DS-US-GRP-024). La suma de tamaños añade un `lstat` por entrada al recorrido que ya lee nombres; si la certificación (§ 9.5) pasa de 10 s, la reserva se toma del manifiesto de la semilla medido en `seed.built` (alternativa registrada, no construida) |
 
 ---
 
@@ -165,6 +167,7 @@ Todas son **Decisión del orquestador (2026-11-21), validada por Arquitecto**. L
 | G3 | **Linux y Windows**: reflink en btrfs y XFS (`FICLONE`), ReFS (block cloning), y `parent_is_private` en Windows (G1 de DS-MCP-019). Hoy esas plataformas responden `unsupported-platform` y crean sin copia | Bloquea liberación en Linux y Windows | Solo Linux y Windows | Etapa de validación multiplataforma; fila nueva en `xplat-pendientes.md` (T012) | Arquitecto |
 | G4 | La semilla aparece en la flota como un worktree más | Informativo | — | Mostrarla como «semilla» con su origen es de US-WTL-005 (convivencia); la limpieza no la toca (US-WTL-008) | PO |
 | G6 | Un humano que compila a mano dentro de la semilla no se detecta (D7) | Informativo | — | `raptor seed status` advierte que la semilla es de GitRaptor; M4 (US-WTL-006) la mantiene el daemon | — |
+| G7 | **Suelo en el brazo de DS-US-GRP-024** (T005 y T006: `floor_crossed`, la sonda `FreeSpaceProbe` en `WorktreeSite`, el cerrojo global de `create-worktree`). Nada está en `main` (2026-11-21) | Bloqueante | T013 | Mezclar DS-US-GRP-024 T005 y T006 antes de T013. El resto de esta DS no la necesita | Orquestador |
 
 Ninguna violación: sin constitución, ver Contexto rápido.
 
@@ -225,7 +228,7 @@ sequenceDiagram
     C->>D: operation.run
     E->>G: worktree add -b … o worktree add <ruta> <rama> (T004, T007)
     E->>E: verificación posterior y HEAD simbólico, D4 (T007)
-    E->>S: SeedCheck otra vez, luego copia con include, NEVER_COPY y clonefile (T003, T006)
+    E->>S: SeedCheck otra vez y suelo con la reserva de la copia, luego copia con include, NEVER_COPY y clonefile (T003, T006, T013)
     D-->>C: created {path, branch, reused, seed} (T002, T007)
     C-->>H: ruta, rama, copia, cómo deshacer (T010)
 ```
@@ -252,10 +255,11 @@ sequenceDiagram
 | T010 | Los subcomandos `raptor new` y `raptor seed` | T008, T009 | `apps/cli/src/` |
 | T011 | Prueba de extremo a extremo y certificación en macOS | T010 | `apps/cli/tests/raptor_new.rs` |
 | T012 | Cerrar la historia y las enmiendas | T011 | `docs/` |
+| T013 | Recomprobar el suelo de espacio libre antes de copiar | T007, G7 | `crates/core/src/seed/copy.rs`, `crates/core/src/executor/ops/create_worktree.rs` |
 
 ### En qué orden
 
-T003, T004 y T009 van en paralelo con T005. Todo converge en T007, que espera a G1.
+T003, T004 y T009 van en paralelo con T005. Todo converge en T007, que espera a G1. T013 sigue a T007 (espera además a G7) y va en paralelo con T008; T011 espera a T010 y a T013.
 
 ```mermaid
 graph LR
@@ -274,6 +278,8 @@ graph LR
     T008 --> T010
     T009 --> T010
     T010 --> T011
+    T007 --> T013
+    T013 --> T011
     T011 --> T012
 ```
 
@@ -520,7 +526,7 @@ graph LR
 - Sin esperas fijas: cada lectura tiene su plazo.
 - Certificación manual (§ 9.5): no es una prueba automatizada y no bloquea el CI.
 
-- **Depende:** T010
+- **Depende:** T010, T013
 - **Refs:** Criterios de Certificación de US-WTL-001; NFR-01
 - **Aceptación:** `cargo test -p gitraptor-cli --test raptor_new` en verde en macOS
 
@@ -540,6 +546,31 @@ graph LR
 - **Depende:** T011
 - **Refs:** § Enmiendas que implica, `AGENTS.md`
 - **Aceptación:** revisión de Arquitecto y PO; `/aadd-analyze` sin BLOCKER
+
+### T013 — Recomprobar el suelo de espacio libre antes de copiar
+
+**Objetivo.** Ninguna copia desde la semilla deja el volumen del worktree nuevo por debajo del suelo de SEC-TMC-12; si el espacio se agotó entre crear y copiar, el worktree queda creado sin copia y se avisa (D15).
+
+**Ubicación.**
+- `crates/core/src/seed/copy.rs` (**MODIFY**, creado en T006): `select(src, include) -> Result<CopySelection, SeedError>` con las entradas que se clonarían y `reserve_bytes`; `copy` pasa a recibir la selección, así que el árbol se recorre una sola vez
+- `crates/api/src/seed.rs` (**MODIFY**, creado en T002): variante `SeedSkipReason::NoFreeSpace` (`no-free-space`), aditiva
+- `crates/core/src/executor/ops/create_worktree.rs` (**MODIFY**): en el paso 4 de T007, entre la segunda `site.seed` y `seed::copy`
+- `crates/core/src/seed/copy_tests.rs` y `crates/core/src/executor/ops/create_worktree_wtl_tests.rs` (**MODIFY**): pruebas nuevas en rojo antes del código
+- `crates/core/tests/us_wtl_001_create.rs` (**MODIFY**): la prueba de contrato
+
+**Pasos**
+1. Pruebas en rojo (abajo). La sonda de espacio es una `FreeSpaceProbe` de prueba montada en el `WorktreeSite` de prueba (valores fijos en bytes, y una que cambia en la tercera lectura); el repo, la semilla y el perfil son temporales. **Ninguna prueba llena un disco real.**
+2. `select`: el recorrido de D11 (`read_dir` sin seguir enlaces, `NEVER_COPY` a toda profundidad) suma `symlink_metadata().len()` de cada archivo seleccionado; un enlace cuenta su propio tamaño, nunca el del destino. Un error de `lstat` → `SeedError` y la copia se omite con `io` (sin clonar nada).
+3. En el brazo: `if floor_crossed(site.free_space_probe(), &ruta_nueva, selection.reserve_bytes) { report = SeedCopyReport { status: Skipped, reason: Some(NoFreeSpace), entries: 0, existing: 0 } }` y no se llama a `copy`. `floor_crossed` y la sonda son los de DS-US-GRP-024 (G7); no se escribe código de medida nuevo.
+4. Texto de la CLI para `no-free-space` (§ Forma del error).
+- ⛔13.1 Por debajo del suelo, o con la sonda ilegible, no se clona ninguna entrada, y el worktree, su rama y su `HEAD` simbólico quedan como los dejó el paso (nunca se deshace la creación).
+- ⛔13.2 La reserva es el tamaño lógico de lo seleccionado, no 0: una selección de 2 GiB con 5 GiB + 1 GiB libres sobre un suelo de 5 GiB omite la copia.
+
+- **Depende:** T007, G7
+- **Refs:** D11, D12, D15; DS-US-GRP-024 D6, D7, D8, D15; SEC-TMC-12
+- **Aceptación:** `cargo test -p gitraptor-core seed::copy_tests`, `cargo test -p gitraptor-core executor::ops::` y `cargo test -p gitraptor-core --test us_wtl_001_create` en verde
+- **Guard ⛔13.1:** `us_wtl_001_create::space_exhausted_between_create_and_copy_keeps_the_worktree_without_copy` (repo temporal; la sonda simulada pasa al preparar y en el replan y cruza el suelo en la lectura previa a la copia → worktree creado con `HEAD` simbólico, operación completada, informe de copia con estado `skipped`, motivo `no-free-space` y 0 entradas, ningún archivo de `target/` en el worktree nuevo) y `create_worktree_wtl_tests::an_unreadable_volume_before_copying_skips_the_copy`
+- **Guard ⛔13.2:** `copy_tests::the_copy_reserve_is_the_logical_size_of_the_selection` y `create_worktree_wtl_tests::a_selection_above_the_free_space_over_the_floor_skips_the_copy`
 
 ---
 
@@ -579,6 +610,11 @@ crates/policy/src/settings/worktree_tests.rs    ← CREATE
 crates/core/src/executor/ops/create_worktree.rs            ← MODIFY
 crates/core/src/executor/ops/create_worktree/site.rs       ← MODIFY
 crates/core/src/executor/ops/create_worktree_wtl_tests.rs  ← CREATE
+# Tramo F (cont.) — suelo antes de copiar (T013, tras T007 y G7); toca archivos de A y D ya creados
+crates/api/src/seed.rs                          ← MODIFY  SeedSkipReason::NoFreeSpace
+crates/core/src/seed/copy.rs                    ← MODIFY  select, CopySelection.reserve_bytes
+crates/core/src/seed/copy_tests.rs              ← MODIFY
+crates/core/src/executor/ops/create_worktree.rs ← MODIFY  floor_crossed antes de copy
 # Tramo G — servicio de la semilla (T008)
 crates/core/src/executor/ops/seed_advance.rs    ← CREATE
 crates/core/src/executor/ops/mod.rs             ← MODIFY  ARMS
@@ -639,6 +675,11 @@ pub struct SeedCopyReport {
 pub enum SeedSkipReason {               // kebab-case on the wire
     NoInclude, IncludeInvalid, NoSeed, SeedNotBuilt, SeedBuilding, SeedBusy, SeedMoved,
     FingerprintMismatch, NoCow, CrossDevice, UnsupportedPlatform, Io,
+    NoFreeSpace,                         // T013, D15: below the floor before copying
+}
+pub struct CopySelection {               // crates/core/src/seed/copy.rs (T013)
+    pub entries: Vec<PathBuf>,           // relative to the seed root
+    pub reserve_bytes: u64,              // logical size, from symlink_metadata
 }
 pub enum SeedState { Unbuilt, Building, Ready, Failed }
 pub struct SeedView {
@@ -679,8 +720,12 @@ pub fn check(repo: &RepoHandle, manifest: Option<&SeedManifest>, sessions: &[Ses
 pub fn load(main_root: &Path) -> Result<Option<Include>, IncludeError>;
 pub const NEVER_COPY: &[&str];
 
-// crates/core/src/seed/copy.rs
-pub fn copy(src: &SeedSource, dst_root: &Path, include: &Include) -> SeedCopyReport;
+// crates/core/src/seed/copy.rs (T006; T013 la parte en select + copy)
+pub fn select(src: &SeedSource, include: &Include) -> Result<CopySelection, SeedError>;
+pub fn copy(src: &SeedSource, selection: &CopySelection, dst_root: &Path) -> SeedCopyReport;
+
+// crates/core/src/executor/ops/create_worktree/limits.rs — de DS-US-GRP-024 (G7), se usa sin cambios
+pub(crate) fn floor_crossed(probe: &dyn FreeSpaceProbe, new_path: &Path, reserve: u64) -> bool;
 
 // crates/core/src/executor/ops/create_worktree/site.rs — en WorktreeSite
 fn seed(&self, repo: &RepoHandle) -> SeedCheck { SeedCheck::Skip(SeedSkipReason::NoSeed) }
@@ -731,6 +776,7 @@ Textos de la CLI (es / en) para cada motivo de la copia; el worktree se crea sie
 | `cross-device` | La semilla está en otro volumen: no se copió nada. | The seed is on another volume: nothing was copied. |
 | `unsupported-platform` | Copia desde la semilla aún no disponible en esta plataforma. | Seed copy is not available on this platform yet. |
 | `io` (con `partial`) | La copia se detuvo a medias: el worktree está creado. | The copy stopped part-way: the worktree is created. |
+| `no-free-space` | Poco espacio libre para copiar desde la semilla: el worktree está creado sin copia. Libera espacio en ese disco. | Not enough free space to copy from the seed: the worktree is created without a copy. Free up space on that disk. |
 
 `branch-checked-out` en la CLI: «La rama "feat-login" ya está en ../wt-login.» (ruta relativa al cwd si cabe; saneada). Códigos de salida: los de `apps/cli/src/codes.rs` para rechazo (sin crear) y éxito (creado, con o sin copia).
 
@@ -758,6 +804,8 @@ node_modules/
 | `.worktreeinclude` | ≤ 64 KiB y ≤ 512 patrones | D10 |
 | `worktree.seedBuild` | ≤ 8 órdenes; argv de 1 a 64 elementos; elemento de 1 a 4096 bytes | T009 |
 | Comprobaciones de semilla quieta | 2: al preparar (en la huella del plan) y en el paso antes de copiar | D7 |
+| Comprobaciones del suelo de espacio libre | 3: al preparar y en el replan (rechazo `no-free-space` sin crear, DS-US-GRP-024 D6) y en el paso antes de copiar (sin copia, D15) | D15 |
+| Reserva de la copia | tamaño lógico de lo seleccionado (`.worktreeinclude` menos `NEVER_COPY`), sobre el suelo máx(5 GiB, 5 %) | D15; SEC-TMC-12 |
 | Semillas por repo en M3 | 1 | D5 (M4: una por toolchain y perfil, US-WTL-006) |
 
 ---
@@ -795,7 +843,7 @@ El contrato de `/nassa-core:implement` declara `"suite": { "command": "node tool
 
 | Capa | Línea | Rama | Mutación | Camino crítico 100% |
 |-------|-----:|-------:|---------:|:------------------:|
-| `seed::copy` | — | — | — | ✅ cada `SeedSkipReason` de la copia, `partial`, `EEXIST`, `NEVER_COPY` a toda profundidad |
+| `seed::copy` | — | — | — | ✅ cada `SeedSkipReason` de la copia (también `no-free-space`), `partial`, `EEXIST`, `NEVER_COPY` a toda profundidad, la reserva de `select` |
 | `seed::quiet` | — | — | — | ✅ las cinco condiciones de D7 |
 | `create_worktree` (lo nuevo) | — | — | — | ✅ reutilizar, `branch-checked-out`, HEAD separado, capa `mcp` |
 
@@ -825,6 +873,8 @@ Escenario de la historia → prueba:
 | D3. Rama existente se reutiliza | `us_wtl_001_create::an_existing_free_branch_is_reused_at_its_tip` (ninguna ref se mueve) |
 | D5. Rama `gitraptor/seed` ajena | `quiet_tests::a_gitraptor_seed_branch_not_in_the_manifest_is_never_the_seed` |
 | D12. Sin copy-on-write | `copy_tests::cross_device_skips_without_leaving_anything` (con un segundo volumen de prueba solo si existe; si no, el error se inyecta en un `Cloner` de prueba) |
+| Poco espacio libre, no se crea el worktree | Brazo común: `the_developer_gets_no_free_space_too` de DS-US-GRP-024 (capa `cockpit`, sonda simulada, nada creado) |
+| D15. El espacio se agota entre crear y copiar | `us_wtl_001_create::space_exhausted_between_create_and_copy_keeps_the_worktree_without_copy` (T013, sonda simulada, repo temporal) · `copy_tests::the_copy_reserve_is_the_logical_size_of_the_selection` · `create_worktree_wtl_tests::an_unreadable_volume_before_copying_skips_the_copy` · `create_worktree_wtl_tests::a_selection_above_the_free_space_over_the_floor_skips_the_copy` |
 
 ### 9.4 Comportamientos críticos verificados
 
@@ -832,6 +882,7 @@ Escenario de la historia → prueba:
 - [ ] La copia solo sale de una semilla quieta, del manifiesto, con la huella actual.
 - [ ] Nunca HEAD separado; una rama sacada en otro worktree se rechaza nombrándolo.
 - [ ] Un fallo de copia nunca deshace el worktree ni borra nada.
+- [ ] Ninguna copia deja el volumen bajo el suelo: con poco espacio antes de copiar, el worktree queda creado sin copia y se avisa (D15).
 - [ ] El MCP no cambia; `reuse_branch` y `seed_copy` solo para la capa `cockpit`.
 - [ ] La orden de compilación es argv sin shell, solo del perfil o la local, y solo la corre la CLI.
 - [ ] `raptor new` no lanza ningún agente ni escribe ninguna skill.
@@ -886,7 +937,7 @@ Propuestas y **sin aplicar**: cada dueño las aplica en su documento (T012). **N
 | E1 | D11 | `crates/macsys` gana el módulo público `clone` y el privado `ffi_clonefile` | ADR-GRP-002 (Enmienda 2026-10-07, crates/macsys) | Arquitecto |
 | E2 | D3, D4, D9, D14 | `create-worktree`: `reuse_branch` y `seed_copy` solo para la capa `cockpit`; motivo `branch-checked-out`; verificación posterior del HEAD simbólico. Operación nueva `seed-advance`, motivos `seed-diverged` y `not-the-seed` | ADR-CKP-002 § 1, § 5 y § 12; `api-contract-ipc.md` | Arquitecto |
 | E3 | D7, D11 | Aditiva a DS-US-MCP-019: `WorktreeSite::seed` con implementación por defecto y `CreatedWorktree.{reused, seed}` bajo `operation.create-worktree-seed`. El comportamiento del MCP no cambia | DS-US-MCP-019 (§ Enmienda) | Arquitecto |
-| E4 | D6 | Clave `worktree.seedBuild`, niveles perfil y local | ADR-GRP-007 (tabla de secciones) | Arquitecto |
+| E4 | D6 | Clave `worktree.seedBuild`, niveles perfil y local | ADR-GRP-007 (tabla de secciones) | Arquitecto · **aplicada** (Enmienda 2026-11-21, US-GRP-024, sección `worktree`) |
 | E5 | D5, D10, D12, D3, D8 | Preguntas 9 (dónde vive la semilla), 11 (sin reflink: no se copia y se avisa), 14 (se reutiliza), 16 (lista fija `NEVER_COPY`) y 5b: anotar la decisión del Arquitecto, provisional hasta que Rene las cierre. P-WTL-21 cerrada el 2026-11-21 (D6) | CTX-WTL-001, Preguntas abiertas | PO |
 | E7 | D6 (c) | Una línea en la Enmienda 2026-11-10: ejecutar `worktree.seedBuild` (`raptor seed refresh`, y `raptor new` cuando pediría la semilla) se rechaza al perfil `mcp` con `reserved-refused`; no se añade a la lista del § 1 con los controles 1 a 3 | ADR-GRD-007 | Arquitecto |
 | E6 | D3, D13 | Escenario nuevo "Rama existente se reutiliza" (cuando Rene cierre la Pregunta 14) y frase en la descripción: el Deshacer de la creación es el descarte | US-WTL-001 | PO |

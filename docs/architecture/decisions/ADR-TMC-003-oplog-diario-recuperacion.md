@@ -5,7 +5,7 @@ type: adr
 status: accepted
 accepted: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-28
+updated: 2026-11-21
 date: 2026-10-03
 domain: GRP
 feature: time-machine
@@ -48,6 +48,8 @@ El timeline muestra qué cambió, cuándo, quién y con qué cobertura (US-TMC-0
 | **Aviso pendiente** | Interrupción o purga anunciada que hay que mostrar a un cliente, con su estado de entrega | Solo anexión |
 
 La inmutabilidad se impone en el esquema: los triggers rechazan `UPDATE` y `DELETE` sobre operaciones, snapshots y diario. La purga (ADR-TMC-007) no borra filas: anota en el diario que el contenido se liberó. Como el mismo usuario puede editar el archivo, cada fila encadena el hash de la anterior y la cabeza se guarda también fuera del oplog; una cadena rota se declara hueco con su causa (SEC-TMC-09).
+
+- **Destino `new-worktree`** (Enmienda 2026-11-21, US-GRP-024): una operación `create-worktree` guarda en su destino la ruta del worktree que crea, con un índice parcial y una subida de `user_version`; un binario anterior responde `SchemaTooNew`. Ver esa sección.
 
 ### 3. Estados de una operación
 
@@ -345,3 +347,21 @@ Aplicada desde la [Dev Spec de US-TMC-004](../../requirements/features/time-mach
 - **Previo de hook de un comando sin efecto**: sin cambios (Enmienda 2026-10-21, "Enlace por ventana, no por proceso").
 
 **Validación añadida**: `prior_point_tests.rs` y `timeline_prior_point_tests.rs` (C9 del brief) y `apps/cli/tests/restore_process.rs::an_edit_after_a_restore_survives_a_raw_reset_hard` (binario `raptor` real y daemon).
+
+## Enmienda (2026-11-21, US-GRP-024)
+
+**Decisión del orquestador (2026-11-21), validada por Arquitecto/Seguridad** (security-review de DS-US-GRP-024 del 2026-11-21, hallazgos M-2 y L-2). Origen: [DS-US-GRP-024](../../requirements/features/mcp/dev-specs/US-GRP-024-dev-spec.md) E3, D4, D17 y D19. El recuento de worktrees de agentes (tope por sesión y techo por repo) sale del oplog y de lo que Git lista, sin contador aparte; para que un agente que cambia de rama dentro de su worktree nuevo siga contando, la operación guarda la ruta que creó. Amplía § 2 (destino de una operación) y § 1 (migraciones). No cambia los estados, la recuperación ni el formato de la cadena (`FORMAT` sigue igual). El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| **Destino `new-worktree`**: `Target` gana la variante `NewWorktree(ruta)` (serde `"new-worktree"`), con la ruta canónica del plan (`OpPlan.expected["path"]`), nunca la del argumento del cliente. Solo la escribe la intención de una operación protegida con subtipo `create-worktree`, antes de correr nada; las demás siguen con `Target::None`. Es otra forma del JSON de la columna `target`: sin columna nueva, sin reconstruir la tabla y sin cambiar cómo se hashea la fila. `scope.worktrees` sigue vacío en esa operación (el worktree aún no existe al registrar la intención). La línea de tiempo y el undo la tratan como `None`: no deshacen nada distinto | § 2, Operación | DS-US-GRP-024 D4 |
+| **Índice parcial**: una migración nueva al final de `OPLOG_MIGRATIONS`, que solo añade: `CREATE INDEX IF NOT EXISTS operations_create_worktree ON operations(requester_session, seq) WHERE subtype = 'create-worktree';`. Sirve a la consulta ligera `Oplog::agent_created_worktrees`, que lee `requester`, `scope` y `target` de esas filas sin derivar estado ni leer el diario. Presupuesto: ≤ 200 ms en depuración con 2000 filas y 1000 worktrees listados | § 1 | DS-US-GRP-024 D17 |
+| **Versión del esquema**: la migración sube `user_version` del oplog en uno. Es la subida, y no la variante nueva, la que protege a un binario anterior (siguiente fila) | § 1 | DS-US-GRP-024 D17, D19 |
+| **Compatibilidad hacia atrás**: un binario anterior no sabe leer `new-worktree`. Al abrir un oplog con la migración aplicada responde `SchemaTooNew` (`profile/error.rs`), como tras la migración 3 (Enmienda 2026-10-08): no toca el oplog y **deja el repo sin observar** hasta volver a la versión nueva, en vez de leer mal una fila a mitad de una línea de tiempo. No se pierden datos. **Bajar de versión con filas nuevas no está soportado** | § 1, § 6 | DS-US-GRP-024 D19 |
+
+- **Filas anteriores**: las `create-worktree` escritas antes, con `Target::None`, siguen válidas; el recuento las casa solo por rama (`scope.refs`). `verify_chain` verifica igual filas antiguas y nuevas mezcladas.
+- **Por qué en `target` y no en `scope.worktrees` ni en el diario**: el ejecutor y la captura tratan las rutas de `scope.worktrees` como worktrees existentes; una entrada nueva del diario cambia el `CHECK` de `journal.entry` y obliga a reconstruir la tabla.
+- **Purga**: las operaciones no se purgan (solo los snapshots, US-TMC-022). Si una historia futura purga operaciones, debe conservar las `create-worktree` de agentes cuyo worktree siga existiendo (DS-US-GRP-024 D3).
+- **Alternativa descartada**: añadir la variante sin subir `user_version`. El binario anterior abriría el oplog y fallaría al deserializar la fila en mitad de una lectura.
+
+**Validación añadida** (definida en DS-US-GRP-024 § Estrategia de pruebas; tests por implementar, archivo `crates/core/src/timemachine/oplog/new_worktree_target_tests.rs`): `create_worktree_records_its_new_worktree_target`, `old_and_new_targets_keep_the_chain_valid`, `the_timeline_reads_new_worktree_as_none`, `the_partial_index_is_used` (`EXPLAIN QUERY PLAN` nombra `operations_create_worktree`) y la **prueba de bajada de versión** `an_older_schema_list_refuses_the_new_oplog`: abre un oplog migrado con `OPLOG_MIGRATIONS` sin su última entrada y espera `SchemaTooNew`, sin leer ninguna fila.
