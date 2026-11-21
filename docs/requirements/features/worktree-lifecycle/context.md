@@ -334,7 +334,7 @@ Cada fila cita las fuentes del Panorama con su fecha de consulta. ✔ sí · ≈
 |-------------|------------|--------|
 | US-CKP-018 y US-MCP-019 | Crear worktree sobre la base confirmada | Existen; US-CKP-018 se mantiene para preparar sin lanzar ningún agente |
 | US-CKP-017 | Descartar con Deshacer | Existe; esta feature añade la protección del agente vivo, el informe de disco y los worktrees del agente |
-| ADR-GRP-012 | Detección de sesiones de Claude Code: activo, inactivo, terminado | Aceptado; los estados nuevos de BR-WTL-009 y la interceptación de BR-WTL-010 lo amplían. **Enmienda aplicada (2026-11-10)** |
+| ADR-GRP-012 | Detección de sesiones de Claude Code: activo, inactivo, terminado | Aceptado; los estados nuevos de BR-WTL-009 y la interceptación de BR-WTL-010 lo amplían. **Enmiendas aplicadas**: hooks de worktree (2026-11-10, BR-WTL-010) y estados del agente (2026-11-21, BR-WTL-009: señales, máquina de estados y umbral de 15 min) |
 | BRD-GRP-001 § 6.4 | Fuera de alcance «lanzar prompts» | **Enmienda aplicada (2026-11-10, BRD v0.10)**: GitRaptor puede lanzar un agente una vez, a petición explícita del humano |
 | Superficie para agentes (feature mcp) | Skill de GitRaptor (US-MCP-020, Must M3; la usa US-WTL-013) y `raptor configure-agents` (US-MCP-021, M4) | Con historias desde el 2026-11-10; P-MCP-39 decidida (copia documentada) |
 | Time Machine (ADR-TMC-001, ADR-TMC-007) | Snapshot, retención de 30 días, ignorados fuera | Aceptados |
@@ -433,7 +433,7 @@ Cada fila cita las fuentes del Panorama con su fecha de consulta. ✔ sí · ≈
 **Vaguedad que bloquea historias:** ninguna desde las decisiones del 2026-11-10 (Preguntas 3, 4, 5, 7, 8 y 12 resueltas). Las que siguen abiertas tienen supuesto provisional y no bloquean.
 
 **Riesgos aguas abajo:**
-- **Arquitecto:** tiene a su cargo la enmienda de ADR-GRP-012 para interceptar los eventos de Claude Code, incluido el rechazo del borrado si el registro falla; también decide dónde vive la semilla (Pregunta 9) y cómo se mide el umbral de 15 min.
+- **Arquitecto:** tiene a su cargo la enmienda de ADR-GRP-012 para interceptar los eventos de Claude Code, incluido el rechazo del borrado si el registro falla; también decide dónde vive la semilla (Pregunta 9) y cómo se mide el umbral de 15 min (resuelto en la Enmienda 2026-11-21 de ADR-GRP-012).
 - **UX:** la confirmación del descarte debe decir que los ignorados no se guardan (BR-WTL-006) y la app necesita la misma protección del agente vivo; sin la Pregunta 13 cerrada no se sabe si hay botón de forzar.
 - **QA:** las pruebas de copy-on-write solo se pueden certificar en macOS hasta la etapa de validación multiplataforma.
 - **SM:** cuatro Must en M3 sobre una base que también tiene pendientes los XP Must; las fechas de M3 están por recalcular.

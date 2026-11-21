@@ -6,12 +6,12 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-03
 created: 2026-10-03
-updated: 2026-11-10
+updated: 2026-11-21
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
-related: [US-WTL-004, ADR-GRD-007, ADR-GRP-016, TS-GRP-008, ADR-GRP-005, ADR-GRP-006, ADR-GRP-007, ADR-GRP-009, ADR-GRP-010, ADR-GRP-013, ADR-GRD-001, ADR-GRD-002, ADR-GRD-003, ADR-GRD-004, SPIKE-GRP-001, US-GRD-018, US-GRD-019, US-GRP-008, TD-GRP-004]
-tags: [deteccion, atribucion, claude-code, sesiones, procesos, transcripts, privacidad, nfr-08, seguridad, autoria, co-authored-by, br-26]
+related: [US-WTL-003, CTX-WTL-001, US-WTL-004, ADR-GRD-007, ADR-GRP-016, TS-GRP-008, ADR-GRP-005, ADR-GRP-006, ADR-GRP-007, ADR-GRP-009, ADR-GRP-010, ADR-GRP-013, ADR-GRD-001, ADR-GRD-002, ADR-GRD-003, ADR-GRD-004, SPIKE-GRP-001, US-GRD-018, US-GRD-019, US-GRP-008, TD-GRP-004]
+tags: [deteccion, atribucion, claude-code, sesiones, procesos, transcripts, privacidad, nfr-08, seguridad, autoria, co-authored-by, br-26, estado-del-agente, github-actions]
 ---
 
 # ADR-GRP-012 — Detección de sesiones de Claude Code sin hooks propios
@@ -28,7 +28,7 @@ Restricciones:
 - **Sin APIs privadas** (NFR-08).
 - **Solo dos valores de actor**: "agente X" con su origen, o "sin atribuir". Nunca "humano" (Q34, Q35).
 - **Meta de precisión**: 90% de sesiones detectadas correctamente en dogfooding (Q9).
-- **Estados**: activo, inactivo y terminado según el umbral de inactividad (BR-WF-001, BR-TIME-001; perfil o configuración local, 5 min por defecto, Q24). Una sesión terminada no se reactiva (Q41).
+- **Estados**: activo, inactivo y terminado según el umbral de inactividad (BR-WF-001, BR-TIME-001; perfil o configuración local, 5 min por defecto, Q24). Una sesión terminada no se reactiva (Q41). Los cinco estados del agente de BR-WTL-009 son una dimensión aparte: [Enmienda (2026-11-21)](#enmienda-2026-11-21-estados-del-agente-us-wtl-003).
 - **Instalación tardía**: Claude Code instalado después se detecta sin reconfigurar GitRaptor (BR-EDGE-006, Q29).
 - **Límite clave**: el SO no informa de qué proceso escribió un archivo. La ubicación sola no distingue a Claude Code del editor humano abierto en el mismo worktree (R2).
 
@@ -512,5 +512,162 @@ El motivo de Q17 y Q22 era no depender de un formato ni de una configuración de
 
 - El contrato exacto de los eventos de Claude Code (qué recibe cada hook, qué efecto tiene su código de salida y cómo se comporta cuando el hook de `WorktreeCreate` crea el worktree él mismo) **no está verificado en este repo**: ⚠️ **ASSUMPTION**, que fija la Dev Spec con la versión soportada de Claude Code. Si una versión no respeta el rechazo del borrado, la garantía baja a Guardrails sobre `WorktreeDelete` (ADR-GRD-002) y a la restauración desde el último snapshot, y la historia lo dice.
 - El método de conexión y su retirada comparten el instalador y la marca de US-MCP-021 y 022.
-- **Pendiente, fuera de esta enmienda**: los estados nuevos del agente de BR-WTL-009 (esperando una decisión humana, esperando el CI, colgado) amplían la detección y necesitan **otra** enmienda de este ADR; US-WTL-003 sigue `draft` por eso.
+- **Resuelto en otra enmienda**: los estados nuevos del agente de BR-WTL-009 (esperando una decisión humana, esperando el CI, colgado) los fija la [Enmienda (2026-11-21, estados del agente)](#enmienda-2026-11-21-estados-del-agente-us-wtl-003).
 - **Validación**: (a) un hook de `WorktreeRemove` con el daemon parado rechaza el borrado; (b) con el daemon vivo, el snapshot existe antes de que el worktree desaparezca; (c) un agente simulado no puede conectar, cambiar ni quitar los hooks; (d) la respuesta del hook nunca contiene una concesión; (e) una ruta fuera de la allowlist se rechaza.
+
+## Enmienda (2026-11-21, estados del agente: US-WTL-003)
+
+**Decisión del orquestador (2026-11-21), validada por Arquitecto.** El `status` sigue en `accepted`. Origen: [US-WTL-003](../../requirements/features/worktree-lifecycle/user-stories/US-WTL-003-estado-real-del-agente.md) y [CTX-WTL-001](../../requirements/features/worktree-lifecycle/context.md): BR-WTL-009 (cinco estados) y Pregunta 4 (colgado = 15 min sin actividad del agente ni del repo y sin CI en curso, configurable). Referencia de campo: el supervisor y el watchdog del orquestador del proyecto (`bitacora/orquestador/`, no versionados), que llevan desde octubre de 2026 haciendo a mano este trabajo.
+
+**Qué no cambia.** Las señales de atribución S1 a S4, la regla de combinación, el registro, la pista `single-session`, los valores del actor y la tabla de Privacidad. **Los estados de esta enmienda no atribuyen nada**: ninguna regla de atribución lee el estado del agente, y ningún estado es evidencia de que un evento sea de una sesión. Tampoco cambian los estados de BR-WF-001 (activo, inactivo, terminado) ni su umbral de 5 min: siguen en el campo `state` del contrato, con su significado y sus tipos `session-*` del historial (ADR-GRP-013). El estado del agente es **una dimensión aparte**, derivada y solo en memoria.
+
+### 1. Escenario que manda
+
+> Un orquestador con 6 a 10 agentes en paralelo mira la flota una vez cada pocos minutos. Un agente parado por él (un menú de permisos, una pregunta, un turno terminado) aparece arriba en menos de 1 ciclo de refresco desde que el motor recibe la señal. Un agente con la sesión viva, sin actividad durante 15 min y sin CI en curso aparece «colgado». Ningún agente vivo aparece «terminado» y ningún agente colgado aparece «activo». Hoy esto lo cubre un script que lee la pantalla de cada terminal cada 3 min; el orquestador perdió noches enteras por sus falsos negativos (dos workers 6 h en un menú del plugin, el 2026-10-16; tres workers horas esperando un merge que nadie anunció, el 2026-10-21).
+
+### 2. Lo que enseña el watchdog del orquestador
+
+GitRaptor **no lee la pantalla del terminal del agente**: la pantalla contiene prompts, respuestas y código (la misma razón por la que PQ-2 limita los transcripts a metadatos), leerla exige el multiplexor o una API del emulador que no son contractuales (NFR-08), y no hay forma portable de hacerlo sin APIs privadas. Las lecciones del watchdog se traducen a señales permitidas:
+
+| Lo que lee el watchdog en pantalla | Funcionó | Falso positivo o negativo observado | Señal permitida que lo sustituye |
+|---|---|---|---|
+| Marca de turno terminado (`✻ … done`) | Sí, es la base de todo lo demás | «done HH:MM» con shells o agentes en segundo plano: el worker parece parado y sigue trabajando | Hook `Stop` (§ 3 b). Los procesos en segundo plano son descendientes de la sesión, así que su CPU es actividad del agente (§ 3 a) y despeja el turno terminado |
+| Menús: «Do you want», «Esc to cancel», «Enter to select», incluido el menú de aprobación de un plugin | Sí, es el caso que más horas costó | Un menú confundido con inactividad, o al revés, según la regex | Hook `Notification` con su tipo (permiso, pregunta): la señal la da el propio Claude Code y no depende de una regex |
+| Texto de aprobación pendiente («apruebo el plan»…) | Sí | Depende del texto exacto del plugin | Hook `Stop`: el agente terminó su turno y espera al humano. GitRaptor no sabe qué texto espera, ni lo necesita |
+| `orca orchestration ask` pendiente | Sí | — | **Ninguna**: es una herramienta en curso que espera a otro proceso. Proceso vivo, sin CPU ni escrituras: a los 15 min sale «colgado», que también está en la zona de atención. Riesgo declarado (§ 8) |
+| `API Error` y límite de uso | Sí (el watchdog incluso reanudaba) | — | Hook `Stop` si Claude Code cierra el turno; si no, «colgado» por el umbral. GitRaptor **no distingue la causa** y **nunca reanuda**: no escribe en el terminal ni en el agente |
+| Inactivo más de 45 min, con lista de excepciones (`wd-ignore-idle`) | A medias | Un worker que espera legítimamente un merge sale como colgado | Hook `Stop` (espera al humano) o CI en curso (§ 3 c). Silenciar un agente concreto es alcance de producto: pregunta abierta (§ 9) |
+
+### 3. Fuentes de señal permitidas
+
+| Fuente | Papel | Qué puede afirmar | Qué no puede afirmar | Si falta o falla |
+|---|---|---|---|---|
+| **(a1) Proceso vivo** (S1, sin cambios) | Evidencia positiva de existencia y fin | La sesión `(pid, hora de inicio)` existe o terminó | Que el agente trabaje o progrese | Sin S1 no hay sesión: no hay estado del agente |
+| **(a2) Actividad del worktree**: cambios de archivos y eventos de Git del worktree de la sesión (la «actividad» de BR-WF-001, ADR-GRP-010) | Evidencia positiva de actividad | Que algo se mueve en el worktree | Quién lo movió: también cuenta la edición del humano (Consecuencias, «activo no implica que Claude Code esté trabajando») | Un hueco del observador (ADR-GRP-010) se trata como «sin actividad» solo después de la reconciliación; mientras dura, el umbral de colgado no corre |
+| **(a3) CPU del árbol de la sesión**: tiempo de CPU acumulado del proceso de Claude Code y de sus descendientes, leído en el mismo escaneo de S1 (`PROC_PIDTASKINFO` en macOS, `/proc/<pid>/stat` en Linux, `GetProcessTimes` en Windows). Nunca `cmd` ni `environ` (SEC-04) | Auxiliar | Que el proceso o una herramienta suya (un `cargo build` de 40 min, una shell en segundo plano) está trabajando | Que el trabajo progrese; un bucle ocupado también consume CPU | Si no se puede leer, no cuenta: el criterio de colgado queda solo con (a2) y la fila lo marca «sin lectura de CPU» |
+| **(b) Hooks `Notification` y `Stop` de Claude Code**, conectados por el humano | Evidencia positiva del estado «esperando una decisión humana» | `Notification`: Claude Code pide permiso o hace una pregunta. `Stop`: el agente terminó su turno y espera la siguiente instrucción | Qué decisión espera ni de quién; la causa de un turno terminado (fin normal, error de la API, límite de uso) | Sin hooks, «esperando una decisión humana» **no se afirma** (§ 3.2). Un hook que falla no cambia nada |
+| **(c) Estado del CI** por GitHub Actions, solo lectura | Evidencia positiva de «esperando el CI» y condición negativa de «colgado» | Que hay una ejecución en curso o en cola para la rama de la sesión | Que el agente esté esperando ese CI y no otra cosa | Si no se puede leer, se dice («CI no legible») y **nunca** se muestra «esperando el CI» |
+
+**El mtime de los transcripts (S2a) sigue sin contar como actividad.** Se mantiene la regla del Ciclo de vida: S2 está fuera del MVP (Enmienda 2026-10-28), y un transcript que crece no distingue un agente que trabaja de uno que reintenta en bucle. Si el adaptador de transcripts entra después del MVP, se puede proponer como actividad auxiliar con su propia enmienda (§ 9).
+
+#### 3.1 Reglas de los hooks `Notification` y `Stop`
+
+Mismo patrón que la Enmienda 2026-11-10 (hooks de worktree), con una diferencia deliberada: allí fallan cerrado porque protegen datos; aquí fallan abiertos porque solo informan.
+
+1. **Solo registran un evento de estado.** El hook llama a un método nuevo del módulo `sessions` (por ejemplo `sessions.agent-signal`), que guarda en memoria `{sesión, tipo, hora}`. No toca el repo, no lanza ni detiene nada y no atribuye eventos.
+2. **Nunca conceden ni bloquean.** El hook sale siempre con código 0 y sin salida estructurada: una respuesta de `Stop` con `decision: block` obligaría al agente a seguir, y una de `Notification` no tiene efecto. Ningún campo de la respuesta de Claude Code se escribe. La prueba de contrato lo comprueba.
+3. **Fail-open para el estado.** Daemon inalcanzable, tiempo agotado (tope de 2 s para no frenar al agente), entrada no validable o sesión no resuelta: el hook sale con 0, el evento se descarta y el estado no cambia. Un contador entero del diagnóstico lo cuenta, sin contenido.
+4. **Lo configura el humano, nunca el agente.** Conectar, cambiar o quitar los dos hooks escribe en la configuración de Claude Code del usuario o del repo, fuera del perfil: es una operación reservada de ADR-GRD-007 con la misma política que la fila de los hooks de worktree (confirmación con qué se escribe, dónde, por qué y cómo se revierte; reversible por la transacción de US-MCP-022; comparte instalador y marca con US-MCP-021). El canal rechaza la conexión desde un solicitante agente. La fila propia en ADR-GRD-007 la añade la Dev Spec de US-WTL-003.
+5. **La sesión se resuelve por ascendencia, no por el contenido del evento.** El cliente del hook es descendiente del proceso de Claude Code que lo dispara: el daemon resuelve su sesión con la ascendencia de S3/S4 (`via: ancestry`, identificadores no reutilizables de ADR-GRP-005). El `session_id` y el `cwd` del evento solo se contrastan: si el cwd no cae en el worktree de la sesión resuelta, el evento se descarta. Un evento sin sesión resuelta se descarta.
+6. **Entrada no confiable.** La entrada del hook la controla el agente. Se lee con tope de bytes (64 KiB) y tiempo; solo se extrae el tipo de notificación de una lista cerrada (permiso, pregunta, espera de entrada; un tipo desconocido cuenta como «pregunta») y el cwd para el contraste. **El texto del mensaje no se guarda ni se muestra** (puede citar un comando o una ruta), y `transcript_path` nunca se abre.
+7. **Canal.** Método aditivo del contrato (ADR-GRP-016, un archivo propio en `crates/api/src/methods/`), ofrecido al perfil del cliente de hooks (ADR-GRD-001) y **ausente del perfil `mcp`**. Devuelve solo «registrado» o «ignorado».
+8. **Falsificación acotada.** Un agente puede llamar al cliente del hook desde su propia shell. Por la regla 5 solo puede cambiar la etiqueta de **su** sesión, y solo entre estados que ya están en la zona de atención (esperando una decisión humana, colgado): no puede ocultarse ni tocar otra sesión, y no gana ningún permiso.
+
+#### 3.2 Sin hooks: «sin señal», no una suposición
+
+Sin los hooks conectados (o con la marca de conexión ausente), la dimensión «decisión pendiente» vale `no-signal`. La regla 2 de la máquina de estados (§ 4) no se aplica, y la fila muestra el estado que corresponda (normalmente «activo» o «colgado») con la nota **«sin señal de decisión»**; en «colgado», «colgado · sin señal de decisión: puede estar esperando una respuesta». Nunca se infiere «esperando una decisión humana» de la inactividad, del texto de un proceso ni de ninguna otra señal. La app y la TUI ofrecen conectar los hooks con la operación reservada.
+
+#### 3.3 Lectura del CI: solo lectura, privacidad y presupuesto
+
+- **Vía**: la CLI `gh` del usuario, si está instalada y autenticada, con argv fijo y sin shell (NFR-02), entorno mínimo y tope de tiempo; la petición es `gh api` sobre `repos/<owner>/<repo>/actions/runs` filtrando por rama. GitRaptor **no guarda ni pide tokens**: usa la autenticación que el usuario ya tiene en `gh`. Llamar directo a la API REST exigiría custodiar un token y queda descartado para M3.
+- **Solo lectura**: ningún método lanza, reintenta, cancela ni re-ejecuta una ejecución (`gh run rerun`, `cancel`, `workflow run` y cualquier verbo distinto de `GET` quedan fuera de la allowlist de argv, y lo fija una prueba).
+- **Qué se lee**: de cada ejecución, solo estado, conclusión, rama, sha de cabeza, id y URL. Nunca logs, artefactos, secretos ni el nombre del autor. Se considera «en curso» una ejecución `queued`, `in_progress`, `waiting`, `pending` o `requested` para la rama local de la sesión.
+- **Cuándo se lee**: solo para un repo con alguna sesión viva que lleve sin actividad al menos el umbral de inactividad de BR-WF-001 (5 min): es la única situación en que el CI cambia el estado. Una petición por repo (no por sesión) cubre todas sus ramas.
+- **Presupuesto**: como máximo una petición por repo y minuto, con caché de 60 s; ante un error o un límite de la API, backoff exponencial hasta 15 min, respetando `Retry-After` y `X-RateLimit-Remaining` (por debajo del 10 % restante, se suspende la lectura hasta el reinicio de la ventana). Con 10 repos activos son ≤ 600 peticiones por hora, un 12 % del límite autenticado de GitHub.
+- **No se puede leer** (sin `gh`, sin autenticación, remoto que no es de github.com, error, backoff en curso, respuesta no validable): el CI vale `unreadable` con un motivo de una lista cerrada, la fila lo dice («CI no legible: <motivo>») y nunca muestra «esperando el CI».
+- **Entrada no confiable**: la respuesta se valida con tope de tamaño; rama, URL y nombres se sanean antes de mostrarse (SEC-12, ADR-GRP-005 § 5). Nada de la respuesta se persiste.
+
+### 4. Máquina de estados
+
+Se evalúa en cada escaneo de S1 y al llegar una señal de hook o de CI, sobre estos hechos de cada sesión:
+
+- `vivo`: S1 ve el proceso `(pid, hora de inicio)`.
+- `inactivo_desde`: la última actividad del agente, es decir, la más reciente de (a2), (a3) por encima de su umbral, o un evento de hook de esa sesión.
+- `decisión`: `pending` (hay un evento `Notification` o `Stop` sin despejar), `none` o `no-signal` (§ 3.2).
+- `ci`: `running`, `idle` o `unreadable`.
+
+**Precedencia**, de mayor a menor (gana la primera que se cumple):
+
+| # | Estado | Condición |
+|---|---|---|
+| 1 | **terminado** | `vivo` es falso. Absoluto: no se reactiva (Q41) |
+| 2 | **esperando una decisión humana** | `decisión = pending` |
+| 3 | **esperando el CI** | `ci = running` y sin actividad durante al menos el umbral de inactividad de BR-WF-001 (5 min) |
+| 4 | **colgado** | Sin actividad durante al menos el umbral de colgado (15 min) y `ci ≠ running` |
+| 5 | **activo** | Cualquier otro caso con `vivo` |
+
+**Invariantes** (las fija una prueba de propiedades sobre secuencias aleatorias de hechos):
+
+- **Nunca terminado si sigue vivo**: solo la regla 1 da «terminado» y solo con `vivo` falso.
+- **Nunca activo si está colgado**: la regla 5 solo se alcanza si la 4 no se cumple.
+- **Nunca «esperando el CI» si el CI no se pudo leer**: la regla 3 exige `ci = running`.
+- **Colgado medible**: proceso vivo, sin actividad del agente ni cambios ni eventos de Git en el worktree durante el umbral, sin CI en curso y sin decisión pendiente. Con `ci = unreadable` la sesión puede salir «colgado», con la nota «CI no legible», porque lo que se mide (la inactividad) sí se cumple; la decisión de no ocultarla es deliberada.
+
+**Cómo se despeja una decisión pendiente**:
+
+- `Notification`: con actividad del worktree (a2) posterior al evento, un evento de hook posterior de la misma sesión o el fin de la sesión. La CPU (a3) **no** la despeja: una herramienta en segundo plano puede seguir compilando mientras el menú espera.
+- `Stop`: con cualquier actividad del agente posterior al evento, incluida la CPU (a3): es el caso «done con shells en segundo plano» del watchdog.
+- Un `Stop` posterior a una `Notification` la sustituye. Un reinicio del daemon pierde las decisiones pendientes (viven en memoria): la sesión vuelve a `none` hasta el siguiente evento de hook.
+
+**Transiciones típicas**: activo → esperando una decisión humana (hook) → activo (escritura tras aprobar); activo → esperando el CI (push y 5 min sin actividad con CI en curso) → colgado (el CI termina y pasan los 15 min) → activo (actividad); cualquiera → terminado. Entre 5 y 15 min sin actividad y sin CI, la sesión sigue «activo» en esta dimensión e «inactivo» en la de BR-WF-001; la fila muestra «sin actividad hace N min».
+
+#### 4.1 Umbral y reloj
+
+- **Umbral de colgado**: configurable con la configuración local de ADR-GRP-007, por defecto 15 min, entre el umbral de inactividad de BR-WF-001 y 24 h; un valor fuera de rango se rechaza con el error de configuración existente. Se aplica al recalcular, sin reiniciar.
+- **Umbral de CPU de (a3)**: un mínimo de tiempo de CPU por minuto del árbol para contar como actividad, que filtre el ruido de un Claude Code en reposo y de sus servidores MCP. ⚠️ **ASSUMPTION**: 2 s de CPU por minuto como punto de partida; la Dev Spec lo fija con medidas de dogfooding.
+- **Reloj**: monotónico y que **no avanza durante la suspensión del equipo** (`CLOCK_UPTIME_RAW` en macOS, `CLOCK_MONOTONIC` en Linux; en Windows, el tiempo de interrupción sin sesgo, ⚠️ **ASSUMPTION** a verificar en la Dev Spec). Nunca la hora de pared, que salta con NTP o con el cambio de zona.
+- **Suspensión**: el tiempo dormido no cuenta para el umbral de colgado. Cerrar el portátil por la noche no deja la flota «colgada» al despertar. Al reanudar, antes de emitir un «colgado» nuevo se espera un ciclo de escaneo y una lectura de CI, para que el observador reconcilie (ADR-GRP-010). El estado «inactivo» de BR-WF-001 conserva su regla del Ciclo de vida, sin cambios.
+
+#### 4.2 «Colgado» es una etiqueta
+
+Ningún estado dispara una acción. En particular, «colgado» **nunca** mata, reinicia, reanuda, escribe en el terminal ni en el worktree, ni llama a Guardrails o a la Time Machine. Tampoco cambia la protección de BR-WTL-006 y BR-WTL-007: un agente colgado sigue siendo un agente vivo que protege su worktree. Lo que haga el humano lo hace él, con las operaciones que ya existen.
+
+### 5. Consecuencias para el contrato
+
+- **Aditivo y con capacidad** (ADR-GRP-016 § 1): un campo nuevo es un cambio de forma, así que la vista de sesión gana, solo para las conexiones que aceptan la capacidad `sessions.agent-state`:
+  - `agent_state`: `active | awaiting-human | awaiting-ci | stalled | ended`;
+  - `decision`: `pending | none | no-signal`, con el tipo (`permission | question | turn-ended`) si está pendiente;
+  - `ci`: `running | idle | unreadable | not-applicable`, con el motivo de una lista cerrada si es `unreadable`;
+  - `idle_secs`, contado con el reloj del § 4.1.
+  - Una notificación de cambio de estado, con la misma capacidad. No se añade ningún tipo `session-*` al historial: el estado del agente no se persiste y ADR-GRP-013 no cambia.
+- **Clientes viejos** (los que solo conocen activo, inactivo y terminado): sin la capacidad no reciben ningún campo nuevo, y su `state` es **el de siempre**, calculado por BR-WF-001. No hay proyección con pérdida que inventar: un cliente viejo ve «inactivo» en una sesión colgada o en espera de decisión, y «terminado» exactamente cuando el estado del agente es «terminado». Así un daemon nuevo nunca rompe a un cliente que rechaza valores desconocidos de `SessionStateView`.
+- **Superficies**: la CLI con salida JSON, la TUI y la app muestran los cinco estados y suben a la zona de atención «esperando una decisión humana» y «colgado» (BR-WTL-009). La lectura del estado sigue el perfil del método de sesiones que ya existe, incluido `mcp` (solo lectura); el método del hook no está en `mcp`.
+- **i18n**: los nombres de estado y las notas («sin señal de decisión», «CI no legible: <motivo>») van en en/es por el registro de mensajes de ADR-GRP-016.
+
+### 6. Privacidad (añade a la tabla)
+
+| Se lee | Nunca se lee | Se persiste en el perfil |
+|---|---|---|
+| Tiempo de CPU acumulado del árbol de la sesión, en el escaneo de S1 | `cmd` y `environ` de esos procesos | Nada |
+| Del evento de hook: el tipo de notificación (lista cerrada) y el cwd para el contraste | El texto del mensaje, el `transcript_path` y su contenido | Nada: las decisiones pendientes viven en memoria |
+| Del CI, por `gh`: estado, conclusión, rama, sha, id y URL de cada ejecución | Logs, artefactos, secretos y autores | Nada. En el log del daemon, solo contadores enteros (peticiones, errores por motivo, backoffs) |
+
+### 7. Validación
+
+- **Pruebas automatizadas** (US-WTL-003, criterio de certificación 1), con el daemon real, sesiones simuladas (un proceso que se presenta como Claude Code, como en SPIKE-GRP-001) y repos temporales (NFR-01):
+  - un caso por estado, incluido el paso a terminado y la no reactivación;
+  - un cliente de hook simulado: `Notification` y `Stop` cambian el estado; su despeje por escritura, por CPU (solo `Stop`) y por un evento posterior; un daemon parado, un tiempo agotado y una entrada de 100 MB o malformada no cambian nada y el hook sale con 0; la salida del hook nunca contiene una decisión;
+  - un evento de hook lanzado desde otra sesión o sin ascendencia no cambia el estado de ninguna sesión; el texto del mensaje no aparece en el perfil, los logs ni el stream IPC (prueba con canario, como SEC-05);
+  - un `gh` falso en el `PATH`, con respuestas grabadas: ejecución en curso, ninguna, error, límite de la API con `Retry-After`, `gh` ausente y respuesta gigante; se comprueba el presupuesto (≤ 1 petición por repo y minuto) y que ningún argv contiene un verbo que escriba;
+  - un reloj inyectable: umbral por defecto, umbral configurado a 30 min (escenario 4 de US-WTL-003) y una suspensión simulada que no cuenta;
+  - las invariantes del § 4 con una prueba de propiedades;
+  - un cliente sin la capacidad recibe el `state` de siempre y ningún campo nuevo.
+- **Dogfooding** (criterio de certificación 2): una jornada con el orquestador del proyecto sin supervisor ni watchdog, con los hooks conectados. Criterio: ≥ 90 % de las etiquetas «colgado» y «esperando una decisión humana» confirmadas por el orquestador (la meta de Q9 aplicada a estos estados); cada parada que el watchdog habría detectado aparece en la zona de atención; 0 violaciones de las invariantes. Las etiquetas erróneas se registran con su causa para ajustar el umbral de CPU.
+
+### 8. Riesgos declarados
+
+- **Espera en una herramienta** (`orca orchestration ask`, un `read` interactivo): sin hook, sin CPU y sin escrituras, sale «colgado». Está en la zona de atención, que es donde debe estar, pero con otra etiqueta.
+- **Turno reanudado sin escribir**: tras aprobar un permiso, un agente que solo lee o piensa sigue «esperando una decisión humana» hasta su primera escritura o su siguiente evento de hook. El error va en la dirección segura (atrae la mirada, no la oculta).
+- **Ruido de CPU**: un servidor MCP que sondea puede mantener «activo» a un agente colgado. Se mide en dogfooding y se ajusta el umbral de (a3).
+- **Edición humana**: una edición del humano en el worktree cuenta como actividad (a2) y despeja una decisión pendiente, igual que hoy mantiene activa la sesión de BR-WF-001.
+
+### 9. Puntos abiertos
+
+- ⚠️ **ASSUMPTION**: el contrato exacto de los eventos `Notification` y `Stop` (tipos de notificación, campos de entrada, efecto del código de salida y de la salida estructurada, comportamiento con agentes en segundo plano) **no está verificado en este repo**. Lo fija la Dev Spec de US-WTL-003 con la versión soportada de Claude Code. Si una versión no da el tipo de notificación, todo evento `Notification` cuenta como «pregunta».
+- ⚠️ **ASSUMPTION**: GitHub Enterprise Server y otros CI quedan fuera de M3 (US-WTL-003, Dependencias); su remoto da `ci = unreadable` con motivo «no soportado».
+- ⚠️ **ASSUMPTION**: los umbrales de CPU (2 s/min) y de reloj en Windows del § 4.1.
+- **Pregunta abierta para el PO**: entre 5 y 15 min sin actividad, ¿basta con «activo · sin actividad hace N min», o hace falta un sexto estado visible? BR-WTL-009 fija cinco y esta enmienda no añade ninguno.
+- **Pregunta abierta para el PO**: ¿se puede silenciar un agente concreto (el equivalente de `wd-ignore-idle`) para que un «colgado» esperado no ocupe la zona de atención? Es alcance de producto; esta enmienda no lo decide.
+- **Pregunta abierta para el PO**: un tercer hook de Claude Code (`UserPromptSubmit` o `PostToolUse`) despejaría la decisión pendiente en el momento exacto y cerraría el riesgo del «turno reanudado sin escribir». No se adopta sin decisión de producto, porque amplía lo que el humano conecta.
+- **Evolución**: si el adaptador de transcripts entra después del MVP, su mtime puede proponerse como actividad auxiliar con su propia enmienda; hoy no cuenta.
+- **Revisión de seguridad**: el método del hook es un canal nuevo desde el árbol del agente. Antes de aceptar la Dev Spec de US-WTL-003, la revisa `security-review` (security-expert), como las enmiendas 2026-10-09 y 2026-11-09.
