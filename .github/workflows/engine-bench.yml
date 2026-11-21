@@ -1,7 +1,7 @@
 # INF-GRP-002: freshness, scale and footprint gates of the engine (ADR-GRP-011 § 4, NFR-04,
 # NFR-05, NFR HUELLA). See the INF-GRP-002 Dev Spec.
 #
-# Runs `cargo bench -p gitraptor-cli --bench engine` (release build) over the 100K-commit
+# Runs `cargo bench -p gitraptor-cli --bench engine` (bench profile with debug assertions, S-01) over the 100K-commit
 # reference repo with 10 worktrees, with `--gate ci`: on a shared runner the NFR-04 budget (p95
 # 300 ms) is measured and reported, and what fails is a regression over the ceilings calibrated
 # for that runner, confirmed by measuring the scenario again (two of three attempts). The job
@@ -119,6 +119,12 @@ jobs:
         # `runner` is not available in the job's `env`.
         env:
           ENGINE_BENCH_ROOT: ${{ runner.temp }}/engine-bench
+          # S-01: the daemon decides the class of the requester by its ancestry and, when in
+          # doubt, gives `mcp`. The bench's client has no controlling terminal, so only the
+          # debug-only test path of TS-GRP-010 (rule (i) under the bench's agent override) gives
+          # it the full view. Step-level and bench profile only: no release build, no other job
+          # and no cache key is touched, and no path opens in a shipped binary.
+          CARGO_PROFILE_BENCH_DEBUG_ASSERTIONS: "true"
         run: cargo bench -p gitraptor-cli --bench engine -- --gate ci --out "$ENGINE_BENCH_ROOT/engine-bench-${{ runner.os }}.json"
       # The IPC budget of ADR-GRP-011 (25 ms p95) under a slow client and a connection flood
       # (TS-GRP-004 SEC-08), in release: the debug test keeps only the functional side.
@@ -137,7 +143,7 @@ jobs:
         run: |
           files="$(gh pr diff "$PR" --repo "$GITHUB_REPOSITORY" --name-only)"
           if grep -qE '^crates/core/src/(watch/|daemon/|channel/|observe\.rs)' <<<"$files"; then
-            msg="This PR touches the engine: attach the report of 'cargo bench -p gitraptor-cli --bench engine -- --gate reference' from the reference machine before the merge (TD-GRP-003)."
+            msg="This PR touches the engine: attach the report of 'CARGO_PROFILE_BENCH_DEBUG_ASSERTIONS=true cargo bench -p gitraptor-cli --bench engine -- --gate reference' from the reference machine before the merge (TD-GRP-003)."
             echo "::warning::$msg"
             echo "> **NFR-04**: $msg" >> "$GITHUB_STEP_SUMMARY"
           fi
