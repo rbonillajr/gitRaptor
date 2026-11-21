@@ -48,6 +48,8 @@ pub struct Outbox {
     without_special_states: std::sync::atomic::AtomicBool,
     /// Without `observation.change-attribution` (see [`Outbox::set_without_change_attribution`]).
     without_change_attribution: std::sync::atomic::AtomicBool,
+    /// Without `observation.worktree-origin` (see [`Outbox::set_without_worktree_origin`]).
+    without_worktree_origin: std::sync::atomic::AtomicBool,
     /// Without `sessions.worktree-removed` (see [`Outbox::set_without_worktree_removed`]).
     without_worktree_removed: std::sync::atomic::AtomicBool,
     /// Without `discovery.events` (see [`Outbox::set_without_discovery`]).
@@ -85,6 +87,7 @@ impl Outbox {
             without_tiers: std::sync::atomic::AtomicBool::new(true),
             without_special_states: std::sync::atomic::AtomicBool::new(true),
             without_change_attribution: std::sync::atomic::AtomicBool::new(true),
+            without_worktree_origin: std::sync::atomic::AtomicBool::new(true),
             without_worktree_removed: std::sync::atomic::AtomicBool::new(true),
             without_discovery: std::sync::atomic::AtomicBool::new(true),
             without_protection: std::sync::atomic::AtomicBool::new(true),
@@ -128,6 +131,13 @@ impl Outbox {
     /// without the actor of the uncommitted changes.
     pub fn set_without_change_attribution(&self, without: bool) {
         self.without_change_attribution
+            .store(without, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// The connection lacks `observation.worktree-origin`: `worktree.state` reaches it
+    /// without the origin of each worktree.
+    pub fn set_without_worktree_origin(&self, without: bool) {
+        self.without_worktree_origin
             .store(without, std::sync::atomic::Ordering::Relaxed);
     }
 
@@ -206,7 +216,13 @@ impl Outbox {
         let without_change_attribution = self
             .without_change_attribution
             .load(std::sync::atomic::Ordering::Relaxed);
-        if !(without_activity || without_special_states || without_change_attribution)
+        let without_worktree_origin = self
+            .without_worktree_origin
+            .load(std::sync::atomic::Ordering::Relaxed);
+        if !(without_activity
+            || without_special_states
+            || without_change_attribution
+            || without_worktree_origin)
             || event.kind != gitraptor_api::event::WORKTREE_STATE
         {
             return std::borrow::Cow::Borrowed(event);
@@ -224,6 +240,9 @@ impl Outbox {
         }
         if without_change_attribution {
             data.without_change_attribution();
+        }
+        if without_worktree_origin {
+            data.without_worktree_origin();
         }
         let mut event = event.clone();
         event.data = serde_json::to_value(data).unwrap_or(serde_json::Value::Null);
