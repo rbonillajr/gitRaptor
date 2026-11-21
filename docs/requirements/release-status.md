@@ -13,10 +13,10 @@
 | Implementado (`implemented`) | 85 |
 | Hecho (`done`) | 3 |
 | Implementado en parte (`partially-implemented`) | 27 |
-| Listo (`ready`) | 29 |
+| Listo (`ready`) | 30 |
 | Borrador (`draft`) | 67 |
 | Bloqueado (`blocked`) | 1 |
-| **Total** | **212** |
+| **Total** | **213** |
 
 ## Por feature
 
@@ -25,7 +25,7 @@
 | [cockpit](#cockpit) | 16 | 0 | 5 | 2 | 15 | 1 | 39 |
 | [desktop](#desktop) | 7 | 0 | 1 | 15 | 0 | 0 | 23 |
 | [guardrails](#guardrails) | 14 | 0 | 7 | 1 | 3 | 0 | 25 |
-| [mcp](#mcp) | 7 | 0 | 4 | 2 | 14 | 0 | 27 |
+| [mcp](#mcp) | 7 | 0 | 4 | 3 | 14 | 0 | 28 |
 | [motor-local](#motor-local) | 22 | 2 | 9 | 2 | 16 | 0 | 51 |
 | [time-machine](#time-machine) | 19 | 1 | 1 | 0 | 13 | 0 | 34 |
 | [worktree-lifecycle](#worktree-lifecycle) | 0 | 0 | 0 | 7 | 6 | 0 | 13 |
@@ -140,7 +140,7 @@
 
 ### mcp
 
-27 fichas: 7 implementado, 4 implementado en parte, 2 listo, 14 borrador.
+28 fichas: 7 implementado, 4 implementado en parte, 3 listo, 14 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -155,6 +155,7 @@
 | [US-MCP-009](features/mcp/user-stories/US-MCP-009-safe-commit.md) | Un agente commitea por MCP con las reglas del repo y con un punto de recuperación previo | Implementado en parte (`partially-implemented`) | #289 | — |
 | [US-MCP-010](features/mcp/user-stories/US-MCP-010-safe-commit-rutas.md) | Un agente commitea solo los archivos que nombra y nunca fuera de su worktree | Implementado en parte (`partially-implemented`) | #289 | — |
 | [US-MCP-013](features/mcp/user-stories/US-MCP-013-confirmacion-sin-cola.md) | Un agente sabe que una acción necesita al desarrollador y a quién acudir | Implementado en parte (`partially-implemented`) | #267 | — |
+| [US-GRP-024](features/mcp/user-stories/US-GRP-024-tope-de-worktrees-por-agente.md) | Un agente no puede llenar el disco ni la flota creando worktrees | Listo (`ready`) | — | — |
 | [US-MCP-019](features/mcp/user-stories/US-MCP-019-create-worktree.md) | Un agente prepara un worktree nuevo desde la rama base para otro trabajo | Listo (`ready`) | — | — |
 | [US-MCP-020](features/mcp/user-stories/US-MCP-020-guia-para-agentes.md) | Un agente de Claude Code sabe cómo trabajar con GitRaptor sin que el desarrollador se lo explique en cada sesión | Listo (`ready`) | — | — |
 | [US-MCP-006](features/mcp/user-stories/US-MCP-006-registrar-agente.md) | Un agente sin soporte completo se declara por MCP y su trabajo queda a su nombre | Borrador (`draft`) | — | — |
@@ -452,7 +453,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### M3
 
-16 fichas: 1 implementado, 3 implementado en parte, 7 listo, 5 borrador.
+17 fichas: 1 implementado, 3 implementado en parte, 8 listo, 5 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -460,6 +461,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [SPIKE-GRD-001](features/guardrails/technical-stories/SPIKE-GRD-001-interceptabilidad-hooks.md) | Interceptabilidad, coexistencia y coste de la capa de hooks en los tres SO | Implementado en parte (`partially-implemented`) | #22, #25, #121 | 2 |
 | [SPIKE-GRP-002](features/motor-local/technical-stories/SPIKE-GRP-002-viabilidad-observador.md) | Viabilidad del observador de cambios a escala en los tres SO | Implementado en parte (`partially-implemented`) | #17, #23 | 2 |
 | [TD-GRP-001](features/motor-local/technical-stories/TD-GRP-001-acl-windows.md) | Verificación de ACL en Windows: git.exe (SEC-10) y perfil (SEC-06) | Implementado en parte (`partially-implemented`) | #72 | 2 |
+| [US-GRP-024](features/mcp/user-stories/US-GRP-024-tope-de-worktrees-por-agente.md) | Un agente no puede llenar el disco ni la flota creando worktrees | Listo (`ready`) | — | — |
 | [US-MCP-019](features/mcp/user-stories/US-MCP-019-create-worktree.md) | Un agente prepara un worktree nuevo desde la rama base para otro trabajo | Listo (`ready`) | — | — |
 | [US-MCP-020](features/mcp/user-stories/US-MCP-020-guia-para-agentes.md) | Un agente de Claude Code sabe cómo trabajar con GitRaptor sin que el desarrollador se lo explique en cada sesión | Listo (`ready`) | — | — |
 | [US-WTL-001](features/worktree-lifecycle/user-stories/US-WTL-001-worktree-con-copia-desde-semilla.md) | El desarrollador crea un worktree con rama con nombre y artefactos copiados desde una semilla quieta | Listo (`ready`) | — | — |

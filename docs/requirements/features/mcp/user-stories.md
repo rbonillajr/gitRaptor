@@ -128,6 +128,7 @@ Ajustes del Juez AADD (reservas) y del Arquitecto.
 | [US-MCP-024](./user-stories/US-MCP-024-conflictos-por-cli.md) | Un agente que trabaja por Bash sabe con quién va a chocar antes de integrar | Desarrollador quiere la predicción de `check_conflicts` también por la CLI con `--json` | expanded |
 | [US-MCP-025](./user-stories/US-MCP-025-uso-por-canal.md) | El desarrollador ve cuánto usan sus agentes el MCP y cuánto la CLI | Desarrollador quiere llamadas y rechazos por canal, agente, repo y herramienta, sin meta ni contenido | expanded |
 | [US-MCP-026](./user-stories/US-MCP-026-comparacion-mcp-cli.md) | El desarrollador compara, por tarea, cuánto cuesta y cuánto acierta un agente por el MCP y por la CLI | Desarrollador quiere llamadas, tokens y aciertos por canal; spike si no deja nada en el producto | expanded |
+| [US-GRP-024](./user-stories/US-GRP-024-tope-de-worktrees-por-agente.md) | Un agente no puede llenar el disco ni la flota creando worktrees | Desarrollador quiere un tope de 8 worktrees por sesión de agente y repo, un techo de 32 por repo que sobrevive a un reinicio y un suelo de espacio libre, sin limitarse a sí mismo | ready (M3; blocked_by US-MCP-019; condición de salida de M3) |
 
 ---
 
@@ -163,6 +164,7 @@ Ajustes del Juez AADD (reservas) y del Arquitecto.
 | US-MCP-024 | CONS-008 (parte), CALC-004 (mismo contenido) | US-MCP-016, US-MCP-023 | — | Could · después de v0.1.0 | Preguntar antes de integrar también por Bash |
 | US-MCP-025 | CONS-010 | US-MCP-015, US-MCP-023 | — | Should · M4 | Recortar el MCP con datos propios |
 | US-MCP-026 | CONS-010 (parte) | US-MCP-025, US-MCP-020 | Muestra, criterio de acierto y fuente de tokens: sin dato (P-MCP-38). Spike si no deja nada en el producto | Could · después de v0.1.0 | Elegir canal con un dato propio, no de terceros |
+| US-GRP-024 | ELIG-004 (tope, techo y suelo de un agente) | US-MCP-019 (la extiende) | Security-review H-01 de DS-US-MCP-019 (D14, D18, G9); criterio 12 de salida de M3; TS-GRP-010 en `main` | Must · M3 | Un agente en bucle no deja sin disco al undo de todos |
 
 ### Orden y paralelismo (DAG)
 
