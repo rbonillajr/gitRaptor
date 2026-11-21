@@ -631,6 +631,15 @@ No aplicadas por esta DS; las aplica el PR de la historia o quedan anotadas en �
 
 **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO.** Origen: [DS-US-CKP-013](./US-CKP-013-abrir-en-editor.md). Completa X12 con la lista común de teclas ocupadas de la revisión: `a`, `c` (DS-016), `d` (DS-012), `D` (DS-017), `e` (DS-013), `m`, `o`/`u` (DS-014), `r`, `t` (DS-021), `w` (DS-018), `x` (DS-019), `?`.
 
+## Enmienda (2026-11-21, US-WTL-002)
+
+**Decisión del orquestador (2026-11-21), validada por Arquitecto.** Origen: [DS-US-WTL-002](../../worktree-lifecycle/dev-specs/US-WTL-002-descarte-reversible-disco.md) (W1, W2, W9, W11, W12). No reescribe ninguna decisión de esta DS; la amplía en cuatro puntos:
+
+- **X15**: la regla «cualquier sesión presente bloquea» se sustituye por el estado del agente (Enmienda 2026-11-21 de ADR-GRP-012): solo un worktree sin agente vivo se descarta; estado desconocido o escaneo incompleto bloquea (W1). La regla 3 de `plan_op` (T003) y la regla 6 de `discard_eligibility` (T005) pasan a `agent-alive` / `agent-state-unknown`.
+- **X2**: motivos aditivos `agent-alive`, `agent-state-unknown` y `foreign-worktree` (HEAD separado no creado por GitRaptor, BR-WTL-011), tras la capacidad `operation.discard-guard`; desde entonces, preparar `discard-worktree` exige `operation.discard` y `operation.discard-guard` (W12).
+- **X6/X7**: la ruta con HEAD separado solo se aplica a worktrees que GitRaptor creó; sin procedencia conocida, `foreign-worktree` (W11).
+- **X9**: el undo de un `discard-worktree` por `operation_id` comprueba antes la retención (`retention-expired`, aditivo y sin capacidad) (W9).
+
 ## Notas del autor
 
 - Riesgo: un `node_modules/` grande hace lento el recorrido; el tope de X4 lo acota y la lista se marca truncada, nunca vacía.

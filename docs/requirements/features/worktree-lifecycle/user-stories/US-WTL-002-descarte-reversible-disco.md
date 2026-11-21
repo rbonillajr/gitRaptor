@@ -31,7 +31,8 @@ related:
     - BR-WTL-007
     - BR-WTL-008
     - BR-WTL-011
-  specs: []
+  specs:
+    - DS-US-WTL-002
 ado:
   id: null
   url: null
@@ -134,7 +135,12 @@ Entonces la respuesta trae el resultado del descarte, el espacio que ganó el di
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección)._
+- **Dev Spec:** [`dev-specs/US-WTL-002-descarte-reversible-disco.md`](../dev-specs/US-WTL-002-descarte-reversible-disco.md) — `DS-US-WTL-002` (status: spec-ready). Delta sobre DS-US-CKP-017, sin repetir el descarte.
+- **Agente vivo**: solo un worktree sin agente vivo se descarta; estado desconocido falla cerrado; sin forzado. Sustituye X15 de DS-US-CKP-017 (W1–W4).
+- **Disco**: espacio libre del volumen del worktree antes y después del borrado (`statvfs` de `rustix`, sin `unsafe`), marcado aproximado, o «no medido» con motivo (W5–W6).
+- **Restauración**: `timemachine.undo` con `operation_id` (X9/X10 de DS-US-CKP-017) más comprobación de retención; el descarte se localiza con el método de lectura `timemachine.discards` (W9–W10).
+- **Ajeno y autorización**: HEAD separado sin procedencia de GitRaptor se rechaza; nada por MCP ni por un agente; CLI con `--json` y confirmación humana (W11–W13).
+- **Enmienda aplicada**: DS-US-CKP-017, «Enmienda (2026-11-21, US-WTL-002)». Propuesta: ADR-TMC-007 § 3 (previo de un descarte protegido hasta su retención).
 
 ## Diseño
 
