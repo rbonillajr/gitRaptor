@@ -107,6 +107,38 @@ Dado una semilla en la que hay una sesión de agente
 Cuando el desarrollador ejecuta `raptor new feat-g`
 Entonces ningún artefacto se copia desde ella a "feat-g"
 
+**Esquema del escenario: Un agente no puede compilar la semilla**
+
+Dado el perfil personal del desarrollador con `worktree.seedBuild` igual a `cargo build --workspace`
+  Y "claude-1" usa la CLI `raptor`, que recibe el perfil `mcp` porque la lanzó un agente
+  Y <situación>
+Cuando "claude-1" ejecuta `<orden>`
+Entonces la orden se rechaza con el código de operación reservada, el motivo "compilar la semilla es una operación reservada al desarrollador" y la acción "el desarrollador ejecuta `raptor seed refresh` desde su terminal"
+  Y `cargo build --workspace` no se ejecuta
+  Y la semilla queda como estaba
+
+Ejemplos:
+| situación | orden |
+| la semilla de `main` existe | raptor seed refresh |
+| el repo no tiene semilla | raptor new feat-h |
+
+**Escenario: El desarrollador sí compila la semilla con su orden**
+
+Dado el perfil personal del desarrollador con `worktree.seedBuild` igual a `cargo build --workspace`
+  Y un repo sin semilla
+Cuando el desarrollador ejecuta `raptor seed refresh` desde su terminal
+Entonces GitRaptor crea la semilla desde `main` y ejecuta `cargo build --workspace` en ella, en primer plano, sin pasar por un shell
+  Y la salida de la compilación se ve en la terminal del desarrollador
+
+**Escenario: La orden de compilar la semilla del archivo del equipo se ignora**
+
+Dado el `.gitraptor/settings.json` versionado del equipo con `worktree.seedBuild` igual a `make all`
+  Y ni el perfil personal ni la configuración local personal tienen `worktree.seedBuild`
+Cuando el desarrollador ejecuta `raptor seed refresh`
+Entonces `make all` no se ejecuta
+  Y la salida avisa de que `worktree.seedBuild` del archivo del equipo se ignora porque solo se lee del perfil personal o de la configuración local personal
+  Y la semilla se crea desde `main` sin compilar
+
 ## Criterios de Certificación
 
 - Validar que crear un worktree con copia desde una semilla quieta tarda como máximo lo medido con worktrunk (7–10 s en el repo de GitRaptor) y que el `df` no baja el tamaño completo de `target/` · *(método: medición en macOS, como el diario del 2026-11-09)*.
@@ -124,6 +156,7 @@ Arquitecto, 2026-11-21: [DS-US-WTL-001](../dev-specs/US-WTL-001-dev-spec.md) (`s
 
 - **De User Stories**: Requiere **US-MCP-019** (la operación de crear worktree del motor, que esta historia reutiliza y amplía con la copia desde la semilla) · Relacionado US-CKP-018 (preparar sin lanzar desde la TUI) · Bloquea **US-WTL-013** (lanzar el agente e instalar la skill), US-WTL-004, US-WTL-006, US-WTL-007, US-WTL-009, US-WTL-012.
 - **Decisión del orquestador (2026-11-21), validada por PO**: esta historia ya no depende de US-CKP-018. Atarla a la TUI la hacía esperar al flujo de escritura de US-CKP-014 y al descarte de US-CKP-017, que `raptor new` no usa. Lo que necesita es la operación de crear worktree, cuya dueña es US-MCP-019; ninguna de las tres historias la construye dos veces. US-CKP-018 se mantiene como la superficie de la TUI para preparar sin lanzar.
+- **Compilar la semilla (Pregunta 21, decidida el 2026-11-21)**: aceptada con condiciones por el orquestador, con la delegación de Rene. La orden `worktree.seedBuild` solo se lee del perfil personal o de la configuración local personal; la ejecuta la CLI en primer plano, sin shell y dentro de la semilla, nunca el motor en segundo plano ni el MCP; con el perfil `mcp` se rechaza como operación reservada. Escenarios añadidos arriba.
 - **Sin bloqueos de enmienda**: la enmienda de BRD-GRP-001 § 6.4 (lanzar un agente) se aplicó el 2026-11-10 y afecta a US-WTL-013, no a esta historia.
 - **Preguntas abiertas que esta historia no fija**: 5b (qué hace `raptor new` con una semilla de otro toolchain o perfil: provisional, crea el worktree sin copia y avisa), 11 (disco sin reflink: provisional, no se copia y se avisa), 14 (reutilizar una rama existente: provisional, se reutiliza), 16 (ignorados que nunca se copian: provisional, lista fija de exclusiones). Se añaden escenarios cuando Rene las cierre; los supuestos provisionales no bloquean.
 - **Cross-cutting / transversales**: dónde vive la semilla y cuánto ocupa (Pregunta 9) y cómo se copia con copy-on-write: transversal (lo define el Arquitecto).

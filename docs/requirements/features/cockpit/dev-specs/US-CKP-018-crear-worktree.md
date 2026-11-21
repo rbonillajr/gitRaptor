@@ -96,7 +96,7 @@ Revisión del Arquitecto y del PO (2026-10-28): ratificadas C1 a C4, C6, C11, C1
 |----|----------|----------------------|
 | C1 | **Una sola operación para la TUI y el MCP.** La TUI pide `create-worktree` por `operation.prepare` y `operation.run`, con el mismo brazo (`ops/create_worktree.rs`), el mismo sitio, los mismos motivos y la misma capacidad que DS-US-MCP-019. Si esta historia empieza antes que US-MCP-019, implementa T001 a T005 de DS-US-MCP-019 tal como están escritas, sin reinterpretarlas; T006 y T007 (la herramienta MCP) siguen siendo de US-MCP-019 | DS-MCP-019 D1 ("la construye la primera de las dos historias que entre"). Dos caminos para crear un worktree divergirían en las reglas de H-02 y de D6. **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO** |
 | C2 | **Ruta explícita en producción**, solo en conexión completa y solo para la capa `cockpit`. `plan_op` con `args.path = Some` deja de responder `NotImplemented` cuando no se pidieron los brazos de prueba; con ellos pedidos, sigue delegando en `test_arms` (las pruebas de proceso de hoy no cambian). La ruta pasa por las mismas comprobaciones que una ruta de plantilla: forma final (componentes de 1 a 255 bytes, sin nombres de dispositivo de Windows, ≤ 1024 bytes), las tres de `check_new_worktree_path`, `create_dir` y la verificación posterior. No necesita `main_root`: un repo *bare* acepta una ruta explícita | Lo pide BR-CKP-VAL-001 ("acepta una ruta") y D1 de DS-MCP-019 lo deja aquí. Una sola función de forma final para las dos rutas evita que la explícita sea más débil que la de plantilla. **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO** |
-| C3 | **Capa**: el ejecutor rechaza `create-worktree` con `path` para una capa distinta de `cockpit` con `not-available-for-layer` (`RejectReason::NotAvailableForLayer`, ya existe), en `Executor::plan` antes de `plan_op`, como la regla de `commit` de la capa `mcp` (`executor/mod.rs:535-546`) | Defensa en profundidad de H-02: hoy solo el esquema MCP quita `path` (`catalog.rs:319-325`), y un agente que hablara el protocolo completo podría elegir la ruta. Descartado: confiar en el esquema. **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO** |
+| C3 | **Capa**: el ejecutor rechaza `create-worktree` con `path` para una capa distinta de `cockpit` con `not-available-for-layer` (`RejectReason::NotAvailableForLayer`, ya existe), en `Executor::plan` antes de `plan_op`, como la regla de `commit` de la capa `mcp` (`executor/mod.rs:535-546`) | Defensa en profundidad de H-02: hoy solo el esquema MCP quita `path` (`catalog.rs:319-325`), y un agente que hablara el protocolo completo podría elegir la ruta. Descartado: confiar en el esquema. **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO**. **Enmienda (2026-11-21, DS-US-MCP-019 D12), decisión del orquestador validada por Arquitecto**: la regla la construye DS-MCP-019 T004 en `cockpit_only_args`, dentro de `Executor::prepare`, después de `admit` y **antes de `OperationArgs::parse`** (no en `Executor::plan`), y rechaza también a toda conexión con perfil `mcp` (TS-GRP-010), para `path`, `reuse_branch` y `seed_copy`. Esta DS no construye la regla; T002 solo sirve la ruta explícita en `plan_op` |
 | C4 | **UNC y ruta mal formada se rechazan antes del daemon.** La TUI valida los parámetros con `OperationArgs::parse(OperationId::CreateWorktree, &args, false)`, la misma función que usa el daemon. Un `Invalid` con campo `path` pinta "ruta no válida: usa una ruta local absoluta, sin UNC ni `..`" y no se llama al daemon. El daemon vuelve a validar (`-32602`) | Escenario 6. `check_absolute` ya rechaza `\\…` y `//…` (`catalog.rs:535`). Un solo validador: la TUI no puede aceptar lo que el daemon rechaza. El rechazo de UNC en Windows real (incluido `\\?\`) se valida en la etapa multiplataforma (XP-57). **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO** |
 | C5 | **Deshacer = descartar el worktree creado**, y solo desde el panel de resultado (ventana de 5 s, C7): `u` lanza `discard-worktree` (DS-US-CKP-017) sobre la raíz de `created.path`, por el mismo `write_flow`. No usa `timemachine.undo`. Una rama recién creada, sin cambios, está integrada (su punta es la de la base o un antepasado), así que el descarte es `Affected::Nobody` y corre sin prompt (DS-017 X3). Si el desarrollador ya escribió algo, el descarte pide su confirmación y toma el previo garantizado del worktree nuevo; el descarte queda en el oplog y se puede deshacer (DS-017 X10). **Fuera del panel**: mientras el worktree creado exista, `raptor undo` o `u` sobre el principal responden `ref-in-use` (`undo.rs:563-581`); la CLI lo traduce a "esta operación creó un worktree; bórralo desde raptor (D en su fila)" sin cambiar el protocolo, y el historial (DS-021) muestra la entrada con `u` desactivado (Q-CKP-58, cerrada). Una rama nueva que casa con una regla de rama protegida no se deshace desde el panel (Q-CKP-57, cerrada; C7) | El undo genérico rechaza con `ref-in-use` (`undo.rs:556-583`) y la Time Machine no puede borrar un worktree sin porcelana (SEC-TMC-02). El descarte ya tiene previo, precondiciones (sesión presente, bloqueado) y Deshacer propio: NFR-01 sin código nuevo en la Time Machine. Descartados: un undo nativo de `create-worktree` en la Time Machine (otra recreación inversa, otra historia de la TM), `git worktree remove` desde la TUI (sin previo) y saltarse `protected-branch` en este descarte. Lo que hace `raptor undo` en el principal tras crear y tras el descarte es G6. **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO (revisión, con cambios)** |
 | C6 | **Deshacer espera a la fila.** El descarte nombra un worktree observado. Si al pulsar `u` la instantánea aún no tiene la fila de `created.path`, la petición queda pendiente y sale en cuanto aparece, mientras siga la ventana de 5 s; si no aparece, "el worktree aún no aparece; descártalo con D desde su fila" | ⚠️ **ASSUMPTION**: el motor publica el worktree nuevo dentro del presupuesto de frescura de ADR-GRP-011, que es menor de 5 s. Descartado: nombrar una ruta no observada (el canal la rechaza, `conn.rs:3270-3280` y `repo_of`). **Decisión del orquestador (2026-10-28), validada por Arquitecto y PO** |
@@ -137,7 +137,7 @@ sequenceDiagram
     F-->>T: formulario Rama / Ruta (T004)
     T->>T: OperationArgs::parse local (C4), si es inválido muestra el texto y no envía nada
     T->>D: operation.prepare create-worktree {branch, path?} (worktree = principal, C12)
-    D->>D: capa cockpit si hay path (C3, T002)
+    D->>D: cockpit_only_args antes de parse, path solo con capa cockpit y sin perfil mcp (C3, lo construye DS-MCP-019 T004 paso 1.5)
     D->>A: plan_op: base, rama libre, ruta (explícita o plantilla), check_new_worktree_path
     D-->>T: PrepareResult sin avisos ni reto
     T->>D: operation.run sin prompt (C11)
@@ -158,7 +158,7 @@ sequenceDiagram
 | # | Tarea | Depende | Aterriza en |
 |---|---|---|---|
 | T001 | Escribir en rojo los tests de contrato del daemon y de la TUI | G1, G2 | `crates/core/tests/us_ckp_018_create.rs`, `apps/cli/tests/tui_create_worktree.rs`, stubs |
-| T002 | Servir la ruta explícita y fijarla a la capa `cockpit` | T001 | `crates/core/src/executor/ops/create_worktree.rs`, `crates/core/src/executor/mod.rs`, `crates/api/src/worktree_template.rs` |
+| T002 | Servir la ruta explícita | T001 | `crates/core/src/executor/ops/create_worktree.rs`, `crates/api/src/worktree_template.rs` |
 | T003 | Crear la elegibilidad de "Crear worktree" en la TUI | T001 | `apps/cli/src/tui/create_worktree.rs` |
 | T004 | Crear el formulario y su edición | T003 | `apps/cli/src/tui/widgets/create_form.rs`, `apps/cli/src/tui/create_worktree.rs` |
 | T005 | Pintar la acción, enviar y mostrar el resultado, con textos en/es | T002, T004 | `tui/{update,view,help,keymap,mod}.rs`, `present/create_worktree_text.rs`, `present/write_text.rs`, `tui/write_flow.rs` |
@@ -185,14 +185,15 @@ T002 y T003 van en paralelo. T006 es lo único que espera a DS-017.
 - **Refs:** US-CKP-018 escenarios 1 a 6; § 9.4
 - **Aceptación:** `cargo test -p gitraptor-core --test us_ckp_018_create` y `cargo test -p gitraptor-cli --test tui_create_worktree` compilan y fallan por "no implementado"
 
-### T002 — Servir la ruta explícita y fijarla a la capa `cockpit`
+### T002 — Servir la ruta explícita
 
-**Objetivo.** Una conexión completa de la capa `cockpit` crea el worktree en la ruta que indica, con las mismas comprobaciones que la ruta de plantilla.
+**Objetivo.** Una conexión completa de la capa `cockpit` crea el worktree en la ruta que indica, con las mismas comprobaciones que la ruta de plantilla. La regla de capa de C3 **no** se construye aquí: la sirve `cockpit_only_args` de DS-US-MCP-019 (T004 paso 1.5, D12). **Security-review M-02, Decisión del orquestador (2026-11-21), validada por Arquitecto/Seguridad.**
 
 **Ubicación.**
 - `crates/core/src/executor/ops/create_worktree.rs` (**MODIFY**, lo crea DS-MCP-019 T004): rama `args.path = Some` de `plan_op`.
 - `crates/api/src/worktree_template.rs` (**MODIFY**, lo crea DS-MCP-019 T001): `pub fn check_final_path(&Path) -> Result<(), TemplateError>`, extraída de `PathTemplate::render` (la usan las dos rutas).
-- `crates/core/src/executor/mod.rs` (**MODIFY**): la regla de capa de C3 en `Executor::plan` (`:518-573`).
+
+`crates/core/src/executor/mod.rs` **no cambia** en esta DS.
 
 **Reglas** — `plan_op` con `args.path = Some(p)` (sustituye el paso 2.1 de DS-MCP-019 T004 solo cuando no se pidieron los brazos de prueba)
 1. Brazos de prueba pedidos → `test_arms::plan_op`, como hoy.
@@ -201,15 +202,15 @@ T002 y T003 van en paralelo. T006 es lo único que espera a DS-017.
 4. `check_new_worktree_path(p, &site.protected)`: `Exists` → `NewPathExists`; el resto → `NewPathRefused` (DS-MCP-019 ⛔1.1).
 5. El `OpPlan` y el paso, idénticos a los de la ruta de plantilla: la ruta canónica entra en la huella, `create_dir` no recursivo, `worktree add -b`, verificación posterior y nunca `remove_dir_all` (DS-MCP-019 D6, ⛔4.2).
 
-**Reglas** — capa (C3)
-- En `Executor::plan`, antes de `backend.plan_op`: `op == CreateWorktree`, `args` con `path` y `layer != Layer::Cockpit` → `RejectReason::NotAvailableForLayer`. Se evalúa al preparar y otra vez bajo el cerrojo, porque `run` rehace el plan.
+**Reglas** — capa (C3, enmendada el 2026-11-21)
+- Ya servida por DS-MCP-019: `cockpit_only_args` en `Executor::prepare`, después de `admit` y antes de `OperationArgs::parse`, rechaza `path` (y `reuse_branch`, `seed_copy`) presente con capa distinta de `cockpit` o con perfil `mcp` → `NotAvailableForLayer`. Esta tarea solo comprueba, en su test de punta a punta, que la regla sigue en verde con la ruta explícita servida.
 
 - **Depende:** T001, G1
 - **Refs:** C2, C3; DS-MCP-019 D2, D6, D7, T004; ADR-CKP-002 § 1 ("Ruta nueva") y § 5
 - **Aceptación:** `cargo test -p gitraptor-core --lib executor::ops::create_worktree` y `cargo test -p gitraptor-core --test us_ckp_018_create` en verde, y siguen en verde `--test channel_protected`, `--test ts_ckp_003_deadlock` y `cargo test -p gitraptor-cli --test guard_ts_ckp_003` (usan el brazo de prueba con ruta), con:
 - [ ] Ruta explícita que existe → `new-path-exists`; padre enlace simbólico → `new-path-refused`; dentro de un `.git` o de otro worktree → `new-path-refused`.
 - [ ] Ruta explícita con un componente `CON` o de 256 bytes → `new-path-refused`, sin llamar a `git`.
-- [ ] Capa `mcp` por conexión completa con `path` → `not-available-for-layer`, nada creado.
+- [ ] Capa `mcp`, o perfil `mcp`, con `path` → `not-available-for-layer`, nada creado (regla de DS-MCP-019 D12).
 - [ ] Repo *bare* con ruta explícita → creado; sin ruta → `new-path-refused` (DS-MCP-019 T003).
 
 ### T003 — Crear la elegibilidad de "Crear worktree" en la TUI
@@ -347,7 +348,6 @@ T002 y T003 van en paralelo. T006 es lo único que espera a DS-017.
 |---|---|---|
 | `crates/core/src/executor/ops/create_worktree.rs` | MODIFY (rama `path = Some`; lo crea DS-MCP-019) | T002 |
 | `crates/api/src/worktree_template.rs` | MODIFY (`check_final_path`; lo crea DS-MCP-019) | T002 |
-| `crates/core/src/executor/mod.rs` | MODIFY (regla de capa) | T002 |
 | `crates/core/tests/us_ckp_018_create.rs` | CREATE | T001 |
 | `apps/cli/src/tui/create_worktree.rs` | CREATE | T003, T004, T006 |
 | `apps/cli/src/tui/widgets/create_form.rs`, `widgets/mod.rs` | CREATE, MODIFY (1 línea) | T004 |
