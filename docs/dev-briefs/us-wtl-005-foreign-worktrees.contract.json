@@ -4,8 +4,8 @@
     "ref": "docs/requirements/features/worktree-lifecycle/dev-specs/US-WTL-005-convivencia-worktrees-ajenos.md"
   },
   "goal": {
-    "intent": "El desarrollador ve en raptor status, la TUI, la app y raptor-mcp quién creó cada worktree (Orca, worktrunk, Codex, Claude Code) o «ajeno» cuando no se sabe, y los de HEAD separado salen marcados «ajeno, no tocar», con detección de solo lectura",
-    "endState": "WorktreeView.origin existe detrás de la capacidad observation.worktree-origin, el motor lo calcula sin escribir en ningún worktree y los cuatro clientes lo pintan con la misma regla de confianza",
+    "intent": "El desarrollador ve en raptor status, la TUI y raptor-mcp quién creó cada worktree (Orca, worktrunk, Codex, Claude Code) o «ajeno» cuando no se sabe, y los de HEAD separado salen marcados «ajeno, no tocar», con detección de solo lectura; la app lo pinta también, verificado fuera de la certificación",
+    "endState": "WorktreeView.origin existe detrás de la capacidad observation.worktree-origin, el motor lo calcula sin escribir en ningún worktree y raptor status, la TUI y raptor-mcp lo pintan con la misma regla de confianza; la app (T009/T010) se verifica fuera de la certificación con el job desktop del CI",
     "nonGoals": [
       "crear, descartar, limpiar o copiar worktrees",
       "regla de detección de GitKraken",
