@@ -171,7 +171,7 @@ fn an_overlap_is_a_confirmation_and_any_other_rejection_is_not() {
 
 #[test]
 fn one_line_and_nothing_on_stderr() {
-    let ok = render_ok(&json!({"worktree": {"untrusted": "shop"}})).expect("serializes");
+    let ok = render_ok(&json!({"worktree": {"untrusted": "shop"}}), true).expect("serializes");
     let failed = render_fail(
         CliErrorCode::Cli(CliOnlyCode::ReservedCommand),
         Some(json!({"reason": "agent-ancestry"})),
@@ -201,7 +201,7 @@ fn untrusted_params_are_escaped() {
         CliErrorCode::Tool(McpToolError::RepoUnavailable),
         Some(params),
     );
-    let ok = render_ok(&json!({"worktree": {"untrusted": hostile}})).expect("serializes");
+    let ok = render_ok(&json!({"worktree": {"untrusted": hostile}}), true).expect("serializes");
     for line in [failed, ok] {
         assert!(!line.as_bytes().contains(&0x1b), "{line:?}");
         for hidden in ['\u{202e}', '\u{200b}'] {
@@ -209,6 +209,18 @@ fn untrusted_params_are_escaped() {
         }
         assert!(!line.contains('\n'));
     }
+}
+
+#[test]
+fn a_developer_output_keeps_the_raw_text_in_one_line() {
+    let raw = "a\u{1b}[31mb\nc";
+    let line = render_ok(&json!({"path": {"untrusted": raw}}), false).expect("serializes");
+    assert!(
+        !line.contains('\n') && !line.as_bytes().contains(&0x1b),
+        "{line:?}"
+    );
+    let value: Value = serde_json::from_str(&line).expect("JSON");
+    assert_eq!(value["data"]["path"]["untrusted"], raw);
 }
 
 #[test]

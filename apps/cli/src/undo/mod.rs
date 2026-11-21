@@ -196,8 +196,23 @@ pub fn run(json: bool, since: Option<&str>, agent: Option<&str>) -> ExitCode {
 pub(crate) fn typed_ok<T: serde::Serialize + serde::de::DeserializeOwned>(
     value: serde_json::Value,
 ) -> ExitCode {
+    typed::<T>(value, true)
+}
+
+/// [`typed_ok`] for a developer output outside the agent view: `untrusted` keeps the raw text.
+pub(crate) fn typed_ok_raw<T: serde::Serialize + serde::de::DeserializeOwned>(
+    value: serde_json::Value,
+) -> ExitCode {
+    typed::<T>(value, false)
+}
+
+fn typed<T: serde::Serialize + serde::de::DeserializeOwned>(
+    value: serde_json::Value,
+    sanitize: bool,
+) -> ExitCode {
     match serde_json::from_value::<T>(value) {
-        Ok(result) => json_out::ok(&result),
+        Ok(result) if sanitize => json_out::ok(&result),
+        Ok(result) => json_out::ok_raw(&result),
         Err(_) => json_out::fail(CliErrorCode::Tool(McpToolError::Internal), None),
     }
 }

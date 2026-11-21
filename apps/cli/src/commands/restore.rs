@@ -82,7 +82,7 @@ impl Cmd {
         match answer {
             Ok(value) => {
                 if self.json {
-                    return undo::typed_ok::<RestoreResult>(value);
+                    return undo::typed_ok_raw::<RestoreResult>(value);
                 }
                 match serde_json::from_value::<RestoreResult>(value) {
                     Ok(result) => {

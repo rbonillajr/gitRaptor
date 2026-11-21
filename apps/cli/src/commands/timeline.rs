@@ -95,7 +95,7 @@ impl Cmd {
             }
         };
         if self.json {
-            return undo::typed_ok::<TimelineResult>(value);
+            return undo::typed_ok_raw::<TimelineResult>(value);
         }
         let result = match serde_json::from_value::<TimelineResult>(value) {
             Ok(result) => result,

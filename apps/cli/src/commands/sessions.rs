@@ -56,7 +56,7 @@ fn sessions_command(json: bool, all: bool) -> ExitCode {
         }
     };
     if json {
-        return json_out::ok(&sessions::json(&list.sessions, list.detection_available));
+        return json_out::ok_raw(&sessions::json(&list.sessions, list.detection_available));
     } else {
         print!(
             "{}",
