@@ -1018,6 +1018,14 @@ pub const COST_TABLE: &[CostRow] = &[
     cost(2, 56, 0, "fetch", PREPARING_FETCH),
     cost(2, 56, 0, "stash", PREPARING_STASH),
     cost(2, 56, 0, "stash-pop", PREPARING_STASH_POP),
+    // Linux CI runner (ubuntu-latest), Git 2.56.1, 2026-11-21: identical to 2.56.0.
+    cost(2, 56, 1, "commit", PREPARING_COMMIT),
+    cost(2, 56, 1, "switch-new", PREPARING_SWITCH_NEW),
+    cost(2, 56, 1, "switch", PREPARING_SWITCH),
+    cost(2, 56, 1, "rebase-3", PREPARING_REBASE_3),
+    cost(2, 56, 1, "fetch", PREPARING_FETCH),
+    cost(2, 56, 1, "stash", PREPARING_STASH),
+    cost(2, 56, 1, "stash-pop", PREPARING_STASH_POP),
     // Linux container (xplat/run-linux.sh, arm64), 2026-10-06: Git 2.38.5 built from source (the
     // minimum, NFR-07) and the distro's 2.43.0, identical. Before the symbolic-ref transactions
     // (`ref:<target>`, SPIKE-GRD-001 § 3) moving `HEAD` runs no `reference-transaction`.
