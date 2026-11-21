@@ -289,7 +289,6 @@ graph LR
 - `crates/core/src/channel/mcp_conflicts_tests.rs` (**MODIFY**)
 - `crates/core/src/channel/mcp_status_more_tests.rs` (**MODIFY**)
 - `crates/core/src/channel/mcp_status_tests.rs` (**MODIFY**)
-- `crates/core/src/executor/ops/commit_paths.rs` (**MODIFY**)
 - `crates/core/tests/observe.rs` (**MODIFY**)
 - `crates/core/tests/us_grp_003_states.rs` (**MODIFY**)
 
@@ -307,10 +306,11 @@ graph LR
 
 **Ubicación.**
 - `crates/core/src/worktree_origin.rs` (**CREATE**)
-- `crates/core/src/worktree_origin_tests.rs` (**CREATE**)
+- `crates/core/tests/worktree_origin_detect.rs` (**CREATE**)
 - `crates/core/src/lib.rs` (**MODIFY**)
 
 **Reglas**
+- `lib.rs` lleva `pub mod worktree_origin;`; `OriginEnv` (campos públicos), `detect`, `is_locked`, `hands_off`, `origin_of` y `refuses_destructive` son `pub`, porque la prueba de aceptación es de integración.
 - Aplica las reglas de [Reglas de detección](#reglas-de-detección) en ese orden; la primera que acierta gana.
 - Solo `std::fs::symlink_metadata` sobre `<common>/worktrees/<id>/orca` y `<common>/worktrees/<id>/locked`; nada se abre, nada se lee dentro de la raíz del worktree y nada se escribe, mueve ni borra.
 - El `id` se acepta solo si es un único componente `Normal`, como en `linked_is_trusted_in` (`observe.rs:538`).
@@ -323,7 +323,7 @@ graph LR
 
 - **Depende:** T001
 - **Refs:** ADR-GRP-009 (frontera de solo lectura); SEC-11; NFR-01
-- **Aceptación:** `cargo test -p gitraptor-core --lib worktree_origin` (una prueba por regla, precedencia marca > ruta, Codex con `CODEX_HOME` y con el valor por defecto, repo bare sin reglas de raíz principal, `orca` simbólico ignorado, raíz borrada sin pánico, `refuses_destructive`).
+- **Aceptación:** `cargo test -p gitraptor-core --test worktree_origin_detect` (una prueba por regla, precedencia marca > ruta, Codex con `CODEX_HOME` y con el valor por defecto, repo bare sin reglas de raíz principal, `orca` simbólico ignorado, raíz borrada sin pánico, `refuses_destructive`).
 
 ### T004 — Rellenar el origen y la marca al leer cada worktree
 
@@ -514,7 +514,6 @@ crates/api/src/
 crates/api/tests/worktree_origin.rs    ← CREATE  (T001)
 crates/core/src/
 ├── worktree_origin.rs                 ← CREATE  (T003)
-├── worktree_origin_tests.rs           ← CREATE  (T003)
 ├── lib.rs                             ← MODIFY  (T003, una línea)
 ├── observe.rs                         ← MODIFY  (T004)
 └── channel/
@@ -523,6 +522,7 @@ crates/core/src/
     ├── mcp_status.rs                  ← MODIFY  (T006)
     └── mcp_status_origin_tests.rs     ← CREATE  (T006)
 crates/core/tests/
+├── worktree_origin_detect.rs          ← CREATE  (T003)
 ├── worktree_origin.rs                 ← CREATE  (T004)
 └── worktree_origin_capability.rs      ← CREATE  (T005)
 apps/cli/
@@ -550,7 +550,7 @@ docs/architecture/
 └── decisions/ADR-GRP-016-…md          ← MODIFY  (T011)
 ```
 
-`← CREATE`: fichero nuevo. `← MODIFY`: fichero existente. Los 25 ficheros de construcciones literales de T002 están en su `Ubicación`.
+`← CREATE`: fichero nuevo. `← MODIFY`: fichero existente. Los 24 ficheros de construcciones literales de T002 están en su `Ubicación`.
 
 ---
 
@@ -825,4 +825,4 @@ Corre `/security-review --scope devspec docs/requirements/features/worktree-life
 | G7 | Un worktree creado a mano no se distingue de uno desconocido: sale «ajeno», que es lo que pide el escenario 1 | Ninguna | — |
 | G8 | Un worktree cuya carpeta se borra sin `git worktree remove` sigue registrado y sale `unavailable { missing }` hasta que Git lo poda (contrato actual, `api-contract-ipc.md` § Estado de un worktree). No es un error | Ninguna | — |
 | G9 | Ramas en paralelo que tocan lo mismo: US-WTL-001 y US-WTL-002 (worktrees `wtlcreate`, `wtldiscard`) deben consumir `refuses_destructive`; US-MCP-023 toca el JSON de `status.rs`. `messages.rs` sigue compartido: mergear en serie | Coordinar el orden de merge | Orquestador |
-| G10 | T002 edita 25 ficheros solo para añadir `origin: None`. Un constructor de `WorktreeView` para tests ahorraría esto la próxima vez | Fuera de alcance; anotar como TD si se repite | Arquitecto |
+| G10 | T002 edita 24 ficheros solo para añadir `origin: None`. Un constructor de `WorktreeView` para tests ahorraría esto la próxima vez | Fuera de alcance; anotar como TD si se repite | Arquitecto |
