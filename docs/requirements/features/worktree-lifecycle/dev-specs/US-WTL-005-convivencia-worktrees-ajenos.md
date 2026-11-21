@@ -439,6 +439,7 @@ graph LR
 - `CAP_OBSERVATION_WORKTREE_ORIGIN.name` entra en la lista de capacidades de `link.rs:20`.
 - `WorktreeDto` (`wire.rs:326`) gana `origin: Option<OriginDto>`; `ingest::worktree` (`ingest.rs:185`) traduce los enums cerrados uno a uno. No hay texto no confiable nuevo.
 - La lista cerrada de comandos de ADR-GRP-017 § 1 no cambia.
+- Tests existentes que cambian porque la lista de capacidades crece (no son tests de criterio firmados): `apps/desktop/src-tauri/tests/engine_link.rs:122` (exige exactamente las capacidades de `REQUIRED_CAPABILITIES`) y `engine_launcher.rs:28`; se actualizan al nuevo contenido de la lista, sin debilitar otras aserciones.
 
 - **Depende:** T005
 - **Refs:** ADR-GRP-017 § 1 y § 2; SEC-12
@@ -460,6 +461,7 @@ graph LR
 - `WorktreeDto` en TS gana `origin: OriginDto | null`; `CardModel` gana `originText: string | null` y `handsOff: boolean`.
 - `originText` sigue la misma regla que la TUI con las claves `fleet.origin.*` y `fleet.handsOff.*`; React lo pinta como texto.
 - `a11yLabel` incluye `originText`.
+- `apps/desktop/src/fleet/fixtures.ts` (`worktree()`) fija `origin: null` para que compile el tipado; no es un test de criterio firmado.
 
 - **Depende:** T009
 - **Refs:** ADR-GRP-004; ADR-GRP-017 § 2 (texto no confiable)
