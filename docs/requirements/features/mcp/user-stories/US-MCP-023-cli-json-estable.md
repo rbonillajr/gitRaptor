@@ -139,4 +139,4 @@ Arquitecto, 2026-11-10: [ADR-MCP-001, Enmienda (2026-11-10, superficie para agen
 - **Diseño:** no aplica (salida para máquinas; la regla de `--json` ya está en el design system, tabla de la CLI).
 - **Dev Spec:** **sí** (decisión del Arquitecto, 2026-11-10). [DS-US-MCP-023](../dev-specs/US-MCP-023-dev-spec.md) (`implemented`, 2026-11-21).
 
-Implementado en: PR #378 (sin certificar: modo FAST, sin baseline de suite completa; Linux y Windows pendientes).
+Implementado en: PR #380 (sin certificar: modo FAST, sin baseline de suite completa; Linux y Windows pendientes).

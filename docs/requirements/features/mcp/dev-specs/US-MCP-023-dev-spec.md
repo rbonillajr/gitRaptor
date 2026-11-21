@@ -653,4 +653,4 @@ Corre `/security-review --scope devspec docs/requirements/features/mcp/dev-specs
 | G5 | US-MCP-020 (guía) debe probar sus códigos contra `cli_contract::stable_codes()`, no solo contra `McpToolError::ALL`. | Anotarlo en su Dev Spec | Arquitecto |
 | G6 | Hoy, bajo perfil `mcp`, `sessions`/`timeline`/`guard log` dan texto («el motor todavía no hace eso», `NOT_IMPLEMENTED`/`METHOD_NOT_FOUND` de `crates/core/src/channel/conn.rs`). Sin `--json` no cambia. | Ninguna | — |
 
-Implementado en: PR #378.
+Implementado en: PR #380.
