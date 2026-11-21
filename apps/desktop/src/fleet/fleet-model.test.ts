@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import "@/i18n";
 import en from "@/i18n/locales/en.json";
 import es from "@/i18n/locales/es.json";
+import type { OriginDto } from "@/client/engine-types";
 import { fleetCards, formatAge, knownConflicts, type CardModel } from "./fleet-model";
 import { HOUR, MIN, NOW, counted, pair, ready, session, tienda, worktree } from "./fixtures";
 
@@ -373,5 +374,68 @@ describe("accessible name and catalogs", () => {
     for (const catalog of [en.fleet, es.fleet, en.repos, es.repos]) {
       for (const text of texts(catalog)) expect(text.toLowerCase()).not.toMatch(/human/);
     }
+  });
+});
+
+// US-WTL-005 (T010): the card shows who created a linked worktree, or "Foreign · do not touch".
+describe("worktree origin (US-WTL-005)", () => {
+  const origin = (tool: OriginDto["tool"], evidence: OriginDto["evidence"], handsOff: OriginDto["handsOff"] = null): OriginDto => ({ tool, evidence, handsOff });
+  const withOrigins = () =>
+    tienda({
+      worktrees: [
+        worktree("tienda", { main: true }),
+        worktree("w-orca", { origin: origin("orca", "admin-marker") }),
+        worktree("w-codex", { origin: origin("codex", "path-pattern") }),
+        worktree("w-claude", { origin: origin("claude-code", "path-pattern") }),
+        worktree("w-manual", { origin: origin("unknown", "none") }),
+        worktree("w-detached", { origin: origin("unknown", "none", "detached") }),
+        worktree("w-locked", { origin: origin("codex", "path-pattern", "locked") }),
+        worktree("w-unreadable", { origin: origin("unknown", "none", "unreadable") }),
+        worktree("w-plain"),
+      ],
+      sessions: [],
+    });
+
+  it("a certain origin shows the tool, a probable one says probably, an unknown one says foreign", () => {
+    const list = cards(withOrigins());
+    expect(card(list, "w-orca")).toMatchObject({ originText: "Orca", handsOff: false });
+    expect(card(list, "w-codex")).toMatchObject({ originText: "Probably Codex", handsOff: false });
+    expect(card(list, "w-claude")).toMatchObject({ originText: "Probably Claude Code", handsOff: false });
+    expect(card(list, "w-manual")).toMatchObject({ originText: "Foreign", handsOff: false });
+  });
+
+  it("the mark replaces the origin and says why", () => {
+    const list = cards(withOrigins());
+    expect(card(list, "w-detached")).toMatchObject({ originText: "Foreign · do not touch (detached HEAD)", handsOff: true });
+    expect(card(list, "w-locked")).toMatchObject({ originText: "Foreign · do not touch (locked)", handsOff: true });
+    expect(card(list, "w-unreadable")).toMatchObject({ originText: "Foreign · do not touch (unreadable)", handsOff: true });
+  });
+
+  it("in Spanish", () => {
+    const list = fleetCards(withOrigins(), NOW, true, tEs);
+    expect(card(list, "w-orca").originText).toBe("Orca");
+    expect(card(list, "w-codex").originText).toBe("Probablemente Codex");
+    expect(card(list, "w-manual").originText).toBe("Ajeno");
+    expect(card(list, "w-detached")).toMatchObject({ originText: "Ajeno · no tocar (HEAD separado)", handsOff: true });
+    expect(card(list, "w-locked").originText).toBe("Ajeno · no tocar (bloqueado)");
+    expect(card(list, "w-unreadable").originText).toBe("Ajeno · no tocar (ilegible)");
+  });
+
+  it("the main worktree and a worktree without origin have no badge", () => {
+    const list = cards(withOrigins());
+    // Control: the origin of the others is there, so the absence below is the rule's.
+    expect(card(list, "w-orca").originText).not.toBeNull();
+    for (const folder of ["tienda", "w-plain"]) {
+      expect(card(list, folder)).toMatchObject({ originText: null, handsOff: false });
+    }
+  });
+
+  it("the accessible name includes the origin", () => {
+    const list = cards(withOrigins());
+    expect(card(list, "w-orca").a11yLabel).toContain("Orca");
+    expect(card(list, "w-codex").a11yLabel).toContain("Probably Codex");
+    expect(card(list, "w-detached").a11yLabel).toContain("Foreign · do not touch (detached HEAD)");
+    expect(card(list, "w-plain").a11yLabel).not.toContain("Foreign");
+    expect(card(list, "tienda").a11yLabel).not.toContain("Foreign");
   });
 });

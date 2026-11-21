@@ -31,7 +31,7 @@
     },
     {
       "id": "O2",
-      "statement": "Cuando el motor detecta el origen de un worktree enlazado, la marca orca/ del directorio de administración da orca/admin-marker (un enlace simbólico no cuenta), las rutas dan worktrunk, codex, claude-code u orca por patrón de ruta (probable), lo demás es unknown/none y nunca gitkraken, y hands_off sale por HEAD separado, bloqueado o ilegible, sin pánico si la raíz desapareció",
+      "statement": "Cuando el motor detecta el origen de un worktree enlazado, la marca orca/ del directorio de administración da orca/admin-marker (un enlace simbólico no cuenta), las rutas dan worktrunk, codex, claude-code u orca por patrón de ruta (probable), lo demás es unknown/none y nunca gitkraken, hands_off sale por HEAD separado, bloqueado o ilegible, sin pánico si la raíz desapareció, y refuses_destructive es true para un worktree enlazado sin origen o con hands_off y false para el principal y para un ajeno sin marca",
       "priority": "must",
       "verify": "cargo test -p gitraptor-core --test worktree_origin_detect",
       "layer": "runtime",
@@ -47,7 +47,7 @@
     },
     {
       "id": "O4",
-      "statement": "Cuando una conexión no aceptó observation.worktree-origin, ninguna salida (repo.add, engine.snapshot, scope.snapshot, worktree.state) lleva origin; con la capacidad las cuatro lo llevan, y la página de worktrees de raptor-mcp lo incluye solo con ella",
+      "statement": "Cuando una conexión no aceptó observation.worktree-origin, ninguna salida (repo.add, engine.snapshot, scope.snapshot, worktree.state) lleva origin; con la capacidad las cuatro lo llevan, y la página de worktrees de raptor-mcp (pedida por el canal con y sin la capacidad) lo incluye solo con ella",
       "priority": "must",
       "verify": "cargo test -p gitraptor-core --test worktree_origin_capability",
       "layer": "runtime",
@@ -73,7 +73,7 @@
       "id": "O7",
       "statement": "Cuando el backend de la app recibe un worktree con origen, pide la capacidad en el enlace, entrega origin en el WorktreeDto (null sin origen) sin añadir ningún comando IPC",
       "priority": "must",
-      "verify": "cargo test -p gitraptor-desktop --test worktree_origin",
+      "verify": "pnpm --filter @gitraptor/desktop build && cargo test -p gitraptor-desktop --test worktree_origin",
       "layer": "runtime",
       "tests": ["apps/desktop/src-tauri/tests/worktree_origin.rs"]
     },

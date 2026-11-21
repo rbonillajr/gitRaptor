@@ -51,6 +51,7 @@ mod timemachine_redo_tests;
 #[path = "timemachine_since_tests.rs"]
 mod timemachine_since_tests;
 pub mod untrusted;
+pub mod worktree_origin;
 
 pub use actor::{Actor, AgentKind, AgentOrigin};
 pub use event::{Event, Timings};
