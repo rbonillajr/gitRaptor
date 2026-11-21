@@ -140,7 +140,7 @@ impl Machine {
     fn observed(&self) -> Vec<String> {
         let out = self.read(&["status", "--json"]);
         assert!(out.status.success(), "{}", text(&out));
-        let status: Value = serde_json::from_slice(&out.stdout).unwrap();
+        let status: Value = data_of(serde_json::from_slice(&out.stdout).unwrap());
         status["repos"]
             .as_array()
             .unwrap()
@@ -313,4 +313,13 @@ fn escape_leaves_it_for_later_and_no_dismisses_it() {
     });
     tui.quit();
     assert!(!m.observes("fresh"), "{:?}", m.observed());
+}
+
+/// The `data` of a `--json` envelope: the contract version is checked, the payload returned.
+fn data_of(envelope: serde_json::Value) -> serde_json::Value {
+    assert_eq!(envelope["schema_version"], "1.0", "{envelope:#}");
+    envelope
+        .get("data")
+        .cloned()
+        .unwrap_or_else(|| panic!("no data in the envelope: {envelope:#}"))
 }

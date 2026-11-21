@@ -262,7 +262,7 @@ impl Machine {
             .lines()
             .find_map(|l| l.find('{').map(|i| &l[i..]))
             .unwrap_or_else(|| panic!("no JSON: {stdout}"));
-        serde_json::from_str(line.trim()).unwrap()
+        data_of(serde_json::from_str(line.trim()).unwrap())
     }
 
     fn profile_settings(&self, json: &str) {
@@ -570,4 +570,13 @@ fn degraded_mode_applies_the_rules_for_everyone_of_the_floor() {
     m.ok(m.human("restore -q --staged ."));
     m.ok(m.human("switch -q feat-x"));
     m.ok(m.commit(true, &[("agent.txt", Some("a\n"))], "commit -q"));
+}
+
+/// The `data` of a `--json` envelope: the contract version is checked, the payload returned.
+fn data_of(envelope: serde_json::Value) -> serde_json::Value {
+    assert_eq!(envelope["schema_version"], "1.0", "{envelope:#}");
+    envelope
+        .get("data")
+        .cloned()
+        .unwrap_or_else(|| panic!("no data in the envelope: {envelope:#}"))
 }

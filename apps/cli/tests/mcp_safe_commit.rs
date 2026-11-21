@@ -204,8 +204,10 @@ impl Machine {
         let start = shown
             .find('{')
             .unwrap_or_else(|| panic!("no JSON: {shown}"));
-        serde_json::from_str(shown[start..].trim())
-            .unwrap_or_else(|e| panic!("not JSON ({e}): {shown}"))
+        data_of(
+            serde_json::from_str(shown[start..].trim())
+                .unwrap_or_else(|e| panic!("not JSON ({e}): {shown}")),
+        )
     }
 
     /// The operations `raptor timeline --json` shows from the worktree.
@@ -962,4 +964,13 @@ fn a_retry_while_the_commit_runs_is_operation_in_progress() {
     let done = agent.read(first)["result"].clone();
     assert_committed(&done);
     assert_eq!(m.commits(), commits + 1, "the retry made a second commit");
+}
+
+/// The `data` of a `--json` envelope: the contract version is checked, the payload returned.
+fn data_of(envelope: serde_json::Value) -> serde_json::Value {
+    assert_eq!(envelope["schema_version"], "1.0", "{envelope:#}");
+    envelope
+        .get("data")
+        .cloned()
+        .unwrap_or_else(|| panic!("no data in the envelope: {envelope:#}"))
 }

@@ -298,8 +298,15 @@ fn raptor_undo_recovers_uncommitted_work_after_a_real_reset_hard() {
     let before = m.fx.fingerprint();
     let again = m.raptor(&m.worktree, &["undo", "--json"], "es_ES.UTF-8");
     assert!(!again.status.success());
-    let stderr = text(&again.stderr);
-    assert!(stderr.contains("no hay nada que deshacer"), "{stderr}");
+    // The refusal is a JSON envelope on stdout now: the reason is its stable code, the text in
+    // Spanish.
+    let envelope: serde_json::Value = serde_json::from_slice(&again.stdout).unwrap();
+    assert_eq!(
+        envelope["error"]["params"]["detail"], "nothing-to-undo",
+        "{envelope}"
+    );
+    let message = envelope["error"]["message"].as_str().unwrap();
+    assert!(message.contains("rechaz"), "{envelope}");
     assert!(diff(&before, &m.fx.fingerprint()).is_empty());
     assert_eq!(std::fs::read_to_string(&login).unwrap(), work);
 }
@@ -314,7 +321,8 @@ fn raptor_undo_json_prints_the_result() {
     let out = m.raptor(&m.worktree, &["undo", "--json"], "en_US.UTF-8");
 
     assert!(out.status.success(), "{}", text(&out.stderr));
-    let result: UndoResult = serde_json::from_slice(&out.stdout).unwrap();
+    let result: UndoResult =
+        serde_json::from_value(data_of(serde_json::from_slice(&out.stdout).unwrap())).unwrap();
     assert_eq!(result.undone_operation_id, op.operation_id);
     assert_eq!(result.target_snapshot_id, op.prior_snapshot_id);
 }
@@ -393,4 +401,13 @@ fn an_agents_work_needs_a_confirmation_that_is_not_there_yet() {
     let stderr = text(&out.stderr);
     assert!(stderr.contains("belongs to an agent"), "{stderr}");
     assert!(diff(&before, &m.fx.fingerprint()).is_empty());
+}
+
+/// The `data` of a `--json` envelope: the contract version is checked, the payload returned.
+fn data_of(envelope: serde_json::Value) -> serde_json::Value {
+    assert_eq!(envelope["schema_version"], "1.0", "{envelope:#}");
+    envelope
+        .get("data")
+        .cloned()
+        .unwrap_or_else(|| panic!("no data in the envelope: {envelope:#}"))
 }

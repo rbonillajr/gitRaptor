@@ -414,7 +414,10 @@ fn an_agent_recovers_its_work_after_a_raw_reset_hard() {
     );
     // TS-GRP-010 (S-01, M-01): the agent's `raptor undo` has the `mcp` profile, whose result
     // counts and names only the operation; the work is back on disk, which is what matters.
-    let undo: McpUndoResult = serde_json::from_slice(&std::fs::read(&report).unwrap()).unwrap();
+    let undo: McpUndoResult = serde_json::from_value(data_of(
+        serde_json::from_slice(&std::fs::read(&report).unwrap()).unwrap(),
+    ))
+    .unwrap();
     assert!(!undo.undone_operation_id.is_empty());
     assert_eq!(std::fs::read(m.worktree.join("login.txt")).unwrap(), WORK);
     assert_eq!(std::fs::read(m.worktree.join("util.rs")).unwrap(), UTIL);
@@ -450,4 +453,13 @@ fn an_agent_recovers_its_work_after_a_raw_reset_hard() {
     assert_eq!(std::fs::read(m.worktree.join("login.txt")).unwrap(), WORK);
     drop(claude);
     m.stop();
+}
+
+/// The `data` of a `--json` envelope: the contract version is checked, the payload returned.
+fn data_of(envelope: serde_json::Value) -> serde_json::Value {
+    assert_eq!(envelope["schema_version"], "1.0", "{envelope:#}");
+    envelope
+        .get("data")
+        .cloned()
+        .unwrap_or_else(|| panic!("no data in the envelope: {envelope:#}"))
 }

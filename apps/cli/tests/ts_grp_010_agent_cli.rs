@@ -222,17 +222,19 @@ fn path(p: &Path) -> &str {
     p.to_str().unwrap()
 }
 
-/// The first JSON object of a command's output (a pty may wrap it in other text).
+/// The `data` of the first JSON envelope of a command's output (a pty may wrap it in other text).
 fn json_of(out: &Output) -> Value {
     let shown = String::from_utf8_lossy(&out.stdout);
     let start = shown
         .find('{')
         .unwrap_or_else(|| panic!("no JSON: {}", text(out)));
-    serde_json::Deserializer::from_str(&shown[start..])
+    let envelope: Value = serde_json::Deserializer::from_str(&shown[start..])
         .into_iter::<Value>()
         .next()
         .unwrap()
-        .unwrap()
+        .unwrap();
+    assert_eq!(envelope["schema_version"], "1.0", "{envelope:#}");
+    envelope["data"].clone()
 }
 
 /// An observed repo, not enabled for the MCP.

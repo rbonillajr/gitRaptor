@@ -396,7 +396,7 @@ impl Machine {
     fn observed_repos(&self, deadline: Instant) -> Option<Vec<Value>> {
         let stdout = self.raptor_until(&["status", "--json"], deadline)?;
         let status: Value = serde_json::from_slice(&stdout).ok()?;
-        status["repos"].as_array().cloned()
+        status["data"]["repos"].as_array().cloned()
     }
 
     /// Stdout of `raptor args` if it ends successfully before `deadline`; the process is killed

@@ -284,7 +284,7 @@ impl Machine {
             self.worktree.join("b.rs").exists(),
             "the undo recovered b.rs"
         );
-        serde_json::from_slice(&out.stdout).expect("the undo's JSON")
+        data_of(serde_json::from_slice(&out.stdout).expect("the undo's JSON"))
     }
 
     /// The point the last redo of the oplog took before itself.
@@ -386,12 +386,12 @@ fn redo_json_prints_the_result() {
         "TMC003-E2E: the redo --json is done: {}",
         all_text(&out)
     );
-    let result: Value = serde_json::from_slice(&out.stdout).unwrap_or_else(|e| {
+    let result: Value = data_of(serde_json::from_slice(&out.stdout).unwrap_or_else(|e| {
         panic!(
             "TMC003-E2E: stdout is the JSON result ({e}): {}",
             all_text(&out)
         )
-    });
+    }));
     assert_eq!(
         result["redone_undo_id"], undo["operation_id"],
         "TMC003-E2E: {result}"
@@ -472,4 +472,13 @@ fn an_operation_after_the_undo_invalidates_the_redo() {
         let changes = diff(&before, &m.fx.fingerprint());
         assert!(changes.is_empty(), "TMC003-E2E ({lang}): {changes:#?}");
     }
+}
+
+/// The `data` of a `--json` envelope: the contract version is checked, the payload returned.
+fn data_of(envelope: serde_json::Value) -> serde_json::Value {
+    assert_eq!(envelope["schema_version"], "1.0", "{envelope:#}");
+    envelope
+        .get("data")
+        .cloned()
+        .unwrap_or_else(|| panic!("no data in the envelope: {envelope:#}"))
 }

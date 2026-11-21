@@ -147,7 +147,7 @@ impl Machine {
     fn status(&self) -> Value {
         let out = self.raptor(&["status", "--json"], &[]);
         assert!(out.status.success(), "{}", text(&out));
-        serde_json::from_slice(&out.stdout).unwrap()
+        data_of(serde_json::from_slice(&out.stdout).unwrap())
     }
 
     fn client(&self) -> Client {
@@ -469,4 +469,13 @@ fn staging_everything_picks_up_nothing_from_the_engine() {
     let staged = m.f.git(&["diff", "--cached", "--name-only"]);
     assert_eq!(staged.lines().collect::<Vec<_>>(), ["login.txt"]);
     m.stop();
+}
+
+/// The `data` of a `--json` envelope: the contract version is checked, the payload returned.
+fn data_of(envelope: serde_json::Value) -> serde_json::Value {
+    assert_eq!(envelope["schema_version"], "1.0", "{envelope:#}");
+    envelope
+        .get("data")
+        .cloned()
+        .unwrap_or_else(|| panic!("no data in the envelope: {envelope:#}"))
 }

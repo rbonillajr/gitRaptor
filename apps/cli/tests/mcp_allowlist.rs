@@ -167,7 +167,7 @@ impl Machine {
 
     fn repo_id(&self, path: &Path) -> String {
         let out = self.raptor(&["status", "--json"]);
-        let status: Value = serde_json::from_slice(&out.stdout).unwrap();
+        let status: Value = data_of(serde_json::from_slice(&out.stdout).unwrap());
         let want = gitraptor_core::observe::canonical(path);
         status["repos"]
             .as_array()
@@ -186,7 +186,7 @@ impl Machine {
 
     fn observed(&self) -> usize {
         let out = self.raptor(&["status", "--json"]);
-        let status: Value = serde_json::from_slice(&out.stdout).unwrap();
+        let status: Value = data_of(serde_json::from_slice(&out.stdout).unwrap());
         status["repos"].as_array().unwrap().len()
     }
 
@@ -816,4 +816,13 @@ fn a_looping_agent_hits_its_connection_limit() {
     // Another connection has its own budget.
     let other = m.mcp_status(&m.f.repo);
     assert_eq!(other["isError"], false, "{other}");
+}
+
+/// The `data` of a `--json` envelope: the contract version is checked, the payload returned.
+fn data_of(envelope: serde_json::Value) -> serde_json::Value {
+    assert_eq!(envelope["schema_version"], "1.0", "{envelope:#}");
+    envelope
+        .get("data")
+        .cloned()
+        .unwrap_or_else(|| panic!("no data in the envelope: {envelope:#}"))
 }

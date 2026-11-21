@@ -289,7 +289,7 @@ impl Machine {
             .lines()
             .find_map(|l| l.find('{').map(|i| &l[i..]))
             .unwrap_or_else(|| panic!("no JSON: {stdout}"));
-        serde_json::from_str(line.trim()).unwrap()
+        data_of(serde_json::from_str(line.trim()).unwrap())
     }
 
     /// `(rule, level, cause)` of every reason of every entry of the log.
@@ -1067,7 +1067,7 @@ impl Machine {
             .output()
             .unwrap();
         assert!(out.status.success(), "{}", text(&out));
-        serde_json::from_slice(&out.stdout).unwrap()
+        data_of(serde_json::from_slice(&out.stdout).unwrap())
     }
 
     /// The status JSON once `ready` holds (the daemon re-reads the team level on a ref change;
@@ -1254,4 +1254,13 @@ fn a_team_relaxation_waits_for_the_developer() {
         rejected.reason.as_deref().is_some_and(|r| !r.is_empty()),
         "{rejected:?}"
     );
+}
+
+/// The `data` of a `--json` envelope: the contract version is checked, the payload returned.
+fn data_of(envelope: serde_json::Value) -> serde_json::Value {
+    assert_eq!(envelope["schema_version"], "1.0", "{envelope:#}");
+    envelope
+        .get("data")
+        .cloned()
+        .unwrap_or_else(|| panic!("no data in the envelope: {envelope:#}"))
 }

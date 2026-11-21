@@ -108,9 +108,10 @@ describe('sample', () => {
       fake,
       `#!${process.execPath}\n` +
         `const a = process.argv.slice(2).join(' ');\n` +
-        `if (a.startsWith('status')) console.log(JSON.stringify({ running: true, engine: { pid: 7, cpu: { mean_pct: 0.3, target_pct: 1 }, rss_bytes: { value: 1000, target: 157286400 }, watches: { roots: 10 } } }));\n` +
-        `else if (a.startsWith('sessions')) console.log(JSON.stringify({ detection_available: true, sessions: [] }));\n` +
-        `else console.log('[]');\n`,
+        `const wrap = (data) => JSON.stringify({ schema_version: '1.0', data });\n` +
+        `if (a.startsWith('status')) console.log(wrap({ running: true, engine: { pid: 7, cpu: { mean_pct: 0.3, target_pct: 1 }, rss_bytes: { value: 1000, target: 157286400 }, watches: { roots: 10 } } }));\n` +
+        `else if (a.startsWith('sessions')) console.log(wrap({ detection_available: true, sessions: [] }));\n` +
+        `else console.log(wrap([]));\n`,
     );
     chmodSync(fake, 0o755);
     const data = join(tmp, 'e2e-data');
