@@ -24,7 +24,8 @@ related:
     - BR-WTL-007
     - BR-WTL-009
     - BR-WTL-016
-  specs: []
+  specs:
+    - DS-US-WTL-003
 ado:
   id: null
   url: null
@@ -171,11 +172,16 @@ Entonces el cockpit indica junto a ese agente que el estado del CI no se pudo le
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección)._
+- **Dev Spec:** [`dev-specs/US-WTL-003-estado-real-del-agente.md`](../dev-specs/US-WTL-003-estado-real-del-agente.md) — `DS-US-WTL-003` (status: spec-ready). Diseño base: ADR-GRP-012, Enmienda (2026-11-21, estados del agente).
+- **Contrato**: capacidad aditiva `sessions.agent-state` (campos nuevos de `SessionView` y evento `session.agent-state`); un cliente sin ella ve el `state` de siempre (activo, inactivo, terminado).
+- **Señales**: proceso vivo (S1), actividad del worktree y CPU del árbol de la sesión con un reloj que no cuenta la suspensión; hooks `Notification` y `Stop` con el método `sessions.agent-signal` (fuera del perfil `mcp`, sesión por ascendencia, siempre exit 0); CI de GitHub Actions con `gh` en solo lectura (argv fijo, solo `GET`, sin tokens, backoff).
+- **Conectar la señal**: operación reservada nueva de ADR-GRD-007 (`raptor agent-signal connect`), a nivel de usuario y activada por repo; depende del instalador de US-MCP-021/022 (G1 de la Dev Spec).
+- **Umbral**: `engine.stalledThresholdMinutes` (niveles perfil y local, 15 min por defecto).
+- **Pendiente antes de aprobar la Dev Spec**: revisión de seguridad (`security-review`) y las enmiendas propuestas E1 a E6 (E1 y E5 tocan escenarios de esta historia).
 
 ## Diseño
 
-- **Diseño (flujo/UX):** Pendiente de diseño (estados en la fila del cockpit y en la app, nota «sin avisos de Claude Code»).
+- **Diseño (flujo/UX):** Pendiente de diseño (estados en la fila del cockpit y en la app, nota «sin señal de decisión»; textos base en la Dev Spec, § Textos).
 
 ## Dependencias
 
