@@ -13,8 +13,8 @@
 | Implementado (`implemented`) | 85 |
 | Hecho (`done`) | 3 |
 | Implementado en parte (`partially-implemented`) | 27 |
-| Listo (`ready`) | 28 |
-| Borrador (`draft`) | 68 |
+| Listo (`ready`) | 29 |
+| Borrador (`draft`) | 67 |
 | Bloqueado (`blocked`) | 1 |
 | **Total** | **212** |
 
@@ -25,7 +25,7 @@
 | [cockpit](#cockpit) | 16 | 0 | 5 | 2 | 15 | 1 | 39 |
 | [desktop](#desktop) | 7 | 0 | 1 | 15 | 0 | 0 | 23 |
 | [guardrails](#guardrails) | 14 | 0 | 7 | 1 | 3 | 0 | 25 |
-| [mcp](#mcp) | 7 | 0 | 4 | 1 | 15 | 0 | 27 |
+| [mcp](#mcp) | 7 | 0 | 4 | 2 | 14 | 0 | 27 |
 | [motor-local](#motor-local) | 22 | 2 | 9 | 2 | 16 | 0 | 51 |
 | [time-machine](#time-machine) | 19 | 1 | 1 | 0 | 13 | 0 | 34 |
 | [worktree-lifecycle](#worktree-lifecycle) | 0 | 0 | 0 | 7 | 6 | 0 | 13 |
@@ -140,7 +140,7 @@
 
 ### mcp
 
-27 fichas: 7 implementado, 4 implementado en parte, 1 listo, 15 borrador.
+27 fichas: 7 implementado, 4 implementado en parte, 2 listo, 14 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -155,6 +155,7 @@
 | [US-MCP-009](features/mcp/user-stories/US-MCP-009-safe-commit.md) | Un agente commitea por MCP con las reglas del repo y con un punto de recuperación previo | Implementado en parte (`partially-implemented`) | #289 | — |
 | [US-MCP-010](features/mcp/user-stories/US-MCP-010-safe-commit-rutas.md) | Un agente commitea solo los archivos que nombra y nunca fuera de su worktree | Implementado en parte (`partially-implemented`) | #289 | — |
 | [US-MCP-013](features/mcp/user-stories/US-MCP-013-confirmacion-sin-cola.md) | Un agente sabe que una acción necesita al desarrollador y a quién acudir | Implementado en parte (`partially-implemented`) | #267 | — |
+| [US-MCP-019](features/mcp/user-stories/US-MCP-019-create-worktree.md) | Un agente prepara un worktree nuevo desde la rama base para otro trabajo | Listo (`ready`) | — | — |
 | [US-MCP-020](features/mcp/user-stories/US-MCP-020-guia-para-agentes.md) | Un agente de Claude Code sabe cómo trabajar con GitRaptor sin que el desarrollador se lo explique en cada sesión | Listo (`ready`) | — | — |
 | [US-MCP-006](features/mcp/user-stories/US-MCP-006-registrar-agente.md) | Un agente sin soporte completo se declara por MCP y su trabajo queda a su nombre | Borrador (`draft`) | — | — |
 | [US-MCP-007](features/mcp/user-stories/US-MCP-007-confused-deputy.md) | Un hook lanzado por una escritura de un agente no puede usar los poderes del desarrollador | Borrador (`draft`) | — | — |
@@ -164,7 +165,6 @@
 | [US-MCP-015](features/mcp/user-stories/US-MCP-015-medicion-del-mcp.md) | El desarrollador mide cuánto paró y cuánto recuperó el MCP | Borrador (`draft`) | — | — |
 | [US-MCP-017](features/mcp/user-stories/US-MCP-017-explain-history.md) | Un agente entiende qué pasó en su repo sin ver mensajes ni contenido | Borrador (`draft`) | — | — |
 | [US-MCP-018](features/mcp/user-stories/US-MCP-018-safe-rebase-atomico.md) | Un agente se pone al día con la rama base y, si choca, su rama queda como estaba | Borrador (`draft`) | — | — |
-| [US-MCP-019](features/mcp/user-stories/US-MCP-019-create-worktree.md) | Un agente prepara un worktree nuevo desde la rama base para otro trabajo | Borrador (`draft`) | — | — |
 | [US-MCP-021](features/mcp/user-stories/US-MCP-021-configure-agents.md) | El desarrollador deja un repo listo para Claude Code con un comando que enseña antes lo que va a cambiar | Borrador (`draft`) | — | — |
 | [US-MCP-022](features/mcp/user-stories/US-MCP-022-archivos-del-usuario-y-reversion.md) | Configurar y retirar GitRaptor en un repo deja intacto lo que escribió el equipo | Borrador (`draft`) | — | — |
 | [US-MCP-023](features/mcp/user-stories/US-MCP-023-cli-json-estable.md) | Un agente que trabaja por Bash lee la salida de raptor con un contrato JSON estable y versionado | Borrador (`draft`) | — | — |
@@ -323,7 +323,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### M2
 
-105 fichas: 48 implementado, 3 hecho, 20 implementado en parte, 4 listo, 30 borrador.
+104 fichas: 48 implementado, 3 hecho, 20 implementado en parte, 4 listo, 29 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -424,7 +424,6 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-MCP-015](features/mcp/user-stories/US-MCP-015-medicion-del-mcp.md) | El desarrollador mide cuánto paró y cuánto recuperó el MCP | Borrador (`draft`) | — | — |
 | [US-MCP-017](features/mcp/user-stories/US-MCP-017-explain-history.md) | Un agente entiende qué pasó en su repo sin ver mensajes ni contenido | Borrador (`draft`) | — | — |
 | [US-MCP-018](features/mcp/user-stories/US-MCP-018-safe-rebase-atomico.md) | Un agente se pone al día con la rama base y, si choca, su rama queda como estaba | Borrador (`draft`) | — | — |
-| [US-MCP-019](features/mcp/user-stories/US-MCP-019-create-worktree.md) | Un agente prepara un worktree nuevo desde la rama base para otro trabajo | Borrador (`draft`) | — | — |
 | [US-TMC-007](features/time-machine/user-stories/US-TMC-007-timeline-filtros-huecos.md) | El desarrollador filtra el timeline por worktree, agente o periodo y ve lo que no se observó | Borrador (`draft`) | — | — |
 | [US-TMC-014](features/time-machine/user-stories/US-TMC-014-undo-ya-empujado.md) | El desarrollador sabe cuándo lo que deshizo sigue en el remoto | Borrador (`draft`) | — | — |
 | [US-TMC-015](features/time-machine/user-stories/US-TMC-015-operacion-git-en-curso.md) | El desarrollador no rompe un rebase o un merge a medias al deshacer o restaurar | Borrador (`draft`) | — | — |
@@ -453,7 +452,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### M3
 
-15 fichas: 1 implementado, 3 implementado en parte, 6 listo, 5 borrador.
+16 fichas: 1 implementado, 3 implementado en parte, 7 listo, 5 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -461,6 +460,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [SPIKE-GRD-001](features/guardrails/technical-stories/SPIKE-GRD-001-interceptabilidad-hooks.md) | Interceptabilidad, coexistencia y coste de la capa de hooks en los tres SO | Implementado en parte (`partially-implemented`) | #22, #25, #121 | 2 |
 | [SPIKE-GRP-002](features/motor-local/technical-stories/SPIKE-GRP-002-viabilidad-observador.md) | Viabilidad del observador de cambios a escala en los tres SO | Implementado en parte (`partially-implemented`) | #17, #23 | 2 |
 | [TD-GRP-001](features/motor-local/technical-stories/TD-GRP-001-acl-windows.md) | Verificación de ACL en Windows: git.exe (SEC-10) y perfil (SEC-06) | Implementado en parte (`partially-implemented`) | #72 | 2 |
+| [US-MCP-019](features/mcp/user-stories/US-MCP-019-create-worktree.md) | Un agente prepara un worktree nuevo desde la rama base para otro trabajo | Listo (`ready`) | — | — |
 | [US-MCP-020](features/mcp/user-stories/US-MCP-020-guia-para-agentes.md) | Un agente de Claude Code sabe cómo trabajar con GitRaptor sin que el desarrollador se lo explique en cada sesión | Listo (`ready`) | — | — |
 | [US-WTL-001](features/worktree-lifecycle/user-stories/US-WTL-001-worktree-con-copia-desde-semilla.md) | El desarrollador crea un worktree con rama con nombre y artefactos copiados desde una semilla quieta | Listo (`ready`) | — | — |
 | [US-WTL-002](features/worktree-lifecycle/user-stories/US-WTL-002-descarte-reversible-disco.md) | El desarrollador descarta el worktree de un agente terminado, sabe cuánto disco ganó y lo puede restaurar | Listo (`ready`) | — | — |

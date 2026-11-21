@@ -50,3 +50,10 @@
 {"v":1,"ts":"2026-11-10T20:29:35.481Z","event":"updated","session":"23cf10f8-36bf-48af-890b-94db43e16add","rel":"user-stories/US-MCP-026-comparacion-mcp-cli.md","id":"US-MCP-026","type":"us","sha":"fa6153089a79c992"}
 {"v":1,"ts":"2026-11-10T20:30:05.419Z","event":"updated","session":"23cf10f8-36bf-48af-890b-94db43e16add","rel":"context.md","id":"CTX-MCP-001","type":"context","sha":"fcaac26cb9ac84e7"}
 {"v":1,"ts":"2026-11-10T20:30:07.191Z","event":"updated","session":"23cf10f8-36bf-48af-890b-94db43e16add","rel":"context.md","id":"CTX-MCP-001","type":"context","sha":"08fd61d163b1a4af"}
+{"v":1,"ts":"2026-11-21T16:19:32.356Z","event":"updated","session":"88e891ad-51e7-404b-86d3-7a272f76e36f","rel":"user-stories/US-MCP-019-create-worktree.md","id":"US-MCP-019","type":"us","sha":"ecb0c711a77132a0"}
+{"v":1,"ts":"2026-11-21T16:19:33.426Z","event":"updated","session":"88e891ad-51e7-404b-86d3-7a272f76e36f","rel":"user-stories/US-MCP-019-create-worktree.md","id":"US-MCP-019","type":"us","sha":"413c1218047f0f1e"}
+{"v":1,"ts":"2026-11-21T16:19:34.208Z","event":"updated","session":"88e891ad-51e7-404b-86d3-7a272f76e36f","rel":"user-stories/US-MCP-019-create-worktree.md","id":"US-MCP-019","type":"us","sha":"f0842e54bc1e7b2b"}
+{"v":1,"ts":"2026-11-21T16:19:39.959Z","event":"updated","session":"88e891ad-51e7-404b-86d3-7a272f76e36f","rel":"user-stories/US-MCP-019-create-worktree.md","id":"US-MCP-019","type":"us","sha":"8303170bf73c7eaa"}
+{"v":1,"ts":"2026-11-21T16:19:43.639Z","event":"updated","session":"88e891ad-51e7-404b-86d3-7a272f76e36f","rel":"user-stories/US-MCP-019-create-worktree.md","id":"US-MCP-019","type":"us","sha":"7952a9e9432357bd"}
+{"v":1,"ts":"2026-11-21T16:19:55.491Z","event":"updated","session":"88e891ad-51e7-404b-86d3-7a272f76e36f","rel":"user-stories/US-MCP-019-create-worktree.md","id":"US-MCP-019","type":"us","sha":"a7108fce467e5a0d"}
+{"v":1,"ts":"2026-11-21T16:20:01.078Z","event":"updated","session":"88e891ad-51e7-404b-86d3-7a272f76e36f","rel":"user-stories/US-MCP-019-create-worktree.md","id":"US-MCP-019","type":"us","sha":"7022a7d6abc758a1"}
