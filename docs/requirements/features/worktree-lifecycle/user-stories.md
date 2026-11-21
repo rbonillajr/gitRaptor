@@ -1,7 +1,7 @@
 ---
 mode: bulk
 generated: 2026-11-10T00:00Z
-updated: 2026-11-10
+updated: 2026-11-21
 generator: product-owner
 total_artifacts: 13
 expanded: 13
@@ -30,6 +30,7 @@ blocked:
 - **Corte**: una historia por capacidad de CTX-WTL-001. Esqueleto andante: **US-WTL-001** (`raptor new`); el resto la reutiliza o reutiliza US-CKP-017.
 - **Criterio de bloqueo**: una historia figura en `blocked` si depende de una enmienda decidida y sin aplicar. Las del BRD § 6.4 y las de hooks de worktree de ADR-GRP-012 y de ADR-GRD-007 se aplicaron el 2026-11-10; solo queda la de los estados nuevos del agente de ADR-GRP-012 (US-WTL-003). No arranca hasta que se aplique. `blocked_by` lista solo historias.
 - **Draft**: además de la bloqueada, las que tienen una pregunta abierta que cambia un escenario (US-WTL-006, 009) y las Could (US-WTL-010 a 012).
+- **US-WTL-001 y US-CKP-018** (decisión del orquestador, 2026-11-21, validada por PO): US-WTL-001 depende de US-MCP-019, dueña de la operación de crear worktree, y no de US-CKP-018, que se mantiene como superficie de la TUI para preparar sin lanzar.
 
 > **Transversales (no son historias)**: dónde vive la semilla (Pregunta 9), copy-on-write sin reflink (Pregunta 11) y la medición del disco ganado los define el Arquitecto. Linux y Windows: Pendiente: etapa de validación multiplataforma.
 
@@ -39,7 +40,7 @@ blocked:
 
 | ID | Título | Prioridad | Hito | blocked_by | Bloqueos (enmiendas y preguntas) | Status |
 |----|--------|-----------|------|------------|----------------------------------|--------|
-| [US-WTL-001](./user-stories/US-WTL-001-worktree-con-copia-desde-semilla.md) | El desarrollador crea un worktree con rama con nombre y artefactos copiados desde una semilla quieta | Must | M3 | US-CKP-018 | — | ready |
+| [US-WTL-001](./user-stories/US-WTL-001-worktree-con-copia-desde-semilla.md) | El desarrollador crea un worktree con rama con nombre y artefactos copiados desde una semilla quieta | Must | M3 | US-MCP-019 | — | ready |
 | [US-WTL-013](./user-stories/US-WTL-013-lanzar-agente-e-instalar-skill.md) | El desarrollador lanza un agente de Claude Code en un worktree nuevo, con la skill de GitRaptor instalada, con una sola orden | Must | M3 | US-WTL-001, US-MCP-020 | — | ready |
 | [US-WTL-002](./user-stories/US-WTL-002-descarte-reversible-disco.md) | El desarrollador descarta el worktree de un agente terminado, sabe cuánto disco ganó y lo puede restaurar | Must | M3 | US-CKP-017, US-WTL-003 | — | ready |
 | [US-WTL-003](./user-stories/US-WTL-003-estado-real-del-agente.md) | El desarrollador ve qué agentes esperan su decisión, cuáles esperan el CI y cuáles se colgaron | Must | M3 | — | Enmienda de ADR-GRP-012 sin aplicar (estados nuevos) | draft |
@@ -55,7 +56,7 @@ blocked:
 
 ## Preguntas nuevas surgidas al escribir las historias
 
-Pasadas a [CTX-WTL-001](./context.md) (2026-11-10) como Preguntas 18 a 20, con una propuesta de respuesta cada una; las confirma Rene y no bloquean (todas de M4).
+Pasadas a [CTX-WTL-001](./context.md) (2026-11-10) como Preguntas 18 a 20 (todas de M4). Decididas el 2026-11-10: el orquestador aceptó las propuestas del PO con la delegación de Rene; los escenarios de US-WTL-006, 007 y 009 las recogen (2026-11-21).
 
 | Historia | Pregunta |
 |----------|----------|

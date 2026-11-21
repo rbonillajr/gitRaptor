@@ -69,3 +69,5 @@
 {"v":1,"ts":"2026-11-09T04:20:23.589Z","event":"updated","session":"6f316a89-0c67-4417-9b02-a96ec3cde9f3","rel":"../../../architecture/decisions/ADR-CKP-002-catalogo-operaciones-ejecutor.md","id":"ADR-CKP-002","type":"adr","sha":"936079638a4ad372"}
 {"v":1,"ts":"2026-11-09T04:21:27.078Z","event":"updated","session":"6f316a89-0c67-4417-9b02-a96ec3cde9f3","rel":"../../../architecture/decisions/ADR-CKP-002-catalogo-operaciones-ejecutor.md","id":"ADR-CKP-002","type":"adr","sha":"a04ef50ad47b287c"}
 {"v":1,"ts":"2026-11-10T19:38:24.823Z","event":"updated","session":"726da47d-0840-4870-89e9-bfb8fba4a048","rel":"user-stories/US-CKP-022-grafo-carriles.md","id":"US-CKP-022","type":"us","sha":"7d4f93f77f874e3c"}
+{"v":1,"ts":"2026-11-21T15:59:01.469Z","event":"updated","session":"88e891ad-51e7-404b-86d3-7a272f76e36f","rel":"user-stories/US-CKP-018-crear-worktree.md","id":"US-CKP-018","type":"us","sha":"e0ae19a1113d82fc"}
+{"v":1,"ts":"2026-11-21T15:59:06.692Z","event":"updated","session":"88e891ad-51e7-404b-86d3-7a272f76e36f","rel":"user-stories/US-CKP-018-crear-worktree.md","id":"US-CKP-018","type":"us","sha":"e2d30a6a24c878d4"}

@@ -2,10 +2,14 @@
 id: US-CKP-018
 title: "El desarrollador prepara un worktree para un agente nuevo"
 type: us
-status: draft
+status: ready
 priority: medium
+blocked_by:
+  - US-MCP-019
+  - US-CKP-014
+  - US-CKP-017
 created: 2026-10-04
-updated: 2026-10-28
+updated: 2026-11-21
 feature: cockpit
 related:
   context:
@@ -15,6 +19,9 @@ related:
   stories:
     - US-GRP-016
     - US-CKP-014
+    - US-CKP-017
+    - US-MCP-019
+    - US-WTL-001
   specs:
     - DS-US-CKP-018
 tags:
@@ -39,8 +46,9 @@ BR-CKP-VAL-001 · BR-CKP-ELIG-005 · BR-CKP-WF-005 (crear desactivado) — ver [
 
 ## Dependencias
 
-- **Historias**: US-CKP-014 (flujo de escritura); US-GRP-016 (base pendiente publicada).
-- **Técnicas**: TS-CKP-002, TS-CKP-003.
+- **Historias**: US-MCP-019 (dueña de la operación de crear worktree: plantilla de ruta y motivos de rechazo; esta historia la reutiliza); US-CKP-014 (flujo de escritura de la TUI); US-CKP-017 (descarte, que hace de Deshacer); US-GRP-016 (base pendiente publicada).
+- **Técnicas**: TS-CKP-002, TS-CKP-003 (implementadas).
+- **Decisión del orquestador (2026-11-21), validada por PO**: esta historia se mantiene y no se absorbe en US-WTL-001. Es la superficie de la TUI para preparar un worktree sin lanzar agente (CTX-WTL-001, Pregunta 7); `raptor new` y la copia desde la semilla son de US-WTL-001, por la CLI. Ninguna de las dos construye la operación de crear worktree: la construye US-MCP-019 y las dos la reutilizan. US-WTL-001 ya no depende de esta historia. Pasa a `ready` como historia; su construcción sigue bloqueada por G1 (operación de US-MCP-019 sin mezclar en `main`) y G2 (flujo de escritura de US-CKP-014 y descarte de US-CKP-017, sin mezclar) de su Dev Spec.
 
 ## Criterios de Aceptación
 

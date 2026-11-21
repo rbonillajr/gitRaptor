@@ -45,3 +45,5 @@
 {"v":1,"ts":"2026-11-10T20:21:19.441Z","event":"generated","session":"95f70f42-a644-4dde-bb11-024cc35a6cbf","rel":"user-stories/US-WTL-011-resumen-ci-pr-por-rama.md","id":"US-WTL-011","type":"us","sha":"bbaaab1d0561fa68"}
 {"v":1,"ts":"2026-11-10T20:21:26.525Z","event":"generated","session":"95f70f42-a644-4dde-bb11-024cc35a6cbf","rel":"user-stories/US-WTL-012-puerto-por-worktree.md","id":"US-WTL-012","type":"us","sha":"cedf04ab63c19edf"}
 {"v":1,"ts":"2026-11-10T20:21:33.071Z","event":"updated","session":"95f70f42-a644-4dde-bb11-024cc35a6cbf","rel":"user-stories/US-WTL-010-integrar-en-local.md","id":"US-WTL-010","type":"us","sha":"6ec1cb6b932d5888"}
+{"v":1,"ts":"2026-11-21T15:58:06.023Z","event":"updated","session":"88e891ad-51e7-404b-86d3-7a272f76e36f","rel":"context.md","id":"CTX-WTL-001","type":"context","sha":"df817de1664eb7a0"}
+{"v":1,"ts":"2026-11-21T15:58:10.034Z","event":"updated","session":"88e891ad-51e7-404b-86d3-7a272f76e36f","rel":"context.md","id":"CTX-WTL-001","type":"context","sha":"0c66128ffaa3cd90"}

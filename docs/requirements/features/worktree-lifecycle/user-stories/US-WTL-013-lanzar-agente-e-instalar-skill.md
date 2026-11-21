@@ -104,7 +104,9 @@ Entonces el worktree queda igual que antes de instalarla
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto en Fase 2._ Operación reservada según la Enmienda 2026-11-10 de ADR-GRD-007 (un agente no puede lanzarla). La skill es la de US-MCP-020 (copia por el mismo instalador y marca de versión y hash que US-MCP-021 y 022; P-MCP-39).
+_Dev Spec pendiente (2026-11-21): aún no se escribe porque le falta cerrar, tras DS-US-WTL-001 y DS-US-MCP-020:_ (1) quién instala la skill en M3 (confirmar que el instalador de DS-US-MCP-020, `raptor agent guide`, sirve por worktree con marca de versión y hash); (2) la orden para «quitar la skill»; (3) dónde se escribe y cómo no la commitea el agente (`info/exclude`); (4) cómo se lanza `claude` (reemplazo de proceso, primer plano u otra terminal); (5) cómo se pasa la tarea sin dejarla en logs ni en la tabla de procesos (privacidad de ADR-GRP-012); (6) el texto con la orden para lanzar Codex. Además espera a US-WTL-001 y a US-MCP-023 en `main`.
+
+_Notas previas:_ Operación reservada según la Enmienda 2026-11-10 de ADR-GRD-007 (un agente no puede lanzarla). La skill es la de US-MCP-020 (copia por el mismo instalador y marca de versión y hash que US-MCP-021 y 022; P-MCP-39).
 
 ## Diseño
 

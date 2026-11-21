@@ -4,7 +4,7 @@ title: "Contexto — Ciclo de vida del worktree"
 type: context
 status: draft
 created: 2026-11-10
-updated: 2026-11-10
+updated: 2026-11-21
 domain: GRP
 epic: E-001
 feature: worktree-lifecycle
@@ -365,9 +365,10 @@ Cada fila cita las fuentes del Panorama con su fecha de consulta. ✔ sí · ≈
 | 15 | Un ignorado copiado por `.worktreeinclude` (por ejemplo `.env`) no entra en el snapshot (D-TMC-16). ¿Basta con que la confirmación lo avise, o algún ignorado debe guardarse? | Rene | [POR VERIFICAR] Basta el aviso: el original sigue en la semilla o en el repo principal | no |
 | 16 | ¿Hay ignorados que nunca se copian aunque el repo los liste (estado de otros agentes como `.claude/runs`)? | Rene + Arquitecto | [POR VERIFICAR] Sí, una lista fija de exclusiones | no |
 | 17 | ¿Un hook de setup aprobado vuelve a pedir aprobación cuando cambia su contenido? | Rene | [POR VERIFICAR] Sí | no (M4) |
-| 18 | ¿Se puede traer o devolver el trabajo de un agente que sigue vivo (US-WTL-007), o aplica la misma protección que al descartar (BR-WTL-007)? | Rene | **Propuesta**: aplica la misma protección: con el agente vivo se rechaza hasta terminarlo, porque traer o devolver mueve archivos bajo sus pies. [POR VERIFICAR] | no (M4) |
-| 19 | Si el hook de setup falla (US-WTL-009), ¿se lanza igual el agente? | Rene | **Propuesta**: no. El worktree queda creado, el agente no se lanza y se muestra el error con la orden para repetir el setup; así un agente no trabaja sobre un entorno a medio preparar. [POR VERIFICAR] | no (M4) |
-| 20 | Mientras la semilla se reconstruye (US-WTL-006), ¿`raptor new` espera o crea el worktree sin copia? | Rene | **Propuesta**: crea el worktree sin copia y avisa de que la semilla se está reconstruyendo (coherente con la Pregunta 5b); `--wait` opcional para esperar. [POR VERIFICAR] | no (M4) |
+| 18 | ¿Se puede traer o devolver el trabajo de un agente que sigue vivo (US-WTL-007), o aplica la misma protección que al descartar (BR-WTL-007)? | Coordinador | Resuelta 2026-11-10: aplica la misma protección; con el agente vivo se rechaza hasta terminarlo, porque traer o devolver mueve archivos bajo sus pies (propuesta del PO aceptada por el orquestador con la delegación de Rene) | no (M4) |
+| 19 | Si el hook de setup falla (US-WTL-009), ¿se lanza igual el agente? | Coordinador | Resuelta 2026-11-10: no; el worktree queda creado, el agente no se lanza y se muestra el error con la orden para repetir el setup (propuesta del PO aceptada por el orquestador con la delegación de Rene) | no (M4) |
+| 20 | Mientras la semilla se reconstruye (US-WTL-006), ¿`raptor new` espera o crea el worktree sin copia? | Coordinador | Resuelta 2026-11-10: crea el worktree sin copia y avisa de que la semilla se está reconstruyendo; `--wait` opcional para esperar (propuesta del PO aceptada por el orquestador con la delegación de Rene) | no (M4) |
+| 21 | ¿Se acepta que la semilla se compile con una orden que el humano configura en su perfil (`worktree.seedBuild`, argv sin shell, solo la ejecuta la CLI)? Se parece a los hooks de setup de M4 (US-WTL-009) | Coordinador | **Propuesta del Arquitecto (DS-US-WTL-001, 2026-11-21)**: sí, porque solo corre por orden humana y sin shell. Provisional hasta que Rene la cierre; si no se acepta, cambian solo T009 y T010 de la DS. Las preguntas 5b, 9, 11, 14 y 16 llevan decisión provisional del Arquitecto en la misma DS | no |
 
 ---
 
@@ -384,7 +385,10 @@ Cada fila cita las fuentes del Panorama con su fecha de consulta. ✔ sí · ≈
 | No copiar | HEAD separado por defecto; hooks con shell libre que un agente pueda disparar | Rene (diario del 2026-11-08) | 2026-11-08 |
 | Superficie para agentes | MCP para estado vivo y seguridad; CLI con salida JSON y skill para el resto; sin code mode | Rene | 2026-11-10 |
 | Copiar desde semilla quieta | La función gestiona una semilla quieta por toolchain y perfil; nunca copia desde worktrees vivos | Hallazgo de la prueba 3, adoptado por el coordinador | 2026-11-09 |
-| Preguntas 18 a 20 | Surgidas al escribir las historias; con propuesta de respuesta, a confirmar por Rene (todas de M4) | Coordinador | 2026-11-10 |
+| Preguntas 18 a 20 | Surgidas al escribir las historias (todas de M4); se aceptan las propuestas del PO, detalladas en las tres filas siguientes | Coordinador, por delegación de Rene | 2026-11-10 |
+| Traer o devolver con el agente vivo (Pregunta 18) | Misma protección que al descartar (BR-WTL-007): con el agente vivo se rechaza hasta terminarlo | Coordinador, por delegación de Rene | 2026-11-10 |
+| Hook de setup que falla (Pregunta 19) | El worktree queda creado, el agente no se lanza y se muestra el error con la orden para repetir el setup | Coordinador, por delegación de Rene | 2026-11-10 |
+| Semilla en reconstrucción (Pregunta 20) | `raptor new` crea el worktree sin copia y avisa de que la semilla se está reconstruyendo; `--wait` opcional para esperar | Coordinador, por delegación de Rene | 2026-11-10 |
 | Lanzar el agente (Pregunta 7) | Se enmienda BRD § 6.4: GitRaptor puede lanzar un agente una vez, a petición explícita del humano (`raptor new`, botón «Nuevo agente»); nunca a petición de un agente ni por el MCP. US-CKP-018 se mantiene para preparar sin lanzar. La enmienda del BRD se aplicó el 2026-11-10 (v0.10) | Coordinador, por delegación de Rene | 2026-11-10 |
 | Interceptar eventos de worktree de Claude Code (Pregunta 12) | Es un uso distinto de la detección que ADR-GRP-012 descartó: solo registrar el worktree, snapshot y Guardrails, nunca conceder permisos; lo configura el humano; si el hook falla, el agente no queda sin protección y el borrado se rechaza. Va como enmienda de ADR-GRP-012, aplicada el 2026-11-10 | Coordinador, por delegación de Rene | 2026-11-10 |
 | CI en M3 (Pregunta 3) | Solo GitHub Actions, leído con `gh`, en solo lectura | Coordinador, por delegación de Rene | 2026-11-10 |
