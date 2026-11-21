@@ -19,6 +19,7 @@ pub mod resources;
 pub mod timemachine;
 pub mod watch;
 pub mod work_class;
+pub mod worktree_origin;
 
 pub use gitraptor_api::API_VERSION;
 

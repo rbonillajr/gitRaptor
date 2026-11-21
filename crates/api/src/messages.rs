@@ -232,6 +232,10 @@ impl RepoView {
             w.without_change_attribution();
         }
     }
+
+    /// The repo in the shapes of a connection without
+    /// `observation.worktree-origin` (skeleton: behaviour lands with T001).
+    pub fn without_worktree_origin(&mut self) {}
 }
 
 /// The base branch of a repo (US-GRP-012, ADR-GRD-004 § 3): the one the
