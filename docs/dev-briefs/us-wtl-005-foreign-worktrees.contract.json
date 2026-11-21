@@ -1,0 +1,111 @@
+{
+  "source": {
+    "kind": "devspec",
+    "ref": "docs/requirements/features/worktree-lifecycle/dev-specs/US-WTL-005-convivencia-worktrees-ajenos.md"
+  },
+  "goal": {
+    "intent": "El desarrollador ve en raptor status, la TUI, la app y raptor-mcp quién creó cada worktree (Orca, worktrunk, Codex, Claude Code) o «ajeno» cuando no se sabe, y los de HEAD separado salen marcados «ajeno, no tocar», con detección de solo lectura",
+    "endState": "WorktreeView.origin existe detrás de la capacidad observation.worktree-origin, el motor lo calcula sin escribir en ningún worktree y los cuatro clientes lo pintan con la misma regla de confianza",
+    "nonGoals": [
+      "crear, descartar, limpiar o copiar worktrees",
+      "regla de detección de GitKraken",
+      "guardar el origen en el almacén",
+      "comando IPC nuevo en la app"
+    ]
+  },
+  "suite": { "command": "node tools/test/nextest-junit.mjs" },
+  "layers": {
+    "runtime": {
+      "commands": [{ "id": "suite", "cmd": "node tools/test/nextest-junit.mjs" }],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "criteria": [
+    {
+      "id": "O1",
+      "statement": "Cuando se (de)serializa un origen, la forma JSON es {tool, evidence, hands_off?}, se rechazan campos desconocidos y las combinaciones incoherentes (unknown con evidencia, herramienta sin evidencia, gitraptor sin registered, gitraptor con hands_off), y la capacidad observation.worktree-origin pertenece al grupo observation",
+      "priority": "must",
+      "verify": "cargo test -p gitraptor-api --test worktree_origin",
+      "layer": "runtime",
+      "tests": ["crates/api/tests/worktree_origin.rs"]
+    },
+    {
+      "id": "O2",
+      "statement": "Cuando el motor detecta el origen de un worktree enlazado, la marca orca/ del directorio de administración da orca/admin-marker (un enlace simbólico no cuenta), las rutas dan worktrunk, codex, claude-code u orca por patrón de ruta (probable), lo demás es unknown/none y nunca gitkraken, y hands_off sale por HEAD separado, bloqueado o ilegible, sin pánico si la raíz desapareció",
+      "priority": "must",
+      "verify": "cargo test -p gitraptor-core --test worktree_origin_detect",
+      "layer": "runtime",
+      "tests": ["crates/core/tests/worktree_origin_detect.rs"]
+    },
+    {
+      "id": "O3",
+      "statement": "Cuando se observa un repo con un worktree de worktrunk, uno de Orca y uno hecho a mano, cada uno aparece con su origen cuando se sabe y como ajeno cuando no; un ajeno con HEAD separado, bloqueado o ilegible sale hands_off; .worktreeinclude, .config/wt.toml, .git/config y el directorio de administración quedan idénticos tras reconciliar dos veces; y un worktree ajeno que desaparece deja de mostrarse sin error ni cambiar los demás",
+      "priority": "must",
+      "verify": "cargo test -p gitraptor-core --test worktree_origin",
+      "layer": "runtime",
+      "tests": ["crates/core/tests/worktree_origin.rs"]
+    },
+    {
+      "id": "O4",
+      "statement": "Cuando una conexión no aceptó observation.worktree-origin, ninguna salida (repo.add, engine.snapshot, scope.snapshot, worktree.state) lleva origin; con la capacidad las cuatro lo llevan, y la página de worktrees de raptor-mcp lo incluye solo con ella",
+      "priority": "must",
+      "verify": "cargo test -p gitraptor-core --test worktree_origin_capability",
+      "layer": "runtime",
+      "tests": ["crates/core/tests/worktree_origin_capability.rs"]
+    },
+    {
+      "id": "O5",
+      "statement": "Cuando raptor status lista un repo con worktrees ajenos, cada worktree enlazado muestra su origen (cierto, probable o desconocido) o «ajeno, no tocar» en inglés y español, el JSON lleva origin solo cuando existe, y un nombre de rama con secuencias de escape sigue saliendo saneado",
+      "priority": "must",
+      "verify": "cargo test -p gitraptor-cli --test status_origin",
+      "layer": "runtime",
+      "tests": ["apps/cli/tests/status_origin.rs"]
+    },
+    {
+      "id": "O6",
+      "statement": "Cuando la TUI pinta la fila de un worktree enlazado, muestra la etiqueta de origen o «ajeno · no tocar» en inglés y español, la marca gana sobre temporary y sobre el origen, y el worktree principal no lleva etiqueta",
+      "priority": "must",
+      "verify": "cargo test -p gitraptor-cli --test tui_origin",
+      "layer": "runtime",
+      "tests": ["apps/cli/tests/tui_origin.rs"]
+    },
+    {
+      "id": "O7",
+      "statement": "Cuando el backend de la app recibe un worktree con origen, pide la capacidad en el enlace, entrega origin en el WorktreeDto (null sin origen) sin añadir ningún comando IPC",
+      "priority": "must",
+      "verify": "cargo test -p gitraptor-desktop --test worktree_origin",
+      "layer": "runtime",
+      "tests": ["apps/desktop/src-tauri/tests/worktree_origin.rs"]
+    },
+    {
+      "id": "O8",
+      "statement": "Cuando la tarjeta de la app modela un worktree enlazado, muestra el origen cierto, probable o desconocido o «Ajeno · no tocar», el principal queda sin insignia y la etiqueta de accesibilidad incluye el origen",
+      "priority": "must",
+      "verify": "pnpm --filter @gitraptor/desktop exec vitest run src/fleet/fleet-model.test.ts",
+      "layer": "runtime",
+      "tests": ["apps/desktop/src/fleet/fleet-model.test.ts"]
+    }
+  ],
+  "constraints": {
+    "deny_paths": [
+      "docs/ARTIFACTS.md",
+      "crates/api/src/rpc.rs",
+      "crates/api/src/methods/mod.rs",
+      "apps/cli/src/main.rs",
+      "crates/core/src/daemon/**",
+      "crates/core/src/executor/ops/**",
+      "Cargo.lock",
+      "Cargo.toml"
+    ],
+    "allow_dependency_changes": false
+  },
+  "budget": { "maxRounds": 3, "verifyTimeoutMs": 900000, "suiteTimeoutMs": 2700000 },
+  "hops": {
+    "design": { "agent": "main-loop", "model": "sonnet" },
+    "critic": { "agent": "nassa-dev-core:plan-critic", "model": "opus" },
+    "tester": { "agent": "nassa-dev-core:criterion-tester", "model": "sonnet" },
+    "build": { "agent": "nassa-dev-rust:rust-expert", "model": "sonnet" },
+    "review": { "agent": "nassa-dev-rust:rust-code-reviewer", "model": "opus" },
+    "conformance": { "agent": "nassa-dev-rust:rust-code-reviewer", "model": "sonnet" }
+  }
+}
