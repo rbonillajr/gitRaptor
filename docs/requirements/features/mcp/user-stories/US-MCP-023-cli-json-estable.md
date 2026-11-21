@@ -2,11 +2,11 @@
 id: US-MCP-023
 title: "Un agente que trabaja por Bash lee la salida de raptor con un contrato JSON estable y versionado"
 type: us
-status: draft
+status: ready
 priority: high
 milestone: M3
 created: 2026-11-10
-updated: 2026-11-12
+updated: 2026-11-21
 domain: GRP
 epic: E-001
 feature: mcp
@@ -21,6 +21,8 @@ related:
     - US-MCP-004
     - US-MCP-005
     - US-MCP-020
+  specs:
+    - DS-US-MCP-023
 ado:
   id: null
   url: null
@@ -39,13 +41,16 @@ tags: [mcp, agentes, cli, json, contrato, superficie-agentes, hito-m3]
 
 **Prioridad e hito**: Must, M3 (beta). Decisión de Rene Bonilla del 2026-11-10 (P-MCP-32).
 
+**Decisión del PO (2026-11-21)**: desde TS-GRP-010 (en `main`), la CLI lanzada por un agente recibe el perfil `mcp`, y con él solo tiene `status`, `undo`, `redo`, `agent register` y `daemon status`. `sessions`, `timeline`, `guard log` y `events` quedan fuera de su vista, y `agent withdraw` es un comando reservado al desarrollador. Los escenarios cambian en consecuencia: el agente recibe esos subcomandos como rechazo en JSON (hoy le sale el texto "todavía no disponible en esta versión"), y el `--json` de `agent withdraw` se prueba desde el desarrollador. Los códigos "engine-unavailable" y "repo-not-enabled" siguen en el catálogo; `status --json` ya rechaza "repo-not-enabled" en JSON, pero sin versión ni acción.
+
 ## Reglas cubiertas
 
 BR-MCP-CONS-008 (versión del contrato en toda salida, errores en JSON con código estable, cambio incompatible = versión mayor, vista del perfil `mcp` para un agente) — ver [business-rules.md](../business-rules.md)
 
 ## Dependencias
 
-- **Historias**: US-MCP-005 (códigos de rechazo estables, plantilla fija, motivo y acción) y US-MCP-004 (contenido de la vista del agente).
+- **Historias**: US-MCP-005 (códigos de rechazo estables, plantilla fija, motivo y acción) y US-MCP-004 (contenido de la vista del agente), las dos implementadas en `main`.
+- **Transversal (lo define el Arquitecto)**: qué código estable recibe un agente cuando pide un subcomando fuera de su vista.
 - **Relación**: US-MCP-020 enseña a usar este contrato; US-MCP-024 y US-MCP-025 lo usan.
 - **Transversal (lo define el Arquitecto)**: dónde se documenta el esquema y cómo se detecta un cambio incompatible antes de publicar.
 
@@ -60,22 +65,32 @@ Entonces la salida es JSON y declara la versión del contrato
 Ejemplos:
 | subcomando |
 | raptor status |
-| raptor sessions |
-| raptor timeline |
-| raptor guard log |
-| raptor undo --agent claude-1 |
+| raptor undo |
+| raptor redo |
+| raptor agent register "Claude Code" |
+| raptor daemon status |
 
-**Esquema del escenario: Los tres subcomandos que faltaban tienen salida JSON**
+**Esquema del escenario: Un subcomando fuera de la vista del agente responde con un rechazo en JSON**
 
 Dado el repo "shop" observado y habilitado para el MCP
 Cuando un agente ejecuta "<subcomando>" con `--json`
-Entonces la salida es JSON con la versión del contrato y "<contenido>"
+Entonces la salida es JSON con la versión del contrato y "<rechazo>", con su código estable y su acción
+  Y el código de salida es distinto de 0
+  Y no hay texto suelto fuera del JSON
 
 Ejemplos:
-| subcomando | contenido |
-| raptor agent withdraw | el registro retirado |
-| raptor daemon status | si el motor está vivo |
-| raptor guard exec -- git commit | el rechazo de comando reservado, en JSON, con el mismo código y acción (sigue reservado; un agente no lo ejecuta) |
+| subcomando | rechazo |
+| raptor sessions | el de un subcomando que el agente no tiene disponible (el MCP tampoco lo ofrece) |
+| raptor timeline | el de un subcomando que el agente no tiene disponible (el MCP tampoco lo ofrece) |
+| raptor guard log | el de un subcomando que el agente no tiene disponible (el MCP tampoco lo ofrece) |
+| raptor agent withdraw "Claude Code" | el de comando reservado al desarrollador |
+| raptor guard exec -- git commit | el de comando reservado al desarrollador |
+
+**Escenario: El desarrollador retira un registro con salida JSON**
+
+Dado el agente "Claude Code" registrado en un worktree de "shop"
+Cuando el desarrollador ejecuta `raptor agent withdraw "Claude Code" --json`
+Entonces la salida es JSON con la versión del contrato y el registro retirado
 
 **Escenario: Un error con --json sale en JSON**
 
@@ -115,11 +130,11 @@ Arquitecto, 2026-11-10: [ADR-MCP-001, Enmienda (2026-11-10, superficie para agen
 - **Versión**: una sola versión para todo el contrato de la CLI, declarada como constante en `crates/api` junto a los códigos de § 5. Empieza en `1.0`.
 - **Esquemas**: se generan de los tipos de `crates/api`, con instantánea y prueba de compatibilidad en CI (cambio incompatible sin subir el mayor, o campo nuevo sin subir el menor, falla). La referencia para agentes se genera de esos esquemas.
 - **Códigos**: el catálogo estable de § 5. Los códigos solo de la CLI entran en el mismo catálogo.
-- **Condición de entrada (C1)**: el escenario "por la CLI un agente no ve más que por el MCP" exige SEC-MCP-01 (perfil `mcp` por solicitante) en `main`. La implementa [TS-GRP-010](../../motor-local/technical-stories/TS-GRP-010-perfil-mcp-por-solicitante.md), que bloquea el escenario y se mezcla antes que esta historia (decisión del orquestador, 2026-11-10: S-01 pasa a M3).
+- **Condición de entrada (C1)**: el escenario "por la CLI un agente no ve más que por el MCP" exige SEC-MCP-01 (perfil `mcp` por solicitante) en `main`. La implementa [TS-GRP-010](../../motor-local/technical-stories/TS-GRP-010-perfil-mcp-por-solicitante.md), que bloquea el escenario y se mezcla antes que esta historia (decisión del orquestador, 2026-11-10: S-01 pasa a M3). Cumplida: TS-GRP-010 está implementada y en `main` (#368); nota del PO, 2026-11-21.
 - **`guard exec` (C3)**: sigue reservado. Un agente con `--json` recibe el rechazo de comando reservado en JSON.
 - **Para la Dev Spec**: JSON compacto o con formato; errores de `clap` en JSON; códigos de salida por familia.
 
 ## Diseño y Dev Spec
 
 - **Diseño:** no aplica (salida para máquinas; la regla de `--json` ya está en el design system, tabla de la CLI).
-- **Dev Spec:** **sí** (decisión del Arquitecto, 2026-11-10). Pendiente: `../dev-specs/US-MCP-023-dev-spec.md`.
+- **Dev Spec:** **sí** (decisión del Arquitecto, 2026-11-10). [DS-US-MCP-023](../dev-specs/US-MCP-023-dev-spec.md) (spec-ready, 2026-11-21).
