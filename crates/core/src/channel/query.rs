@@ -37,6 +37,57 @@ impl Busy {
 
 type Job = Box<dyn FnOnce() + Send>;
 
+/// Tests only: holds the pool thread before each job until a test opens it, so a test that needs
+/// "the pool is busy" holds it instead of racing the speed of a diff. It does not exist in a
+/// release build and is absent in production.
+#[cfg(debug_assertions)]
+#[doc(hidden)]
+#[derive(Clone, Default)]
+pub struct QueryGate(Arc<(Mutex<bool>, std::sync::Condvar)>);
+
+#[cfg(debug_assertions)]
+impl QueryGate {
+    /// A gate that holds every job until [`Self::open`].
+    pub fn closed() -> Self {
+        Self::default()
+    }
+
+    /// Lets the held job and every later one run.
+    pub fn open(&self) {
+        let (open, cv) = &*self.0;
+        *open.lock().unwrap_or_else(|e| e.into_inner()) = true;
+        cv.notify_all();
+    }
+
+    fn wait(&self) {
+        let (open, cv) = &*self.0;
+        let mut open = open.lock().unwrap_or_else(|e| e.into_inner());
+        while !*open {
+            open = cv.wait(open).unwrap_or_else(|e| e.into_inner());
+        }
+    }
+}
+
+#[cfg(debug_assertions)]
+impl std::fmt::Debug for QueryGate {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("QueryGate")
+    }
+}
+
+#[cfg(debug_assertions)]
+impl PartialEq for QueryGate {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+#[cfg(debug_assertions)]
+impl Eq for QueryGate {}
+
+/// What the pool thread runs before each job; `None` in production.
+type Hold = Option<Box<dyn Fn() + Send>>;
+
 /// One thread (`raptor-query`) and a bounded queue shared by every connection. The thread ends
 /// when the pool is dropped, which is when the channel is.
 pub(crate) struct QueryPool {
@@ -47,10 +98,23 @@ impl QueryPool {
     /// A pool that holds at most `queue` waiting jobs. If the thread cannot start, every
     /// submission is refused as busy.
     pub fn new(queue: usize) -> Self {
+        Self::start(queue, None)
+    }
+
+    /// A pool whose thread waits at `gate` before each job (tests only).
+    #[cfg(debug_assertions)]
+    pub fn gated(queue: usize, gate: Option<QueryGate>) -> Self {
+        Self::start(queue, gate.map(|g| Box::new(move || g.wait()) as _))
+    }
+
+    fn start(queue: usize, hold: Hold) -> Self {
         let (tx, rx) = sync_channel::<Job>(queue);
         // A panicking job must not take the pool with it.
         let _ = spawn_unpooled(WorkClass::UserInitiated, "raptor-query", move || {
             for job in rx {
+                if let Some(hold) = &hold {
+                    hold();
+                }
                 let _ = catch_unwind(AssertUnwindSafe(job));
             }
         });
@@ -114,14 +178,17 @@ impl QueryTable {
         Ok(token)
     }
 
-    /// Cancels request `id`; `false` when it is not in flight here.
-    pub fn cancel(&self, id: &Id) -> bool {
+    /// Cancels request `id`. `announce` receives whether it was in flight here and pushes the
+    /// answer of `query.cancel`; it runs BEFORE the token is set, so the job, which only sees the
+    /// cancellation after that, can never answer `query-cancelled` ahead of the cancel's own
+    /// answer (the contract: `query.cancel` answers now, the query ends after).
+    pub fn cancel(&self, id: &Id, announce: impl FnOnce(bool)) {
         let table = self.lock();
-        let Some((_, token)) = table.iter().find(|(i, _)| i == id) else {
-            return false;
-        };
-        token.0.store(true, Ordering::SeqCst);
-        true
+        let token = table.iter().find(|(i, _)| i == id).map(|(_, t)| t);
+        announce(token.is_some());
+        if let Some(token) = token {
+            token.0.store(true, Ordering::SeqCst);
+        }
     }
 
     /// Removes request `id`: the connection may ask again.
@@ -189,7 +256,7 @@ mod tests {
         let table = QueryTable::default();
         let a = Id::Num(1);
         table.register(&a).unwrap();
-        table.cancel(&a);
+        table.cancel(&a, |_| {});
         assert!(table.register(&Id::Num(2)).is_ok());
     }
 
@@ -198,11 +265,27 @@ mod tests {
         let table = QueryTable::default();
         let a = Id::Num(1);
         let token = table.register(&a).unwrap();
-        assert!(!table.cancel(&Id::Num(9)));
-        assert!(table.cancel(&a));
+        let found = |id: &Id| {
+            let mut found = None;
+            table.cancel(id, |f| found = Some(f));
+            found.unwrap()
+        };
+        assert!(!found(&Id::Num(9)));
+        assert!(found(&a));
         assert!(token.is_cancelled());
         table.finish(&a);
-        assert!(!table.cancel(&a));
+        assert!(!found(&a));
+    }
+
+    #[test]
+    fn cancel_announces_before_the_token_is_set() {
+        let table = QueryTable::default();
+        let a = Id::Num(1);
+        let token = table.register(&a).unwrap();
+        let mut seen = None;
+        table.cancel(&a, |found| seen = Some((found, token.is_cancelled())));
+        assert_eq!(seen, Some((true, false)), "the answer goes out first");
+        assert!(token.is_cancelled());
     }
 
     #[test]

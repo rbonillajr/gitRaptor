@@ -1064,12 +1064,18 @@ impl Connection<'_> {
                 }
             }
             methods::QUERY_CANCEL => {
-                let result = request
-                    .params::<gitraptor_api::query::CancelParams>()
-                    .map(|p| gitraptor_api::query::CancelResult {
-                        cancelled: self.queries.cancel(&p.request),
-                    });
-                self.reply(&request.id, result);
+                match request.params::<gitraptor_api::query::CancelParams>() {
+                    // The answer goes out before the token is set (see `QueryTable::cancel`).
+                    Ok(p) => self.queries.cancel(&p.request, |cancelled| {
+                        self.reply(
+                            &request.id,
+                            Ok(gitraptor_api::query::CancelResult { cancelled }),
+                        );
+                    }),
+                    Err(error) => {
+                        self.reply::<gitraptor_api::query::CancelResult>(&request.id, Err(error));
+                    }
+                }
             }
             methods::PING => self.reply(&request.id, request.params::<NoParams>().map(|_| "pong")),
             methods::CONNECTION_ACCEPT => {
