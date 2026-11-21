@@ -84,6 +84,12 @@ Dado la rama base no confirmada
 Cuando el desarrollador busca crear un worktree
 Entonces la acción aparece desactivada con "confirma la rama base" y cómo confirmarla
 
+**Escenario: Poco espacio libre, no se crea el worktree**
+
+Dado un volumen con menos espacio libre que el suelo (el mayor de 5 GiB y el 5 % del volumen)
+Cuando el desarrollador crea la rama "feat/pagos"
+Entonces se rechaza con "queda poco espacio libre en el disco del worktree nuevo; libera espacio" y nada cambia
+
 **Escenario: Ruta UNC rechazada**
 
 Dado una ruta UNC como "\\\\servidor\\compartido\\shop-x"

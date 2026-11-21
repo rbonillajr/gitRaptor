@@ -314,6 +314,7 @@ ELSE sin confirmación
 ```
 REQUIRE base confirmada                    ELSE desactivado + acción para confirmarla
 REQUIRE BR-CKP-VAL-001
+REQUIRE espacio libre del volumen del destino ≥ suelo (el mayor de 5 GiB y 5 % del volumen)   ELSE rechazo no-free-space (US-GRP-024; el humano no tiene tope de worktrees, solo este suelo)
 → BR-CKP-WF-002
 al terminar → mostrar cómo lanzar el agente en la ruta creada            (BRD § 6.4)
 Deshacer → descarte (BR-CKP-ELIG-004) del worktree creado; con sesión presente, no se deshace   (Q-CKP-57)

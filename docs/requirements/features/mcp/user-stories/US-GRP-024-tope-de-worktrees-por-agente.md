@@ -19,6 +19,7 @@ related:
     - CTX-MCP-001
   specs:
     - DS-US-MCP-019
+    - DS-US-GRP-024
   rules:
     - BR-MCP-001
   stories:
@@ -55,6 +56,7 @@ BR-MCP-ELIG-004 (`create_worktree`: parte del tope, el techo y el suelo de espac
 - **Condición de salida de M3, sin ciclo (decisión del PO, 2026-11-21)**: el tope es condición de salida de M3 (security-review H-01, DS-US-MCP-019 G9). No se pone `blocked_by: [US-GRP-024]` en US-MCP-019, porque crearía un ciclo con el bloqueo de arriba: US-MCP-019 entra primero y esta historia después. La exigencia queda en el [criterio 12 de salida de M3](../../../release-plan.md#criterio-de-salida-2) y en la nota de dependencias de US-MCP-019: M3 no cierra sin esta historia en `main`.
 - **Lo que ya construye US-MCP-019**: el suelo de espacio libre y el techo por repo (DS-US-MCP-019 D18, T004 paso 2.3b) entran con la operación. Esta historia añade el tope por sesión de agente (D14) y certifica los tres límites juntos de punta a punta.
 - **Perfil del solicitante (TS-GRP-010, implementada)**: un agente recibe el perfil `mcp` también por la CLI o hablando directo con el motor, así que el tope le aplica por cualquier puerta.
+- **Capa del desarrollador (decisión del orquestador, 2026-11-21, validada por PO)**: el humano no tiene tope por sesión y sus worktrees no cuentan en el techo de agentes; sí recibe el rechazo por suelo de espacio, porque NFR-01 no distingue quién llena el disco. La regla de cockpit correspondiente (junto a BR-CKP-ELIG-005) y un escenario de poco espacio en US-CKP-018 y US-WTL-001 lo recogen.
 - **Relacionadas que no bloquean**: US-MCP-020 (la guía para agentes explica estos rechazos), US-WTL-001 y US-CKP-018 (crean worktrees desde la capa del desarrollador, que no tiene tope de agentes).
 
 ## Criterios de Aceptación
@@ -127,12 +129,34 @@ Ejemplos:
 | 65 | la configuración local personal | 8 | un diagnóstico avisa del valor fuera de rango (1 a 64) |
 | 2 | la configuración del equipo | 8 | un diagnóstico avisa de que ese nivel no se tiene en cuenta |
 
+**Escenario: Los worktrees del desarrollador no suman al techo de agentes**
+
+Dado el repo "shop" con 31 worktrees de agentes y 10 worktrees creados por el desarrollador
+Cuando "claude-9", con 0 worktrees en su sesión, pide `create_worktree` con la rama "feat/otra"
+Entonces existe la rama "feat/otra" con su worktree, el número 32 de los agentes
+
+**Escenario: Un worktree cuenta aunque la sesión que lo creó ya cerró**
+
+Dado "claude-1" creó 8 worktrees en el repo "shop" y su sesión cerró, sin reiniciar GitRaptor
+  Y los 8 worktrees siguen existiendo
+Cuando el repo ya tiene 32 worktrees de agentes y "claude-9" pide `create_worktree` con la rama "feat/otra"
+Entonces la petición se rechaza con el código `repo-worktree-limit`
+
+**Escenario: El desarrollador tampoco crea con poco espacio libre**
+
+Dado un volumen de 200 GiB con 4 GiB libres, por debajo del suelo de 10 GiB
+Cuando el desarrollador crea un worktree desde la TUI o con `raptor new`
+Entonces se rechaza con el código `no-free-space` y la acción "libera espacio en ese disco"
+  Y no se crea ninguna rama ni worktree
+  Y no hay forma de saltarse el suelo en el MVP
+
 **Escenario: El desarrollador no queda limitado por el tope de agentes**
 
 Dado el repo "shop" con 32 worktrees de agentes y "claude-1" con 8 en su sesión
 Cuando el desarrollador crea un worktree desde la TUI o con `raptor new`
 Entonces el worktree se crea
-  Y no se aplican el tope por sesión, el techo por repo ni el suelo de espacio de los agentes
+  Y no se aplican el tope por sesión ni el techo por repo de los agentes
+  Y el worktree del desarrollador no cuenta en el techo de 32 por repo
 
 ## Criterios de Certificación
 
@@ -140,9 +164,9 @@ Entonces el worktree se crea
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección)._ La mayor parte del contrato ya está en [DS-US-MCP-019](../dev-specs/US-MCP-019-dev-spec.md): D14 (tope por sesión, `worktree.agentLimit`), D18 y T004 paso 2.3b (suelo y techo por repo), G9 y sus pruebas de contrato. El Arquitecto decide si basta esa DS o si esta historia lleva Dev Spec propia.
+Arquitecto, 2026-11-21: [DS-US-GRP-024](../dev-specs/US-GRP-024-dev-spec.md). La mayor parte del contrato ya está en [DS-US-MCP-019](../dev-specs/US-MCP-019-dev-spec.md): D14 (tope por sesión, `worktree.agentLimit`), D18 y T004 paso 2.3b (suelo y techo por repo), G9 y sus pruebas de contrato. El Arquitecto decide si basta esa DS o si esta historia lleva Dev Spec propia.
 
 ## Diseño y Dev Spec
 
 - **Diseño:** no aplica (los textos de rechazo vienen de DS-US-MCP-019).
-- **Dev Spec:** pendiente del Arquitecto; base en [DS-US-MCP-019](../dev-specs/US-MCP-019-dev-spec.md) D14, D18 y T004.
+- **Dev Spec:** [DS-US-GRP-024](../dev-specs/US-GRP-024-dev-spec.md) (`spec-ready`, 2026-11-21); base en [DS-US-MCP-019](../dev-specs/US-MCP-019-dev-spec.md) D14, D18 y T004.
