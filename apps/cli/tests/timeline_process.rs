@@ -626,14 +626,10 @@ fn paths_with_control_characters_are_printed_sanitized() {
     assert!(!shown.contains('\u{1b}'), "{shown:?}");
     assert!(!shown.contains("red\nforged"), "{shown:?}");
     assert!(shown.contains('\u{FFFD}'), "{shown:?}");
-    // `--json` goes through the same sanitizing pass as the MCP view now (SEC-12): the path
-    // arrives as data without the escape sequence and the line break.
+    // The wire keeps the raw text; only the screen is sanitized.
     let timeline = m.timeline_json(&[]);
     let entry = entry_of(&timeline, event["seq"].as_i64().unwrap());
-    assert_eq!(
-        entry["files"]["paths"][0]["untrusted"], "evilred\u{FFFD}forged line.txt",
-        "{entry:#}"
-    );
+    assert_eq!(entry["files"]["paths"][0]["untrusted"], name, "{entry:#}");
     m.stop();
 }
 

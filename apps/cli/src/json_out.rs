@@ -3,9 +3,10 @@
 //!
 //! Text that came from a repo or an agent is data (SEC-12): fields wrapped as `Untrusted` in
 //! `data` and `error.params` go through [`gitraptor_api::mcp_view::for_mcp`] before they are
-//! serialized, the same pass the MCP uses. Developer-only outputs built with `.raw()` (events,
-//! sessions, status) are not escaped: that is outside this guarantee. `error.params` never
-//! carries what the caller typed.
+//! serialized, the same pass the MCP uses (the agent view). The developer outputs that are
+//! outside the agent view (timeline, sessions, events, restore) go through [`ok_raw`]: they
+//! keep the real text in `untrusted`, JSON encoding already escapes control characters and the
+//! output stays one compact line. `error.params` never carries what the caller typed.
 
 use std::io::Write as _;
 use std::process::ExitCode;
@@ -30,9 +31,11 @@ use crate::i18n::t;
 const INTERNAL_LITERAL: &str = r#"{"schema_version":"1.0","error":{"code":"internal","message":"GitRaptor could not answer this command.","params":{},"action":"Retry later."}}"#;
 
 /// The success envelope as one line, `data` escaped as repo text.
-fn render_ok<T: Serialize>(data: &T) -> Option<String> {
+fn render_ok<T: Serialize>(data: &T, sanitize: bool) -> Option<String> {
     let mut data = serde_json::to_value(data).ok()?;
-    for_mcp(&mut data);
+    if sanitize {
+        for_mcp(&mut data);
+    }
     serde_json::to_string(&CliOk {
         schema_version: CLI_SCHEMA_VERSION,
         data,
@@ -66,9 +69,19 @@ fn emit(line: &str) {
     let _ = out.flush();
 }
 
-/// Prints `{schema_version, data}` and gives the success exit code.
+/// Prints `{schema_version, data}` and gives the success exit code. `data` is escaped as repo
+/// text (the agent view).
 pub(crate) fn ok<T: Serialize>(data: &T) -> ExitCode {
-    match render_ok(data) {
+    print_ok(data, true)
+}
+
+/// Like [`ok`] for a developer output outside the agent view: `untrusted` keeps the raw text.
+pub(crate) fn ok_raw<T: Serialize>(data: &T) -> ExitCode {
+    print_ok(data, false)
+}
+
+fn print_ok<T: Serialize>(data: &T, sanitize: bool) -> ExitCode {
+    match render_ok(data, sanitize) {
         Some(line) => {
             emit(&line);
             ExitCode::SUCCESS

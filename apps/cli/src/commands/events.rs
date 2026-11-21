@@ -105,7 +105,7 @@ fn events_command(json: bool, limit: u32, all: bool) -> ExitCode {
     };
     let entries = events::interleave(all, &gaps);
     if json {
-        return json_out::ok(&events::json_with_gaps(&entries));
+        return json_out::ok_raw(&events::json_with_gaps(&entries));
     } else {
         // A gap carries only UTC: it is shown at the offset of the events, as the
         // Guardrails log does for its unlogged periods.
