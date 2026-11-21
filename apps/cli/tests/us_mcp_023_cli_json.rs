@@ -365,15 +365,50 @@ impl Machine {
         }
     }
 
-    /// The agent edits, throws its work away with raw Git: something to undo.
+    /// The agent edits and commits (attributed work, as in `td_tmc_003`): something to undo, and a
+    /// base point for the redo of its own undo.
     fn agent_resets(&self, claude: &mut FakeClaude) {
         assert!(claude.run("printf 'user\\npassword\\n' > login.txt"));
         self.captured("login.txt", WORK);
         let hooks = self.outside.path().join("slow-hooks");
         assert!(claude.run(&format!(
-            "git -c core.hooksPath={} reset -q --hard",
+            "git add -- login.txt && git -c core.hooksPath={} commit -q -m 'agent work'",
             hooks.display()
         )));
+        // Wait for the timeline to show the commit as an agent event: the base point the undo
+        // (and the redo after it) is measured from.
+        self.timeline_shows("event:", true, 1);
+    }
+
+    /// Waits for the timeline of the worktree to show at least `n` entries whose id starts with
+    /// `prefix`, attributed to an agent or not.
+    fn timeline_shows(&self, prefix: &str, by_agent: bool, n: usize) {
+        use gitraptor_api::actor::Actor;
+        use gitraptor_api::timemachine::TimelineResult;
+        let start = Instant::now();
+        loop {
+            let timeline: TimelineResult = self
+                .client()
+                .call(
+                    methods::TM_TIMELINE,
+                    json!({"worktree": self.worktree, "since": "1h", "limit": 200}),
+                )
+                .unwrap();
+            let seen = timeline
+                .entries
+                .iter()
+                .filter(|e| e.id.starts_with(prefix))
+                .filter(|e| matches!(e.actor, Actor::Agent { .. }) == by_agent)
+                .count();
+            if seen >= n {
+                return;
+            }
+            assert!(
+                start.elapsed() < DEADLINE,
+                "the timeline never showed {n} {prefix} entries (agent: {by_agent}), it shows {seen}"
+            );
+            std::thread::sleep(Duration::from_millis(50));
+        }
     }
 
     fn branch_exists(&self, name: &str) -> bool {
@@ -425,6 +460,7 @@ fn every_agent_subcommand_declares_the_contract_version() {
 
     m.agent_resets(&mut claude);
     m.as_agent(&mut claude, &["undo", "--json"]).data("undo");
+    m.timeline_shows("operation:", true, 1);
     m.as_agent(&mut claude, &["redo", "--json"]).data("redo");
 }
 
@@ -458,6 +494,7 @@ fn agent_outputs_deserialize_into_their_contract_type() {
     let undo = m.as_agent(&mut claude, &["undo", "--json"]).data("undo");
     serde_json::from_value::<McpUndoResult>(undo.clone())
         .unwrap_or_else(|e| panic!("undo data is not McpUndoResult ({e}): {undo}"));
+    m.timeline_shows("operation:", true, 1);
     let redo = m.as_agent(&mut claude, &["redo", "--json"]).data("redo");
     serde_json::from_value::<McpRedoResult>(redo.clone())
         .unwrap_or_else(|e| panic!("redo data is not McpRedoResult ({e}): {redo}"));
@@ -559,6 +596,8 @@ fn the_developer_reads_daemon_status_and_runs_guard_exec_with_json() {
 
     // Without --yes there is no interactive question in JSON: confirmation-required, nothing runs.
     let repo = path(&m.f.repo).to_owned();
+    // The daemon refuses a guarded run on a repo whose guard was never installed.
+    m.ok(&m.f.root, &["guard", "install", &repo, "--yes"]);
     let argv = ["--", "git", "-C", &repo, "branch", "-d", "victim"];
     let mut ask = vec!["guard", "exec", "--json"];
     ask.extend_from_slice(&argv);
