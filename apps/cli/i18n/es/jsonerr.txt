@@ -1,0 +1,30 @@
+# Textos fijos de los rechazos de `raptor ... --json` (el `message` y el `action` del error).
+# Una `key = text` por línea: jsonerr.<code>.message y jsonerr.<code>.action, un par por cada
+# código de CliErrorCode::ALL. Cada clave existe también en ../en/jsonerr.txt.
+
+jsonerr.engine-unavailable.message = GitRaptor no está en marcha y no se pudo arrancar.
+jsonerr.engine-unavailable.action = Revisa la instalación de GitRaptor.
+jsonerr.repo-not-enabled.message = Este repo no está habilitado para agentes.
+jsonerr.repo-not-enabled.action = Pide al desarrollador que lo habilite con raptor mcp enable.
+jsonerr.not-in-observed-worktree.message = Esta carpeta no está dentro de un worktree que GitRaptor observe.
+jsonerr.not-in-observed-worktree.action = Ejecuta el comando dentro de un repo observado.
+jsonerr.repo-unavailable.message = GitRaptor no puede leer este repo ahora.
+jsonerr.repo-unavailable.action = Pide al desarrollador que revise el repo en GitRaptor.
+jsonerr.identity-unverified.message = GitRaptor no pudo verificar quién llama.
+jsonerr.identity-unverified.action = Reintenta más tarde.
+jsonerr.rate-limited.message = Demasiadas llamadas en esta conexión.
+jsonerr.rate-limited.action = Espera unos segundos y reintenta.
+jsonerr.confirmation-required.message = Esta acción requiere confirmación del desarrollador.
+jsonerr.confirmation-required.action = Avisa al desarrollador: la decisión es suya. Reintentar da la misma respuesta.
+jsonerr.aborted.message = No se pudo tomar el snapshot previo; no se cambió nada.
+jsonerr.aborted.action = Pide al desarrollador que libere espacio o revise GitRaptor, y reintenta.
+jsonerr.internal.message = GitRaptor no pudo responder a este comando.
+jsonerr.internal.action = Reintenta más tarde.
+jsonerr.command-unavailable.message = Este comando no está disponible aquí.
+jsonerr.command-unavailable.action = Usa un comando de la vista del agente (status, undo, redo, agent register, daemon status) o pídeselo al desarrollador.
+jsonerr.reserved-command.message = Este comando está reservado al desarrollador.
+jsonerr.reserved-command.action = Pide al desarrollador que lo ejecute.
+jsonerr.command-failed.message = El motor rechazó el comando.
+jsonerr.command-failed.action = Revisa params.reason, corrige la causa y reintenta, o consulta al desarrollador.
+jsonerr.invalid-args.message = Los argumentos del comando no son válidos.
+jsonerr.invalid-args.action = Revisa params.kind y params.argument, y ejecuta raptor --help.

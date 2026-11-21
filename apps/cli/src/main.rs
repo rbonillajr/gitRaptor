@@ -6,6 +6,7 @@ mod discovery;
 mod events;
 mod guard;
 mod i18n;
+mod json_out;
 mod mcp;
 mod resources;
 mod restricted;
@@ -70,6 +71,26 @@ fn parse_lang(value: &str) -> Result<gitraptor_cli::present::i18n::Lang, String>
     }
 }
 
+/// A command line clap rejects. With `--json` before any `--` the agent gets the rejection as
+/// JSON; otherwise (and for `--help` and `--version`) clap prints and exits as it always did.
+fn usage_failure(err: &clap::Error, args: &[std::ffi::OsString]) -> ExitCode {
+    use clap::error::ErrorKind;
+    let wants_json = args
+        .iter()
+        .skip(1)
+        .take_while(|a| *a != "--")
+        .any(|a| a == "--json");
+    if wants_json
+        && !matches!(
+            err.kind(),
+            ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
+        )
+    {
+        return json_out::usage(err);
+    }
+    err.exit()
+}
+
 fn main() -> ExitCode {
     // What a Guardrails dispatcher starts: positional constants, no clap, no profile, no
     // daemon start (ADR-GRD-001 § 2).
@@ -77,7 +98,10 @@ fn main() -> ExitCode {
     if args.get(1).is_some_and(|a| a == "hook") {
         return guard::hook(&args[2..]);
     }
-    let cli = Cli::parse();
+    let cli = match Cli::try_parse() {
+        Ok(cli) => cli,
+        Err(err) => return usage_failure(&err, &args),
+    };
     // Before any message: every catalog (the TUI's and the CLI's) reads it from here.
     gitraptor_cli::present::i18n::Lang::choose(cli.lang);
     let global = commands::Global {
