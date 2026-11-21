@@ -137,10 +137,16 @@ fn status_resources(json: bool) -> ExitCode {
                 .any(|m| m == methods::ENGINE_RESOURCES)
             {
                 if json {
-                    return json_out::fail(
-                        CliErrorCode::Cli(CliOnlyCode::CommandUnavailable),
-                        Some(serde_json::json!({ "reason": "engine-version" })),
-                    );
+                    // `require` names the agent view; a method only reserved for the engine
+                    // still has no resources here, so it is an old engine.
+                    return json_out::require(&client, methods::ENGINE_RESOURCES)
+                        .err()
+                        .unwrap_or_else(|| {
+                            json_out::fail(
+                                CliErrorCode::Cli(CliOnlyCode::CommandUnavailable),
+                                Some(serde_json::json!({ "reason": "engine-version" })),
+                            )
+                        });
                 }
                 eprintln!("{CMD}: {}", t("res.restart-engine", &[]));
                 return ExitCode::FAILURE;

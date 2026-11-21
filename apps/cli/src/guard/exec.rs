@@ -78,7 +78,7 @@ pub fn exec(yes: bool, json: bool, argv: Vec<OsString>) -> ExitCode {
         if json {
             return json_out::fail(
                 CliErrorCode::Cli(CliOnlyCode::InvalidArgs),
-                Some(json!({ "kind": "non-utf8-argument" })),
+                Some(json!({ "kind": "invalid-utf8" })),
             );
         }
         eprintln!("{CMD}: {}", t("guardexec.non-utf8", &[]));
@@ -125,6 +125,12 @@ pub fn exec(yes: bool, json: bool, argv: Vec<OsString>) -> ExitCode {
             .as_ref()
             .is_some_and(|caps| caps.iter().any(|c| c == methods::CAP_GUARD_EXCEPTION.name));
     if !served {
+        if json {
+            return json_out::fail(
+                CliErrorCode::Cli(CliOnlyCode::CommandUnavailable),
+                Some(json!({ "reason": "engine-version" })),
+            );
+        }
         return stop(json, "guardexec.unavailable", "engine-version");
     }
     let repo = GuardRepoParams {
