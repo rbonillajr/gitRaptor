@@ -17,7 +17,8 @@ related:
     - US-CKP-017
   rules:
     - BR-WTL-011
-  specs: []
+  specs:
+    - DS-US-WTL-005
 ado:
   id: null
   url: null
