@@ -931,6 +931,7 @@ mod tests {
             main,
             admin_name: None,
             status,
+            origin: None,
         }
     }
 

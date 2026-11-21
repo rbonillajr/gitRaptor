@@ -64,6 +64,7 @@ fn wt(path: &str, main: bool, branch: &str, divergence: DivergenceView) -> Workt
             changes: Vec::new(),
             divergence,
         },
+        origin: None,
     }
 }
 

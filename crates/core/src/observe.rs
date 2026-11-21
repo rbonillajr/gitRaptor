@@ -738,6 +738,7 @@ pub fn read_worktree(
         operation,
         unmerged_paths,
         changes_actor: None,
+        origin: None,
     };
     let read =
         || -> Result<(HeadView, Option<String>, Status, Option<OperationKindView>), ReadError> {

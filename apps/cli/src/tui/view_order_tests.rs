@@ -87,6 +87,7 @@ fn worktrees(trees: &[Tree]) -> Vec<WorktreeView> {
             operation: None,
             unmerged_paths: 0,
             changes_actor: None,
+            origin: None,
         })
         .collect()
 }

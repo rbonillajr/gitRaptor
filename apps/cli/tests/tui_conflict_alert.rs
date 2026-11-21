@@ -88,6 +88,7 @@ fn wt(i: usize) -> WorktreeView {
                 },
             },
         },
+        origin: None,
     }
 }
 

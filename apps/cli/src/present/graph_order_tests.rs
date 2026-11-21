@@ -44,6 +44,7 @@ fn wt(path: &str, main: bool, branch: &str) -> WorktreeView {
             changes: Vec::new(),
             divergence: DivergenceView::NoBase,
         },
+        origin: None,
     }
 }
 

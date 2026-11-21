@@ -190,6 +190,7 @@ fn snapshot(seq: u64, base: &str, branch: &str, ahead: u64, extra: bool) -> Msg 
                 },
             },
         },
+        origin: None,
     };
     let mut worktrees = vec![
         wt("/w/shop", true, "main", 0),
