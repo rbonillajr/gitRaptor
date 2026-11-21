@@ -89,6 +89,13 @@ Dado un agente conectado por el MCP
 Cuando pide crear un worktree
 Entonces lo prepara sin lanzar ningún agente en él
 
+**Escenario: Poco espacio libre, no se crea el worktree**
+
+Dado un volumen con menos espacio libre que el suelo (el mayor de 5 GiB y el 5 % del volumen)
+Cuando el desarrollador ejecuta `raptor new feat-h`
+Entonces se rechaza con el código `no-free-space` y la acción "libera espacio en ese disco"
+  Y no se crea ningún worktree ni se copia nada desde la semilla
+
 **Escenario: Nunca HEAD separado**
 
 Dado cualquier creación con `raptor new`
