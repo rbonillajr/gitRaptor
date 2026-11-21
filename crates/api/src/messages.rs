@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::actor::Actor;
 use crate::event::Event;
+use crate::worktree_origin::WorktreeOriginView;
 use crate::{Untrusted, UntrustedName};
 
 /// Longest accepted client version text.
@@ -234,8 +235,12 @@ impl RepoView {
     }
 
     /// The repo in the shapes of a connection without
-    /// `observation.worktree-origin` (skeleton: behaviour lands with T001).
-    pub fn without_worktree_origin(&mut self) {}
+    /// `observation.worktree-origin`.
+    pub fn without_worktree_origin(&mut self) {
+        for w in &mut self.worktrees {
+            w.without_worktree_origin();
+        }
+    }
 }
 
 /// The base branch of a repo (US-GRP-012, ADR-GRD-004 § 3): the one the
@@ -413,6 +418,11 @@ pub struct WorktreeView {
     /// (BR-EDGE-004).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub changes_actor: Option<Actor>,
+    /// Who created a linked worktree and how that is known (BR-WTL-011).
+    /// Absent for the main worktree and for a connection without
+    /// `observation.worktree-origin`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<WorktreeOriginView>,
 }
 
 /// A Git operation left half-way in a worktree, from its marker files
@@ -448,6 +458,12 @@ impl WorktreeView {
     /// `observation.change-attribution`.
     pub fn without_change_attribution(&mut self) {
         self.changes_actor = None;
+    }
+
+    /// The worktree in the shapes of a connection without
+    /// `observation.worktree-origin`.
+    pub fn without_worktree_origin(&mut self) {
+        self.origin = None;
     }
 
     /// The listed changes are fewer than the counted ones.
@@ -530,6 +546,14 @@ impl WorktreeStateData {
     pub fn without_change_attribution(&mut self) {
         for w in &mut self.worktrees {
             w.without_change_attribution();
+        }
+    }
+
+    /// The data in the shapes of a connection without
+    /// `observation.worktree-origin`.
+    pub fn without_worktree_origin(&mut self) {
+        for w in &mut self.worktrees {
+            w.without_worktree_origin();
         }
     }
 }
@@ -1316,6 +1340,7 @@ mod tests {
                 operation: None,
                 unmerged_paths: 0,
                 changes_actor: None,
+                origin: None,
             }],
             fetched_utc_ms: None,
         };

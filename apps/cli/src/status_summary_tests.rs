@@ -76,6 +76,7 @@ fn snapshot_with(counts: ChangeCounts, changes: Vec<FileChangeView>) -> Snapshot
                         behind: zero,
                     },
                 },
+                origin: None,
             }],
             tier: None,
             checked_utc_ms: None,

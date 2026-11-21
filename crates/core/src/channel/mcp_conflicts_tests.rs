@@ -48,6 +48,7 @@ fn worktree(root: &Path, main: bool) -> WorktreeView {
         operation: None,
         unmerged_paths: 0,
         changes_actor: None,
+        origin: None,
     }
 }
 
