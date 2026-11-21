@@ -50,3 +50,8 @@
 {"v":1,"ts":"2026-11-10T20:29:35.481Z","event":"updated","session":"23cf10f8-36bf-48af-890b-94db43e16add","rel":"user-stories/US-MCP-026-comparacion-mcp-cli.md","id":"US-MCP-026","type":"us","sha":"fa6153089a79c992"}
 {"v":1,"ts":"2026-11-10T20:30:05.419Z","event":"updated","session":"23cf10f8-36bf-48af-890b-94db43e16add","rel":"context.md","id":"CTX-MCP-001","type":"context","sha":"fcaac26cb9ac84e7"}
 {"v":1,"ts":"2026-11-10T20:30:07.191Z","event":"updated","session":"23cf10f8-36bf-48af-890b-94db43e16add","rel":"context.md","id":"CTX-MCP-001","type":"context","sha":"08fd61d163b1a4af"}
+{"v":1,"ts":"2026-11-21T15:57:27.518Z","event":"updated","session":"19e3bc36-b7e0-4dcc-93e0-5579caca0e75","rel":"user-stories/US-MCP-023-cli-json-estable.md","id":"US-MCP-023","type":"us","sha":"27f773c0099234b5"}
+{"v":1,"ts":"2026-11-21T15:57:36.777Z","event":"updated","session":"19e3bc36-b7e0-4dcc-93e0-5579caca0e75","rel":"user-stories/US-MCP-023-cli-json-estable.md","id":"US-MCP-023","type":"us","sha":"d496e0ca8c5fa102"}
+{"v":1,"ts":"2026-11-21T15:57:44.454Z","event":"updated","session":"19e3bc36-b7e0-4dcc-93e0-5579caca0e75","rel":"user-stories/US-MCP-023-cli-json-estable.md","id":"US-MCP-023","type":"us","sha":"40664f4d40163fa9"}
+{"v":1,"ts":"2026-11-21T15:57:47.442Z","event":"updated","session":"19e3bc36-b7e0-4dcc-93e0-5579caca0e75","rel":"user-stories/US-MCP-023-cli-json-estable.md","id":"US-MCP-023","type":"us","sha":"b1bc34ca53ef3ded"}
+{"v":1,"ts":"2026-11-21T15:57:50.007Z","event":"updated","session":"19e3bc36-b7e0-4dcc-93e0-5579caca0e75","rel":"user-stories/US-MCP-023-cli-json-estable.md","id":"US-MCP-023","type":"us","sha":"fe5d90c1aba8ad7c"}

@@ -46,6 +46,8 @@ La regla ya existe en el design system: "`--json` en todos los comandos, con un 
 | `raptor mcp enable`, `disable` | No | Comando reservado (ADR-MCP-001 § 3) | Nunca para agentes |
 | `raptor tui`, `ui gallery`, `predict-worker` (oculto) | No aplica | — | — |
 
+**Revisión del PO (2026-11-21, rama `feat/US-MCP-023-cli-json-contract`)**: la tabla sigue vigente. Ningún subcomando ha cambiado su `--json`, ninguna salida declara versión, y `agent withdraw`, `daemon status` y `guard exec` siguen sin `--json`. Lo nuevo desde TS-GRP-010: lanzada por un agente, la CLI recibe el perfil `mcp`. Con ese perfil el motor solo ofrece `status`, `undo`, `redo`, `agent register` y `daemon status`, en su vista restringida. `sessions`, `events`, `timeline`, `restore`, `guard status` y `guard log` responden "todavía no disponible en esta versión", como texto. `agent withdraw`, `correct` y `uncorrect` son comandos reservados al desarrollador. `status --json` ya rechaza un repo no habilitado como `{"error": "repo-not-enabled"}`, sin versión ni acción.
+
 ## Lo que falta (transversal a todos los subcomandos)
 
 | Hueco | Evidencia | Historia |

@@ -14,6 +14,7 @@ pub mod actor;
 pub mod attribution;
 pub mod capability;
 pub mod catalog;
+pub mod cli_contract;
 #[cfg(feature = "client")]
 pub mod client;
 pub mod clock;
