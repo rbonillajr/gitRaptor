@@ -4,7 +4,9 @@
 use std::process::ExitCode;
 
 use gitraptor_api::discovery::CandidatesResult;
-use gitraptor_api::messages::{ClientKind, SessionsListParams, SessionsListResult};
+use gitraptor_api::cli_contract::{CliErrorCode, CliOnlyCode};
+use gitraptor_api::mcp_view::McpToolError;
+use gitraptor_api::messages::{ClientKind, SessionsListParams, SessionsListResult, Snapshot};
 use gitraptor_api::methods;
 use gitraptor_api::resources::ResourcesResult;
 use gitraptor_api::untrusted::sanitize;
@@ -13,7 +15,7 @@ use gitraptor_core::profile::{INDEX_FILE, read_only_repos};
 
 use super::Global;
 use crate::i18n::t;
-use crate::{engine, error_text, offers, profile_dirs, resources, snapshot, status};
+use crate::{error_text, json_out, offers, profile_dirs, resources, snapshot, status};
 
 /// Show every observed repo and the state of its worktrees.
 #[derive(clap::Args)]
@@ -44,7 +46,7 @@ impl Cmd {
 /// Read-only; starts the engine on demand.
 fn status(json: bool, verbose: bool) -> ExitCode {
     const CMD: &str = "raptor status";
-    let mut client = match engine(CMD) {
+    let mut client = match json_out::engine(CMD, json) {
         Ok(client) => client,
         Err(code) => return code,
     };
@@ -52,9 +54,14 @@ fn status(json: bool, verbose: bool) -> ExitCode {
     if crate::restricted::is_restricted(&client) {
         return crate::restricted::print_status(&mut client, json);
     }
-    let snapshot = match snapshot(&mut client, CMD) {
+    let snapshot = match client.call::<_, Snapshot>(methods::ENGINE_SNAPSHOT, serde_json::json!({}))
+    {
         Ok(snapshot) => snapshot,
-        Err(code) => return code,
+        Err(err) if json => return json_out::fail_client(&client, &err),
+        Err(err) => {
+            eprintln!("{CMD}: {}", sanitize(&err.to_string()));
+            return ExitCode::FAILURE;
+        }
     };
     // Sessions (US-GRP-007), when the engine offers them.
     let mut sessions = status::SessionsInfo::default();
@@ -66,6 +73,7 @@ fn status(json: bool, verbose: bool) -> ExitCode {
                 sessions.available = Some(list.detection_available);
                 sessions.sessions = list.sessions;
             }
+            Err(err) if json => return json_out::fail_client(&client, &err),
             Err(err) => {
                 eprintln!("{CMD}: {}", sanitize(&err.to_string()));
                 return ExitCode::FAILURE;
@@ -87,10 +95,7 @@ fn status(json: bool, verbose: bool) -> ExitCode {
         }
     }
     if json {
-        match serde_json::to_string_pretty(&status::json(&snapshot, &sessions)) {
-            Ok(text) => println!("{text}"),
-            Err(_) => return ExitCode::FAILURE,
-        }
+        return json_out::ok(&status::json(&snapshot, &sessions));
     } else {
         print!(
             "{}",
@@ -106,9 +111,21 @@ fn status(json: bool, verbose: bool) -> ExitCode {
 /// target does not change the exit code.
 fn status_resources(json: bool) -> ExitCode {
     const CMD: &str = "raptor status --resources";
-    let dirs = match profile_dirs() {
-        Ok(dirs) => dirs,
-        Err(code) => return code,
+    let dirs = if json {
+        match gitraptor_core::profile::ProfileDirs::resolve() {
+            Ok(dirs) => dirs,
+            Err(_) => {
+                return json_out::fail(
+                    CliErrorCode::Tool(McpToolError::EngineUnavailable),
+                    None,
+                );
+            }
+        }
+    } else {
+        match profile_dirs() {
+            Ok(dirs) => dirs,
+            Err(code) => return code,
+        }
     };
     let view = match Client::connect(&dirs, ClientKind::Cli, gitraptor_api::PROTOCOL_VERSION) {
         Ok(mut client) => {
@@ -119,6 +136,12 @@ fn status_resources(json: bool) -> ExitCode {
                 .iter()
                 .any(|m| m == methods::ENGINE_RESOURCES)
             {
+                if json {
+                    return json_out::fail(
+                        CliErrorCode::Cli(CliOnlyCode::CommandUnavailable),
+                        Some(serde_json::json!({ "reason": "engine-version" })),
+                    );
+                }
                 eprintln!("{CMD}: {}", t("res.restart-engine", &[]));
                 return ExitCode::FAILURE;
             }
@@ -145,14 +168,23 @@ fn status_resources(json: bool) -> ExitCode {
             let result: ResourcesResult =
                 match client.call(methods::ENGINE_RESOURCES, serde_json::json!({})) {
                     Ok(result) => result,
+                    Err(err) if json => return json_out::fail_client(&client, &err),
                     Err(err) => {
                         eprintln!("{CMD}: {}", error_text(err));
                         return ExitCode::FAILURE;
                     }
                 };
-            let snapshot = match snapshot(&mut client, CMD) {
-                Ok(snapshot) => snapshot,
-                Err(code) => return code,
+            let snapshot = if json {
+                match client.call::<_, Snapshot>(methods::ENGINE_SNAPSHOT, serde_json::json!({}))
+                {
+                    Ok(snapshot) => snapshot,
+                    Err(err) => return json_out::fail_client(&client, &err),
+                }
+            } else {
+                match snapshot(&mut client, CMD) {
+                    Ok(snapshot) => snapshot,
+                    Err(code) => return code,
+                }
             };
             let repos = snapshot
                 .repos
@@ -177,16 +209,14 @@ fn status_resources(json: bool) -> ExitCode {
                 repos,
             )
         }
+        Err(err) if json => return json_out::fail_error(&err),
         Err(err) => {
             eprintln!("{CMD}: {}", error_text(err));
             return ExitCode::FAILURE;
         }
     };
     if json {
-        match serde_json::to_string_pretty(&resources::json(&view)) {
-            Ok(text) => println!("{text}"),
-            Err(_) => return ExitCode::FAILURE,
-        }
+        return json_out::ok(&resources::json(&view));
     } else {
         print!("{}", resources::text(&view));
     }

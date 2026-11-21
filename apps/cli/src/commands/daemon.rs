@@ -12,9 +12,10 @@ use gitraptor_api::client::{
     Client as ApiClient, Ensured, ReplacePolicy,
     ensure_daemon_policy, peer,
 };
-use gitraptor_api::messages::{ClientKind, IncompatibleData};
+use gitraptor_api::cli_contract::{DaemonRepoView, DaemonStatusView, McpDaemonStatusView};
+use gitraptor_api::messages::{ClientKind, IncompatibleData, Snapshot};
 use gitraptor_api::rpc::code;
-use gitraptor_api::untrusted::sanitize;
+use gitraptor_api::untrusted::{Untrusted, sanitize};
 use gitraptor_core::autostart::{Autostart, start_failure_exit};
 use gitraptor_core::client::{Client, ClientError, ClientOptions};
 use gitraptor_core::daemon::{self, DaemonConfig, DaemonError};
@@ -22,7 +23,9 @@ use gitraptor_core::profile::ProfileDirs;
 
 use super::Global;
 use crate::i18n::t;
-use crate::{autostart, codes, confirm, engine, error_text, profile_dirs, refusal_text, snapshot, status};
+use crate::{
+    autostart, codes, confirm, error_text, json_out, profile_dirs, refusal_text, snapshot, status,
+};
 
 /// Run the GitRaptor engine in the foreground (one per user).
 #[derive(clap::Args)]
@@ -44,7 +47,11 @@ enum DaemonAction {
         yes: bool,
     },
     /// Show the engine state, starting the engine if it is not running.
-    Status,
+    Status {
+        /// Print JSON instead of text.
+        #[arg(long)]
+        json: bool,
+    },
     /// Start the engine at login (launchd, systemd --user or HKCU Run).
     Enable,
     /// Stop starting the engine at login. The running engine keeps running.
@@ -71,7 +78,7 @@ impl Cmd {
         match self.action {
             None => run_daemon(self.autostart),
             Some(DaemonAction::Stop { yes }) => stop_daemon(yes),
-            Some(DaemonAction::Status) => daemon_status(),
+            Some(DaemonAction::Status { json }) => daemon_status(json),
             Some(DaemonAction::Enable) => autostart::enable(),
             Some(DaemonAction::Disable) => autostart::disable(),
             Some(DaemonAction::Ensure {
@@ -156,19 +163,22 @@ fn stop_daemon(yes: bool) -> ExitCode {
 /// `raptor daemon status`: diagnostic, read-only. Starts the engine on
 /// demand and prints the snapshot, sanitized (SEC-12). Its presentation is
 /// not a commitment (F-001-02 owns it).
-fn daemon_status() -> ExitCode {
+fn daemon_status(json: bool) -> ExitCode {
     const CMD: &str = "raptor daemon status";
-    let mut client = match engine(CMD) {
+    let mut client = match json_out::engine(CMD, json) {
         Ok(client) => client,
         Err(code) => return code,
     };
     if crate::restricted::is_restricted(&client) {
-        return daemon_status_restricted(&mut client);
+        return daemon_status_restricted(&mut client, json);
     }
     let snapshot = match snapshot(&mut client, CMD) {
         Ok(snapshot) => snapshot,
         Err(code) => return code,
     };
+    if json {
+        return daemon_status_json(&mut client, &snapshot);
+    }
     println!(
         "{}",
         t(
@@ -211,18 +221,56 @@ fn daemon_status() -> ExitCode {
     ExitCode::SUCCESS
 }
 
+/// `raptor daemon status --json` for the developer: the engine, the daemon, the login autostart
+/// and the repos, all of it in the contract's own type.
+fn daemon_status_json(client: &mut Client, snapshot: &Snapshot) -> ExitCode {
+    let autostart = match client.call(
+        gitraptor_api::methods::SCOPE_SNAPSHOT,
+        gitraptor_api::scope::ScopeSnapshotParams {
+            scope: gitraptor_api::scope::Scope::Global,
+        },
+    ) {
+        Ok(gitraptor_api::scope::ScopeSnapshot::Global(global)) => Some(global.autostart),
+        _ => None,
+    };
+    json_out::ok(&DaemonStatusView {
+        engine_state: snapshot.engine.state,
+        pid: snapshot.daemon.pid,
+        protocol: snapshot.daemon.protocol,
+        git_version: snapshot.engine.git_version.clone().map(Untrusted::new),
+        autostart,
+        requester: client.hello().requester.clone(),
+        repos: snapshot
+            .repos
+            .iter()
+            .map(|repo| DaemonRepoView {
+                repo_id: repo.repo_id.clone(),
+                state: repo.state,
+                path: repo.path.clone(),
+            })
+            .collect(),
+    })
+}
+
 /// `raptor daemon status` on a connection the daemon fixed as `mcp` (an
 /// agent asks, TS-GRP-010 D11): the engine's state of the bounded snapshot
 /// and who the daemon sees, without the list of repos.
-fn daemon_status_restricted(client: &mut gitraptor_core::client::Client) -> ExitCode {
+fn daemon_status_restricted(client: &mut gitraptor_core::client::Client, json: bool) -> ExitCode {
     let snapshot: gitraptor_api::messages::McpSnapshot =
         match client.call(gitraptor_api::methods::ENGINE_SNAPSHOT, serde_json::json!({})) {
             Ok(snapshot) => snapshot,
+            Err(err) if json => return json_out::fail_client(client, &err),
             Err(err) => {
                 eprintln!("raptor daemon status: {}", error_text(err));
                 return ExitCode::FAILURE;
             }
         };
+    if json {
+        return json_out::ok(&McpDaemonStatusView {
+            engine_state: snapshot.engine_state,
+            requester: client.hello().requester.clone(),
+        });
+    }
     println!(
         "{}",
         t(

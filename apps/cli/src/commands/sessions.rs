@@ -8,7 +8,7 @@ use gitraptor_api::untrusted::sanitize;
 
 use super::Global;
 use crate::i18n::t;
-use crate::{engine, offers, sessions};
+use crate::{json_out, offers, sessions};
 
 /// Show the agent sessions of the observed repos: the present ones and
 /// the latest ended one of each worktree.
@@ -32,10 +32,13 @@ impl Cmd {
 /// repo, oldest first.
 fn sessions_command(json: bool, all: bool) -> ExitCode {
     const CMD: &str = "raptor sessions";
-    let mut client = match engine(CMD) {
+    let mut client = match json_out::engine(CMD, json) {
         Ok(client) => client,
         Err(code) => return code,
     };
+    if json && let Err(code) = json_out::require(&client, methods::SESSIONS_LIST) {
+        return code;
+    }
     if !offers(&client, methods::SESSIONS_LIST) {
         eprintln!("{CMD}: {}", t("sessions.restart-engine", &[]));
         return ExitCode::FAILURE;
@@ -46,19 +49,14 @@ fn sessions_command(json: bool, all: bool) -> ExitCode {
     };
     let list = match client.call::<_, SessionsListResult>(methods::SESSIONS_LIST, &params) {
         Ok(list) => list,
+        Err(err) if json => return json_out::fail_client(&client, &err),
         Err(err) => {
             eprintln!("{CMD}: {}", sanitize(&err.to_string()));
             return ExitCode::FAILURE;
         }
     };
     if json {
-        match serde_json::to_string_pretty(&sessions::json(
-            &list.sessions,
-            list.detection_available,
-        )) {
-            Ok(text) => println!("{text}"),
-            Err(_) => return ExitCode::FAILURE,
-        }
+        return json_out::ok(&sessions::json(&list.sessions, list.detection_available));
     } else {
         print!(
             "{}",

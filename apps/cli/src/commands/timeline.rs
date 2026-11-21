@@ -6,6 +6,8 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+use gitraptor_api::cli_contract::CliErrorCode;
+use gitraptor_api::mcp_view::McpToolError;
 use gitraptor_api::methods;
 use gitraptor_api::rpc::code;
 use gitraptor_api::timemachine::{TimelineParams, TimelineResult};
@@ -14,7 +16,7 @@ use gitraptor_core::client::ClientError;
 
 use super::Global;
 use crate::i18n::{Tr, t};
-use crate::{engine, error_text, offers, shown, undo};
+use crate::{error_text, json_out, offers, shown, undo};
 
 const CMD: &str = "raptor timeline";
 
@@ -45,14 +47,26 @@ impl Cmd {
     pub(crate) fn run(self, _: &Global) -> ExitCode {
         let cwd = std::env::current_dir().and_then(gitraptor_cli::paths::canonicalize).ok();
         let Some(anchor) = cwd.as_deref().and_then(undo::worktree_root) else {
+            if self.json {
+                return json_out::fail(
+                    CliErrorCode::Tool(McpToolError::NotInObservedWorktree),
+                    None,
+                );
+            }
             eprintln!("{CMD}: {}", t("timeline.not-in-worktree", &[]));
             return ExitCode::FAILURE;
         };
-        let mut client = match engine(CMD) {
+        let mut client = match json_out::engine(CMD, self.json) {
             Ok(client) => client,
             Err(code) => return code,
         };
-        undo::notices::show_pending(&mut client, &anchor, CMD);
+        if self.json {
+            if let Err(code) = json_out::require(&client, methods::TM_TIMELINE) {
+                return code;
+            }
+        } else {
+            undo::notices::show_pending(&mut client, &anchor, CMD);
+        }
         if !offers(&client, methods::TM_TIMELINE) {
             eprintln!("{CMD}: {}", t("timeline.restart-engine", &[]));
             return ExitCode::FAILURE;
@@ -74,14 +88,14 @@ impl Cmd {
             client.call(methods::TM_TIMELINE, &base);
         let value = match answer {
             Ok(value) => value,
+            Err(err) if self.json => return json_out::fail_client(&client, &err),
             Err(err) => {
                 eprintln!("{CMD}: {}", failure_text(err, &anchor));
                 return ExitCode::FAILURE;
             }
         };
         if self.json {
-            println!("{value}");
-            return ExitCode::SUCCESS;
+            return undo::typed_ok::<TimelineResult>(value);
         }
         let result = match serde_json::from_value::<TimelineResult>(value) {
             Ok(result) => result,

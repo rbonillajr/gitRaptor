@@ -6,6 +6,8 @@
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+use gitraptor_api::cli_contract::CliErrorCode;
+use gitraptor_api::mcp_view::McpToolError;
 use gitraptor_api::methods;
 use gitraptor_api::rpc::code;
 use gitraptor_api::timemachine::{
@@ -40,7 +42,7 @@ mod since_review_tests;
 mod agent_tests;
 
 use crate::i18n::{Tr, t, tn};
-use crate::{engine, error_text, shown};
+use crate::{error_text, json_out, shown};
 
 const CMD: &str = "raptor undo";
 
@@ -87,20 +89,31 @@ fn now_ms() -> i64 {
 
 /// `raptor undo [--since <duration>] [--agent <id>]`. The duration and the agent go to the
 /// engine as typed: the engine validates them and counts the period with its own clock.
-pub fn run(json_out: bool, since: Option<&str>, agent: Option<&str>) -> ExitCode {
+pub fn run(json: bool, since: Option<&str>, agent: Option<&str>) -> ExitCode {
     let ask = agent.map(|a| AgentAsk::new(a, since));
     let cwd = std::env::current_dir()
         .and_then(gitraptor_cli::paths::canonicalize)
         .ok();
     let Some(worktree) = cwd.as_deref().and_then(worktree_root) else {
+        if json {
+            // No worktree, so no datum of any repo to give back.
+            return json_out::fail(
+                CliErrorCode::Tool(McpToolError::NotInObservedWorktree),
+                None,
+            );
+        }
         eprintln!("{CMD}: {}", t("undo.not-in-worktree", &[]));
         return ExitCode::FAILURE;
     };
-    let mut client = match engine(CMD) {
+    let mut client = match json_out::engine(CMD, json) {
         Ok(client) => client,
         Err(code) => return code,
     };
-    notices::show_pending(&mut client, &worktree, CMD);
+    // JSON writes nothing on stderr, so the pending notices wait for a human run.
+    // JSON writes nothing on stderr, so the pending notices wait for a human run.
+    if !json {
+        notices::show_pending(&mut client, &worktree, CMD);
+    }
     let mut params = crate::restricted::tm_params(&client, &worktree);
     if let Some(since) = since {
         params["since"] = json!(since);
@@ -112,7 +125,7 @@ pub fn run(json_out: bool, since: Option<&str>, agent: Option<&str>) -> ExitCode
         &mut client,
         methods::TM_UNDO,
         params,
-        !json_out,
+        !json,
         &|data: &TmConfirmData| eprintln!("{CMD}: {}", plan_text(data, since)),
     ) {
         Ok(answer) => answer,
@@ -120,9 +133,14 @@ pub fn run(json_out: bool, since: Option<&str>, agent: Option<&str>) -> ExitCode
     };
     match answer {
         Ok(value) => {
-            if json_out {
-                println!("{value}");
-                return ExitCode::SUCCESS;
+            if json {
+                // Typed, never the daemon's `Value` as is: a new daemon field must pass the
+                // contract snapshot before an agent can read it.
+                return if crate::restricted::is_restricted(&client) {
+                    typed_ok::<McpUndoResult>(value)
+                } else {
+                    typed_ok::<UndoResult>(value)
+                };
             }
             // An agent's CLI (TS-GRP-010): the MCP's counts, never paths.
             if crate::restricted::is_restricted(&client) {
@@ -159,20 +177,8 @@ pub fn run(json_out: bool, since: Option<&str>, agent: Option<&str>) -> ExitCode
             }
         }
         Err(err) => {
-            // `--json` prints an overlap's data as the daemon sent it.
-            if json_out
-                && let ClientError::Rpc(e) = &err
-                && e.code == code::OPERATION_REJECTED
-                && let Some(data) = &e.data
-                && serde_json::from_value::<TmConfirmData>(data.clone()).is_ok_and(|d| {
-                    matches!(
-                        d.reason,
-                        TmRejectReason::Overlap | TmRejectReason::OverlapUnverified
-                    )
-                })
-            {
-                println!("{data}");
-                return ExitCode::FAILURE;
+            if json {
+                return json_out::fail_client(&client, &err);
             }
             if let Some(text) = crate::restricted::refusal_text(&client, &err) {
                 eprintln!("{CMD}: {text}");
@@ -183,6 +189,17 @@ pub fn run(json_out: bool, since: Option<&str>, agent: Option<&str>) -> ExitCode
             }
             ExitCode::FAILURE
         }
+    }
+}
+
+/// The daemon's answer as the contract type `T`, in the JSON envelope; `internal` when it does
+/// not have that shape.
+pub(crate) fn typed_ok<T: serde::Serialize + serde::de::DeserializeOwned>(
+    value: serde_json::Value,
+) -> ExitCode {
+    match serde_json::from_value::<T>(value) {
+        Ok(result) => json_out::ok(&result),
+        Err(_) => json_out::fail(CliErrorCode::Tool(McpToolError::Internal), None),
     }
 }
 

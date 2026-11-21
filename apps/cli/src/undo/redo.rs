@@ -5,38 +5,49 @@
 use std::path::Path;
 use std::process::ExitCode;
 
+use gitraptor_api::cli_contract::CliErrorCode;
+use gitraptor_api::mcp_view::McpToolError;
 use gitraptor_api::methods;
 use gitraptor_api::rpc::code;
 use gitraptor_api::timemachine::{McpRedoResult, RedoResult, TmConfirmData, TmRejectReason};
 use gitraptor_api::untrusted::sanitize;
 use gitraptor_core::client::ClientError;
 
-use super::{confirm, notices, overlap, path_reason_key, worktree_root};
+use super::{confirm, notices, overlap, path_reason_key, typed_ok, worktree_root};
 use crate::i18n::{Tr, t};
-use crate::{engine, error_text, shown};
+use crate::{error_text, json_out, shown};
 
 const CMD: &str = "raptor redo";
 
 /// `raptor redo [--json]`: exit code 0 when the redo is done, 1 when it is refused or fails.
-pub(crate) fn run(json_out: bool) -> ExitCode {
+pub(crate) fn run(json: bool) -> ExitCode {
     let cwd = std::env::current_dir()
         .and_then(gitraptor_cli::paths::canonicalize)
         .ok();
     let Some(worktree) = cwd.as_deref().and_then(worktree_root) else {
+        if json {
+            return json_out::fail(
+                CliErrorCode::Tool(McpToolError::NotInObservedWorktree),
+                None,
+            );
+        }
         eprintln!("{CMD}: {}", t("undo.not-in-worktree", &[]));
         return ExitCode::FAILURE;
     };
-    let mut client = match engine(CMD) {
+    let mut client = match json_out::engine(CMD, json) {
         Ok(client) => client,
         Err(code) => return code,
     };
-    notices::show_pending(&mut client, &worktree, CMD);
+    // JSON writes nothing on stderr, so the pending notices wait for a human run.
+    if !json {
+        notices::show_pending(&mut client, &worktree, CMD);
+    }
     let params = crate::restricted::tm_params(&client, &worktree);
     let answer = match confirm::call(
         &mut client,
         methods::TM_REDO,
         params,
-        !json_out,
+        !json,
         &|data: &TmConfirmData| eprintln!("{CMD}: {}", plan_text(data)),
     ) {
         Ok(answer) => answer,
@@ -44,9 +55,12 @@ pub(crate) fn run(json_out: bool) -> ExitCode {
     };
     match answer {
         Ok(value) => {
-            if json_out {
-                println!("{value}");
-                return ExitCode::SUCCESS;
+            if json {
+                return if crate::restricted::is_restricted(&client) {
+                    typed_ok::<McpRedoResult>(value)
+                } else {
+                    typed_ok::<RedoResult>(value)
+                };
             }
             // An agent's CLI (TS-GRP-010): the MCP's counts, never paths.
             if crate::restricted::is_restricted(&client) {
@@ -83,20 +97,8 @@ pub(crate) fn run(json_out: bool) -> ExitCode {
             }
         }
         Err(err) => {
-            // `--json` prints an overlap's data as the daemon sent it.
-            if json_out
-                && let ClientError::Rpc(e) = &err
-                && e.code == code::OPERATION_REJECTED
-                && let Some(data) = &e.data
-                && serde_json::from_value::<TmConfirmData>(data.clone()).is_ok_and(|d| {
-                    matches!(
-                        d.reason,
-                        TmRejectReason::Overlap | TmRejectReason::OverlapUnverified
-                    )
-                })
-            {
-                println!("{data}");
-                return ExitCode::FAILURE;
+            if json {
+                return json_out::fail_client(&client, &err);
             }
             if let Some(text) = crate::restricted::refusal_text(&client, &err) {
                 eprintln!("{CMD}: {text}");

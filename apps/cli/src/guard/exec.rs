@@ -7,25 +7,28 @@
 use std::ffi::{OsStr, OsString};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitCode};
+use std::process::{Command, ExitCode, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::time::Duration;
 
+use gitraptor_api::cli_contract::{CliErrorCode, CliOnlyCode};
 use gitraptor_api::guard::{
     Diagnostic, ExceptionPlanView, ExceptionRefusal, GuardExceptionChildParams,
     GuardExceptionEndParams, GuardExceptionEndResult, GuardExceptionParams,
     GuardExceptionRefusedData, GuardExceptionResult, GuardRepoParams, GuardStatus, IssuedException,
     PendingAction, ProtectionState, Rule,
 };
+use gitraptor_api::mcp_view::McpToolError;
 use gitraptor_api::messages::ClientKind;
 use gitraptor_api::rpc::{ErrorObject, code};
 use gitraptor_api::{PROTOCOL_VERSION, methods};
 use gitraptor_core::client::{Client, ClientError};
+use serde_json::json;
 
 use super::{Answer, WINDOW_POLL, ask_retrying, guard_error, now_ms, operation_text, param};
 use crate::i18n::t;
-use crate::{refusal_text, shown};
+use crate::{json_out, refusal_text, shown};
 
 const CMD: &str = "raptor guard exec";
 
@@ -49,37 +52,80 @@ const KEPT_GIT_PREFIXES: [&str; 2] = ["GIT_AUTHOR_", "GIT_COMMITTER_"];
 /// Programs outside Git's own variables that git would start for the user.
 const DROPPED: [&str; 3] = ["EDITOR", "VISUAL", "PAGER"];
 
-/// `raptor guard exec [--yes] -- git <args…>`. The exit code is git's; a refusal, a
-/// cancellation or a missing engine never starts git.
-pub fn exec(yes: bool, argv: Vec<OsString>) -> ExitCode {
+/// A stop the command words itself: its text on stderr, or with `--json` the `command-failed`
+/// rejection on stdout carrying `reason`.
+fn stop(json: bool, key: &str, reason: &str) -> ExitCode {
+    if json {
+        json_out::fail(
+            CliErrorCode::Cli(CliOnlyCode::CommandFailed),
+            Some(json!({ "reason": reason })),
+        )
+    } else {
+        eprintln!("{CMD}: {}", t(key, &[]));
+        ExitCode::FAILURE
+    }
+}
+
+/// `raptor guard exec [--yes] [--json] -- git <args…>`. The exit code is git's; a refusal, a
+/// cancellation or a missing engine never starts git. With `--json` stdout carries only the
+/// envelope (git's own output goes to stderr) and there is no question: without `--yes` nothing
+/// runs.
+pub fn exec(yes: bool, json: bool, argv: Vec<OsString>) -> ExitCode {
+    if json && !yes {
+        return json_out::fail(CliErrorCode::Tool(McpToolError::ConfirmationRequired), None);
+    }
     let Some(argv) = utf8(argv) else {
+        if json {
+            return json_out::fail(
+                CliErrorCode::Cli(CliOnlyCode::InvalidArgs),
+                Some(json!({ "kind": "non-utf8-argument" })),
+            );
+        }
         eprintln!("{CMD}: {}", t("guardexec.non-utf8", &[]));
         return ExitCode::FAILURE;
     };
     let Ok(cwd) = std::env::current_dir() else {
-        eprintln!("{CMD}: {}", t("guardexec.no-folder", &[]));
-        return ExitCode::FAILURE;
+        return stop(json, "guardexec.no-folder", "no-folder");
     };
     let path = acting_dir(&cwd, &argv);
     // No engine, no exception: this command never starts one (D19).
-    let mut client = match crate::profile_dirs()
-        .ok()
-        .and_then(|dirs| Client::connect(&dirs, ClientKind::Cli, PROTOCOL_VERSION).ok())
-    {
-        Some(client) => client,
-        None => {
-            eprintln!("{CMD}: {}", t("guardexec.no-engine", &[]));
-            return ExitCode::FAILURE;
+    let mut client = if json {
+        let connected = gitraptor_core::profile::ProfileDirs::resolve()
+            .map_err(|_| ())
+            .and_then(|dirs| {
+                Client::connect(&dirs, ClientKind::Cli, PROTOCOL_VERSION).map_err(|_| ())
+            });
+        match connected {
+            Ok(client) => client,
+            Err(()) => {
+                return json_out::fail(CliErrorCode::Tool(McpToolError::EngineUnavailable), None);
+            }
+        }
+    } else {
+        match crate::profile_dirs()
+            .ok()
+            .and_then(|dirs| Client::connect(&dirs, ClientKind::Cli, PROTOCOL_VERSION).ok())
+        {
+            Some(client) => client,
+            None => {
+                eprintln!("{CMD}: {}", t("guardexec.no-engine", &[]));
+                return ExitCode::FAILURE;
+            }
         }
     };
-    let served = client
-        .hello()
-        .capabilities
-        .as_ref()
-        .is_some_and(|caps| caps.iter().any(|c| c == methods::CAP_GUARD_EXCEPTION.name));
+    // With the `mcp` profile the exception is a reserved command: the engine does not offer
+    // it but decides it, so the agent gets the engine's refusal and not one of ours.
+    let reserved_to_engine = json
+        && crate::restricted::is_restricted(&client)
+        && crate::restricted::may_call(&client, methods::GUARD_EXCEPTION);
+    let served = reserved_to_engine
+        || client
+            .hello()
+            .capabilities
+            .as_ref()
+            .is_some_and(|caps| caps.iter().any(|c| c == methods::CAP_GUARD_EXCEPTION.name));
     if !served {
-        eprintln!("{CMD}: {}", t("guardexec.unavailable", &[]));
-        return ExitCode::FAILURE;
+        return stop(json, "guardexec.unavailable", "engine-version");
     }
     let repo = GuardRepoParams {
         path: path.to_string_lossy().into_owned(),
@@ -98,7 +144,7 @@ pub fn exec(yes: bool, argv: Vec<OsString>) -> ExitCode {
     };
     match status {
         Ok(Some(status)) if status.diagnostics.contains(&Diagnostic::TemplateOutdated) => {
-            return refused(ExceptionRefusal::OutdatedInstall, &argv);
+            return refused(ExceptionRefusal::OutdatedInstall, &argv, json);
         }
         // An altered dispatch file may read as unprotected: the daemon tells an old template
         // apart from a repo never protected, so only a repo without any protection stops here.
@@ -107,9 +153,10 @@ pub fn exec(yes: bool, argv: Vec<OsString>) -> ExitCode {
                 && status.hooks.is_none()
                 && !status.diagnostics.contains(&Diagnostic::LeftoverFolder) =>
         {
-            return refused(ExceptionRefusal::NotInstalled, &argv);
+            return refused(ExceptionRefusal::NotInstalled, &argv, json);
         }
         Ok(_) => {}
+        Err(err) if json => return json_out::fail_client(&client, &err),
         Err(err) => return guard_error(CMD, &path, err),
     }
     // From here on Ctrl-C cancels the window instead of killing this process (D8).
@@ -127,36 +174,39 @@ pub fn exec(yes: bool, argv: Vec<OsString>) -> ExitCode {
                 ..
             }) => (pending, plan),
             Ok(_) => {
-                eprintln!("{CMD}: {}", t("error.guard-exception-refused", &[]));
-                return ExitCode::FAILURE;
+                return stop(
+                    json,
+                    "error.guard-exception-refused",
+                    "guard-exception-refused",
+                );
             }
-            Err(err) => return call_error(err, &path, &argv),
+            Err(err) => return call_error(err, &path, &argv, json.then_some(&client)),
         };
-    show_plan(&path, &plan, &pending, yes);
+    // JSON writes nothing on stderr: the plan is for a person.
+    if !json {
+        show_plan(&path, &plan, &pending, yes);
+    }
     let answer = (!yes).then(|| spawn_question(pending.applies_at_ms));
     match window(&mut client, &repo, &pending, answer, interrupted.as_deref()) {
         Window::Closed => {}
-        Window::Cancelled => {
-            eprintln!("{CMD}: {}", t("guardexec.cancelled", &[]));
-            return ExitCode::FAILURE;
-        }
+        Window::Cancelled => return stop(json, "guardexec.cancelled", "cancelled"),
         Window::Declined(key) => {
             let key = cancel_text(cancel(&mut client, &repo), key);
-            eprintln!("{CMD}: {}", t(key, &[]));
-            return ExitCode::FAILURE;
+            return stop(json, key, "declined");
         }
         Window::Interrupted => {
             let key = cancel_text(cancel(&mut client, &repo), "guardexec.cancelled");
-            eprintln!("{CMD}: {}", t(key, &[]));
+            let _ = stop(json, key, "interrupted");
             return ExitCode::from(INTERRUPTED);
         }
+        Window::Failed(err) if json => return json_out::fail_client(&client, &err),
         Window::Failed(err) => return guard_error(CMD, &path, err),
     }
-    let issued = match confirm(&mut client, &repo, &argv, &pending) {
+    let issued = match confirm(&mut client, &repo, &argv, &pending, json) {
         Ok(issued) => issued,
         Err(code) => return code,
     };
-    run_git(&mut client, &repo, &pending.action_id, &argv, issued)
+    run_git(&mut client, &repo, &pending.action_id, &argv, issued, json)
 }
 
 /// Every argument as UTF-8, or `None` (D1: a non-UTF-8 argument is refused here).
@@ -216,7 +266,14 @@ fn refusal_key(reason: ExceptionRefusal, argv: &[String]) -> &'static str {
     }
 }
 
-fn refused(reason: ExceptionRefusal, argv: &[String]) -> ExitCode {
+fn refused(reason: ExceptionRefusal, argv: &[String], json: bool) -> ExitCode {
+    if json {
+        let (code, params) = json_out::failed(
+            methods::GUARD_EXCEPTION_REFUSED.code,
+            Some(&json!({ "reason": crate::status::wire(&reason) })),
+        );
+        return json_out::fail(code, params);
+    }
     eprintln!("{CMD}: {}", t(refusal_key(reason, argv), &[]));
     ExitCode::FAILURE
 }
@@ -228,11 +285,21 @@ fn refusal_data(err: &ErrorObject) -> Option<GuardExceptionRefusedData> {
         .and_then(|d| serde_json::from_value(d).ok())
 }
 
-fn call_error(err: ClientError, path: &Path, argv: &[String]) -> ExitCode {
+/// A failed call. With `json_client` (the connection, under `--json`) the rejection goes to
+/// stdout with its stable code; without it, the text on stderr.
+fn call_error(
+    err: ClientError,
+    path: &Path,
+    argv: &[String],
+    json_client: Option<&Client>,
+) -> ExitCode {
+    if let Some(client) = json_client {
+        return json_out::fail_client(client, &err);
+    }
     match err {
         ClientError::Rpc(e) if refusal_data(&e).is_some() => {
             let data = refusal_data(&e).map(|d| d.reason);
-            refused(data.unwrap_or(ExceptionRefusal::NoPending), argv)
+            refused(data.unwrap_or(ExceptionRefusal::NoPending), argv, false)
         }
         ClientError::Rpc(e) if e.code == code::RESERVED_REFUSED => {
             eprintln!("{CMD}: {}", refusal_text(&e, "guardexec.refused-agent"));
@@ -395,6 +462,7 @@ fn confirm(
     repo: &GuardRepoParams,
     argv: &[String],
     pending: &PendingAction,
+    json: bool,
 ) -> Result<IssuedException, ExitCode> {
     let params = GuardExceptionParams {
         path: repo.path.clone(),
@@ -408,8 +476,11 @@ fn confirm(
                 ..
             }) => return Ok(issued),
             Ok(_) => {
-                eprintln!("{CMD}: {}", t("error.guard-exception-refused", &[]));
-                return Err(ExitCode::FAILURE);
+                return Err(stop(
+                    json,
+                    "error.guard-exception-refused",
+                    "guard-exception-refused",
+                ));
             }
             Err(ClientError::Rpc(e))
                 if refusal_data(&e).is_some_and(|d| d.reason == ExceptionRefusal::WindowOpen) =>
@@ -423,10 +494,16 @@ fn confirm(
             Err(ClientError::Rpc(e))
                 if refusal_data(&e).is_some_and(|d| d.reason == ExceptionRefusal::NoPending) =>
             {
-                eprintln!("{CMD}: {}", t("guardexec.cancelled", &[]));
-                return Err(ExitCode::FAILURE);
+                return Err(stop(json, "guardexec.cancelled", "cancelled"));
             }
-            Err(err) => return Err(call_error(err, Path::new(&repo.path), argv)),
+            Err(err) => {
+                return Err(call_error(
+                    err,
+                    Path::new(&repo.path),
+                    argv,
+                    json.then_some(&*client),
+                ));
+            }
         }
     }
 }
@@ -474,6 +551,7 @@ fn run_git(
     action_id: &str,
     argv: &[String],
     issued: IssuedException,
+    json: bool,
 ) -> ExitCode {
     let end = |client: &mut Client| {
         client.call::<_, GuardExceptionEndResult>(
@@ -486,8 +564,7 @@ fn run_git(
     };
     let Some(program) = git_program(&issued) else {
         let _ = end(client);
-        eprintln!("{CMD}: {}", t("guardexec.git-failed", &[]));
-        return ExitCode::FAILURE;
+        return stop(json, "guardexec.git-failed", "git-failed");
     };
     let mut command = Command::new(program);
     for pair in &issued.config {
@@ -497,13 +574,16 @@ fn run_git(
         .args(argv.iter().skip(1))
         .env_clear()
         .envs(child_env(issued.token.expose()));
+    if json {
+        // Stdout is the envelope's alone: git's own output is not ours and goes to stderr.
+        command.stdout(Stdio::from(std::io::stderr()));
+    }
     drop(issued);
     let mut child = match command.spawn() {
         Ok(child) => child,
         Err(_) => {
             let _ = end(client);
-            eprintln!("{CMD}: {}", t("guardexec.git-failed", &[]));
-            return ExitCode::FAILURE;
+            return stop(json, "guardexec.git-failed", "git-failed");
         }
     };
     drop(command);
@@ -518,11 +598,19 @@ fn run_git(
         },
     );
     let status = child.wait();
-    if let Ok(GuardExceptionEndResult { consumed: false }) = end(client) {
+    if let Ok(GuardExceptionEndResult { consumed: false }) = end(client)
+        && !json
+    {
         eprintln!("{CMD}: {}", t("guardexec.not-used", &[]));
     }
     match status.ok().and_then(|s| s.code()) {
-        Some(code) => ExitCode::from(u8::try_from(code).unwrap_or(1)),
+        Some(code) => {
+            if json {
+                let _ = json_out::ok(&json!({ "git_exit_code": code }));
+            }
+            ExitCode::from(u8::try_from(code).unwrap_or(1))
+        }
+        None if json => stop(json, "guardexec.git-failed", "git-failed"),
         None => ExitCode::FAILURE,
     }
 }
