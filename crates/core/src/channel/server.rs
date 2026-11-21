@@ -201,6 +201,18 @@ pub(crate) struct ServeArgs {
     pub prediction: Arc<crate::predict::store::PredictionStore>,
 }
 
+/// The pool of on-demand queries; a test can hold it behind a gate.
+fn query_pool(_config: &ChannelConfig) -> super::query::QueryPool {
+    #[cfg(all(debug_assertions, any(unix, windows)))]
+    if let Some(gate) = &_config.test_query_gate {
+        return super::query::QueryPool::gated(
+            gitraptor_api::diff::QUERY_QUEUE,
+            Some(gate.clone()),
+        );
+    }
+    super::query::QueryPool::default()
+}
+
 impl Server {
     pub(crate) fn serve(bound: BoundChannel, args: ServeArgs) -> std::io::Result<Self> {
         let launch = LaunchIdentity::capture(
@@ -217,6 +229,7 @@ impl Server {
         let daemon_id = peer::ProcSource::read(&procs, std::process::id())
             .ok()
             .map(|me| (me.pid, me.start_us));
+        let query = query_pool(&args.config);
         let ctx = Arc::new(ServerCtx {
             uid: args.config.expected_uid.unwrap_or_else(peer::current_uid),
             config: args.config,
@@ -243,7 +256,7 @@ impl Server {
             hook_claims: args.hook_claims,
             requester_limits: Arc::default(),
             prediction: args.prediction,
-            query: super::query::QueryPool::default(),
+            query,
             graph_cache: Arc::default(),
         });
         Self::listen(ctx, bound.listener)

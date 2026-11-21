@@ -30,6 +30,9 @@ mod mcp_status;
 pub mod peer;
 #[cfg(any(unix, windows))]
 mod query;
+#[cfg(all(debug_assertions, any(unix, windows)))]
+#[doc(hidden)]
+pub use query::QueryGate;
 pub mod requester;
 pub mod requester_profile;
 #[cfg(any(unix, windows))]
@@ -139,6 +142,12 @@ pub struct ChannelConfig {
     #[cfg(debug_assertions)]
     #[doc(hidden)]
     pub test_diff_deadline: Option<Duration>,
+    /// Tests only: holds the query pool thread before each job until the gate is opened, so a
+    /// test holds the pool busy instead of racing the speed of a diff. It does not exist in a
+    /// release build and is `None` in production.
+    #[cfg(all(debug_assertions, any(unix, windows)))]
+    #[doc(hidden)]
+    pub test_query_gate: Option<query::QueryGate>,
 }
 
 /// What a test makes the confirmation eligibility answer (debug builds only).
@@ -173,6 +182,8 @@ impl Default for ChannelConfig {
             test_daemon_children_as_self: false,
             #[cfg(debug_assertions)]
             test_diff_deadline: None,
+            #[cfg(all(debug_assertions, any(unix, windows)))]
+            test_query_gate: None,
         }
     }
 }
