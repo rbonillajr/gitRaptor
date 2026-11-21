@@ -29,72 +29,83 @@
     {
       "id": "V1",
       "statement": "Cuando un agente ejecuta status, undo, redo, agent register o daemon status con --json en el repo habilitado, la salida es una sola línea JSON con schema_version 1.0 y data, y data se deserializa en el tipo del contrato",
-      "verify": "cargo test -p gitraptor-cli --test us_mcp_023_cli_json every_agent_subcommand_declares_the_contract_version agent_outputs_deserialize_into_their_contract_type",
+      "verify": "cargo test -p gitraptor-cli --test us_mcp_023_cli_json -- --list 2>/dev/null | grep -q '^every_agent_subcommand_declares_the_contract_version: test' && cargo test -p gitraptor-cli --test us_mcp_023_cli_json every_agent_subcommand_declares_the_contract_version -- --exact && cargo test -p gitraptor-cli --test us_mcp_023_cli_json -- --list 2>/dev/null | grep -q '^agent_outputs_deserialize_into_their_contract_type: test' && cargo test -p gitraptor-cli --test us_mcp_023_cli_json agent_outputs_deserialize_into_their_contract_type -- --exact",
       "layer": "runtime",
-      "tests": ["apps/cli/tests/us_mcp_023_cli_json.rs"]
+      "tests": [
+        "apps/cli/tests/us_mcp_023_cli_json.rs"
+      ]
     },
     {
       "id": "V2",
       "statement": "Cuando un agente ejecuta sessions, timeline o guard log con --json recibe command-unavailable, y con agent withdraw o guard exec -- git commit recibe reserved-command del motor, todo en JSON con código, motivo y acción, salida distinta de 0, stderr vacío y sin ejecutar nada",
-      "verify": "cargo test -p gitraptor-cli --test us_mcp_023_cli_json outside_the_agent_view_is_a_json_refusal an_agent_guard_exec_is_a_reserved_command_refusal",
+      "verify": "cargo test -p gitraptor-cli --test us_mcp_023_cli_json -- --list 2>/dev/null | grep -q '^outside_the_agent_view_is_a_json_refusal: test' && cargo test -p gitraptor-cli --test us_mcp_023_cli_json outside_the_agent_view_is_a_json_refusal -- --exact && cargo test -p gitraptor-cli --test us_mcp_023_cli_json -- --list 2>/dev/null | grep -q '^an_agent_guard_exec_is_a_reserved_command_refusal: test' && cargo test -p gitraptor-cli --test us_mcp_023_cli_json an_agent_guard_exec_is_a_reserved_command_refusal -- --exact",
       "layer": "runtime",
-      "tests": ["apps/cli/tests/us_mcp_023_cli_json.rs"]
+      "tests": [
+        "apps/cli/tests/us_mcp_023_cli_json.rs"
+      ]
     },
     {
       "id": "V3",
       "statement": "Cuando el desarrollador ejecuta agent withdraw --json, daemon status --json y guard exec --json, cada uno devuelve el sobre con la versión y su contenido (registro retirado, estado del motor, código de salida de Git)",
-      "verify": "cargo test -p gitraptor-cli --test us_mcp_023_cli_json the_developer_withdraws_with_json the_developer_reads_daemon_status_and_runs_guard_exec_with_json",
+      "verify": "cargo test -p gitraptor-cli --test us_mcp_023_cli_json -- --list 2>/dev/null | grep -q '^the_developer_withdraws_with_json: test' && cargo test -p gitraptor-cli --test us_mcp_023_cli_json the_developer_withdraws_with_json -- --exact && cargo test -p gitraptor-cli --test us_mcp_023_cli_json -- --list 2>/dev/null | grep -q '^the_developer_reads_daemon_status_and_runs_guard_exec_with_json: test' && cargo test -p gitraptor-cli --test us_mcp_023_cli_json the_developer_reads_daemon_status_and_runs_guard_exec_with_json -- --exact",
       "layer": "runtime",
-      "tests": ["apps/cli/tests/us_mcp_023_cli_json.rs"]
+      "tests": [
+        "apps/cli/tests/us_mcp_023_cli_json.rs"
+      ]
     },
     {
       "id": "V4",
       "statement": "Cuando el motor no puede arrancar, raptor status --json devuelve en stdout un JSON con la versión, el código engine-unavailable, el motivo y la acción, salida distinta de 0 y ningún texto fuera del JSON",
-      "verify": "cargo test -p gitraptor-cli --test us_mcp_023_cli_json an_engine_that_cannot_start_answers_in_json",
+      "verify": "cargo test -p gitraptor-cli --test us_mcp_023_cli_json -- --list 2>/dev/null | grep -q '^an_engine_that_cannot_start_answers_in_json: test' && cargo test -p gitraptor-cli --test us_mcp_023_cli_json an_engine_that_cannot_start_answers_in_json -- --exact",
       "layer": "runtime",
-      "tests": ["apps/cli/tests/us_mcp_023_cli_json.rs"]
+      "tests": [
+        "apps/cli/tests/us_mcp_023_cli_json.rs"
+      ]
     },
     {
       "id": "V5",
       "statement": "Cuando un agente ejecuta status --json en un repo observado pero no habilitado, recibe repo-not-enabled con su acción, en JSON, sin ningún dato de ese repo",
-      "verify": "cargo test -p gitraptor-cli --test us_mcp_023_cli_json a_repo_not_enabled_gives_no_data_in_json",
+      "verify": "cargo test -p gitraptor-cli --test us_mcp_023_cli_json -- --list 2>/dev/null | grep -q '^a_repo_not_enabled_gives_no_data_in_json: test' && cargo test -p gitraptor-cli --test us_mcp_023_cli_json a_repo_not_enabled_gives_no_data_in_json -- --exact",
       "layer": "runtime",
-      "tests": ["apps/cli/tests/us_mcp_023_cli_json.rs"]
+      "tests": [
+        "apps/cli/tests/us_mcp_023_cli_json.rs"
+      ]
     },
     {
       "id": "V6",
       "statement": "Cuando una versión nueva quita o renombra un campo de una salida del agente sin subir el mayor, o añade uno sin subir el menor, la prueba de compatibilidad contra la instantánea falla; añadir un campo con el menor subido es compatible",
-      "verify": "cargo test -p gitraptor-api --test us_mcp_023_cli_contract compat_ the_schemas_match_the_snapshot_for_this_version each_output_schema_describes_its_data_not_the_envelope",
+      "verify": "cargo test -p gitraptor-api --test us_mcp_023_cli_contract -- --list 2>/dev/null | grep -q '^compat_removing_or_renaming_a_field_is_breaking: test' && cargo test -p gitraptor-api --test us_mcp_023_cli_contract compat_removing_or_renaming_a_field_is_breaking -- --exact && cargo test -p gitraptor-api --test us_mcp_023_cli_contract -- --list 2>/dev/null | grep -q '^compat_adding_a_field_is_additive: test' && cargo test -p gitraptor-api --test us_mcp_023_cli_contract compat_adding_a_field_is_additive -- --exact && cargo test -p gitraptor-api --test us_mcp_023_cli_contract -- --list 2>/dev/null | grep -q '^compat_narrowing_a_type_or_making_optional_is_breaking: test' && cargo test -p gitraptor-api --test us_mcp_023_cli_contract compat_narrowing_a_type_or_making_optional_is_breaking -- --exact && cargo test -p gitraptor-api --test us_mcp_023_cli_contract -- --list 2>/dev/null | grep -q '^compat_removing_an_enum_value_is_breaking: test' && cargo test -p gitraptor-api --test us_mcp_023_cli_contract compat_removing_an_enum_value_is_breaking -- --exact && cargo test -p gitraptor-api --test us_mcp_023_cli_contract -- --list 2>/dev/null | grep -q '^the_schemas_match_the_snapshot_for_this_version: test' && cargo test -p gitraptor-api --test us_mcp_023_cli_contract the_schemas_match_the_snapshot_for_this_version -- --exact && cargo test -p gitraptor-api --test us_mcp_023_cli_contract -- --list 2>/dev/null | grep -q '^each_output_schema_describes_its_data_not_the_envelope: test' && cargo test -p gitraptor-api --test us_mcp_023_cli_contract each_output_schema_describes_its_data_not_the_envelope -- --exact",
       "layer": "runtime",
-      "tests": ["crates/api/tests/us_mcp_023_cli_contract.rs"]
+      "tests": [
+        "crates/api/tests/us_mcp_023_cli_contract.rs"
+      ]
     },
     {
       "id": "V7",
       "statement": "Cuando se busca el contrato JSON de la CLI, la referencia para agentes generada de los esquemas lista por cada subcomando de la vista del agente sus campos, su versión y los códigos de error que puede devolver, y coincide con el archivo del repo",
-      "verify": "cargo test -p gitraptor-api --test us_mcp_023_cli_contract the_agent_reference_is_generated_from_the_schemas every_agent_output_lists_fields_version_and_codes the_version_constants_agree cli_only_codes_are_kebab_and_disjoint_from_the_mcp_codes",
+      "verify": "cargo test -p gitraptor-api --test us_mcp_023_cli_contract -- --list 2>/dev/null | grep -q '^the_agent_reference_is_generated_from_the_schemas: test' && cargo test -p gitraptor-api --test us_mcp_023_cli_contract the_agent_reference_is_generated_from_the_schemas -- --exact && cargo test -p gitraptor-api --test us_mcp_023_cli_contract -- --list 2>/dev/null | grep -q '^every_agent_output_lists_fields_version_and_codes: test' && cargo test -p gitraptor-api --test us_mcp_023_cli_contract every_agent_output_lists_fields_version_and_codes -- --exact && cargo test -p gitraptor-api --test us_mcp_023_cli_contract -- --list 2>/dev/null | grep -q '^the_version_constants_agree: test' && cargo test -p gitraptor-api --test us_mcp_023_cli_contract the_version_constants_agree -- --exact && cargo test -p gitraptor-api --test us_mcp_023_cli_contract -- --list 2>/dev/null | grep -q '^cli_only_codes_are_kebab_and_disjoint_from_the_mcp_codes: test' && cargo test -p gitraptor-api --test us_mcp_023_cli_contract cli_only_codes_are_kebab_and_disjoint_from_the_mcp_codes -- --exact",
       "layer": "runtime",
-      "tests": ["crates/api/tests/us_mcp_023_cli_contract.rs"]
+      "tests": [
+        "crates/api/tests/us_mcp_023_cli_contract.rs"
+      ]
     },
     {
       "id": "V8",
       "statement": "Cuando un comando recibe argumentos inválidos y argv lleva --json, sale invalid-args en JSON con salida 2 sin repetir el valor tecleado; sin --json el error de clap es el de hoy",
-      "verify": "cargo test -p gitraptor-cli --test us_mcp_023_cli_json a_usage_error_with_json_is_json a_usage_error_does_not_echo_the_typed_value",
+      "verify": "cargo test -p gitraptor-cli --test us_mcp_023_cli_json -- --list 2>/dev/null | grep -q '^a_usage_error_with_json_is_json: test' && cargo test -p gitraptor-cli --test us_mcp_023_cli_json a_usage_error_with_json_is_json -- --exact && cargo test -p gitraptor-cli --test us_mcp_023_cli_json -- --list 2>/dev/null | grep -q '^a_usage_error_does_not_echo_the_typed_value: test' && cargo test -p gitraptor-cli --test us_mcp_023_cli_json a_usage_error_does_not_echo_the_typed_value -- --exact",
       "layer": "runtime",
-      "tests": ["apps/cli/tests/us_mcp_023_cli_json.rs"]
+      "tests": [
+        "apps/cli/tests/us_mcp_023_cli_json.rs"
+      ]
     },
     {
       "id": "V9",
-      "statement": "Cuando el nombre del worktree o la rama del repo lleva ANSI, bidi o anchura cero, llega en el JSON como dato escapado (SEC-12) y la salida es una sola línea compacta",
-      "verify": "cargo test -p gitraptor-cli --test us_mcp_023_cli_json hostile_names_arrive_escaped_in_json every_json_output_is_one_line",
+      "statement": "Cuando el nombre del worktree o la rama del repo lleva ANSI, bidi o anchura cero, llega en el JSON como dato escapado (SEC-12) y la salida es una sola línea compacta; sin --json, status, sessions y events conservan su salida humana de hoy (sin sobre ni versión)",
+      "verify": "cargo test -p gitraptor-cli --test us_mcp_023_cli_json -- --list 2>/dev/null | grep -q '^hostile_names_arrive_escaped_in_json: test' && cargo test -p gitraptor-cli --test us_mcp_023_cli_json hostile_names_arrive_escaped_in_json -- --exact && cargo test -p gitraptor-cli --test us_mcp_023_cli_json -- --list 2>/dev/null | grep -q '^every_json_output_is_one_line: test' && cargo test -p gitraptor-cli --test us_mcp_023_cli_json every_json_output_is_one_line -- --exact && cargo test -p gitraptor-cli --test us_mcp_023_cli_json -- --list 2>/dev/null | grep -q '^without_json_the_output_is_unchanged: test' && cargo test -p gitraptor-cli --test us_mcp_023_cli_json without_json_the_output_is_unchanged -- --exact",
       "layer": "runtime",
-      "tests": ["apps/cli/tests/us_mcp_023_cli_json.rs"]
-    },
-    {
-      "id": "V10",
-      "statement": "Cuando se ejecutan status, sessions y events sin --json, la salida humana es la de antes (sin sobre, sin versión)",
-      "verify": "cargo test -p gitraptor-cli --test us_mcp_023_cli_json without_json_the_output_is_unchanged",
-      "layer": "runtime",
-      "tests": ["apps/cli/tests/us_mcp_023_cli_json.rs"]
+      "tests": [
+        "apps/cli/tests/us_mcp_023_cli_json.rs"
+      ]
     },
     {
       "id": "V11",
@@ -120,11 +131,29 @@
     "maxOutsidePlan": 60
   },
   "hops": {
-    "design": { "agent": "main-loop", "model": "inherit" },
-    "critic": { "agent": "nassa-dev-core:plan-critic", "model": "opus" },
-    "tester": { "agent": "nassa-dev-core:criterion-tester", "model": "sonnet" },
-    "build": { "agent": "nassa-dev-rust:rust-expert", "model": "sonnet" },
-    "review": { "agent": "nassa-dev-rust:rust-code-reviewer", "model": "opus" },
-    "conformance": { "agent": "nassa-dev-rust:rust-code-reviewer", "model": "sonnet" }
+    "design": {
+      "agent": "main-loop",
+      "model": "inherit"
+    },
+    "critic": {
+      "agent": "nassa-dev-core:plan-critic",
+      "model": "opus"
+    },
+    "tester": {
+      "agent": "nassa-dev-core:criterion-tester",
+      "model": "sonnet"
+    },
+    "build": {
+      "agent": "nassa-dev-rust:rust-expert",
+      "model": "sonnet"
+    },
+    "review": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "opus"
+    },
+    "conformance": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "sonnet"
+    }
   }
 }
