@@ -50,3 +50,8 @@
 {"v":1,"ts":"2026-11-21T16:02:41.414Z","event":"updated","session":"9c33ef55-a09b-462a-8b1f-48e9b97b9196","rel":"context.md","id":"CTX-WTL-001","type":"context","sha":"04f03a40b8d1d597"}
 {"v":1,"ts":"2026-11-21T16:02:43.135Z","event":"updated","session":"9c33ef55-a09b-462a-8b1f-48e9b97b9196","rel":"context.md","id":"CTX-WTL-001","type":"context","sha":"086481b4e42299e0"}
 {"v":1,"ts":"2026-11-21T16:02:44.462Z","event":"updated","session":"9c33ef55-a09b-462a-8b1f-48e9b97b9196","rel":"context.md","id":"CTX-WTL-001","type":"context","sha":"d5466ac3af9c74b8"}
+{"v":1,"ts":"2026-11-21T16:13:58.015Z","event":"updated","session":"9c33ef55-a09b-462a-8b1f-48e9b97b9196","rel":"user-stories/US-WTL-002-descarte-reversible-disco.md","id":"US-WTL-002","type":"us","sha":"add00fdb9fba2c45"}
+{"v":1,"ts":"2026-11-21T16:14:07.469Z","event":"updated","session":"9c33ef55-a09b-462a-8b1f-48e9b97b9196","rel":"user-stories/US-WTL-002-descarte-reversible-disco.md","id":"US-WTL-002","type":"us","sha":"6f1943245bbd70b1"}
+{"v":1,"ts":"2026-11-21T16:17:06.666Z","event":"updated","session":"9c33ef55-a09b-462a-8b1f-48e9b97b9196","rel":"user-stories/US-WTL-003-estado-real-del-agente.md","id":"US-WTL-003","type":"us","sha":"15d24dc0c3f56c04"}
+{"v":1,"ts":"2026-11-21T16:17:13.966Z","event":"updated","session":"9c33ef55-a09b-462a-8b1f-48e9b97b9196","rel":"user-stories/US-WTL-003-estado-real-del-agente.md","id":"US-WTL-003","type":"us","sha":"8fb88d993be9b4f5"}
+{"v":1,"ts":"2026-11-21T16:17:18.771Z","event":"updated","session":"9c33ef55-a09b-462a-8b1f-48e9b97b9196","rel":"user-stories/US-WTL-003-estado-real-del-agente.md","id":"US-WTL-003","type":"us","sha":"f7077964fae86b6a"}
