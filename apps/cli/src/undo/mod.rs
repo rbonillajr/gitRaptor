@@ -110,7 +110,6 @@ pub fn run(json: bool, since: Option<&str>, agent: Option<&str>) -> ExitCode {
         Err(code) => return code,
     };
     // JSON writes nothing on stderr, so the pending notices wait for a human run.
-    // JSON writes nothing on stderr, so the pending notices wait for a human run.
     if !json {
         notices::show_pending(&mut client, &worktree, CMD);
     }

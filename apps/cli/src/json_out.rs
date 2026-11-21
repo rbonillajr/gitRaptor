@@ -1,9 +1,11 @@
 //! The one way `raptor … --json` writes: a single compact line on stdout carrying the
 //! contract version and either `data` or an `error`, and nothing on stderr.
 //!
-//! Text that came from a repo or an agent is data (SEC-12): `data` and `error.params` go
-//! through [`gitraptor_api::mcp_view::for_mcp`] before they are serialized, the same pass the
-//! MCP uses. `error.params` never carries what the caller typed.
+//! Text that came from a repo or an agent is data (SEC-12): fields wrapped as `Untrusted` in
+//! `data` and `error.params` go through [`gitraptor_api::mcp_view::for_mcp`] before they are
+//! serialized, the same pass the MCP uses. Developer-only outputs built with `.raw()` (events,
+//! sessions, status) are not escaped: that is outside this guarantee. `error.params` never
+//! carries what the caller typed.
 
 use std::io::Write as _;
 use std::process::ExitCode;
@@ -201,7 +203,12 @@ pub(crate) fn from_client_error(
                     )
                 });
             if overlap {
-                (tool(McpToolError::ConfirmationRequired), rpc.data.clone())
+                // The challenge is a one-use token: it never goes into the envelope.
+                let mut data = rpc.data.clone();
+                if let Some(Value::Object(map)) = data.as_mut() {
+                    map.remove("challenge");
+                }
+                (tool(McpToolError::ConfirmationRequired), data)
             } else {
                 failed(rpc.code, rpc.data.as_ref())
             }
@@ -251,20 +258,31 @@ pub(crate) fn require(client: &Client, method: &str) -> Result<(), ExitCode> {
     ))
 }
 
-/// `PascalCase` to `kebab-case`: the kind of a usage error as a stable name.
-fn kebab(name: &str) -> String {
-    let mut out = String::new();
-    for (i, c) in name.chars().enumerate() {
-        if c.is_ascii_uppercase() {
-            if i > 0 {
-                out.push('-');
-            }
-            out.push(c.to_ascii_lowercase());
-        } else {
-            out.push(c);
+/// The kind of a usage error as a stable kebab-case name. Explicit, so a clap upgrade can
+/// never rename a wire value; a kind added later reads as `other`.
+fn kind_name(kind: ErrorKind) -> &'static str {
+    match kind {
+        ErrorKind::InvalidValue => "invalid-value",
+        ErrorKind::UnknownArgument => "unknown-argument",
+        ErrorKind::InvalidSubcommand => "invalid-subcommand",
+        ErrorKind::NoEquals => "no-equals",
+        ErrorKind::ValueValidation => "value-validation",
+        ErrorKind::TooManyValues => "too-many-values",
+        ErrorKind::TooFewValues => "too-few-values",
+        ErrorKind::WrongNumberOfValues => "wrong-number-of-values",
+        ErrorKind::ArgumentConflict => "argument-conflict",
+        ErrorKind::MissingRequiredArgument => "missing-required-argument",
+        ErrorKind::MissingSubcommand => "missing-subcommand",
+        ErrorKind::InvalidUtf8 => "invalid-utf8",
+        ErrorKind::DisplayHelp => "display-help",
+        ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand => {
+            "display-help-on-missing-argument-or-subcommand"
         }
+        ErrorKind::DisplayVersion => "display-version",
+        ErrorKind::Io => "io",
+        ErrorKind::Format => "format",
+        _ => "other",
     }
-    out
 }
 
 /// The argument a usage error is about, by the binary's own definition (`--lang`, `<PATH>`).
@@ -296,7 +314,7 @@ fn defined_argument(err: &clap::Error) -> Option<String> {
 /// A clap error with `--json`: `invalid-args` with `params.kind` and, when the binary defines
 /// it, `params.argument`; never the typed value nor clap's text. Exit code 2.
 pub(crate) fn usage(err: &clap::Error) -> ExitCode {
-    let mut params = json!({ "kind": kebab(&format!("{:?}", err.kind())) });
+    let mut params = json!({ "kind": kind_name(err.kind()) });
     if let Some(argument) = defined_argument(err) {
         params["argument"] = json!(argument);
     }

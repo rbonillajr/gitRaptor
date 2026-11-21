@@ -25,24 +25,24 @@ Versión del contrato: `1.0`. Toda salida `--json` es una línea con `{"schema_v
 | `branch` | null \| object | no |  |
 | `branch.lossy` | boolean | no |  |
 | `branch.truncated` | boolean | no |  |
-| `branch.untrusted` | string | no |  |
+| `branch.untrusted` | string | sí |  |
 | `here` | null \| object | no |  |
 | `here.ahead` | integer \| null | no |  |
 | `here.at_least` | boolean | no |  |
 | `here.behind` | integer \| null | no |  |
 | `here.changes` | null \| object | no |  |
-| `here.changes.cursor` | string | no |  |
-| `here.changes.total` | integer | no |  |
+| `here.changes.cursor` | string | sí |  |
+| `here.changes.total` | integer | sí |  |
 | `here.sessions` | array | no |  |
 | `here.sessions[]` | object | sí |  |
 | `here.sessions[].actor` | object | sí |  |
 | `here.sessions[].actor.actor` | string | sí | "agent", "unattributed" |
-| `here.sessions[].actor.kind` | string | no | "claude-code", "other" |
+| `here.sessions[].actor.kind` | string | sí | "claude-code", "other" |
 | `here.sessions[].actor.name` | null \| object | no |  |
 | `here.sessions[].actor.name.lossy` | boolean | no |  |
 | `here.sessions[].actor.name.truncated` | boolean | no |  |
-| `here.sessions[].actor.name.untrusted` | string | no |  |
-| `here.sessions[].actor.origin` | string | no | "detected", "registered" |
+| `here.sessions[].actor.name.untrusted` | string | sí |  |
+| `here.sessions[].actor.origin` | string | sí | "detected", "registered" |
 | `here.sessions[].state` | string | sí | "active", "ended", "inactive" |
 | `here.sessions_total` | integer \| null | no |  |
 | `here.uncounted` | null \| string | no | "base-missing", "no-base", "no-commits", "unreadable" |
@@ -52,13 +52,13 @@ Versión del contrato: `1.0`. Toda salida `--json` es una línea con `{"schema_v
 | `page.of` | null \| object | no |  |
 | `page.of.lossy` | boolean | no |  |
 | `page.of.truncated` | boolean | no |  |
-| `page.of.untrusted` | string | no |  |
+| `page.of.untrusted` | string | sí |  |
 | `page.paths` | array | no |  |
 | `page.paths[]` | object | sí |  |
 | `page.paths[].lossy` | boolean | no |  |
 | `page.paths[].truncated` | boolean | no |  |
 | `page.paths[].untrusted` | string | sí |  |
-| `page.total` | integer | no |  |
+| `page.total` | integer | sí |  |
 | `page.truncated` | boolean | no |  |
 | `page.worktrees` | array | no |  |
 | `page.worktrees[]` | object | sí |  |
@@ -68,10 +68,10 @@ Versión del contrato: `1.0`. Toda salida `--json` es una línea con `{"schema_v
 | `page.worktrees[].branch` | null \| object | no |  |
 | `page.worktrees[].branch.lossy` | boolean | no |  |
 | `page.worktrees[].branch.truncated` | boolean | no |  |
-| `page.worktrees[].branch.untrusted` | string | no |  |
+| `page.worktrees[].branch.untrusted` | string | sí |  |
 | `page.worktrees[].changes` | null \| object | no |  |
-| `page.worktrees[].changes.cursor` | string | no |  |
-| `page.worktrees[].changes.total` | integer | no |  |
+| `page.worktrees[].changes.cursor` | string | sí |  |
+| `page.worktrees[].changes.total` | integer | sí |  |
 | `page.worktrees[].main` | boolean | no |  |
 | `page.worktrees[].name` | object | sí |  |
 | `page.worktrees[].name.lossy` | boolean | no |  |
@@ -81,22 +81,22 @@ Versión del contrato: `1.0`. Toda salida `--json` es una línea con `{"schema_v
 | `page.worktrees[].sessions[]` | object | sí |  |
 | `page.worktrees[].sessions[].actor` | object | sí |  |
 | `page.worktrees[].sessions[].actor.actor` | string | sí | "agent", "unattributed" |
-| `page.worktrees[].sessions[].actor.kind` | string | no | "claude-code", "other" |
+| `page.worktrees[].sessions[].actor.kind` | string | sí | "claude-code", "other" |
 | `page.worktrees[].sessions[].actor.name` | null \| object | no |  |
 | `page.worktrees[].sessions[].actor.name.lossy` | boolean | no |  |
 | `page.worktrees[].sessions[].actor.name.truncated` | boolean | no |  |
-| `page.worktrees[].sessions[].actor.name.untrusted` | string | no |  |
-| `page.worktrees[].sessions[].actor.origin` | string | no | "detected", "registered" |
+| `page.worktrees[].sessions[].actor.name.untrusted` | string | sí |  |
+| `page.worktrees[].sessions[].actor.origin` | string | sí | "detected", "registered" |
 | `page.worktrees[].sessions[].state` | string | sí | "active", "ended", "inactive" |
 | `page.worktrees[].sessions_total` | integer \| null | no |  |
 | `page.worktrees[].unavailable` | null \| string | no | "missing", "unreadable", "untrusted" |
 | `page.worktrees[].uncounted` | null \| string | no | "base-missing", "no-base", "no-commits", "unreadable" |
 | `repo` | null \| object | no |  |
-| `repo.base` | object | no |  |
+| `repo.base` | object | sí |  |
 | `repo.base.name` | null \| object | no |  |
 | `repo.base.name.lossy` | boolean | no |  |
 | `repo.base.name.truncated` | boolean | no |  |
-| `repo.base.name.untrusted` | string | no |  |
+| `repo.base.name.untrusted` | string | sí |  |
 | `repo.base.state` | string | no | "confirmed", "invalid", "pending", "unconfirmed" |
 | `repo.diagnostics` | array | no |  |
 | `repo.diagnostics[]` | string | sí | "base-change-pending", "base-change-pending-invalid", "base-unconfirmed", "config-unreadable", "floor-relax-pending", "leftover-folder", "template-outdated" |
@@ -107,22 +107,22 @@ Versión del contrato: `1.0`. Toda salida `--json` es una línea con `{"schema_v
 | `repo.gaps[].from_s_ago` | integer | sí |  |
 | `repo.gaps[].to_s_ago` | integer \| null | no |  |
 | `repo.gaps_total` | integer \| null | no |  |
-| `repo.protection` | string | no | "full", "mcp-only" |
+| `repo.protection` | string | sí | "full", "mcp-only" |
 | `repo.protection_lost` | null \| string | no | "binary-missing", "dispatcher-altered", "dispatcher-missing", "dispatcher-not-executable", "folder-missing", "hookspath-changed", "repo-moved" |
 | `repo.sessions_unknown` | boolean | no |  |
 | `repo.worktrees` | null \| object | no |  |
-| `repo.worktrees.cursor` | string | no |  |
-| `repo.worktrees.total` | integer | no |  |
+| `repo.worktrees.cursor` | string | sí |  |
+| `repo.worktrees.total` | integer | sí |  |
 | `repo_id` | string | sí |  |
 | `repo_state` | string | sí | "observed", "unavailable" |
 | `requester` | object | sí |  |
 | `requester.actor` | string | sí | "agent", "unattributed" |
-| `requester.kind` | string | no | "claude-code", "other" |
+| `requester.kind` | string | sí | "claude-code", "other" |
 | `requester.name` | null \| object | no |  |
 | `requester.name.lossy` | boolean | no |  |
 | `requester.name.truncated` | boolean | no |  |
-| `requester.name.untrusted` | string | no |  |
-| `requester.origin` | string | no | "detected", "registered" |
+| `requester.name.untrusted` | string | sí |  |
+| `requester.origin` | string | sí | "detected", "registered" |
 | `worktree` | object | sí |  |
 | `worktree.lossy` | boolean | no |  |
 | `worktree.truncated` | boolean | no |  |
@@ -139,12 +139,12 @@ Versión del contrato: `1.0`. Toda salida `--json` es una línea con `{"schema_v
 |---|---|---|---|
 | `actor` | object | sí |  |
 | `actor.actor` | string | sí | "agent", "unattributed" |
-| `actor.kind` | string | no | "claude-code", "other" |
+| `actor.kind` | string | sí | "claude-code", "other" |
 | `actor.name` | null \| object | no |  |
 | `actor.name.lossy` | boolean | no |  |
 | `actor.name.truncated` | boolean | no |  |
-| `actor.name.untrusted` | string | no |  |
-| `actor.origin` | string | no | "detected", "registered" |
+| `actor.name.untrusted` | string | sí |  |
+| `actor.origin` | string | sí | "detected", "registered" |
 | `kept` | integer | no |  |
 | `not_restored` | integer | sí |  |
 | `operation_id` | string | sí |  |
@@ -163,12 +163,12 @@ Versión del contrato: `1.0`. Toda salida `--json` es una línea con `{"schema_v
 |---|---|---|---|
 | `actor` | object | sí |  |
 | `actor.actor` | string | sí | "agent", "unattributed" |
-| `actor.kind` | string | no | "claude-code", "other" |
+| `actor.kind` | string | sí | "claude-code", "other" |
 | `actor.name` | null \| object | no |  |
 | `actor.name.lossy` | boolean | no |  |
 | `actor.name.truncated` | boolean | no |  |
-| `actor.name.untrusted` | string | no |  |
-| `actor.origin` | string | no | "detected", "registered" |
+| `actor.name.untrusted` | string | sí |  |
+| `actor.origin` | string | sí | "detected", "registered" |
 | `kept` | integer | no |  |
 | `not_restored` | integer | sí |  |
 | `operation_id` | string | sí |  |
@@ -190,7 +190,7 @@ Versión del contrato: `1.0`. Toda salida `--json` es una línea con `{"schema_v
 | `agent_name` | null \| object | no |  |
 | `agent_name.lossy` | boolean | no |  |
 | `agent_name.truncated` | boolean | no |  |
-| `agent_name.untrusted` | string | no |  |
+| `agent_name.untrusted` | string | sí |  |
 | `origin` | string | sí |  |
 | `outcome` | string | sí |  |
 | `repo_id` | string | sí |  |
@@ -208,17 +208,17 @@ Versión del contrato: `1.0`. Toda salida `--json` es una línea con `{"schema_v
 |---|---|---|---|
 | `engine_state` | string | sí | "no-repos", "observing", "waiting-for-git" |
 | `requester` | null \| object | no |  |
-| `requester.actor` | object | no |  |
+| `requester.actor` | object | sí |  |
 | `requester.actor.actor` | string | sí | "agent", "unattributed" |
-| `requester.actor.kind` | string | no | "claude-code", "other" |
+| `requester.actor.kind` | string | sí | "claude-code", "other" |
 | `requester.actor.name` | null \| object | no |  |
 | `requester.actor.name.lossy` | boolean | no |  |
 | `requester.actor.name.truncated` | boolean | no |  |
-| `requester.actor.name.untrusted` | string | no |  |
-| `requester.actor.origin` | string | no | "detected", "registered" |
-| `requester.confirmable` | boolean | no |  |
-| `requester.layer` | string | no | "cockpit", "mcp" |
-| `requester.state` | string | no | "resolved", "unverified" |
+| `requester.actor.name.untrusted` | string | sí |  |
+| `requester.actor.origin` | string | sí | "detected", "registered" |
+| `requester.confirmable` | boolean | sí |  |
+| `requester.layer` | string | sí | "cockpit", "mcp" |
+| `requester.state` | string | sí | "resolved", "unverified" |
 
 ## agent-withdraw
 
@@ -274,3 +274,7 @@ Familia de salida: 0 éxito, 1 rechazo o fallo, 2 uso (`invalid-args`).
 - `reserved-command` (salida 1)
 - `invalid-args` (salida 2)
 - `command-failed` (salida 1)
+
+### Motivos locales
+
+Además del nombre estable del error del canal, `command-failed` lleva en `params.reason` estos motivos de `raptor guard exec --json`, que no vienen del motor: `no-folder` (no hay carpeta de trabajo), `cancelled` (se canceló la ventana), `declined` (el desarrollador rechazó la excepción), `interrupted` (Ctrl-C) y `git-failed` (git no llegó a ejecutarse o no devolvió estado). `invalid-args` lleva `params.kind` (el tipo del error de uso, p. ej. `unknown-argument`; `invalid-utf8` para un argumento que no es UTF-8) y, cuando el binario lo define, `params.argument`.

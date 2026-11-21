@@ -258,7 +258,7 @@ fn merge(mut a: Node, b: Node, intersect: bool) -> Node {
                     .insert(key, (merge(mine, node, intersect), required));
             }
             None => {
-                a.props.insert(key, (node, intersect && required));
+                a.props.insert(key, (node, required));
             }
         }
     }
@@ -327,22 +327,33 @@ fn build(schema: &Value, root: &Value, stack: &mut Vec<String>) -> Node {
             continue;
         };
         let mut union: Option<Node> = None;
-        let mut seen: Vec<BTreeSet<String>> = Vec::new();
+        let mut nullable = false;
         for branch in branches {
             let built = build(branch, root, stack);
-            seen.push(built.props.keys().cloned().collect());
+            // The `null` of an `Option` says the parent may be absent, not that its fields are
+            // optional: it is carried as a type and never touches `required`.
+            if built.types.len() == 1
+                && built.types.contains("null")
+                && built.props.is_empty()
+                && built.items.is_none()
+            {
+                nullable = true;
+                continue;
+            }
             union = Some(match union {
                 None => built,
                 Some(acc) => merge(acc, built, false),
             });
         }
-        if let Some(mut union) = union {
-            // A property missing from any alternative is not guaranteed.
-            for (key, (_, required)) in &mut union.props {
-                if seen.iter().any(|keys| !keys.contains(key)) {
-                    *required = false;
-                }
-            }
+        // `required` stays relative to the object that declares the field, so a variant that
+        // does not have it neither hides nor invents a change.
+        if nullable {
+            union
+                .get_or_insert_with(Node::default)
+                .types
+                .insert("null".to_owned());
+        }
+        if let Some(union) = union {
             node = merge(node, union, true);
         }
     }
@@ -534,6 +545,16 @@ pub fn reference_markdown() -> String {
         };
         out.push_str(&format!("- `{code}` (salida {exit})\n"));
     }
+    out.push_str(
+        "\n### Motivos locales\n\n\
+         Además del nombre estable del error del canal, `command-failed` lleva en \
+         `params.reason` estos motivos de `raptor guard exec --json`, que no vienen del motor: \
+         `no-folder` (no hay carpeta de trabajo), `cancelled` (se canceló la ventana), \
+         `declined` (el desarrollador rechazó la excepción), `interrupted` (Ctrl-C) y \
+         `git-failed` (git no llegó a ejecutarse o no devolvió estado). `invalid-args` lleva \
+         `params.kind` (el tipo del error de uso, p. ej. `unknown-argument`; `invalid-utf8` \
+         para un argumento que no es UTF-8) y, cuando el binario lo define, `params.argument`.\n",
+    );
     out
 }
 
@@ -554,28 +575,62 @@ mod tests {
 
     /// The version rule of the compatibility check against the stored snapshot.
     fn check_version(stored: &Value) -> Result<(), String> {
+        let codes: Vec<(String, u8)> = CliErrorCode::ALL
+            .iter()
+            .map(|c| (c.as_str().to_owned(), c.exit_code()))
+            .collect();
+        check_against(
+            stored,
+            &agent_output_schemas(),
+            &codes,
+            (CLI_SCHEMA_MAJOR, CLI_SCHEMA_MINOR),
+        )
+    }
+
+    /// `check_version` over explicit current outputs, codes and version.
+    fn check_against(
+        stored: &Value,
+        outputs: &[(&'static str, Value)],
+        codes: &[(String, u8)],
+        (major, minor): (u16, u16),
+    ) -> Result<(), String> {
         let version = stored["schema_version"].as_str().unwrap_or("0.0");
-        let (major, minor) = version.split_once('.').unwrap_or(("0", "0"));
-        let (old_major, old_minor): (u16, u16) =
-            (major.parse().unwrap_or(0), minor.parse().unwrap_or(0));
+        let (old_major, old_minor) = version.split_once('.').unwrap_or(("0", "0"));
+        let (old_major, old_minor): (u16, u16) = (
+            old_major.parse().unwrap_or(0),
+            old_minor.parse().unwrap_or(0),
+        );
         let mut breaking = false;
         let mut additive = false;
-        for (name, schema) in agent_output_schemas() {
-            match compat(&stored["outputs"][name], &schema) {
+        for (name, schema) in outputs {
+            match compat(&stored["outputs"][*name], schema) {
                 Change::None => {}
                 Change::Additive(_) => additive = true,
                 Change::Breaking(_) => breaking = true,
             }
         }
-        let now: Vec<&str> = CliErrorCode::ALL.iter().map(|c| c.as_str()).collect();
-        let removed_code = stored["codes"].as_array().is_some_and(|codes| {
-            codes
-                .iter()
-                .filter_map(|c| c["code"].as_str())
-                .any(|c| !now.contains(&c))
-        });
-        breaking |= removed_code;
-        let (major, minor) = (CLI_SCHEMA_MAJOR, CLI_SCHEMA_MINOR);
+        // An output that is no longer produced breaks whoever reads it.
+        if let Some(stored_outputs) = stored["outputs"].as_object() {
+            breaking |= stored_outputs
+                .keys()
+                .any(|name| !outputs.iter().any(|(now, _)| now == name));
+        }
+        // A code is the pair (name, exit): a new pair is additive; a pair that is gone, which
+        // includes a changed exit, is breaking.
+        let stored_codes: BTreeSet<(String, u8)> = stored["codes"]
+            .as_array()
+            .map(|all| {
+                all.iter()
+                    .filter_map(|c| {
+                        let exit = u8::try_from(c["exit"].as_u64()?).ok()?;
+                        Some((c["code"].as_str()?.to_owned(), exit))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let now: BTreeSet<(String, u8)> = codes.iter().cloned().collect();
+        breaking |= stored_codes.difference(&now).next().is_some();
+        additive |= now.difference(&stored_codes).next().is_some();
         if breaking && major <= old_major {
             return Err("a breaking change needs a major bump".into());
         }
@@ -583,6 +638,86 @@ mod tests {
             return Err("an additive change needs a minor bump".into());
         }
         Ok(())
+    }
+
+    fn object_schema(required: &[&str]) -> Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": { "a": {"type": "string"}, "b": {"type": "string"} },
+            "required": required,
+        })
+    }
+
+    #[test]
+    fn a_required_field_of_a_nullable_object_becoming_optional_is_breaking() {
+        let wrap = |inner: Value| {
+            serde_json::json!({
+                "type": "object",
+                "properties": { "x": { "anyOf": [ {"$ref": "#/$defs/X"}, {"type": "null"} ] } },
+                "required": ["x"],
+                "$defs": { "X": inner },
+            })
+        };
+        let flat = flatten_schema(&wrap(object_schema(&["a"])));
+        assert!(flat["x.a"].required, "null must not degrade the field");
+        assert!(flat["x"].types.contains("null"));
+        let change = compat(&wrap(object_schema(&["a"])), &wrap(object_schema(&[])));
+        assert!(
+            matches!(&change, Change::Breaking(m) if m.iter().any(|m| m.starts_with("x.a:"))),
+            "{change:?}"
+        );
+    }
+
+    #[test]
+    fn a_field_absent_from_another_variant_keeps_its_own_required() {
+        let wrap = |first: Value| {
+            serde_json::json!({
+                "oneOf": [first, {"type": "object", "properties": {"c": {"type": "string"}}}],
+            })
+        };
+        let flat = flatten_schema(&wrap(object_schema(&["a"])));
+        assert!(flat["a"].required);
+        let change = compat(&wrap(object_schema(&["a"])), &wrap(object_schema(&[])));
+        assert!(matches!(change, Change::Breaking(_)), "{change:?}");
+    }
+
+    fn stored_with(outputs: Value, codes: Value) -> Value {
+        serde_json::json!({"schema_version": "1.0", "outputs": outputs, "codes": codes})
+    }
+
+    #[test]
+    fn a_removed_output_needs_a_major_bump() {
+        let schema = object_schema(&["a"]);
+        let stored = stored_with(
+            serde_json::json!({"one": schema.clone(), "two": schema.clone()}),
+            serde_json::json!([]),
+        );
+        let now = [("one", schema)];
+        assert!(check_against(&stored, &now, &[], (1, 1)).is_err());
+        assert!(check_against(&stored, &now, &[], (2, 0)).is_ok());
+    }
+
+    #[test]
+    fn codes_are_compared_as_code_and_exit() {
+        let stored = stored_with(
+            serde_json::json!({}),
+            serde_json::json!([{"code": "a", "exit": 1}, {"code": "b", "exit": 1}]),
+        );
+        let pair = |code: &str, exit: u8| (code.to_owned(), exit);
+        // Same codes: nothing to bump.
+        let same = [pair("a", 1), pair("b", 1)];
+        assert!(check_against(&stored, &[], &same, (1, 0)).is_ok());
+        // Added: additive, so the minor must move.
+        let added = [pair("a", 1), pair("b", 1), pair("c", 1)];
+        assert!(check_against(&stored, &[], &added, (1, 0)).is_err());
+        assert!(check_against(&stored, &[], &added, (1, 1)).is_ok());
+        // Removed, or the exit changed: breaking, so the major must move.
+        let removed = [pair("a", 1)];
+        let exit_changed = [pair("a", 1), pair("b", 2)];
+        for now in [&removed[..], &exit_changed[..]] {
+            assert!(check_against(&stored, &[], now, (1, 5)).is_err());
+            assert!(check_against(&stored, &[], now, (2, 0)).is_ok());
+        }
     }
 
     #[test]
