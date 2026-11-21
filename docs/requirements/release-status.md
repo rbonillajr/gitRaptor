@@ -16,7 +16,7 @@
 | Listo (`ready`) | 30 |
 | Borrador (`draft`) | 67 |
 | Bloqueado (`blocked`) | 1 |
-| **Total** | **213** |
+| **Total** | **214** |
 
 ## Por feature
 
