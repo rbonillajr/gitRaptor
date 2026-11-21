@@ -47,3 +47,7 @@
 {"v":1,"ts":"2026-11-10T20:21:33.071Z","event":"updated","session":"95f70f42-a644-4dde-bb11-024cc35a6cbf","rel":"user-stories/US-WTL-010-integrar-en-local.md","id":"US-WTL-010","type":"us","sha":"6ec1cb6b932d5888"}
 {"v":1,"ts":"2026-11-21T15:58:06.023Z","event":"updated","session":"88e891ad-51e7-404b-86d3-7a272f76e36f","rel":"context.md","id":"CTX-WTL-001","type":"context","sha":"df817de1664eb7a0"}
 {"v":1,"ts":"2026-11-21T15:58:10.034Z","event":"updated","session":"88e891ad-51e7-404b-86d3-7a272f76e36f","rel":"context.md","id":"CTX-WTL-001","type":"context","sha":"0c66128ffaa3cd90"}
+{"v":1,"ts":"2026-11-21T16:20:23.782Z","event":"updated","session":"88e891ad-51e7-404b-86d3-7a272f76e36f","rel":"user-stories/US-WTL-001-worktree-con-copia-desde-semilla.md","id":"US-WTL-001","type":"us","sha":"95d5842061469744"}
+{"v":1,"ts":"2026-11-21T16:20:32.927Z","event":"updated","session":"88e891ad-51e7-404b-86d3-7a272f76e36f","rel":"user-stories/US-WTL-001-worktree-con-copia-desde-semilla.md","id":"US-WTL-001","type":"us","sha":"6ff12a4455e889a6"}
+{"v":1,"ts":"2026-11-21T16:20:37.024Z","event":"updated","session":"88e891ad-51e7-404b-86d3-7a272f76e36f","rel":"context.md","id":"CTX-WTL-001","type":"context","sha":"f0a9abd774d13aed"}
+{"v":1,"ts":"2026-11-21T16:20:39.399Z","event":"updated","session":"88e891ad-51e7-404b-86d3-7a272f76e36f","rel":"context.md","id":"CTX-WTL-001","type":"context","sha":"c7433bc55f42e8b6"}
