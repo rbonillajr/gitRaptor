@@ -247,7 +247,7 @@ impl Machine {
     fn status(&self) -> Value {
         let out = self.raptor(&["status", "--json"], &[]);
         assert!(out.status.success(), "{}", text(&out));
-        serde_json::from_slice(&out.stdout).unwrap()
+        data_of(serde_json::from_slice(&out.stdout).unwrap())
     }
 
     fn client(&self) -> Client {
@@ -300,7 +300,7 @@ impl Machine {
     fn all_sessions(&self) -> Vec<Value> {
         let out = self.raptor(&["sessions", "--all", "--json"], &[]);
         assert!(out.status.success(), "{}", text(&out));
-        let value: Value = serde_json::from_slice(&out.stdout).unwrap();
+        let value: Value = data_of(serde_json::from_slice(&out.stdout).unwrap());
         assert_eq!(value["detection_available"], true);
         value["sessions"].as_array().unwrap().clone()
     }
@@ -813,4 +813,13 @@ fn repo_intact_detecting_sessions_does_not_modify_it() {
         m.stop();
     });
     report.assert_intact();
+}
+
+/// The `data` of a `--json` envelope: the contract version is checked, the payload returned.
+fn data_of(envelope: serde_json::Value) -> serde_json::Value {
+    assert_eq!(envelope["schema_version"], "1.0", "{envelope:#}");
+    envelope
+        .get("data")
+        .cloned()
+        .unwrap_or_else(|| panic!("no data in the envelope: {envelope:#}"))
 }

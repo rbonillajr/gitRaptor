@@ -249,7 +249,8 @@ impl Machine {
                 .stdin(Stdio::null())
                 .output()
                 .unwrap();
-            let status: Value = serde_json::from_slice(&out.stdout).unwrap_or_default();
+            let status: Value =
+                serde_json::from_slice::<Value>(&out.stdout).unwrap_or_default()["data"].clone();
             let sessions = status["repos"][0]["worktrees"]
                 .as_array()
                 .into_iter()
@@ -563,7 +564,8 @@ fn measure_quick_commits_with_a_foreign_git_in_another_worktree() {
             .stdin(Stdio::null())
             .output()
             .unwrap();
-        let status: Value = serde_json::from_slice(&out.stdout).unwrap_or_default();
+        let status: Value =
+            serde_json::from_slice::<Value>(&out.stdout).unwrap_or_default()["data"].clone();
         if status["repos"][0]["worktrees"]
             .as_array()
             .is_some_and(|w| w.len() == 2)
@@ -761,7 +763,7 @@ impl Machine {
             .output()
             .unwrap();
         assert!(out.status.success(), "{}", text(&out));
-        let timeline: Value = serde_json::from_slice(&out.stdout).unwrap();
+        let timeline: Value = data_of(serde_json::from_slice(&out.stdout).unwrap());
         let id = format!("event:{}", e.seq);
         timeline["entries"]
             .as_array()
@@ -906,4 +908,13 @@ fn with_guardrails_a_developers_reader_changes_nothing() {
     let (session, evidence) = m.stored_evidence(&repo_id, &human);
     assert_eq!(session, None);
     assert_ne!(evidence.as_deref(), Some(S4));
+}
+
+/// The `data` of a `--json` envelope: the contract version is checked, the payload returned.
+fn data_of(envelope: serde_json::Value) -> serde_json::Value {
+    assert_eq!(envelope["schema_version"], "1.0", "{envelope:#}");
+    envelope
+        .get("data")
+        .cloned()
+        .unwrap_or_else(|| panic!("no data in the envelope: {envelope:#}"))
 }

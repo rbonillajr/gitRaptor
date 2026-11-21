@@ -155,7 +155,7 @@ impl Machine {
     fn json(&self) -> Value {
         let out = self.raptor("en", &["--json"]);
         assert!(out.status.success(), "{}", text(&out));
-        serde_json::from_slice(&out.stdout).unwrap()
+        data_of(serde_json::from_slice(&out.stdout).unwrap())
     }
 
     /// Waits until "idle" sleeps and "busy" stays active.
@@ -164,7 +164,7 @@ impl Machine {
         loop {
             let out = self.raptor("en", &["--json"]);
             if out.status.success() {
-                let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+                let v: Value = data_of(serde_json::from_slice(&out.stdout).unwrap());
                 let o = &v["engine"]["observation"];
                 if o["dormant"]["repos"] == 1 && o["active"]["repos"] == 1 {
                     return;
@@ -265,4 +265,13 @@ fn json_has_the_tier_counts() {
     assert_eq!(o["degraded"]["worktrees"], 0, "{v:#}");
     // US-GRP-020: no discovery root, so no discovered repo; they cost nothing.
     assert_eq!(v["engine"]["discovered_repos"], 0, "{v:#}");
+}
+
+/// The `data` of a `--json` envelope: the contract version is checked, the payload returned.
+fn data_of(envelope: serde_json::Value) -> serde_json::Value {
+    assert_eq!(envelope["schema_version"], "1.0", "{envelope:#}");
+    envelope
+        .get("data")
+        .cloned()
+        .unwrap_or_else(|| panic!("no data in the envelope: {envelope:#}"))
 }

@@ -174,7 +174,7 @@ impl Machine {
             .output()
             .unwrap();
         assert!(out.status.success(), "{}", text(&out));
-        let status: Value = serde_json::from_slice(&out.stdout).unwrap();
+        let status: Value = data_of(serde_json::from_slice(&out.stdout).unwrap());
         status["repos"]
             .as_array()
             .unwrap()
@@ -546,4 +546,13 @@ fn without_a_terminal_nothing_is_asked_nor_observed() {
     assert_eq!(out.status.code(), Some(2), "{}", text(&out));
     assert!(!text(&out).contains("[y/N]"));
     assert!(!m.notes_observed(), "{:?}", m.observed());
+}
+
+/// The `data` of a `--json` envelope: the contract version is checked, the payload returned.
+fn data_of(envelope: serde_json::Value) -> serde_json::Value {
+    assert_eq!(envelope["schema_version"], "1.0", "{envelope:#}");
+    envelope
+        .get("data")
+        .cloned()
+        .unwrap_or_else(|| panic!("no data in the envelope: {envelope:#}"))
 }

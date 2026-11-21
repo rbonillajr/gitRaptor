@@ -283,7 +283,7 @@ impl Machine {
             .lines()
             .find_map(|l| l.find('{').map(|i| &l[i..]))
             .unwrap_or_else(|| panic!("no JSON: {stdout}"));
-        serde_json::from_str(line.trim()).unwrap()
+        data_of(serde_json::from_str(line.trim()).unwrap())
     }
 
     /// `raptor guard log --json` of "demo".
@@ -513,4 +513,13 @@ fn an_agent_commit_with_the_person_identity_and_no_trailer_does_not_relax() {
     let log = m.log();
     assert!(has_rule(&log, "authorship.trailer-required"), "{log:#}");
     assert!(has_relax_notice(&log, "worktree"), "{log:#}");
+}
+
+/// The `data` of a `--json` envelope: the contract version is checked, the payload returned.
+fn data_of(envelope: serde_json::Value) -> serde_json::Value {
+    assert_eq!(envelope["schema_version"], "1.0", "{envelope:#}");
+    envelope
+        .get("data")
+        .cloned()
+        .unwrap_or_else(|| panic!("no data in the envelope: {envelope:#}"))
 }

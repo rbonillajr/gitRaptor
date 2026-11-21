@@ -180,7 +180,7 @@ impl Machine {
                 "{}",
                 String::from_utf8_lossy(&out.stderr)
             );
-            let status: Value = serde_json::from_slice(&out.stdout).unwrap();
+            let status: Value = data_of(serde_json::from_slice(&out.stdout).unwrap());
             let found = status["repos"][0]["worktrees"]
                 .as_array()
                 .unwrap()
@@ -247,7 +247,7 @@ fn a_change_without_an_identified_agent(editor: &str) {
     assert_eq!(w["sessions"], json!([]), "{w:#}");
     assert_unattributed_change(&w);
     let out = m.raptor(&["sessions", "--all", "--json"]);
-    let all: Value = serde_json::from_slice(&out.stdout).unwrap();
+    let all: Value = data_of(serde_json::from_slice(&out.stdout).unwrap());
     assert_eq!(all["sessions"], json!([]), "{all:#}");
 }
 
@@ -282,4 +282,13 @@ fn a_doubtful_change_next_to_claude_code_is_unattributed() {
     assert_eq!(w["sessions"].as_array().unwrap().len(), 1, "{w:#}");
     assert_unattributed_change(&w);
     assert_ne!(w["changes_actor"]["actor"], "claude-code", "{w:#}");
+}
+
+/// The `data` of a `--json` envelope: the contract version is checked, the payload returned.
+fn data_of(envelope: serde_json::Value) -> serde_json::Value {
+    assert_eq!(envelope["schema_version"], "1.0", "{envelope:#}");
+    envelope
+        .get("data")
+        .cloned()
+        .unwrap_or_else(|| panic!("no data in the envelope: {envelope:#}"))
 }

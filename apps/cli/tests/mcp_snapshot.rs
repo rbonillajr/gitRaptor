@@ -186,8 +186,10 @@ impl Machine {
         let start = shown
             .find('{')
             .unwrap_or_else(|| panic!("no JSON: {shown}"));
-        let timeline: Value = serde_json::from_str(shown[start..].trim())
-            .unwrap_or_else(|e| panic!("not JSON ({e}): {shown}"));
+        let timeline: Value = data_of(
+            serde_json::from_str(shown[start..].trim())
+                .unwrap_or_else(|e| panic!("not JSON ({e}): {shown}")),
+        );
         timeline["entries"]
             .as_array()
             .unwrap()
@@ -614,4 +616,13 @@ fn rotating_agent_processes_hit_the_worktree_ceiling() {
     let refused = m.direct_client("mcp", true).remove(0);
     assert_eq!(refused["code"], -33060, "{refused}");
     assert_eq!(refused["data"]["window"], "worktree-day", "{refused}");
+}
+
+/// The `data` of a `--json` envelope: the contract version is checked, the payload returned.
+fn data_of(envelope: serde_json::Value) -> serde_json::Value {
+    assert_eq!(envelope["schema_version"], "1.0", "{envelope:#}");
+    envelope
+        .get("data")
+        .cloned()
+        .unwrap_or_else(|| panic!("no data in the envelope: {envelope:#}"))
 }

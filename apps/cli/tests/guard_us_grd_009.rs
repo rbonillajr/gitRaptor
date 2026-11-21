@@ -290,7 +290,7 @@ impl Machine {
             .lines()
             .find_map(|l| l.find('{').map(|i| &l[i..]))
             .unwrap_or_else(|| panic!("no JSON: {stdout}"));
-        serde_json::from_str(line.trim()).unwrap()
+        data_of(serde_json::from_str(line.trim()).unwrap())
     }
 
     fn blocked(&self) -> u64 {
@@ -1115,4 +1115,13 @@ fn degraded_mode_applies_the_floor_rules_for_everyone() {
         "the safe minimum holds: {}",
         text(&out)
     );
+}
+
+/// The `data` of a `--json` envelope: the contract version is checked, the payload returned.
+fn data_of(envelope: serde_json::Value) -> serde_json::Value {
+    assert_eq!(envelope["schema_version"], "1.0", "{envelope:#}");
+    envelope
+        .get("data")
+        .cloned()
+        .unwrap_or_else(|| panic!("no data in the envelope: {envelope:#}"))
 }

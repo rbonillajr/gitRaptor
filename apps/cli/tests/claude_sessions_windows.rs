@@ -142,7 +142,7 @@ impl Machine {
             "{}",
             String::from_utf8_lossy(&out.stderr)
         );
-        let status: Value = serde_json::from_slice(&out.stdout).unwrap();
+        let status: Value = data_of(serde_json::from_slice(&out.stdout).unwrap());
         let want = plain(&self.repo);
         status["repos"][0]["worktrees"]
             .as_array()
@@ -238,4 +238,13 @@ fn an_agent_outside_every_observed_worktree_is_not_a_session() {
     m.launch(&format!("{KNOWN_AGENT}.exe"), &repo);
     let sessions = m.sessions_when(|s| !s.is_empty());
     assert_eq!(sessions.len(), 1, "{sessions:#?}");
+}
+
+/// The `data` of a `--json` envelope: the contract version is checked, the payload returned.
+fn data_of(envelope: serde_json::Value) -> serde_json::Value {
+    assert_eq!(envelope["schema_version"], "1.0", "{envelope:#}");
+    envelope
+        .get("data")
+        .cloned()
+        .unwrap_or_else(|| panic!("no data in the envelope: {envelope:#}"))
 }

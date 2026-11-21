@@ -254,7 +254,7 @@ impl Machine {
     fn undo(&self) -> UndoResult {
         let out = self.raptor(&self.worktree, &["undo", "--json"], "en_US.UTF-8");
         assert!(out.status.success(), "{}", text(&out));
-        serde_json::from_slice(&out.stdout).unwrap()
+        serde_json::from_value(data_of(serde_json::from_slice(&out.stdout).unwrap())).unwrap()
     }
 
     /// The pending notices of `worktree`, asked as the CLI would.
@@ -668,7 +668,8 @@ fn s2_a_restore_cut_half_way_is_recoverable_and_noticed_once() {
     // The restore itself works again: back to S0.
     let out = m.raptor(&m.worktree, &args, "en_US.UTF-8");
     assert!(out.status.success(), "{}", text(&out));
-    let _: RestoreResult = serde_json::from_slice(&out.stdout).unwrap();
+    let _: RestoreResult =
+        serde_json::from_value(data_of(serde_json::from_slice(&out.stdout).unwrap())).unwrap();
     assert_eq!(m.state(), s0);
 }
 
@@ -922,4 +923,13 @@ fn s6_a_clean_restart_gives_no_notice_and_a_complete_history() {
         "{}",
         text(&shown)
     );
+}
+
+/// The `data` of a `--json` envelope: the contract version is checked, the payload returned.
+fn data_of(envelope: serde_json::Value) -> serde_json::Value {
+    assert_eq!(envelope["schema_version"], "1.0", "{envelope:#}");
+    envelope
+        .get("data")
+        .cloned()
+        .unwrap_or_else(|| panic!("no data in the envelope: {envelope:#}"))
 }

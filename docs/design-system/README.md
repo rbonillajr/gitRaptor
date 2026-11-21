@@ -125,7 +125,7 @@ Widgets ratatui en `apps/cli`, todos con los tokens de `crates/theme`:
 | Aspecto | Regla |
 |---|---|
 | **Salida humana** | Una línea de resultado con un símbolo de estado, más detalles indentados. Color solo si la salida es una TTY. |
-| **Salida para máquinas** | `--json` en todos los comandos, con un esquema estable y versionado. Es la base para scripts y agentes. |
+| **Salida para máquinas** | `--json` en todos los comandos, con un esquema estable y versionado. Es la base para scripts y agentes. Cada salida es un sobre `{"schema_version":"1.0","data":...}` (o `error`) de una línea; la referencia está en [`docs/architecture/design/cli-json-contract.md`](../architecture/design/cli-json-contract.md). Rompe la salida `--json` anterior (aceptado antes del MVP). |
 | **Errores** | Formato *qué pasó → por qué → qué hacer*: `✖ Push bloqueado: la política "protect-main" prohíbe push a main → crea una rama: raptor branch new <nombre>` |
 | **Códigos de salida** | `0` ok, `1` error, `2` uso incorrecto, `3` bloqueado por política, `4` conflicto. Documentados y estables. |
 | **Progreso** | Un spinner o barra solo en una TTY; en CI o con pipes, líneas simples. |
