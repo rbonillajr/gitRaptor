@@ -273,7 +273,7 @@ impl Machine {
     fn status(&self) -> Value {
         let out = self.raptor(&["status", "--json"], &[]);
         assert!(out.status.success(), "{}", text(&out));
-        serde_json::from_slice(&out.stdout).unwrap()
+        data_of(serde_json::from_slice(&out.stdout).unwrap())
     }
 
     fn client(&self) -> Client {
@@ -329,7 +329,7 @@ impl Machine {
     fn all_sessions(&self) -> Vec<Value> {
         let out = self.raptor(&["sessions", "--all", "--json"], &[]);
         assert!(out.status.success(), "{}", text(&out));
-        let value: Value = serde_json::from_slice(&out.stdout).unwrap();
+        let value: Value = data_of(serde_json::from_slice(&out.stdout).unwrap());
         value["sessions"].as_array().unwrap().clone()
     }
 
@@ -497,7 +497,7 @@ fn registering_a_detected_agent_confirms_its_session() {
     assert!(ok, "{out}");
     // libtest's header may come first.
     let line = out.find('{').map_or("", |i| out[i..].trim());
-    let result: Value = serde_json::from_str(line).unwrap_or_else(|_| panic!("{out}"));
+    let result: Value = data_of(serde_json::from_str(line).unwrap_or_else(|_| panic!("{out}")));
     assert_eq!(result["outcome"], "confirmed", "{result:#}");
     assert_eq!(result["session_id"], before[0]["session_id"]);
 
@@ -987,4 +987,13 @@ fn repo_intact_registering_agents_does_not_modify_it() {
         m.stop();
     });
     report.assert_intact();
+}
+
+/// The `data` of a `--json` envelope: the contract version is checked, the payload returned.
+fn data_of(envelope: serde_json::Value) -> serde_json::Value {
+    assert_eq!(envelope["schema_version"], "1.0", "{envelope:#}");
+    envelope
+        .get("data")
+        .cloned()
+        .unwrap_or_else(|| panic!("no data in the envelope: {envelope:#}"))
 }

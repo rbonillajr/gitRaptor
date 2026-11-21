@@ -207,7 +207,7 @@ impl Machine {
             .lines()
             .find_map(|l| l.find('{').map(|i| &l[i..]))
             .unwrap_or_else(|| panic!("no JSON: {stdout}"));
-        serde_json::from_str(line.trim()).unwrap()
+        data_of(serde_json::from_str(line.trim()).unwrap())
     }
 
     fn log_text(&self, lang: &str) -> String {
@@ -505,4 +505,13 @@ fn a_warning_is_logged_once_outside_the_kpi() {
     assert!(en.contains("author: see raptor events"), "{en}");
     // `flexible` relaxes only from a confirmed floor, which no command confirms yet
     // (US-GRD-014): its entry is covered in `crates/core/tests/guard_evaluate.rs`.
+}
+
+/// The `data` of a `--json` envelope: the contract version is checked, the payload returned.
+fn data_of(envelope: serde_json::Value) -> serde_json::Value {
+    assert_eq!(envelope["schema_version"], "1.0", "{envelope:#}");
+    envelope
+        .get("data")
+        .cloned()
+        .unwrap_or_else(|| panic!("no data in the envelope: {envelope:#}"))
 }

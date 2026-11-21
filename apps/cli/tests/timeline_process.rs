@@ -224,8 +224,10 @@ impl Machine {
         argv.extend_from_slice(args);
         let out = self.timeline("en_US.UTF-8", &argv);
         let start = out.find('{').unwrap_or_else(|| panic!("no JSON: {out}"));
-        serde_json::from_str(out[start..].trim())
-            .unwrap_or_else(|e| panic!("not JSON ({e}): {out}"))
+        data_of(
+            serde_json::from_str(out[start..].trim())
+                .unwrap_or_else(|e| panic!("not JSON ({e}): {out}")),
+        )
     }
 
     fn register(&self, agent: &str) {
@@ -377,16 +379,18 @@ impl Machine {
             let text = text(&out);
             let seen = text.find('{').is_some_and(|i| {
                 serde_json::from_str::<Value>(text[i..].trim()).is_ok_and(|v| {
-                    v["repos"][0]["worktrees"].as_array().is_some_and(|ws| {
-                        ws.iter().any(|w| {
-                            w["path"] == self.worktree.to_str().unwrap()
-                                && w["sessions"].as_array().is_some_and(|s| {
-                                    s.iter().any(|s| {
-                                        s["agent"] == "claude-code" && s["origin"] == "detected"
+                    v["data"]["repos"][0]["worktrees"]
+                        .as_array()
+                        .is_some_and(|ws| {
+                            ws.iter().any(|w| {
+                                w["path"] == self.worktree.to_str().unwrap()
+                                    && w["sessions"].as_array().is_some_and(|s| {
+                                        s.iter().any(|s| {
+                                            s["agent"] == "claude-code" && s["origin"] == "detected"
+                                        })
                                     })
-                                })
+                            })
                         })
-                    })
                 })
             });
             if seen {
@@ -622,10 +626,14 @@ fn paths_with_control_characters_are_printed_sanitized() {
     assert!(!shown.contains('\u{1b}'), "{shown:?}");
     assert!(!shown.contains("red\nforged"), "{shown:?}");
     assert!(shown.contains('\u{FFFD}'), "{shown:?}");
-    // The wire keeps the raw text; only the screen is sanitized.
+    // `--json` goes through the same sanitizing pass as the MCP view now (SEC-12): the path
+    // arrives as data without the escape sequence and the line break.
     let timeline = m.timeline_json(&[]);
     let entry = entry_of(&timeline, event["seq"].as_i64().unwrap());
-    assert_eq!(entry["files"]["paths"][0]["untrusted"], name, "{entry:#}");
+    assert_eq!(
+        entry["files"]["paths"][0]["untrusted"], "evilred\u{FFFD}forged line.txt",
+        "{entry:#}"
+    );
     m.stop();
 }
 
@@ -715,4 +723,13 @@ fn worktree_keeps_only_the_entries_of_that_worktree() {
         "{only_branch:#}"
     );
     m.stop();
+}
+
+/// The `data` of a `--json` envelope: the contract version is checked, the payload returned.
+fn data_of(envelope: serde_json::Value) -> serde_json::Value {
+    assert_eq!(envelope["schema_version"], "1.0", "{envelope:#}");
+    envelope
+        .get("data")
+        .cloned()
+        .unwrap_or_else(|| panic!("no data in the envelope: {envelope:#}"))
 }

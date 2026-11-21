@@ -266,7 +266,7 @@ impl Machine {
     fn status(&self) -> Value {
         let out = self.raptor(&["status", "--json"], &[]);
         assert!(out.status.success(), "{}", text(&out));
-        serde_json::from_slice(&out.stdout).unwrap()
+        data_of(serde_json::from_slice(&out.stdout).unwrap())
     }
 
     fn client(&self) -> Client {
@@ -319,7 +319,7 @@ impl Machine {
     fn all_sessions(&self) -> Vec<Value> {
         let out = self.raptor(&["sessions", "--all", "--json"], &[]);
         assert!(out.status.success(), "{}", text(&out));
-        let value: Value = serde_json::from_slice(&out.stdout).unwrap();
+        let value: Value = data_of(serde_json::from_slice(&out.stdout).unwrap());
         assert_eq!(value["detection_available"], true);
         value["sessions"].as_array().unwrap().clone()
     }
@@ -441,7 +441,7 @@ impl Machine {
     fn events_json(&self) -> Value {
         let out = self.raptor(&["events", "--json"], &[]);
         assert!(out.status.success(), "{}", text(&out));
-        serde_json::from_slice(&out.stdout).unwrap()
+        data_of(serde_json::from_slice(&out.stdout).unwrap())
     }
 
     /// A commit of the index of `worktree` by a `git` that runs outside the repo: no sample sees
@@ -726,4 +726,13 @@ fn an_mcp_connection_gets_no_authorship() {
         assert!(!n.params.to_string().contains("Ana"), "{}", n.params);
     }
     m.stop();
+}
+
+/// The `data` of a `--json` envelope: the contract version is checked, the payload returned.
+fn data_of(envelope: serde_json::Value) -> serde_json::Value {
+    assert_eq!(envelope["schema_version"], "1.0", "{envelope:#}");
+    envelope
+        .get("data")
+        .cloned()
+        .unwrap_or_else(|| panic!("no data in the envelope: {envelope:#}"))
 }

@@ -423,7 +423,8 @@ fn raptor_restore_returns_to_a_timeline_point_and_undo_takes_it_back() {
 
     let json = m.raptor(&m.worktree, &["restore", &point, "--json"], "en_US.UTF-8");
     assert!(json.status.success(), "{}", text(&json.stderr));
-    let result: RestoreResult = serde_json::from_slice(&json.stdout).unwrap();
+    let result: RestoreResult =
+        serde_json::from_value(data_of(serde_json::from_slice(&json.stdout).unwrap())).unwrap();
     assert_eq!(result.target_snapshot_id, point);
     assert_eq!(std::fs::read_to_string(&login).unwrap(), work);
 
@@ -647,4 +648,13 @@ fn an_edit_after_a_restore_survives_a_raw_reset_hard() {
         text(&out.stderr)
     );
     assert_eq!(std::fs::read_to_string(&login).unwrap(), edit);
+}
+
+/// The `data` of a `--json` envelope: the contract version is checked, the payload returned.
+fn data_of(envelope: serde_json::Value) -> serde_json::Value {
+    assert_eq!(envelope["schema_version"], "1.0", "{envelope:#}");
+    envelope
+        .get("data")
+        .cloned()
+        .unwrap_or_else(|| panic!("no data in the envelope: {envelope:#}"))
 }

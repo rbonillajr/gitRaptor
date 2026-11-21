@@ -200,7 +200,7 @@ impl Machine {
     fn status(&self, path: &Path) -> GuardStatus {
         let out = self.raptor(&["guard", "status", "--json", path.to_str().unwrap()]);
         assert!(out.status.success(), "{}", text(&out));
-        serde_json::from_slice(&out.stdout).unwrap()
+        serde_json::from_value(data_of(serde_json::from_slice(&out.stdout).unwrap())).unwrap()
     }
 
     /// Plain Git in `dir`, with the hooks active, as an agent would run it.
@@ -1123,4 +1123,13 @@ fn latency_report() {
             g95 - p95
         );
     }
+}
+
+/// The `data` of a `--json` envelope: the contract version is checked, the payload returned.
+fn data_of(envelope: serde_json::Value) -> serde_json::Value {
+    assert_eq!(envelope["schema_version"], "1.0", "{envelope:#}");
+    envelope
+        .get("data")
+        .cloned()
+        .unwrap_or_else(|| panic!("no data in the envelope: {envelope:#}"))
 }

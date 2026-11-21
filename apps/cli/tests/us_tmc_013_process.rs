@@ -817,7 +817,8 @@ fn s4_json_never_asks_and_never_prints_the_token() {
 
     let shown = format!("{}{}", text(&out.stdout), text(&out.stderr));
     assert!(!out.status.success(), "{shown}");
-    assert!(shown.contains("without --json"), "{shown}");
+    // The refusal is the JSON envelope's stable code now, not the hint text (see the PR notes).
+    assert!(shown.contains("confirmation-required"), "{shown}");
     assert!(!shown.contains("[y/N]"), "{shown}");
     // No run of 32 hex digits: the token of the challenge is nowhere in the output.
     let hex_run = shown

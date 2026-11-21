@@ -33,7 +33,10 @@ import { writeDailyReports } from './daily.mjs';
 const TIMEOUT_MS = 30_000;
 const EVENT_PAGE = 200;
 
-/** Runs `raptor <args>` with a fixed argv (no shell) and parses its JSON output. */
+/**
+ * Runs `raptor <args>` with a fixed argv (no shell) and returns the `data` of its JSON envelope
+ * (`{"schema_version":"1.x","data":...}`). A rejection (`error`) or another major version throws.
+ */
 export function runRaptor(raptor, args) {
   const out = execFileSync(raptor, args, {
     encoding: 'utf8',
@@ -41,7 +44,12 @@ export function runRaptor(raptor, args) {
     stdio: ['ignore', 'pipe', 'pipe'],
     maxBuffer: 64 * 1024 * 1024,
   });
-  return JSON.parse(out);
+  const envelope = JSON.parse(out);
+  if (typeof envelope?.schema_version !== 'string' || !envelope.schema_version.startsWith('1.')) {
+    throw new Error(`unsupported schema_version: ${envelope?.schema_version}`);
+  }
+  if (envelope.error) throw new Error(`raptor refused: ${envelope.error.code}`);
+  return envelope.data;
 }
 
 /** The readings of `raptor status --resources --json` the log keeps. */

@@ -417,8 +417,10 @@ impl Machine {
         let start = shown
             .find('{')
             .unwrap_or_else(|| panic!("no JSON: {shown}"));
-        let timeline: Value = serde_json::from_str(shown[start..].trim())
-            .unwrap_or_else(|e| panic!("not JSON ({e}): {shown}"));
+        let timeline: Value = data_of(
+            serde_json::from_str(shown[start..].trim())
+                .unwrap_or_else(|e| panic!("not JSON ({e}): {shown}")),
+        );
         timeline["entries"].clone()
     }
 
@@ -666,4 +668,13 @@ fn a_repo_without_hooks_is_still_governed_by_the_executor() {
     assert_eq!(entries.len(), 1, "{entries:#?}");
     assert_eq!(entries[0]["kind"], "denial");
     assert_eq!(entries[0]["layer"], "cockpit");
+}
+
+/// The `data` of a `--json` envelope: the contract version is checked, the payload returned.
+fn data_of(envelope: serde_json::Value) -> serde_json::Value {
+    assert_eq!(envelope["schema_version"], "1.0", "{envelope:#}");
+    envelope
+        .get("data")
+        .cloned()
+        .unwrap_or_else(|| panic!("no data in the envelope: {envelope:#}"))
 }

@@ -201,7 +201,7 @@ impl Machine {
     fn undo(&self) -> UndoResult {
         let out = self.raptor(&["undo", "--json"]);
         assert!(out.status.success(), "{}", text(&out));
-        serde_json::from_slice(&out.stdout).unwrap()
+        serde_json::from_value(data_of(serde_json::from_slice(&out.stdout).unwrap())).unwrap()
     }
 
     /// `raptor undo` that is rejected, saying so in one of `reasons`.
@@ -676,4 +676,13 @@ fn hostile_half_done_merge_rejects_until_aborted() {
     assert_eq!(m.state(), stopped);
     m.undo();
     assert_eq!(m.state(), s0);
+}
+
+/// The `data` of a `--json` envelope: the contract version is checked, the payload returned.
+fn data_of(envelope: serde_json::Value) -> serde_json::Value {
+    assert_eq!(envelope["schema_version"], "1.0", "{envelope:#}");
+    envelope
+        .get("data")
+        .cloned()
+        .unwrap_or_else(|| panic!("no data in the envelope: {envelope:#}"))
 }

@@ -157,8 +157,10 @@ impl Machine {
         let start = shown
             .find('{')
             .unwrap_or_else(|| panic!("no JSON: {shown}"));
-        serde_json::from_str(shown[start..].trim())
-            .unwrap_or_else(|e| panic!("not JSON ({e}): {shown}"))
+        data_of(
+            serde_json::from_str(shown[start..].trim())
+                .unwrap_or_else(|e| panic!("not JSON ({e}): {shown}")),
+        )
     }
 
     fn repo(&self) -> String {
@@ -169,8 +171,10 @@ impl Machine {
     fn status(&self) -> Value {
         let out = self.raptor(&["guard", "status", "--json", &self.repo()]);
         assert!(out.status.success(), "{}", text(&out));
-        serde_json::from_slice(&out.stdout)
-            .unwrap_or_else(|e| panic!("not JSON ({e}): {}", text(&out)))
+        data_of(
+            serde_json::from_slice(&out.stdout)
+                .unwrap_or_else(|e| panic!("not JSON ({e}): {}", text(&out))),
+        )
     }
 
     /// The entries of `raptor guard log --json` (with `extra` flags).
@@ -591,4 +595,13 @@ fn a_hook_that_rewrites_the_message_is_judged_on_the_stored_message() {
     std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
     m.ok(&["guard", "install", "--yes", &m.repo()]);
     safe_commit_refused_on_the_stored_message(&m, &Machine::msg("rewritten"));
+}
+
+/// The `data` of a `--json` envelope: the contract version is checked, the payload returned.
+fn data_of(envelope: serde_json::Value) -> serde_json::Value {
+    assert_eq!(envelope["schema_version"], "1.0", "{envelope:#}");
+    envelope
+        .get("data")
+        .cloned()
+        .unwrap_or_else(|| panic!("no data in the envelope: {envelope:#}"))
 }
