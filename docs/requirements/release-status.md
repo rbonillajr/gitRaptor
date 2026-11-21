@@ -152,6 +152,7 @@
 | [US-MCP-005](features/mcp/user-stories/US-MCP-005-respuestas-acotadas-y-seguras.md) | Un agente recibe respuestas acotadas que no pueden darle órdenes ni filtrar secretos | Implementado (`implemented`) | #157, #159 | — |
 | [US-MCP-008](features/mcp/user-stories/US-MCP-008-snapshot-manual.md) | Un agente guarda por MCP un punto de recuperación antes de un cambio arriesgado | Implementado (`implemented`) | #213 | — |
 | [US-MCP-016](features/mcp/user-stories/US-MCP-016-check-conflicts.md) | Un agente sabe con quién va a chocar antes de que choque | Implementado (`implemented`) | — | — |
+| [US-MCP-023](features/mcp/user-stories/US-MCP-023-cli-json-estable.md) | Un agente que trabaja por Bash lee la salida de raptor con un contrato JSON estable y versionado | Implementado (`implemented`) | — | — |
 | [INF-MCP-001](features/mcp/technical-stories/INF-MCP-001-corpus-seguridad-mcp.md) | Corpus de seguridad del MCP como suite de CI que bloquea el merge | Implementado en parte (`partially-implemented`) | — | — |
 | [US-MCP-009](features/mcp/user-stories/US-MCP-009-safe-commit.md) | Un agente commitea por MCP con las reglas del repo y con un punto de recuperación previo | Implementado en parte (`partially-implemented`) | #289 | — |
 | [US-MCP-010](features/mcp/user-stories/US-MCP-010-safe-commit-rutas.md) | Un agente commitea solo los archivos que nombra y nunca fuera de su worktree | Implementado en parte (`partially-implemented`) | #289 | — |
@@ -169,7 +170,6 @@
 | [US-MCP-018](features/mcp/user-stories/US-MCP-018-safe-rebase-atomico.md) | Un agente se pone al día con la rama base y, si choca, su rama queda como estaba | Borrador (`draft`) | — | — |
 | [US-MCP-021](features/mcp/user-stories/US-MCP-021-configure-agents.md) | El desarrollador deja un repo listo para Claude Code con un comando que enseña antes lo que va a cambiar | Borrador (`draft`) | — | — |
 | [US-MCP-022](features/mcp/user-stories/US-MCP-022-archivos-del-usuario-y-reversion.md) | Configurar y retirar GitRaptor en un repo deja intacto lo que escribió el equipo | Borrador (`draft`) | — | — |
-| [US-MCP-023](features/mcp/user-stories/US-MCP-023-cli-json-estable.md) | Un agente que trabaja por Bash lee la salida de raptor con un contrato JSON estable y versionado | Borrador (`draft`) | — | — |
 | [US-MCP-024](features/mcp/user-stories/US-MCP-024-conflictos-por-cli.md) | Un agente que trabaja por Bash sabe con quién va a chocar antes de integrar | Borrador (`draft`) | — | — |
 | [US-MCP-025](features/mcp/user-stories/US-MCP-025-uso-por-canal.md) | El desarrollador ve cuánto usan sus agentes el MCP y cuánto la CLI | Borrador (`draft`) | — | — |
 | [US-MCP-026](features/mcp/user-stories/US-MCP-026-comparacion-mcp-cli.md) | El desarrollador compara, por tarea, cuánto cuesta y cuánto acierta un agente por el MCP y por la CLI | Borrador (`draft`) | — | — |
@@ -459,6 +459,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
 | [TS-GRP-010](features/motor-local/technical-stories/TS-GRP-010-perfil-mcp-por-solicitante.md) | Perfil mcp por solicitante: la CLI o la TUI que lanza un agente recibe el perfil mcp | Implementado (`implemented`) | — | — |
+| [US-MCP-023](features/mcp/user-stories/US-MCP-023-cli-json-estable.md) | Un agente que trabaja por Bash lee la salida de raptor con un contrato JSON estable y versionado | Implementado (`implemented`) | — | — |
 | [SPIKE-GRD-001](features/guardrails/technical-stories/SPIKE-GRD-001-interceptabilidad-hooks.md) | Interceptabilidad, coexistencia y coste de la capa de hooks en los tres SO | Implementado en parte (`partially-implemented`) | #22, #25, #121 | 2 |
 | [SPIKE-GRP-002](features/motor-local/technical-stories/SPIKE-GRP-002-viabilidad-observador.md) | Viabilidad del observador de cambios a escala en los tres SO | Implementado en parte (`partially-implemented`) | #17, #23 | 2 |
 | [TD-GRP-001](features/motor-local/technical-stories/TD-GRP-001-acl-windows.md) | Verificación de ACL en Windows: git.exe (SEC-10) y perfil (SEC-06) | Implementado en parte (`partially-implemented`) | #72 | 2 |
