@@ -52,6 +52,10 @@ enum GuardAction {
         /// Answer the question without asking (the window still applies).
         #[arg(long)]
         yes: bool,
+        /// Print JSON instead of text. There is no question in JSON: without `--yes` nothing
+        /// runs; git's own output goes to stderr.
+        #[arg(long)]
+        json: bool,
         /// The git command, after `--`: `git [-C <dir>] push|branch -d|rebase …`.
         #[arg(last = true, required = true, value_name = "GIT")]
         argv: Vec<OsString>,
@@ -90,7 +94,7 @@ impl Cmd {
             GuardAction::Uninstall { path, yes } => guard::uninstall(path, yes),
             GuardAction::Cancel { path } => guard::cancel(path),
             GuardAction::Confirm { path } => guard::confirm(path),
-            GuardAction::Exec { yes, argv } => guard::exec(yes, argv),
+            GuardAction::Exec { yes, json, argv } => guard::exec(yes, json, argv),
             GuardAction::Status { path, json } => guard::status(path, json),
             GuardAction::Log {
                 path,

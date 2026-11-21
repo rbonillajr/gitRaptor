@@ -36,6 +36,9 @@ enum AgentAction {
         /// The worktree (default: the current folder).
         #[arg(long)]
         worktree: Option<PathBuf>,
+        /// Print JSON instead of text.
+        #[arg(long)]
+        json: bool,
     },
     /// Correct the agent of a detected session, from its start (reserved to the developer).
     Correct {
@@ -74,7 +77,11 @@ impl Cmd {
                 worktree,
                 json,
             } => agent::register(&agent, worktree, json),
-            AgentAction::Withdraw { agent, worktree } => agent::withdraw(&agent, worktree),
+            AgentAction::Withdraw {
+                agent,
+                worktree,
+                json,
+            } => agent::withdraw(&agent, worktree, json),
             AgentAction::Correct {
                 agent,
                 worktree,

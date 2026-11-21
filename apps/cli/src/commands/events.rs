@@ -8,7 +8,7 @@ use gitraptor_api::untrusted::sanitize;
 
 use super::Global;
 use crate::i18n::t;
-use crate::{engine, events, offers, snapshot};
+use crate::{events, json_out, offers, snapshot};
 
 /// Show the latest Git events of the observed repos, with their time and actor.
 #[derive(clap::Args)]
@@ -34,17 +34,24 @@ impl Cmd {
 /// repo, oldest first.
 fn events_command(json: bool, limit: u32, all: bool) -> ExitCode {
     const CMD: &str = "raptor events";
-    let mut client = match engine(CMD) {
+    let mut client = match json_out::engine(CMD, json) {
         Ok(client) => client,
         Err(code) => return code,
     };
+    if json && let Err(code) = json_out::require(&client, methods::EVENTS_HISTORY) {
+        return code;
+    }
     // A daemon of the same protocol but older than this binary keeps
     // running after an upgrade and has no history to serve.
     if !offers(&client, methods::EVENTS_HISTORY) {
         eprintln!("{CMD}: {}", t("events.restart-engine", &[]));
         return ExitCode::FAILURE;
     }
-    let snapshot = match snapshot(&mut client, CMD) {
+    let snapshot = match if json {
+        json_out::snapshot(&mut client)
+    } else {
+        snapshot(&mut client, CMD)
+    } {
         Ok(snapshot) => snapshot,
         Err(code) => return code,
     };
@@ -76,6 +83,7 @@ fn events_command(json: bool, limit: u32, all: bool) -> ExitCode {
                         _ => break,
                     }
                 }
+                Err(err) if json => return json_out::fail_client(&client, &err),
                 Err(err) => {
                     eprintln!("{CMD}: {}", sanitize(&err.to_string()));
                     return ExitCode::FAILURE;
@@ -91,16 +99,13 @@ fn events_command(json: bool, limit: u32, all: bool) -> ExitCode {
         all.len().saturating_sub(limit as usize)
     };
     let all = &all[skip..];
-    let gaps = match gaps_of(&mut client, &snapshot.repos, all, all_pages) {
+    let gaps = match gaps_of(&mut client, &snapshot.repos, all, all_pages, json) {
         Ok(gaps) => gaps,
         Err(code) => return code,
     };
     let entries = events::interleave(all, &gaps);
     if json {
-        match serde_json::to_string_pretty(&events::json_with_gaps(&entries)) {
-            Ok(text) => println!("{text}"),
-            Err(_) => return ExitCode::FAILURE,
-        }
+        return json_out::ok(&events::json_with_gaps(&entries));
     } else {
         // A gap carries only UTC: it is shown at the offset of the events, as the
         // Guardrails log does for its unlogged periods.
@@ -119,11 +124,15 @@ fn gaps_of(
     repos: &[gitraptor_api::messages::RepoView],
     shown: &[GitEventView],
     all_pages: bool,
+    json: bool,
 ) -> Result<Vec<events::GapEntry>, ExitCode> {
     const CMD: &str = "raptor events";
     let mut gaps = Vec::new();
     if !offers(client, methods::EVENTS_GAPS) {
-        eprintln!("{CMD}: {}", t("events.gaps-restart-engine", &[]));
+        // JSON writes nothing on stderr: the events still show, without gaps.
+        if !json {
+            eprintln!("{CMD}: {}", t("events.gaps-restart-engine", &[]));
+        }
         return Ok(gaps);
     }
     for repo in repos {
@@ -146,6 +155,7 @@ fn gaps_of(
                 repo_id: repo.repo_id.clone(),
                 gap,
             })),
+            Err(err) if json => return Err(json_out::fail_client(client, &err)),
             Err(err) => {
                 eprintln!("{CMD}: {}", sanitize(&err.to_string()));
                 return Err(ExitCode::FAILURE);

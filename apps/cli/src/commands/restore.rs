@@ -6,6 +6,8 @@
 use std::path::Path;
 use std::process::ExitCode;
 
+use gitraptor_api::cli_contract::CliErrorCode;
+use gitraptor_api::mcp_view::McpToolError;
 use gitraptor_api::methods;
 use gitraptor_api::rpc::code;
 use gitraptor_api::timemachine::{
@@ -19,7 +21,7 @@ use super::Global;
 use super::timeline::compact::{short_id, what, worktree_name};
 use crate::i18n::{Tr, t};
 use crate::undo::confirm;
-use crate::{engine, error_text, shown, undo};
+use crate::{error_text, json_out, shown, undo};
 
 const CMD: &str = "raptor restore";
 
@@ -42,14 +44,26 @@ impl Cmd {
             .and_then(gitraptor_cli::paths::canonicalize)
             .ok();
         let Some(worktree) = cwd.as_deref().and_then(undo::worktree_root) else {
+            if self.json {
+                return json_out::fail(
+                    CliErrorCode::Tool(McpToolError::NotInObservedWorktree),
+                    None,
+                );
+            }
             eprintln!("{CMD}: {}", t("restore.not-in-worktree", &[]));
             return ExitCode::FAILURE;
         };
-        let mut client = match engine(CMD) {
+        let mut client = match json_out::engine(CMD, self.json) {
             Ok(client) => client,
             Err(code) => return code,
         };
-        undo::notices::show_pending(&mut client, &worktree, CMD);
+        if self.json {
+            if let Err(code) = json_out::require(&client, methods::TM_RESTORE) {
+                return code;
+            }
+        } else {
+            undo::notices::show_pending(&mut client, &worktree, CMD);
+        }
         let show_plan = |data: &TmConfirmData| show_restore_plan(data, &self.snapshot_id);
         let answer = match confirm::call(
             &mut client,
@@ -68,8 +82,7 @@ impl Cmd {
         match answer {
             Ok(value) => {
                 if self.json {
-                    println!("{value}");
-                    return ExitCode::SUCCESS;
+                    return undo::typed_ok::<RestoreResult>(value);
                 }
                 match serde_json::from_value::<RestoreResult>(value) {
                     Ok(result) => {
@@ -82,6 +95,7 @@ impl Cmd {
                     }
                 }
             }
+            Err(err) if self.json => json_out::fail_client(&client, &err),
             Err(err) => {
                 // A malformed, too-short or ambiguous id is a usage error.
                 let usage = matches!(&err, ClientError::Rpc(e) if e.code == code::INVALID_PARAMS);

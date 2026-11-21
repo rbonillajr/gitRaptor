@@ -2,8 +2,7 @@
 //! 2026-10-05 MCP): when the daemon fixes the `mcp` profile for this
 //! connection because an agent asks (S-01), `raptor status`, `raptor daemon
 //! status` and the TUI show what the MCP shows, never more. The daemon
-//! decides; this only presents. The versioned `--json` envelope is
-//! US-MCP-023's.
+//! decides; this only presents.
 
 use std::path::Path;
 use std::process::ExitCode;
@@ -11,11 +10,10 @@ use std::process::ExitCode;
 use gitraptor_api::mcp_view::McpToolError;
 use gitraptor_api::messages::ConnectionProfile;
 use gitraptor_api::methods::{self, McpStatus, McpStatusParams};
-use gitraptor_api::rpc::{ScopeRefusal, ScopeRefusedData, code};
 use gitraptor_core::client::{Client, ClientError};
 
-use crate::error_text;
 use crate::i18n::t;
+use crate::{error_text, json_out};
 
 /// The parameters of a Time Machine command for `worktree` (the one of the cwd), with the `cli`
 /// surface. With the `mcp` profile the worktree is not sent: the daemon takes it from the
@@ -52,44 +50,28 @@ pub(crate) fn is_restricted(client: &Client) -> bool {
 }
 
 /// `mcp.status` of the caller's worktree, as the MCP's `status` tool sees it.
-/// With `json`, its result, or `{"error": "<refusal>"}` and exit code 1.
+/// With `json`, the versioned envelope: its result, or the refusal with its stable code.
 pub(crate) fn print_status(client: &mut Client, json: bool) -> ExitCode {
-    let result =
-        client.call::<_, serde_json::Value>(methods::MCP_STATUS, McpStatusParams::default());
+    let result = client.call::<_, McpStatus>(methods::MCP_STATUS, McpStatusParams::default());
     match (result, json) {
-        (Ok(value), true) => match serde_json::to_string_pretty(&value) {
-            Ok(text) => {
-                // serde_json escapes every control character: no raw escape
-                // sequence of an untrusted name reaches the terminal (SEC-12).
-                println!("{text}");
-                ExitCode::SUCCESS
-            }
-            Err(_) => ExitCode::FAILURE,
-        },
-        (Ok(value), false) => match serde_json::from_value::<McpStatus>(value) {
-            Ok(status) => {
-                let worktree = status.worktree.sanitized();
-                let branch = status
-                    .branch
-                    .as_ref()
-                    .map(|b| b.sanitized())
-                    .unwrap_or_else(|| "-".to_owned());
-                println!(
-                    "{}",
-                    t(
-                        "restricted.status",
-                        &[("worktree", &worktree), ("branch", &branch)],
-                    )
-                );
-                ExitCode::SUCCESS
-            }
-            Err(_) => ExitCode::FAILURE,
-        },
-        (Err(err), true) => {
-            let refusal = refusal_name(&err);
-            println!("{}", serde_json::json!({ "error": refusal }));
-            ExitCode::FAILURE
+        (Ok(status), true) => json_out::ok(&status),
+        (Ok(status), false) => {
+            let worktree = status.worktree.sanitized();
+            let branch = status
+                .branch
+                .as_ref()
+                .map(|b| b.sanitized())
+                .unwrap_or_else(|| "-".to_owned());
+            println!(
+                "{}",
+                t(
+                    "restricted.status",
+                    &[("worktree", &worktree), ("branch", &branch)],
+                )
+            );
+            ExitCode::SUCCESS
         }
+        (Err(err), true) => json_out::fail_client(client, &err),
         (Err(err), false) => {
             if refusal_name(&err) == McpToolError::RepoNotEnabled.as_str() {
                 eprintln!("raptor status: {}", t("restricted.not-enabled", &[]));
@@ -101,24 +83,8 @@ pub(crate) fn print_status(client: &mut Client, json: bool) -> ExitCode {
     }
 }
 
-/// The MCP's name of a refused `mcp.status`, the same the `status` tool gives.
+/// The stable name of a refused `mcp.status`, the same the `status` tool gives and the JSON
+/// output carries: one table, in [`json_out::from_client_error`].
 pub(crate) fn refusal_name(err: &ClientError) -> &'static str {
-    match err {
-        ClientError::Rpc(e) if e.code == code::SCOPE_REFUSED => {
-            let reason = e
-                .data
-                .clone()
-                .and_then(|d| serde_json::from_value::<ScopeRefusedData>(d).ok())
-                .map(|d| d.reason);
-            match reason {
-                Some(ScopeRefusal::NotAllowlisted) => McpToolError::RepoNotEnabled.as_str(),
-                _ => McpToolError::NotInObservedWorktree.as_str(),
-            }
-        }
-        ClientError::Rpc(e) if e.code == code::RATE_LIMITED => McpToolError::RateLimited.as_str(),
-        ClientError::Rpc(e) if e.code == methods::MCP_UNAVAILABLE.code => {
-            McpToolError::RepoUnavailable.as_str()
-        }
-        _ => McpToolError::Internal.as_str(),
-    }
+    json_out::from_client_error(err, true).0.as_str()
 }

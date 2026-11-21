@@ -5,12 +5,6 @@
 //! through [`gitraptor_api::mcp_view::for_mcp`] before they are serialized, the same pass the
 //! MCP uses. `error.params` never carries what the caller typed.
 
-// The subcommands adopt these helpers one by one; until the last one does, some are unused.
-#![allow(
-    dead_code,
-    reason = "the subcommands migrate to these helpers in later steps"
-)]
-
 use std::io::Write as _;
 use std::process::ExitCode;
 
@@ -19,7 +13,7 @@ use gitraptor_api::cli_contract::{
     CLI_SCHEMA_VERSION, CliErr, CliError, CliErrorCode, CliOk, CliOnlyCode,
 };
 use gitraptor_api::mcp_view::{McpToolError, for_mcp};
-use gitraptor_api::messages::{ClientKind, RefusalReason, RefusedData};
+use gitraptor_api::messages::{ClientKind, RefusalReason, RefusedData, Snapshot};
 use gitraptor_api::methods;
 use gitraptor_api::rpc::{ScopeRefusal, ScopeRefusedData, code, error_name};
 use gitraptor_api::timemachine::{TmConfirmData, TmRejectReason};
@@ -88,6 +82,25 @@ pub(crate) fn ok<T: Serialize>(data: &T) -> ExitCode {
 pub(crate) fn fail(code: CliErrorCode, params: Option<Value>) -> ExitCode {
     emit(&render_fail(code, params));
     ExitCode::from(code.exit_code())
+}
+
+/// A failed call of `client` as a rejection on stdout, with the exit code of its family.
+pub(crate) fn fail_client(client: &Client, err: &ClientError) -> ExitCode {
+    let (code, params) = from_client_error(err, crate::restricted::is_restricted(client));
+    fail(code, params)
+}
+
+/// `engine.snapshot` for a command with `--json`: a failure is a rejection on stdout.
+pub(crate) fn snapshot(client: &mut Client) -> Result<Snapshot, ExitCode> {
+    client
+        .call(methods::ENGINE_SNAPSHOT, json!({}))
+        .map_err(|err| fail_client(client, &err))
+}
+
+/// A failure with no connection to blame (not running, I/O) as a rejection on stdout.
+pub(crate) fn fail_error(err: &ClientError) -> ExitCode {
+    let (code, params) = from_client_error(err, false);
+    fail(code, params)
 }
 
 const fn tool(code: McpToolError) -> CliErrorCode {
@@ -199,7 +212,7 @@ pub(crate) fn from_client_error(
 
 /// `command-failed`: the stable name of the channel's error and, when its `data` has one, its
 /// `reason`.
-fn failed(rpc_code: i64, data: Option<&Value>) -> (CliErrorCode, Option<Value>) {
+pub(crate) fn failed(rpc_code: i64, data: Option<&Value>) -> (CliErrorCode, Option<Value>) {
     let reason = error_name(rpc_code).unwrap_or("unknown");
     let mut params = json!({ "reason": reason });
     if let Some(detail) = data.and_then(|d| d.get("reason")).and_then(stable_name) {

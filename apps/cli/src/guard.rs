@@ -29,7 +29,7 @@ use gitraptor_core::client::ClientError;
 use gitraptor_core::guardrails::hook::{self, Degraded, HookArgs, HookEnv};
 
 use crate::i18n::{Tr, t, tn};
-use crate::{command_path, engine, error_text, refusal_text, repo_error, shown};
+use crate::{command_path, engine, error_text, json_out, refusal_text, repo_error, shown};
 
 mod confirm;
 #[cfg(test)]
@@ -1015,18 +1015,19 @@ pub fn install(path: Option<PathBuf>, yes: bool) -> ExitCode {
 pub fn status(path: Option<PathBuf>, json: bool) -> ExitCode {
     const CMD: &str = "raptor guard status";
     let path = command_path(path);
-    let mut client = match engine(CMD) {
+    let mut client = match json_out::engine(CMD, json) {
         Ok(client) => client,
         Err(code) => return code,
     };
+    if json && let Err(code) = json_out::require(&client, methods::GUARD_STATUS) {
+        return code;
+    }
     let params = GuardRepoParams {
         path: path.to_string_lossy().into_owned(),
     };
     match client.call::<_, GuardStatus>(methods::GUARD_STATUS, &params) {
-        Ok(status) if json => {
-            println!("{}", serde_json::to_string(&status).unwrap_or_default());
-            ExitCode::SUCCESS
-        }
+        Ok(status) if json => json_out::ok(&status),
+        Err(err) if json => json_out::fail_client(&client, &err),
         Ok(status) => {
             for line in status_lines(&status, Tr::current()) {
                 println!("{line}");
@@ -1615,10 +1616,13 @@ pub fn log(
     const CMD: &str = "raptor guard log";
     let path = command_path(path);
     let days = days.clamp(1, gitraptor_api::guard::LOG_RETENTION_DAYS as u32);
-    let mut client = match engine(CMD) {
+    let mut client = match json_out::engine(CMD, json) {
         Ok(client) => client,
         Err(code) => return code,
     };
+    if json && let Err(code) = json_out::require(&client, methods::GUARD_LOG) {
+        return code;
+    }
     if !crate::offers(&client, methods::GUARD_LOG) {
         eprintln!("{CMD}: {}", t("guard.restart-engine", &[]));
         return ExitCode::FAILURE;
@@ -1631,10 +1635,8 @@ pub fn log(
         }
     }
     match client.call::<_, GuardLogResult>(methods::GUARD_LOG, &params) {
-        Ok(log) if json => {
-            println!("{}", serde_json::to_string(&log).unwrap_or_default());
-            ExitCode::SUCCESS
-        }
+        Ok(log) if json => json_out::ok(&log),
+        Err(err) if json => json_out::fail_client(&client, &err),
         Ok(log) => {
             for line in log_lines(&log, days) {
                 println!("{line}");
