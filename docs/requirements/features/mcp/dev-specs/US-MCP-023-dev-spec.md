@@ -2,7 +2,7 @@
 id: DS-US-MCP-023
 title: "Dev Spec — Contrato JSON estable y versionado de la CLI raptor"
 type: dev-spec
-status: spec-ready
+status: implemented
 feature: mcp
 domain: MCP
 created: 2026-11-21
@@ -652,3 +652,5 @@ Corre `/security-review --scope devspec docs/requirements/features/mcp/dev-specs
 | G4 | D14 precisa ADR-MCP-001 Enmienda § D1 («todas las salidas `--json`»): `daemon ensure` queda fuera. D5 descarta el formato en TTY que el ADR dejaba abierto. D16 hace `params` obligatorio. | Anotar en la Enmienda del ADR al mezclar | Arquitecto |
 | G5 | US-MCP-020 (guía) debe probar sus códigos contra `cli_contract::stable_codes()`, no solo contra `McpToolError::ALL`. | Anotarlo en su Dev Spec | Arquitecto |
 | G6 | Hoy, bajo perfil `mcp`, `sessions`/`timeline`/`guard log` dan texto («el motor todavía no hace eso», `NOT_IMPLEMENTED`/`METHOD_NOT_FOUND` de `crates/core/src/channel/conn.rs`). Sin `--json` no cambia. | Ninguna | — |
+
+Implementado en: PR #378.

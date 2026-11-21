@@ -4,17 +4,17 @@
 
 > **Archivo generado, no editar a mano.** Sale del frontmatter (`status`) y de la sección "Estado de la implementación" de cada ficha (US, TS, INF, SPIKE y TD) de `docs/requirements/features/`. Para cambiar un estado, edita la ficha y regenera con `node tools/status/release-status.mjs`. El CI (docs-lint) falla si este archivo no coincide con lo que genera el script.
 
-Última actualización de una ficha: 2026-11-12.
+Última actualización de una ficha: 2026-11-21.
 
 ## Totales por estado
 
 | Estado | Fichas |
 |---|---|
-| Implementado (`implemented`) | 85 |
+| Implementado (`implemented`) | 86 |
 | Hecho (`done`) | 3 |
 | Implementado en parte (`partially-implemented`) | 27 |
 | Listo (`ready`) | 26 |
-| Borrador (`draft`) | 70 |
+| Borrador (`draft`) | 69 |
 | Bloqueado (`blocked`) | 1 |
 | **Total** | **212** |
 
@@ -25,7 +25,7 @@
 | [cockpit](#cockpit) | 16 | 0 | 5 | 1 | 16 | 1 | 39 |
 | [desktop](#desktop) | 7 | 0 | 1 | 15 | 0 | 0 | 23 |
 | [guardrails](#guardrails) | 14 | 0 | 7 | 1 | 3 | 0 | 25 |
-| [mcp](#mcp) | 7 | 0 | 4 | 0 | 16 | 0 | 27 |
+| [mcp](#mcp) | 8 | 0 | 4 | 0 | 15 | 0 | 27 |
 | [motor-local](#motor-local) | 22 | 2 | 9 | 2 | 16 | 0 | 51 |
 | [time-machine](#time-machine) | 19 | 1 | 1 | 0 | 13 | 0 | 34 |
 | [worktree-lifecycle](#worktree-lifecycle) | 0 | 0 | 0 | 7 | 6 | 0 | 13 |
@@ -140,7 +140,7 @@
 
 ### mcp
 
-27 fichas: 7 implementado, 4 implementado en parte, 16 borrador.
+27 fichas: 8 implementado, 4 implementado en parte, 15 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -151,6 +151,7 @@
 | [US-MCP-005](features/mcp/user-stories/US-MCP-005-respuestas-acotadas-y-seguras.md) | Un agente recibe respuestas acotadas que no pueden darle órdenes ni filtrar secretos | Implementado (`implemented`) | #157, #159 | — |
 | [US-MCP-008](features/mcp/user-stories/US-MCP-008-snapshot-manual.md) | Un agente guarda por MCP un punto de recuperación antes de un cambio arriesgado | Implementado (`implemented`) | #213 | — |
 | [US-MCP-016](features/mcp/user-stories/US-MCP-016-check-conflicts.md) | Un agente sabe con quién va a chocar antes de que choque | Implementado (`implemented`) | — | — |
+| [US-MCP-023](features/mcp/user-stories/US-MCP-023-cli-json-estable.md) | Un agente que trabaja por Bash lee la salida de raptor con un contrato JSON estable y versionado | Implementado (`implemented`) | — | — |
 | [INF-MCP-001](features/mcp/technical-stories/INF-MCP-001-corpus-seguridad-mcp.md) | Corpus de seguridad del MCP como suite de CI que bloquea el merge | Implementado en parte (`partially-implemented`) | — | — |
 | [US-MCP-009](features/mcp/user-stories/US-MCP-009-safe-commit.md) | Un agente commitea por MCP con las reglas del repo y con un punto de recuperación previo | Implementado en parte (`partially-implemented`) | #289 | — |
 | [US-MCP-010](features/mcp/user-stories/US-MCP-010-safe-commit-rutas.md) | Un agente commitea solo los archivos que nombra y nunca fuera de su worktree | Implementado en parte (`partially-implemented`) | #289 | — |
@@ -167,7 +168,6 @@
 | [US-MCP-020](features/mcp/user-stories/US-MCP-020-guia-para-agentes.md) | Un agente de Claude Code sabe cómo trabajar con GitRaptor sin que el desarrollador se lo explique en cada sesión | Borrador (`draft`) | — | — |
 | [US-MCP-021](features/mcp/user-stories/US-MCP-021-configure-agents.md) | El desarrollador deja un repo listo para Claude Code con un comando que enseña antes lo que va a cambiar | Borrador (`draft`) | — | — |
 | [US-MCP-022](features/mcp/user-stories/US-MCP-022-archivos-del-usuario-y-reversion.md) | Configurar y retirar GitRaptor en un repo deja intacto lo que escribió el equipo | Borrador (`draft`) | — | — |
-| [US-MCP-023](features/mcp/user-stories/US-MCP-023-cli-json-estable.md) | Un agente que trabaja por Bash lee la salida de raptor con un contrato JSON estable y versionado | Borrador (`draft`) | — | — |
 | [US-MCP-024](features/mcp/user-stories/US-MCP-024-conflictos-por-cli.md) | Un agente que trabaja por Bash sabe con quién va a chocar antes de integrar | Borrador (`draft`) | — | — |
 | [US-MCP-025](features/mcp/user-stories/US-MCP-025-uso-por-canal.md) | El desarrollador ve cuánto usan sus agentes el MCP y cuánto la CLI | Borrador (`draft`) | — | — |
 | [US-MCP-026](features/mcp/user-stories/US-MCP-026-comparacion-mcp-cli.md) | El desarrollador compara, por tarea, cuánto cuesta y cuánto acierta un agente por el MCP y por la CLI | Borrador (`draft`) | — | — |
@@ -453,11 +453,12 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### M3
 
-15 fichas: 1 implementado, 3 implementado en parte, 5 listo, 6 borrador.
+15 fichas: 2 implementado, 3 implementado en parte, 5 listo, 5 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
 | [TS-GRP-010](features/motor-local/technical-stories/TS-GRP-010-perfil-mcp-por-solicitante.md) | Perfil mcp por solicitante: la CLI o la TUI que lanza un agente recibe el perfil mcp | Implementado (`implemented`) | — | — |
+| [US-MCP-023](features/mcp/user-stories/US-MCP-023-cli-json-estable.md) | Un agente que trabaja por Bash lee la salida de raptor con un contrato JSON estable y versionado | Implementado (`implemented`) | — | — |
 | [SPIKE-GRD-001](features/guardrails/technical-stories/SPIKE-GRD-001-interceptabilidad-hooks.md) | Interceptabilidad, coexistencia y coste de la capa de hooks en los tres SO | Implementado en parte (`partially-implemented`) | #22, #25, #121 | 2 |
 | [SPIKE-GRP-002](features/motor-local/technical-stories/SPIKE-GRP-002-viabilidad-observador.md) | Viabilidad del observador de cambios a escala en los tres SO | Implementado en parte (`partially-implemented`) | #17, #23 | 2 |
 | [TD-GRP-001](features/motor-local/technical-stories/TD-GRP-001-acl-windows.md) | Verificación de ACL en Windows: git.exe (SEC-10) y perfil (SEC-06) | Implementado en parte (`partially-implemented`) | #72 | 2 |
@@ -469,7 +470,6 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-GRD-013](features/guardrails/user-stories/US-GRD-013-comando-edicion-configuracion.md) | El desarrollador cambia la configuración con un comando sin perder lo que editó a mano | Borrador (`draft`) | — | — |
 | [US-GRP-016](features/motor-local/user-stories/US-GRP-016-rama-base-configuracion-equipo.md) | La rama base la define la configuración del equipo | Borrador (`draft`) | — | — |
 | [US-MCP-020](features/mcp/user-stories/US-MCP-020-guia-para-agentes.md) | Un agente de Claude Code sabe cómo trabajar con GitRaptor sin que el desarrollador se lo explique en cada sesión | Borrador (`draft`) | — | — |
-| [US-MCP-023](features/mcp/user-stories/US-MCP-023-cli-json-estable.md) | Un agente que trabaja por Bash lee la salida de raptor con un contrato JSON estable y versionado | Borrador (`draft`) | — | — |
 | [US-TMC-022](features/time-machine/user-stories/US-TMC-022-tope-disco.md) | La Time Machine nunca pasa del tope de disco que fijé | Borrador (`draft`) | — | — |
 | [US-WTL-003](features/worktree-lifecycle/user-stories/US-WTL-003-estado-real-del-agente.md) | El desarrollador ve qué agentes esperan su decisión, cuáles esperan el CI y cuáles se colgaron | Borrador (`draft`) | — | — |
 
