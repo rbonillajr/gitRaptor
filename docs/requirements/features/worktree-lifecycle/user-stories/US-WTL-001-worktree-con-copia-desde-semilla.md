@@ -6,9 +6,9 @@ status: ready
 priority: high
 milestone: M3
 blocked_by:
-  - US-CKP-018
+  - US-MCP-019
 created: 2026-11-10
-updated: 2026-11-10
+updated: 2026-11-21
 feature: worktree-lifecycle
 related:
   context:
@@ -26,7 +26,8 @@ related:
     - BR-WTL-003
     - BR-WTL-004
     - BR-WTL-016
-  specs: []
+  specs:
+    - DS-US-WTL-001
 ado:
   id: null
   url: null
@@ -86,7 +87,7 @@ Entonces la creación se rechaza indicando que "feat-login" ya está en "../wt-l
 
 Dado un agente conectado por el MCP
 Cuando pide crear un worktree
-Entonces puede prepararlo como hasta ahora (US-MCP-019), sin lanzar ningún agente en él
+Entonces lo prepara sin lanzar ningún agente en él
 
 **Escenario: Nunca HEAD separado**
 
@@ -113,7 +114,7 @@ Entonces ningún artefacto se copia desde ella a "feat-g"
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección)._
+Arquitecto, 2026-11-21: [DS-US-WTL-001](../dev-specs/US-WTL-001-dev-spec.md) (`spec-ready`). `raptor new` reutiliza la operación create-worktree de DS-US-MCP-019 con dos argumentos que solo acepta la capa `cockpit` (`reuse_branch`, `seed_copy`). Deshacer la creación es descartar el worktree (US-CKP-017 / US-WTL-002). Las preguntas 5b, 9, 11, 14 y 16 quedan con la decisión provisional del Arquitecto de la DS hasta que Rene las cierre; un escenario de «rama existente se reutiliza» se añade al cerrar la 14.
 
 ## Diseño
 
@@ -121,7 +122,8 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 
 ## Dependencias
 
-- **De User Stories**: Requiere US-CKP-018 (crear worktree sobre la base confirmada) · Relacionado US-MCP-019 (preparar sin lanzar por el MCP) · Bloquea **US-WTL-013** (lanzar el agente e instalar la skill), US-WTL-004, US-WTL-006, US-WTL-007, US-WTL-009, US-WTL-012.
+- **De User Stories**: Requiere **US-MCP-019** (la operación de crear worktree del motor, que esta historia reutiliza y amplía con la copia desde la semilla) · Relacionado US-CKP-018 (preparar sin lanzar desde la TUI) · Bloquea **US-WTL-013** (lanzar el agente e instalar la skill), US-WTL-004, US-WTL-006, US-WTL-007, US-WTL-009, US-WTL-012.
+- **Decisión del orquestador (2026-11-21), validada por PO**: esta historia ya no depende de US-CKP-018. Atarla a la TUI la hacía esperar al flujo de escritura de US-CKP-014 y al descarte de US-CKP-017, que `raptor new` no usa. Lo que necesita es la operación de crear worktree, cuya dueña es US-MCP-019; ninguna de las tres historias la construye dos veces. US-CKP-018 se mantiene como la superficie de la TUI para preparar sin lanzar.
 - **Sin bloqueos de enmienda**: la enmienda de BRD-GRP-001 § 6.4 (lanzar un agente) se aplicó el 2026-11-10 y afecta a US-WTL-013, no a esta historia.
 - **Preguntas abiertas que esta historia no fija**: 5b (qué hace `raptor new` con una semilla de otro toolchain o perfil: provisional, crea el worktree sin copia y avisa), 11 (disco sin reflink: provisional, no se copia y se avisa), 14 (reutilizar una rama existente: provisional, se reutiliza), 16 (ignorados que nunca se copian: provisional, lista fija de exclusiones). Se añaden escenarios cuando Rene las cierre; los supuestos provisionales no bloquean.
 - **Cross-cutting / transversales**: dónde vive la semilla y cuánto ocupa (Pregunta 9) y cómo se copia con copy-on-write: transversal (lo define el Arquitecto).

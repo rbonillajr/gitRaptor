@@ -2,11 +2,11 @@
 id: US-MCP-020
 title: "Un agente de Claude Code sabe cómo trabajar con GitRaptor sin que el desarrollador se lo explique en cada sesión"
 type: us
-status: draft
+status: ready
 priority: high
 milestone: M3
 created: 2026-11-10
-updated: 2026-11-12
+updated: 2026-11-21
 domain: GRP
 epic: E-001
 feature: mcp
@@ -15,6 +15,8 @@ related:
     - ADR-MCP-001
   context:
     - CTX-MCP-001
+  specs:
+    - DS-US-MCP-020
   rules:
     - BR-MCP-001
   stories:
@@ -25,11 +27,12 @@ related:
     - US-MCP-021
     - US-MCP-023
     - US-MCP-024
+    - US-WTL-013
 ado:
   id: null
   url: null
 covers: [BR-MCP-CONS-009]
-blocked_by: []
+blocked_by: [US-MCP-023]
 tags: [mcp, agentes, skill, guia, superficie-agentes, hito-m3]
 ---
 
@@ -51,11 +54,13 @@ BR-MCP-CONS-009 (guía coherente con el contrato: cuatro temas, un código = una
 
 ## Dependencias
 
-- **Historias**: US-MCP-005 (códigos de rechazo estables, que la guía explica), US-MCP-016 (`check_conflicts`, para "antes de integrar"), US-MCP-012 (undo de lo propio por MCP), US-TMC-011 (`raptor undo --agent` por la CLI) y US-MCP-023 (salida `--json` estable que la guía enseña a usar por Bash; mismo hito).
+- **Historias en `main`**: US-MCP-005 (códigos de rechazo estables, que la guía explica), US-MCP-016 (`check_conflicts`, para "antes de integrar") y US-TMC-011 (`raptor undo --agent` por la CLI).
+- **Bloqueo**: **US-MCP-023** (salida `--json` estable de la CLI, mismo hito, en construcción). La guía enseña el camino por la CLI con el contrato que US-MCP-023 deje en `main`; esta historia no fija ese esquema. Se acompañan en M3.
+- **Pendiente, sin bloquear**: US-MCP-012 (undo de lo propio por MCP) no está en `main`. Mientras no esté, la guía enseña el undo solo por la CLI y no ofrece el undo por MCP (escenario «El undo por MCP solo aparece cuando la versión lo ofrece»).
 - **Relación**: US-MCP-021 y US-MCP-022 instalan la guía y el bloque en el repo (M4); US-MCP-024 añade el camino por CLI de "¿voy a chocar?" (después de v0.1.0).
-- **Relación con una feature en preparación (sin id todavía)**: "Ciclo de vida del worktree" tendrá un comando `raptor new` que instalará esta guía en el worktree que cree. Esa feature consume la guía tal como la deja esta historia; cuando tenga contexto e ids, se enlaza aquí.
+- **Bloquea**: US-WTL-013 (`raptor new --agent` instala esta guía en el worktree que crea, tal como la deja esta historia).
 - **Cómo llega la guía al repo en M3**, antes de que exista US-MCP-021: **decidido (P-MCP-39, 2026-11-10)**, copia documentada. La historia añade un subcomando de solo lectura, sin reserva, que imprime la guía embebida con su marca de versión y hash, y la receta para dejarla en `.claude/skills/gitraptor/SKILL.md`; GitRaptor la deja así en su propio repo. En M4, `configure-agents` reconoce esa copia por la marca.
-- **Bloqueo (parte CLI)**: TS-GRP-010 (perfil `mcp` por solicitante, S-01). La guía solo enseña la CLI como camino del agente cuando TS-GRP-010 está en `main`; hasta entonces enseña solo el MCP, y esa parte no espera.
+- **Condición de la parte CLI, cumplida**: TS-GRP-010 (perfil `mcp` por solicitante, S-01) está implementada en `main`, así que la guía puede enseñar la CLI como camino del agente.
 - **Transversal (lo define el Arquitecto)**: dónde vive la guía (plugin de Claude Code o carpeta de skills del repo) y cómo se comprueba que sus códigos coinciden con el contrato.
 
 ## Criterios de Aceptación
@@ -76,10 +81,17 @@ Entonces la guía le indica que lea el motivo y siga la acción del rechazo
 
 **Escenario: La guía enseña a deshacer solo lo propio**
 
-Dado la guía de GitRaptor disponible
+Dado la guía de GitRaptor disponible para "claude-1"
 Cuando el agente busca cómo deshacer su último cambio
-Entonces encuentra el undo de lo propio por MCP y por la CLI con su nombre de agente
+Entonces encuentra el undo de lo propio por la CLI con su nombre de agente, `raptor undo --agent claude-1`
   Y la guía le advierte que un undo que choca con trabajo de otro se detiene y no se fuerza
+
+**Escenario: El undo por MCP solo aparece cuando la versión lo ofrece**
+
+Dado una versión de GitRaptor cuyo servidor MCP no ofrece el undo de lo propio
+Cuando el agente busca en la guía cómo deshacer
+Entonces la guía no le indica ningún undo por MCP
+  Y en una versión cuyo servidor MCP sí lo ofrece, la guía lo nombra junto al de la CLI
 
 **Esquema del escenario: Cada código de rechazo tiene su explicación, en inglés**
 
@@ -92,7 +104,7 @@ Ejemplos:
 | policy-denied |
 | repo-not-enabled |
 | confirmation-required |
-| warnings-not-acknowledged |
+| warnings-not-acknowledged (llega con US-MCP-018; la guía lo explica desde esa versión) |
 | engine-unavailable |
 
 **Escenario: Una versión no sale con un código sin explicar**
@@ -115,11 +127,11 @@ Arquitecto, 2026-11-10: [ADR-MCP-001, Enmienda (2026-11-10, superficie para agen
 - **Fuente**: texto en inglés embebido en el binario como constante, sin texto del repo. Los códigos que nombra salen del catálogo de `crates/api` (F).
 - **Puerta**: una prueba en CI compara en los dos sentidos los códigos de la guía con los códigos estables. Falla en el PR, no solo en la release (Validación 3 de la enmienda).
 - **Destino**: skill de proyecto `.claude/skills/gitraptor/SKILL.md` y bloque en `AGENTS.md`/`CLAUDE.md` (P-MCP-34). Cada pieza lleva una marca con la versión y el hash del contenido, formato compartido con US-MCP-021/022.
-- **Condición de entrada (C1)**: la guía solo enseña la CLI como camino del agente cuando SEC-MCP-01 (perfil `mcp` por solicitante) esté en `main`; hasta entonces enseña el MCP.
+- **Condición de entrada (C1)**: la guía solo enseña la CLI como camino del agente cuando SEC-MCP-01 (perfil `mcp` por solicitante) esté en `main` (ya lo está desde TS-GRP-010, PR #368) y US-MCP-023 también; hasta entonces enseña el MCP.
 - **El MCP no cambia**: `instructions` sigue constante y `tools/list` es el mismo con guía y sin ella.
 - **Cómo llega al repo en M3**: copia documentada con un comando de solo lectura que imprime la guía (P-MCP-39, decidida el 2026-11-10; ver [context.md](../context.md)).
 
 ## Diseño y Dev Spec
 
 - **Diseño:** no aplica (texto para agentes; sigue la guía de contenido del design system).
-- **Dev Spec:** **sí, ligera** (decisión del Arquitecto, 2026-11-10). Pendiente: `../dev-specs/US-MCP-020-dev-spec.md`.
+- **Dev Spec:** **sí, ligera** (decisión del Arquitecto, 2026-11-10): [DS-US-MCP-020](../dev-specs/US-MCP-020-dev-spec.md), `spec-ready` (2026-11-21). Dos compuertas de la guía: la parte CLI del primer escenario depende de US-MCP-024 y el undo por MCP, de US-MCP-012 publicada; hasta entonces la guía enseña solo lo disponible. T008 (activar el camino CLI) espera a US-MCP-023.

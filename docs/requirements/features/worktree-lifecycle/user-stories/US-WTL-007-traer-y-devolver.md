@@ -8,7 +8,7 @@ milestone: M4
 blocked_by:
   - US-WTL-001
 created: 2026-11-10
-updated: 2026-11-10
+updated: 2026-11-21
 feature: worktree-lifecycle
 related:
   context:
@@ -68,6 +68,13 @@ Dado "feat-a" terminado
 Cuando el desarrollador pide traerlo y el snapshot de cualquiera de los dos lados falla
 Entonces no se mueve nada y GitRaptor informa que no hubo snapshot
 
+**Escenario: Con el agente vivo no se trae ni se devuelve**
+
+Dado "feat-a" de "claude-1", con "claude-1" todavía activo
+Cuando el desarrollador pide traer "feat-a" a su copia o devolvérselo
+Entonces la petición se rechaza indicando que "claude-1" sigue vivo y que hay que terminarlo antes
+  Y ni la copia del desarrollador ni "feat-a" cambian
+
 ## Requisitos Técnicos
 
 _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección)._
@@ -79,5 +86,5 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 ## Dependencias
 
 - **De User Stories**: Requiere US-WTL-001 · Relacionado US-TMC-002 (Deshacer).
-- **Pregunta nueva para Rene** (no está en CTX-WTL-001): ¿se puede traer o devolver el trabajo de un agente que sigue vivo, o aplica la misma protección que al descartar? Hasta que responda, la historia no cubre ese caso.
+- **Agente vivo (Pregunta 18 de CTX-WTL-001, decidida el 2026-11-10)**: aplica la misma protección que al descartar; con el agente vivo, traer y devolver se rechazan hasta terminarlo. Lo cubre el escenario «Con el agente vivo no se trae ni se devuelve».
 - **Cross-cutting / transversales**: qué hace el handoff cuando los dos lados chocan: transversal (lo define el Arquitecto con el flujo de operación detenida de US-CKP-016).

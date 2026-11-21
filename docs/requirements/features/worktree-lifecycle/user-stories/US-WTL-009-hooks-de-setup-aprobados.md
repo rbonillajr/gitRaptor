@@ -8,7 +8,7 @@ milestone: M4
 blocked_by:
   - US-WTL-001
 created: 2026-11-10
-updated: 2026-11-10
+updated: 2026-11-21
 feature: worktree-lifecycle
 related:
   context:
@@ -61,8 +61,9 @@ Entonces el hook no corre
 **Escenario: El hook falla**
 
 Dado un hook aprobado que termina con error
-Cuando el desarrollador crea "feat-b"
-Entonces el worktree "feat-b" queda creado y GitRaptor informa el fallo del hook
+Cuando el desarrollador ejecuta `raptor new feat-b --agent claude -- "tarea"`
+Entonces el worktree "feat-b" queda creado y ningún agente se lanza en él
+  Y GitRaptor muestra el error del hook con la orden para repetir el setup
 
 ## Requisitos Técnicos
 
@@ -75,5 +76,5 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 ## Dependencias
 
 - **De User Stories**: Requiere US-WTL-001.
-- **Pendiente para pasar a ready**: Pregunta 17 de CTX-WTL-001 (si un hook aprobado vuelve a pedir aprobación cuando cambia su contenido) y una pregunta nueva para Rene: si el hook falla, ¿se lanza igual el agente?
+- **Pendiente para pasar a ready**: Pregunta 17 de CTX-WTL-001 (si un hook aprobado vuelve a pedir aprobación cuando cambia su contenido). Si el hook falla, el agente no se lanza (Pregunta 19, decidida el 2026-11-10; escenario «El hook falla»).
 - **Cross-cutting / transversales**: cómo se ejecuta el hook sin shell libre ni disparo desde el MCP: transversal (lo define el Arquitecto, NFR-02).

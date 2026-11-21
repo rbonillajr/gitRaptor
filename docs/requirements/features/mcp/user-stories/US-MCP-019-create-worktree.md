@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: high
 created: 2026-10-04
-updated: 2026-10-21
+updated: 2026-11-21
 domain: GRP
 epic: E-001
 feature: mcp
@@ -22,6 +22,8 @@ related:
     - US-MCP-009
     - US-MCP-011
     - US-GRD-014
+    - US-CKP-018
+    - US-WTL-001
 ado:
   id: null
   url: null
@@ -46,8 +48,8 @@ BR-MCP-ELIG-004 (`create_worktree`: desde la base confirmada, nunca reutilizar, 
 
 - **Historias**: US-MCP-007, US-MCP-009 (flujo de escritura), US-MCP-011 (`expect_worktree`). De Guardrails: US-GRD-014 (rama base del equipo).
 - **Habilitadores**: TS-CKP-002 (catálogo y ejecutor) y TS-CKP-003 (decisión única heredada por los hooks), en propuesta, rama docs/arch-cockpit.
-- **Dueña de la operación del catálogo**: comparte `create-worktree` con US-CKP-018, crear worktree desde el Cockpit con las reglas de Q-CKP-13 (propuesta, rama docs/stories-cockpit). La implementa la primera de las dos que entre; la otra la reutiliza.
-- **Externas**: ADR-CKP-002 (**propuesto**, en docs/arch-cockpit): `create_worktree` → `create-worktree` **solo con la plantilla de ruta del desarrollador** (hallazgo de seguridad H-02; DEP-MCP-2 vía ADR-CKP-002). ADR-MCP-001 (DEP-MCP-1, no existe). ADR-MCP-001 y ADR-CKP-002 son bloqueos de arquitectura.
+- **Dueña de la operación del catálogo**: esta historia construye `create-worktree` para producción. US-CKP-018 (crear desde la TUI) y US-WTL-001 (`raptor new` con copia desde la semilla) la reutilizan y dependen de esta (decisión del orquestador, 2026-11-21, validada por PO).
+- **Externas**: ADR-CKP-002 (aceptado): `create_worktree` → `create-worktree` **solo con la plantilla de ruta del desarrollador** (hallazgo de seguridad H-02). ADR-MCP-001 (aceptado).
 - **Regla enmendada**: BR-MCP-VAL-001 y BR-MCP-ELIG-004 (BR-MCP-001 v0.2) ya dicen que por MCP no hay ruta, solo la plantilla del desarrollador. Q-MCP-7 ("ruta opcional") queda estrechada por esa enmienda.
 
 ## Criterios de Aceptación

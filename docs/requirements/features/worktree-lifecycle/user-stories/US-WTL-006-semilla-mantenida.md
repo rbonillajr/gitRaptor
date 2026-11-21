@@ -8,7 +8,7 @@ milestone: M4
 blocked_by:
   - US-WTL-001
 created: 2026-11-10
-updated: 2026-11-10
+updated: 2026-11-21
 feature: worktree-lifecycle
 related:
   context:
@@ -59,6 +59,14 @@ Entonces cada uno copia desde la semilla de su toolchain y perfil
 Dado la semilla en plena reconstrucción
 Cuando el desarrollador ejecuta `raptor new feat-h --agent claude -- "tarea"`
 Entonces ningún artefacto se copia desde la semilla mientras se reconstruye
+  Y el worktree "feat-h" se crea sin copia y GitRaptor avisa de que la semilla se está reconstruyendo
+
+**Escenario: Esperar a que termine la reconstrucción**
+
+Dado la semilla en plena reconstrucción
+Cuando el desarrollador ejecuta `raptor new feat-i --wait`
+Entonces GitRaptor espera a que la reconstrucción termine
+  Y "feat-i" se crea con los artefactos copiados desde la semilla reconstruida
 
 **Escenario: La reconstrucción falla**
 
@@ -77,5 +85,5 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 ## Dependencias
 
 - **De User Stories**: Requiere US-WTL-001 (semilla creada por `raptor new` y `raptor seed refresh`).
-- **Pendiente para pasar a ready**: Pregunta 6 de CTX-WTL-001, qué es un «momento tranquilo» (`sin dato`, Rene y Arquitecto); y qué hace `raptor new` mientras la semilla se reconstruye (esperar o crear sin copia), sin decidir.
+- **Pendiente para pasar a ready**: Pregunta 6 de CTX-WTL-001, qué es un «momento tranquilo» (`sin dato`, Rene y Arquitecto). Qué hace `raptor new` mientras la semilla se reconstruye quedó decidido (Pregunta 20, 2026-11-10): crea el worktree sin copia y avisa; `--wait` para esperar.
 - **Cross-cutting / transversales**: consumo de recursos del daemon al reconstruir y dónde vive la semilla (Pregunta 9): transversal (lo define el Arquitecto).
