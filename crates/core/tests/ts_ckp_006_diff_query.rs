@@ -25,7 +25,7 @@ use gitraptor_api::messages::ClientKind;
 use gitraptor_api::methods;
 use gitraptor_api::rpc::code;
 use gitraptor_api::scope::{Scope, ScopeSnapshot};
-use gitraptor_core::channel::{ChannelConfig, EventBus};
+use gitraptor_core::channel::{ChannelConfig, EventBus, QueryGate};
 use gitraptor_core::client::{Client, ClientError, socket_path};
 use gitraptor_core::daemon::{
     Daemon, DaemonConfig, DaemonEnv, LogLimits, ShutdownHandle, StopCause, StopReport,
@@ -71,6 +71,15 @@ impl Running {
 
     /// `deadline`: the deadline of the diff queries of this daemon (debug builds only).
     fn start_with(tp: &TempProfile, deadline: Option<Duration>) -> Self {
+        Self::start_with_gate(tp, deadline, None)
+    }
+
+    /// `gate`: holds the query pool thread before each job until the test opens it.
+    fn start_with_gate(
+        tp: &TempProfile,
+        deadline: Option<Duration>,
+        gate: Option<QueryGate>,
+    ) -> Self {
         let env = DaemonEnv::from_vars(std::env::vars_os());
         let config = DaemonConfig {
             dirs: tp.dirs(),
@@ -81,6 +90,7 @@ impl Running {
             stop_deadline: None,
             channel: ChannelConfig {
                 test_diff_deadline: deadline,
+                test_query_gate: gate,
                 ..Default::default()
             },
             protected: None,
@@ -429,6 +439,19 @@ fn heavy() -> (Fixture, Env, Running, String) {
         "diff.commit",
     );
     (fx, e, d, oid)
+}
+
+/// The `heavy` repo with the query pool held behind a closed gate: nothing runs until the test
+/// opens it, so "the pool is busy" is a state the test sets, not a race against the diff speed.
+fn heavy_gated() -> (Fixture, Env, Running, String, QueryGate) {
+    let (fx, e) = repo(|fx, wt| {
+        std::fs::write(wt.join("f.txt"), "one\n").unwrap();
+        commit_in(fx, wt, "one file");
+    });
+    let oid = head(&fx, &e.wt);
+    let gate = QueryGate::closed();
+    let d = Running::start_with_gate(&e.tp, None, Some(gate.clone()));
+    (fx, e, d, oid, gate)
 }
 
 // ================================================================================== CKP006-001
@@ -824,31 +847,51 @@ fn ckp006_007_a_second_query_of_the_connection_is_busy_at_once() {
 
 #[test]
 fn ckp006_007_a_full_queue_is_busy() {
-    let (_fx, e, _d, oid) = heavy();
-    // 1 running, 4 queued, 1 refused: under the 8 connections of one requester (limits.rs).
+    let (_fx, e, _d, oid, gate) = heavy_gated();
+    // The pool holds at most 1 running and 4 queued; 6 connections of one requester (limits.rs)
+    // ask at once, so at least one is refused, and it is answered while the gate is still closed.
     let mut conns: Vec<Raw> = (0..6).map(|_| Raw::cli(&e.tp)).collect();
     let ids: Vec<u64> = conns
         .iter_mut()
         .map(|c| c.write(&[(methods::DIFF_COMMIT, commit_params(&e, &oid))])[0])
         .collect();
+    let mut answers: Vec<Option<Value>> = vec![None; conns.len()];
+    let start = Instant::now();
+    while !answers
+        .iter()
+        .flatten()
+        .any(|a| code_of(a) == Some(QUERY_BUSY))
+    {
+        assert!(
+            start.elapsed() < DEADLINE,
+            "6 queries on a held pool must overflow the queue of 4: no query-busy came"
+        );
+        for (i, c) in conns.iter_mut().enumerate() {
+            if answers[i].is_none() && c.pump(Duration::from_millis(5)) {
+                answers[i] = c.answers.remove(&ids[i]);
+            }
+        }
+    }
+    // Nothing ran while the gate was closed: the only answers so far are the refusals.
+    assert!(
+        answers
+            .iter()
+            .flatten()
+            .all(|a| code_of(a) == Some(QUERY_BUSY)),
+        "a query ran while the pool was held: {answers:?}"
+    );
+    gate.open();
     let answers: Vec<Value> = conns
         .iter_mut()
         .zip(ids)
-        .map(|(c, id)| c.answer(id))
+        .zip(answers)
+        .map(|((c, id), done)| done.unwrap_or_else(|| c.answer(id)))
         .collect();
-    let busy = answers
-        .iter()
-        .filter(|a| code_of(a) == Some(QUERY_BUSY))
-        .count();
-    assert!(
-        busy >= 1,
-        "12 connections asking at once must fill the global queue of 4: no query-busy came"
-    );
     assert!(
         answers
             .iter()
             .all(|a| a.get("error").is_none() || code_of(a) == Some(QUERY_BUSY)),
-        "a query other than the busy ones failed"
+        "a query other than the busy ones failed: {answers:?}"
     );
 }
 

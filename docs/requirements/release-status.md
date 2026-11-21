@@ -4,25 +4,25 @@
 
 > **Archivo generado, no editar a mano.** Sale del frontmatter (`status`) y de la sección "Estado de la implementación" de cada ficha (US, TS, INF, SPIKE y TD) de `docs/requirements/features/`. Para cambiar un estado, edita la ficha y regenera con `node tools/status/release-status.mjs`. El CI (docs-lint) falla si este archivo no coincide con lo que genera el script.
 
-Última actualización de una ficha: 2026-11-12.
+Última actualización de una ficha: 2026-11-21.
 
 ## Totales por estado
 
 | Estado | Fichas |
 |---|---|
-| Implementado (`implemented`) | 85 |
+| Implementado (`implemented`) | 86 |
 | Hecho (`done`) | 3 |
 | Implementado en parte (`partially-implemented`) | 27 |
 | Listo (`ready`) | 26 |
 | Borrador (`draft`) | 70 |
 | Bloqueado (`blocked`) | 1 |
-| **Total** | **212** |
+| **Total** | **213** |
 
 ## Por feature
 
 | Feature | Implementado | Hecho | Implementado en parte | Listo | Borrador | Bloqueado | Total |
 |---|---|---|---|---|---|---|---|
-| [cockpit](#cockpit) | 16 | 0 | 5 | 1 | 16 | 1 | 39 |
+| [cockpit](#cockpit) | 17 | 0 | 5 | 1 | 16 | 1 | 40 |
 | [desktop](#desktop) | 7 | 0 | 1 | 15 | 0 | 0 | 23 |
 | [guardrails](#guardrails) | 14 | 0 | 7 | 1 | 3 | 0 | 25 |
 | [mcp](#mcp) | 7 | 0 | 4 | 0 | 16 | 0 | 27 |
@@ -32,11 +32,12 @@
 
 ### cockpit
 
-39 fichas: 16 implementado, 5 implementado en parte, 1 listo, 16 borrador, 1 bloqueado.
+40 fichas: 17 implementado, 5 implementado en parte, 1 listo, 16 borrador, 1 bloqueado.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
 | [INF-CKP-001](features/cockpit/technical-stories/INF-CKP-001-esqueleto-tui.md) | Esqueleto de la TUI: cliente del canal, bucle TEA, saneado único y gate de 100 ms | Implementado (`implemented`) | #100, #139, #174, #153 | — |
+| [TD-CKP-001](features/cockpit/technical-stories/TD-CKP-001-cola-consultas-tests-inestables.md) | La cola de consultas del canal responde query.cancel después de la cancelación y sus tests dependen de la velocidad del diff | Implementado (`implemented`) | — | — |
 | [TS-CKP-001](features/cockpit/technical-stories/TS-CKP-001-predictor-conflictos.md) | Predictor de conflictos en el daemon: solape y conflicto previsto publicados para todos los clientes | Implementado (`implemented`) | #275, #314 | — |
 | [TS-CKP-002](features/cockpit/technical-stories/TS-CKP-002-catalogo-ejecutor.md) | Catálogo de operaciones de usuario y ejecutor del daemon en dos fases | Implementado (`implemented`) | #73 | — |
 | [TS-CKP-003](features/cockpit/technical-stories/TS-CKP-003-capa-cockpit-guardrails.md) | Capa cockpit en la decisión de Guardrails, ligada al git del ejecutor y registrada una sola vez | Implementado (`implemented`) | #261 | — |
@@ -504,7 +505,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### Sin hito
 
-47 fichas sin hito asignado.
+48 fichas sin hito asignado.
 
 ## Implementadas en parte: lo que falta
 
