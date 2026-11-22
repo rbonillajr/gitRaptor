@@ -301,7 +301,7 @@ fn outputs_of_client(r: &Running, s: &Shop) -> Outputs {
         .unwrap();
     let next = json!({"scope": scope, "from_seq": snap["scope_seq"].as_u64().unwrap() + 1, "run_id": snap["run_id"]});
     let _: Value = client.call(methods::SCOPE_SUBSCRIBE, next).unwrap();
-    std::fs::write(s.f.repo.join("nuevo.txt"), "y\n").unwrap();
+    std::fs::write(s.f.repo.join("nuevo2.txt"), "z\n").unwrap();
     let state = next_worktree_state(&mut || {
         client
             .next_notification(Duration::from_millis(200))
