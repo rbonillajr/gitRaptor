@@ -380,8 +380,7 @@ describe("accessible name and catalogs", () => {
 // US-WTL-005 (T010): the card shows who created a linked worktree, or "Foreign · do not touch".
 describe("worktree origin (US-WTL-005)", () => {
   const origin = (tool: OriginDto["tool"], evidence: OriginDto["evidence"], handsOff: OriginDto["handsOff"] = null): OriginDto => ({ tool, evidence, handsOff });
-  // `origin` is not in `WorktreeDto` until T010 adds it: typed loosely so the criterion test compiles before the code.
-  const withOrigin = (o: OriginDto): Partial<WorktreeDto> => ({ origin: o }) as unknown as Partial<WorktreeDto>;
+  const withOrigin = (o: OriginDto) => ({ origin: o });
   const withOrigins = () =>
     tienda({
       worktrees: [

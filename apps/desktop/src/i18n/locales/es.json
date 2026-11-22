@@ -72,6 +72,16 @@
       "label": "Copias de trabajo de {{repo}}"
     },
     "main": "copia principal",
+    "origin": {
+      "probably": "Probablemente {{tool}}",
+      "foreign": "Ajeno"
+    },
+    "handsOff": {
+      "text": "Ajeno · no tocar ({{reason}})",
+      "detached": "HEAD separado",
+      "locked": "bloqueado",
+      "unreadable": "ilegible"
+    },
     "agent": {
       "inWorktree": "{{agent}} · {{worktree}}",
       "claudeCode": "Claude Code",

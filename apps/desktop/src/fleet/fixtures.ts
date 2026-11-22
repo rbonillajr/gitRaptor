@@ -29,6 +29,7 @@ export const worktree = (folder: string, over: Partial<WorktreeDto> = {}): Workt
   lastActivityInGap: false,
   detachedAt: null,
   operation: null,
+  origin: null,
   ...over,
 });
 

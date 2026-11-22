@@ -30,6 +30,10 @@ export interface WorktreeCardProps {
   activityText: string | null;
   attentionText: string | null;
   unavailableText: string | null;
+  /** Origin badge or the "foreign, do not touch" mark; untrusted-safe, rendered as text. */
+  originText?: string | null;
+  /** Styles `originText` as a warning. */
+  handsOff?: boolean;
   /** The phrase of the visible parts joined with ", " (DSF-DSK-001 § 7). */
   a11yLabel: string;
   className?: string;
@@ -68,6 +72,9 @@ export function WorktreeCard(p: WorktreeCardProps) {
         ) : null}
       </div>
       {p.unavailableText !== null ? <div className="text-warning-text">{p.unavailableText}</div> : null}
+      {p.originText != null ? (
+        <div className={p.handsOff ? "text-warning-text" : "text-text-muted [font:var(--gr-type-caption)]"}>{p.originText}</div>
+      ) : null}
       {p.branchText !== null ? (
         <div className="min-w-0 truncate text-text-muted">
           {commit !== null ? (
