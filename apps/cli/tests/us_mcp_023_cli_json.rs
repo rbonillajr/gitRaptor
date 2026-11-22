@@ -119,7 +119,7 @@ impl Cap {
         let value: Value = serde_json::from_str(body)
             .unwrap_or_else(|e| panic!("{what}: stdout is not JSON ({e}): {:?}", self.stdout));
         assert_eq!(
-            value["schema_version"], "1.0",
+            value["schema_version"], "1.1",
             "{what}: the output must declare schema_version 1.0: {value}"
         );
         value
@@ -574,7 +574,7 @@ fn the_developer_withdraws_with_json() {
             "--json",
         ],
     );
-    assert_eq!(out["schema_version"], "1.0", "{out}");
+    assert_eq!(out["schema_version"], "1.1", "{out}");
     let data = &out["data"];
     for key in ["repo_id", "session_id"] {
         assert!(
@@ -588,7 +588,7 @@ fn the_developer_withdraws_with_json() {
 fn the_developer_reads_daemon_status_and_runs_guard_exec_with_json() {
     let m = Machine::new();
     let status = m.developer_json(&m.f.root, &["daemon", "status", "--json"]);
-    assert_eq!(status["schema_version"], "1.0", "{status}");
+    assert_eq!(status["schema_version"], "1.1", "{status}");
     assert!(
         status["data"].get("engine_state").is_some(),
         "daemon status --json carries data.engine_state: {status}"
@@ -602,7 +602,7 @@ fn the_developer_reads_daemon_status_and_runs_guard_exec_with_json() {
     let mut ask = vec!["guard", "exec", "--json"];
     ask.extend_from_slice(&argv);
     let refused = m.developer_json(&m.f.root, &ask);
-    assert_eq!(refused["schema_version"], "1.0", "{refused}");
+    assert_eq!(refused["schema_version"], "1.1", "{refused}");
     assert_eq!(
         refused["error"]["code"], "confirmation-required",
         "guard exec --json without --yes: {refused}"
@@ -612,7 +612,7 @@ fn the_developer_reads_daemon_status_and_runs_guard_exec_with_json() {
     let mut run = vec!["guard", "exec", "--json", "--yes"];
     run.extend_from_slice(&argv);
     let done = m.developer_json(&m.f.root, &run);
-    assert_eq!(done["schema_version"], "1.0", "{done}");
+    assert_eq!(done["schema_version"], "1.1", "{done}");
     assert_eq!(
         done["data"]["git_exit_code"], 0,
         "guard exec --json --yes carries git's exit code: {done}"

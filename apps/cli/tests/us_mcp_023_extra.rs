@@ -197,7 +197,7 @@ impl Drop for Machine {
 fn data_of(stdout: &str) -> Value {
     let value: Value = serde_json::from_str(stdout.trim_end())
         .unwrap_or_else(|e| panic!("not one JSON line ({e}): {stdout:?}"));
-    assert_eq!(value["schema_version"], "1.0", "{value}");
+    assert_eq!(value["schema_version"], "1.1", "{value}");
     value["data"].clone()
 }
 

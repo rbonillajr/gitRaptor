@@ -9,14 +9,14 @@ status: generated
 
 > Generado por la prueba de `crates/api/src/cli_contract.rs` desde `crates/api/schemas/cli-contract.json`. No lo edites a mano: regenéralo con `GITRAPTOR_BLESS_CLI_CONTRACT=1 cargo test -p gitraptor-api cli_contract`.
 
-Versión del contrato: `1.0`. Toda salida `--json` es una línea con `{"schema_version", "data"}` o `{"schema_version", "error"}`; `error` lleva `code`, `message`, `params` y `action`. Un cambio incompatible sube el mayor; añadir sube el menor. Las salidas del desarrollador llevan el sobre pero su `data` no tiene esquema congelado.
+Versión del contrato: `1.1`. Toda salida `--json` es una línea con `{"schema_version", "data"}` o `{"schema_version", "error"}`; `error` lleva `code`, `message`, `params` y `action`. Un cambio incompatible sube el mayor; añadir sube el menor. Las salidas del desarrollador llevan el sobre pero su `data` no tiene esquema congelado.
 
 
 ## status@agent
 
 - Subcomando: `raptor status --json`
 - Perfil: mcp (agente)
-- Versión: `1.0`
+- Versión: `1.1`
 - Códigos de error posibles: `engine-unavailable` (salida 1), `repo-not-enabled` (salida 1), `not-in-observed-worktree` (salida 1), `repo-unavailable` (salida 1), `identity-unverified` (salida 1), `rate-limited` (salida 1), `confirmation-required` (salida 1), `aborted` (salida 1), `internal` (salida 1), `command-unavailable` (salida 1), `reserved-command` (salida 1), `command-failed` (salida 1), `invalid-args` (salida 2)
 
 | Campo | Tipo | Requerido | Valores |
@@ -77,6 +77,10 @@ Versión del contrato: `1.0`. Toda salida `--json` es una línea con `{"schema_v
 | `page.worktrees[].name.lossy` | boolean | no |  |
 | `page.worktrees[].name.truncated` | boolean | no |  |
 | `page.worktrees[].name.untrusted` | string | sí |  |
+| `page.worktrees[].origin` | null \| object | no |  |
+| `page.worktrees[].origin.evidence` | string | sí | "admin-marker", "none", "path-pattern", "registered" |
+| `page.worktrees[].origin.hands_off` | null \| string | no | "detached", "locked", "unreadable" |
+| `page.worktrees[].origin.tool` | string | sí | "claude-code", "codex", "gitkraken", "gitraptor", "orca", "unknown", "worktrunk" |
 | `page.worktrees[].sessions` | array | no |  |
 | `page.worktrees[].sessions[]` | object | sí |  |
 | `page.worktrees[].sessions[].actor` | object | sí |  |
@@ -132,7 +136,7 @@ Versión del contrato: `1.0`. Toda salida `--json` es una línea con `{"schema_v
 
 - Subcomando: `raptor undo --json`
 - Perfil: mcp (agente)
-- Versión: `1.0`
+- Versión: `1.1`
 - Códigos de error posibles: `engine-unavailable` (salida 1), `repo-not-enabled` (salida 1), `not-in-observed-worktree` (salida 1), `repo-unavailable` (salida 1), `identity-unverified` (salida 1), `rate-limited` (salida 1), `confirmation-required` (salida 1), `aborted` (salida 1), `internal` (salida 1), `command-unavailable` (salida 1), `reserved-command` (salida 1), `command-failed` (salida 1), `invalid-args` (salida 2)
 
 | Campo | Tipo | Requerido | Valores |
@@ -156,7 +160,7 @@ Versión del contrato: `1.0`. Toda salida `--json` es una línea con `{"schema_v
 
 - Subcomando: `raptor redo --json`
 - Perfil: mcp (agente)
-- Versión: `1.0`
+- Versión: `1.1`
 - Códigos de error posibles: `engine-unavailable` (salida 1), `repo-not-enabled` (salida 1), `not-in-observed-worktree` (salida 1), `repo-unavailable` (salida 1), `identity-unverified` (salida 1), `rate-limited` (salida 1), `confirmation-required` (salida 1), `aborted` (salida 1), `internal` (salida 1), `command-unavailable` (salida 1), `reserved-command` (salida 1), `command-failed` (salida 1), `invalid-args` (salida 2)
 
 | Campo | Tipo | Requerido | Valores |
@@ -181,7 +185,7 @@ Versión del contrato: `1.0`. Toda salida `--json` es una línea con `{"schema_v
 
 - Subcomando: `raptor agent register <agente> --json`
 - Perfil: mcp (agente) y desarrollador
-- Versión: `1.0`
+- Versión: `1.1`
 - Códigos de error posibles: `engine-unavailable` (salida 1), `repo-not-enabled` (salida 1), `not-in-observed-worktree` (salida 1), `repo-unavailable` (salida 1), `identity-unverified` (salida 1), `rate-limited` (salida 1), `confirmation-required` (salida 1), `aborted` (salida 1), `internal` (salida 1), `command-unavailable` (salida 1), `reserved-command` (salida 1), `command-failed` (salida 1), `invalid-args` (salida 2)
 
 | Campo | Tipo | Requerido | Valores |
@@ -201,7 +205,7 @@ Versión del contrato: `1.0`. Toda salida `--json` es una línea con `{"schema_v
 
 - Subcomando: `raptor daemon status --json`
 - Perfil: mcp (agente)
-- Versión: `1.0`
+- Versión: `1.1`
 - Códigos de error posibles: `engine-unavailable` (salida 1), `repo-not-enabled` (salida 1), `not-in-observed-worktree` (salida 1), `repo-unavailable` (salida 1), `identity-unverified` (salida 1), `rate-limited` (salida 1), `confirmation-required` (salida 1), `aborted` (salida 1), `internal` (salida 1), `command-unavailable` (salida 1), `reserved-command` (salida 1), `command-failed` (salida 1), `invalid-args` (salida 2)
 
 | Campo | Tipo | Requerido | Valores |
@@ -224,7 +228,7 @@ Versión del contrato: `1.0`. Toda salida `--json` es una línea con `{"schema_v
 
 - Subcomando: `raptor agent withdraw --json`
 - Perfil: desarrollador (el agente recibe reserved-command)
-- Versión: `1.0`
+- Versión: `1.1`
 - Códigos de error posibles: `engine-unavailable` (salida 1), `repo-not-enabled` (salida 1), `not-in-observed-worktree` (salida 1), `repo-unavailable` (salida 1), `identity-unverified` (salida 1), `rate-limited` (salida 1), `confirmation-required` (salida 1), `aborted` (salida 1), `internal` (salida 1), `command-unavailable` (salida 1), `reserved-command` (salida 1), `command-failed` (salida 1), `invalid-args` (salida 2)
 
 | Campo | Tipo | Requerido | Valores |

@@ -488,7 +488,7 @@ fn json_prints_the_daemons_data() {
 
     assert!(ok, "{said}");
     let envelope: serde_json::Value = serde_json::from_str(said.trim()).expect("the daemon's JSON");
-    assert_eq!(envelope["schema_version"], "1.0", "{envelope}");
+    assert_eq!(envelope["schema_version"], "1.1", "{envelope}");
     let value = envelope["data"].clone();
     // TS-GRP-010 (S-01, M-01): the agent's `raptor undo` has the `mcp` profile, which gets the
     // overlap and the kept paths as counts, never which path (SEC-12).
@@ -521,7 +521,7 @@ fn json_on_an_overlap_prints_the_daemons_rejection() {
         .find(|l| l.trim_start().starts_with('{'))
         .unwrap_or_else(|| panic!("no JSON in: {said}"));
     let envelope: serde_json::Value = serde_json::from_str(line.trim()).expect("the JSON envelope");
-    assert_eq!(envelope["schema_version"], "1.0", "{envelope}");
+    assert_eq!(envelope["schema_version"], "1.1", "{envelope}");
     assert_eq!(
         envelope["error"]["code"], "confirmation-required",
         "{envelope}"
