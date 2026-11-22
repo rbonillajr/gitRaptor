@@ -72,6 +72,16 @@
       "label": "Worktrees of {{repo}}"
     },
     "main": "main worktree",
+    "origin": {
+      "probably": "Probably {{tool}}",
+      "foreign": "Foreign"
+    },
+    "handsOff": {
+      "text": "Foreign · do not touch ({{reason}})",
+      "detached": "detached HEAD",
+      "locked": "locked",
+      "unreadable": "unreadable"
+    },
     "agent": {
       "inWorktree": "{{agent}} · {{worktree}}",
       "claudeCode": "Claude Code",

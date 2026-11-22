@@ -1,5 +1,5 @@
 import type { TFunction } from "i18next";
-import type { PairDto, RepoFleet, SessionDto, WorktreeDto } from "@/client/engine-types";
+import type { OriginTool, PairDto, RepoFleet, SessionDto, WorktreeDto } from "@/client/engine-types";
 
 export type Group = "main" | "attention" | "active" | "inactive" | "ended" | "no-agent";
 
@@ -35,6 +35,10 @@ export interface CardModel {
   activityText: string | null;
   attention: { kind: "conflict"; text: string; conflictWith: Array<string | "base"> } | null;
   unavailableText: string | null;
+  /** Who created the worktree, or the "foreign, do not touch" mark; `null` for the main one and when the engine does not say. */
+  originText: string | null;
+  /** The worktree is foreign and GitRaptor must not touch it. */
+  handsOff: boolean;
   a11yLabel: string;
 }
 
@@ -144,6 +148,25 @@ function agentView(worktree: WorktreeDto, sessions: readonly SessionDto[], detec
   };
 }
 
+const TOOL_LABEL: Record<Exclude<OriginTool, "unknown">, string> = {
+  gitraptor: "GitRaptor",
+  orca: "Orca",
+  worktrunk: "worktrunk",
+  codex: "Codex",
+  gitkraken: "GitKraken",
+  "claude-code": "Claude Code",
+};
+
+/** The mark replaces the origin; a tool seen only by its path is "probably"; no tool is "foreign". */
+function originText(w: WorktreeDto, t: TFunction): string | null {
+  const o = w.origin;
+  if (w.main || o === null) return null;
+  if (o.handsOff !== null) return t("fleet.handsOff.text", { reason: t(`fleet.handsOff.${o.handsOff}`) });
+  if (o.tool === "unknown") return t("fleet.origin.foreign");
+  const tool = TOOL_LABEL[o.tool];
+  return o.evidence === "path-pattern" ? t("fleet.origin.probably", { tool }) : tool;
+}
+
 const SYNC_KEY = {
   "base-missing": "fleet.sync.baseMissing",
   "no-base": "fleet.sync.noBase",
@@ -213,12 +236,14 @@ export function fleetCards(fleet: RepoFleet, nowMs: number, activity: boolean, t
             ? t("fleet.attention.conflictBase", { base: baseName })
             : t("fleet.attention.conflict", { other: folderOf(conflictWith[0] ?? "") });
 
+    const originLabel = originText(w, t);
     const agentText = agent.shared ? `${agent.label} ${t("fleet.agent.shared")}` : agent.label;
     const a11yLabel = [
       w.main ? t("fleet.main") : null,
       agentText,
       agent.stateText,
       unavailableText,
+      originLabel,
       branchText,
       filesText,
       syncText,
@@ -245,6 +270,8 @@ export function fleetCards(fleet: RepoFleet, nowMs: number, activity: boolean, t
       activityText,
       attention: attentionText === null ? null : { kind: "conflict", text: attentionText, conflictWith },
       unavailableText,
+      originText: originLabel,
+      handsOff: !w.main && w.origin !== null && w.origin.handsOff !== null,
       a11yLabel,
     };
     return { card, path: w.path, folder: w.folder };
