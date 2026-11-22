@@ -64,6 +64,9 @@ pub struct AgentRowModel {
     pub activity: SafeText,
     /// A label after the branch, muted (e.g. "temporary").
     pub tag: Option<SafeText>,
+    /// The tag is an origin or the "hands off" mark: the list makes room for it (a narrower name
+    /// column, or the cells of the row's ahead/behind and activity for the long mark).
+    pub tag_makes_room: bool,
     pub conflict: bool,
     pub blocked: bool,
     pub operation: Option<Operation>,
@@ -129,6 +132,8 @@ const MARK: u16 = 2;
 const NAME: u16 = 14;
 const NAME_MAX: u16 = 26;
 const BRANCH_MIN: u16 = 12;
+/// What the branch keeps when its row wears a tag.
+const BRANCH_MIN_TAGGED: u16 = 10;
 const CHANGES: u16 = 6;
 const SYNC: u16 = 12;
 /// The ahead/behind column grows up to `SYNC_MAX` to fit "not computable", as long as the
@@ -137,6 +142,13 @@ const SYNC_MAX: u16 = 15;
 /// The activity column grows the same way up to `ACTIVITY_MAX` ("not available").
 const ACTIVITY: u16 = 11;
 const ACTIVITY_MAX: u16 = 14;
+/// A tag up to this wide (`temporary`, an origin) is given room in the branch column by
+/// narrowing the name column; a longer one (the "hands off" mark) is painted over the ahead/behind
+/// and activity cells of its own row when it does not fit next to the branch.
+const TAG_SHORT: u16 = 12;
+/// Below this inner width the name column is never narrowed for a tag: the tag shows only if it
+/// fits as things are.
+const TAG_NARROW_FROM: u16 = 72;
 
 /// Column widths for an inner width: activity goes first, then ahead/behind.
 #[derive(Debug, Clone, Copy)]
@@ -150,10 +162,10 @@ struct Cols {
 }
 
 impl Cols {
-    /// `widest` holds the widest name, activity and ahead/behind text of all the rows (not only
-    /// the visible ones, so the columns do not jump while scrolling); `flags` whether any row
+    /// `widest` holds the widest name, activity, ahead/behind text and short tag of all the rows
+    /// (not only the visible ones, so the columns do not jump while scrolling); `flags` whether any row
     /// has a ⚡ or ⛔ to show, the only case their columns take room.
-    fn new(inner: u16, styles: &Styles, widest: (u16, u16, u16), flags: bool) -> Self {
+    fn new(inner: u16, styles: &Styles, widest: (u16, u16, u16, u16), flags: bool) -> Self {
         let flags = if flags {
             u16::from(styles.symbol(SymbolToken::Conflict).width)
                 + 1
@@ -196,7 +208,13 @@ impl Cols {
         } else {
             sync
         };
-        let room = inner.saturating_sub(base + sync + activity + BRANCH_MIN);
+        // With a tag in the list the branch keeps less, so the name column narrows for it.
+        let branch_min = if widest.3 > 0 && inner >= TAG_NARROW_FROM {
+            BRANCH_MIN_TAGGED + widest.3
+        } else {
+            BRANCH_MIN
+        };
+        let room = inner.saturating_sub(base + sync + activity + branch_min);
         let name = (widest.0 + 1).clamp(NAME, NAME_MAX).min(room.max(NAME));
         let branch = inner.saturating_sub(base + name + sync + activity);
         Self {
@@ -210,6 +228,15 @@ impl Cols {
 }
 
 impl AgentRowModel {
+    /// The tag as painted (after the separator) and the columns it takes, with its blank.
+    fn tag_label(&self, styles: &Styles) -> Option<(String, u16)> {
+        self.tag.as_ref().map(|t| {
+            let label = format!("{}{}", styles.glyphs.separator.trim_start(), t.as_str());
+            let w = width(&label) + 1;
+            (label, w)
+        })
+    }
+
     fn state_symbol(&self) -> Option<(SymbolToken, ColorToken)> {
         Some(match self.state {
             AgentState::Active => (SymbolToken::AgentActive, ColorToken::AgentStateActive),
@@ -277,12 +304,22 @@ impl AgentRowModel {
         } else {
             // The tag keeps its room at the end of the branch column while the branch keeps
             // `BRANCH_MIN`; otherwise it is left out.
-            let tag = (self.tag.as_ref()).map(|t| {
-                let label = format!("{}{}", g.separator.trim_start(), t.as_str());
-                let w = width(&label) + 1;
-                (label, w)
-            });
-            let tag = tag.filter(|(_, w)| cols.branch >= BRANCH_MIN + w);
+            let tag = self.tag_label(styles);
+            let tag_min = if self.tag_makes_room {
+                BRANCH_MIN_TAGGED
+            } else {
+                BRANCH_MIN
+            };
+            let overlay = tag
+                .as_ref()
+                .filter(|_| self.tag_makes_room)
+                .filter(|(_, w)| {
+                    *w > TAG_SHORT + 1
+                        && cols.branch < tag_min + w
+                        && cols.sync + cols.activity >= *w
+                })
+                .cloned();
+            let tag = tag.filter(|(_, w)| cols.branch >= tag_min + w);
             let (b, style) = match &self.branch {
                 Branch::Named(b) => (b, text),
                 Branch::Detached(b) => (b, styles.fg(ColorToken::StatusWarning).patch(row)),
@@ -309,7 +346,9 @@ impl AgentRowModel {
                     muted
                 },
             );
-            if cols.sync > 0 {
+            if let Some((label, _)) = &overlay {
+                pen.cell(label, cols.sync + cols.activity, muted);
+            } else if cols.sync > 0 {
                 match &self.sync {
                     Sync::Known { ahead, behind } => {
                         let s = format!("{}{ahead} {}{behind}", g.ahead, g.behind);
@@ -318,7 +357,7 @@ impl AgentRowModel {
                     Sync::Unknown(reason) => pen.cell(reason.as_str(), cols.sync, muted),
                 };
             }
-            if cols.activity > 0 {
+            if cols.activity > 0 && overlay.is_none() {
                 pen.cell(self.activity.as_str(), cols.activity, muted);
             }
         }
@@ -347,7 +386,7 @@ impl Component for AgentListModel {
             return;
         }
         let g = styles.glyphs;
-        let widest = self.rows.iter().fold((0, 0, 0), |(n, a, s), r| {
+        let widest = self.rows.iter().fold((0, 0, 0, 0), |(n, a, s, t), r| {
             let sync = match &r.sync {
                 Sync::Known { ahead, behind } => {
                     width(&format!("{}{ahead} {}{behind}", g.ahead, g.behind))
@@ -358,6 +397,13 @@ impl Component for AgentListModel {
                 n.max(width(r.name.as_str())),
                 a.max(width(r.activity.as_str())),
                 s.max(sync),
+                t.max(
+                    r.tag_label(styles)
+                        .filter(|_| r.tag_makes_room)
+                        .map(|(_, w)| w)
+                        .filter(|w| *w <= TAG_SHORT + 1)
+                        .unwrap_or(0),
+                ),
             )
         });
         let flags = self.rows.iter().any(|r| r.conflict || r.blocked);

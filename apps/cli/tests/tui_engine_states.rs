@@ -675,6 +675,7 @@ fn row_actions_are_disabled_with_a_reason_on_unavailable_rows() {
                         state: WorktreeState::Unavailable(reason),
                         last_activity_ms: None,
                         temporary: false,
+                        origin: None,
                         root: PathBuf::from("/w/gone"),
                     }],
                     sessions: Vec::new(),

@@ -451,6 +451,9 @@ pub struct WorktreeRow {
     pub last_activity_ms: Option<i64>,
     /// Under the system's temporary folder: a scratch worktree (US-CKP-001).
     pub temporary: bool,
+    /// Who created a linked worktree (closed enums: nothing to sanitize); `None` for the main
+    /// one and from an engine without `observation.worktree-origin`.
+    pub origin: Option<gitraptor_api::worktree_origin::WorktreeOriginView>,
     /// The raw root, only to name the worktree in `Cmd::Diff`: never painted.
     pub root: std::path::PathBuf,
 }
