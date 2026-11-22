@@ -119,14 +119,15 @@ fn dsk002_link_every_other_error_is_lost() {
 }
 
 #[test]
-fn required_capabilities_are_the_four_the_app_needs() {
+fn required_capabilities_are_the_five_the_app_needs() {
     assert_eq!(
         REQUIRED_CAPABILITIES.to_vec(),
         vec![
             "scope.activity",
             "observation.tiers",
             "prediction.pairs",
-            "connection.requester"
+            "connection.requester",
+            "observation.worktree-origin"
         ],
         "D3-LINK: REQUIRED_CAPABILITIES must add connection.requester (L-01)"
     );

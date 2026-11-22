@@ -333,6 +333,18 @@ pub struct WorktreeDto {
     pub last_activity_in_gap: bool,
     pub detached_at: Option<String>,
     pub operation: Option<String>,
+    /// Who created a linked worktree; `null` for the main one. Closed enums only: no untrusted
+    /// text.
+    pub origin: Option<OriginDto>,
+}
+
+/// The origin of a linked worktree as the webview reads it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OriginDto {
+    pub tool: gitraptor_api::worktree_origin::OriginToolView,
+    pub evidence: gitraptor_api::worktree_origin::OriginEvidenceView,
+    pub hands_off: Option<gitraptor_api::worktree_origin::HandsOffReasonView>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
