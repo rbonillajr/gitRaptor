@@ -364,6 +364,7 @@
           "lastActivityUtcMs": 1762697000000,
           "main": true,
           "operation": null,
+          "origin": null,
           "path": "/w/tienda",
           "status": {
             "counts": {
@@ -397,6 +398,7 @@
           "lastActivityUtcMs": 1762697090000,
           "main": false,
           "operation": "rebase",
+          "origin": null,
           "path": "/w/feat-pagos",
           "status": {
             "counts": {
@@ -430,6 +432,7 @@
           "lastActivityUtcMs": null,
           "main": false,
           "operation": null,
+          "origin": null,
           "path": "/w/feat-login",
           "status": {
             "counts": {
@@ -462,6 +465,7 @@
           "lastActivityUtcMs": null,
           "main": false,
           "operation": null,
+          "origin": null,
           "path": "/w/spike",
           "status": {
             "counts": {
@@ -487,6 +491,7 @@
           "lastActivityUtcMs": null,
           "main": false,
           "operation": null,
+          "origin": null,
           "path": "/w/gone",
           "status": {
             "reason": "missing",
@@ -501,6 +506,7 @@
           "lastActivityUtcMs": null,
           "main": false,
           "operation": null,
+          "origin": null,
           "path": "/w/base-less",
           "status": {
             "counts": {
@@ -726,6 +732,7 @@
         "lastActivityUtcMs": 1762697000000,
         "main": true,
         "operation": null,
+        "origin": null,
         "path": "/w/tienda",
         "status": {
           "counts": {
@@ -759,6 +766,7 @@
         "lastActivityUtcMs": 1762697090000,
         "main": false,
         "operation": "rebase",
+        "origin": null,
         "path": "/w/feat-pagos",
         "status": {
           "counts": {
@@ -792,6 +800,7 @@
         "lastActivityUtcMs": null,
         "main": false,
         "operation": null,
+        "origin": null,
         "path": "/w/feat-login",
         "status": {
           "counts": {
@@ -824,6 +833,7 @@
         "lastActivityUtcMs": null,
         "main": false,
         "operation": null,
+        "origin": null,
         "path": "/w/spike",
         "status": {
           "counts": {
@@ -849,6 +859,7 @@
         "lastActivityUtcMs": null,
         "main": false,
         "operation": null,
+        "origin": null,
         "path": "/w/gone",
         "status": {
           "reason": "missing",
@@ -863,6 +874,7 @@
         "lastActivityUtcMs": null,
         "main": false,
         "operation": null,
+        "origin": null,
         "path": "/w/base-less",
         "status": {
           "counts": {
