@@ -565,6 +565,15 @@
             }
           ]
         },
+        "HandsOffReasonView": {
+          "description": "Why a foreign worktree is \"hands off\".",
+          "enum": [
+            "detached",
+            "locked",
+            "unreadable"
+          ],
+          "type": "string"
+        },
         "LossCause": {
           "description": "Why the hook layer stopped being active (ADR-GRD-005 § 1, H2 to H4). English codes of the\nADR's names; the client puts the text.",
           "oneOf": [
@@ -976,6 +985,17 @@
             "name": {
               "$ref": "#/$defs/Untrusted1024"
             },
+            "origin": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/WorktreeOriginView"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Who created the worktree and whether to leave it alone. Absent for\nthe main worktree and without `observation.worktree-origin`."
+            },
             "sessions": {
               "items": {
                 "$ref": "#/$defs/McpSession"
@@ -1015,6 +1035,44 @@
             "name"
           ],
           "type": "object"
+        },
+        "OriginEvidenceView": {
+          "description": "How the origin is known.",
+          "oneOf": [
+            {
+              "const": "registered",
+              "description": "GitRaptor's own record (reserved: it is never produced yet).",
+              "type": "string"
+            },
+            {
+              "const": "admin-marker",
+              "description": "A marker the tool leaves in `<common>/worktrees/<id>/`.",
+              "type": "string"
+            },
+            {
+              "const": "path-pattern",
+              "description": "The root sits where the tool puts worktrees by default: likely.",
+              "type": "string"
+            },
+            {
+              "const": "none",
+              "description": "No evidence: the tool is `unknown`.",
+              "type": "string"
+            }
+          ]
+        },
+        "OriginToolView": {
+          "description": "The tool that created a worktree.",
+          "enum": [
+            "gitraptor",
+            "orca",
+            "worktrunk",
+            "codex",
+            "gitkraken",
+            "claude-code",
+            "unknown"
+          ],
+          "type": "string"
         },
         "RepoStateView": {
           "oneOf": [
@@ -1106,6 +1164,34 @@
           },
           "required": [
             "untrusted"
+          ],
+          "type": "object"
+        },
+        "WorktreeOriginView": {
+          "additionalProperties": false,
+          "description": "Who created a linked worktree and how that is known.",
+          "properties": {
+            "evidence": {
+              "$ref": "#/$defs/OriginEvidenceView"
+            },
+            "hands_off": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/HandsOffReasonView"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "tool": {
+              "$ref": "#/$defs/OriginToolView"
+            }
+          },
+          "required": [
+            "tool",
+            "evidence"
           ],
           "type": "object"
         }
@@ -1330,5 +1416,5 @@
       "type": "object"
     }
   },
-  "schema_version": "1.0"
+  "schema_version": "1.1"
 }

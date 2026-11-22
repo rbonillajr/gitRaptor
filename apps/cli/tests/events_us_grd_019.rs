@@ -730,7 +730,7 @@ fn an_mcp_connection_gets_no_authorship() {
 
 /// The `data` of a `--json` envelope: the contract version is checked, the payload returned.
 fn data_of(envelope: serde_json::Value) -> serde_json::Value {
-    assert_eq!(envelope["schema_version"], "1.0", "{envelope:#}");
+    assert_eq!(envelope["schema_version"], "1.1", "{envelope:#}");
     envelope
         .get("data")
         .cloned()

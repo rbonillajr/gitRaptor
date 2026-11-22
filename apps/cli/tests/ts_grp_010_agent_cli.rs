@@ -233,7 +233,7 @@ fn json_of(out: &Output) -> Value {
         .next()
         .unwrap()
         .unwrap();
-    assert_eq!(envelope["schema_version"], "1.0", "{envelope:#}");
+    assert_eq!(envelope["schema_version"], "1.1", "{envelope:#}");
     envelope["data"].clone()
 }
 

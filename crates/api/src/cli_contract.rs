@@ -21,8 +21,8 @@ use crate::timemachine::{McpRedoResult, McpUndoResult};
 use crate::untrusted::{Untrusted, UntrustedName};
 
 pub const CLI_SCHEMA_MAJOR: u16 = 1;
-pub const CLI_SCHEMA_MINOR: u16 = 0;
-pub const CLI_SCHEMA_VERSION: &str = "1.0";
+pub const CLI_SCHEMA_MINOR: u16 = 1;
+pub const CLI_SCHEMA_VERSION: &str = "1.1";
 
 /// The success envelope: `data` is the output of the subcommand.
 #[derive(Debug, Serialize, JsonSchema)]
@@ -784,6 +784,6 @@ mod tests {
         };
         let value = serde_json::to_value(&err).expect("serializes");
         assert_eq!(value["error"]["code"], "invalid-args");
-        assert_eq!(value["schema_version"], "1.0");
+        assert_eq!(value["schema_version"], "1.1");
     }
 }

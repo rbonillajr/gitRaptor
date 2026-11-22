@@ -28,7 +28,7 @@ use serde_json::{Value, json};
 use crate::i18n::t;
 
 /// What is printed when the envelope itself cannot be serialized: fixed, English, no params.
-const INTERNAL_LITERAL: &str = r#"{"schema_version":"1.0","error":{"code":"internal","message":"GitRaptor could not answer this command.","params":{},"action":"Retry later."}}"#;
+const INTERNAL_LITERAL: &str = r#"{"schema_version":"1.1","error":{"code":"internal","message":"GitRaptor could not answer this command.","params":{},"action":"Retry later."}}"#;
 
 /// The success envelope as one line, `data` escaped as repo text.
 fn render_ok<T: Serialize>(data: &T, sanitize: bool) -> Option<String> {
