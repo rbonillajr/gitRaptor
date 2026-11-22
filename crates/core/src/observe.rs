@@ -53,6 +53,11 @@ pub fn canonical(path: &Path) -> PathBuf {
     if let Ok(found) = gitraptor_git::paths::canonicalize(path) {
         return found;
     }
+    // A path that is not absolute on this host (`/r` on Windows, a test's made-up root) names
+    // nothing real to resolve: it stays as written.
+    if !path.is_absolute() {
+        return path.to_path_buf();
+    }
     let mut tail: Vec<&std::ffi::OsStr> = Vec::new();
     let mut current = path;
     while let (Some(parent), Some(name)) = (current.parent(), current.file_name()) {
