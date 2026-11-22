@@ -704,6 +704,26 @@ fn row_name(
     (name, state, color_index, line)
 }
 
+/// The label of a row: the "hands off" mark beats `temporary`, and `temporary` beats the
+/// origin. The main worktree carries none of the origin ones.
+fn tag_of(worktree: &WorktreeRow, say: Say) -> Option<SafeText> {
+    let origin = worktree.origin.as_ref();
+    if let Some(reason) = origin.and_then(|o| o.hands_off) {
+        return Some(say.safe(Text::HandsOff(reason)));
+    }
+    if worktree.temporary {
+        return Some(say.safe(Text::Temporary));
+    }
+    let origin = origin?;
+    Some(say.safe(match origin.tool.label() {
+        Some(tool) => Text::Origin {
+            tool,
+            likely: origin.is_likely(),
+        },
+        None => Text::OriginUnknown,
+    }))
+}
+
 fn row(
     repo: &RepoView,
     worktree: &WorktreeRow,
@@ -723,7 +743,8 @@ fn row(
         changes: 0,
         sync: Sync::Unknown(SafeText::default()),
         activity: say.safe(Text::NotAvailable),
-        tag: worktree.temporary.then(|| say.safe(Text::Temporary)),
+        tag: tag_of(worktree, say),
+        tag_makes_room: worktree.origin.is_some(),
         // A ⚡ the predictor publishes; Guardrails' blocks come with their own story.
         conflict: repo
             .prediction

@@ -111,6 +111,7 @@ pub(crate) mod tests {
             state: WorktreeState::Unavailable(UnavailableReason::Missing),
             last_activity_ms: None,
             temporary: false,
+            origin: None,
             root: std::path::PathBuf::from(format!("/w/{name}")),
         }
     }

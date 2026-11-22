@@ -8,6 +8,7 @@ use std::sync::OnceLock;
 use gitraptor_api::guard::LossCause;
 use gitraptor_api::messages::{EngineStateView, ResyncReason, UnavailableReason};
 use gitraptor_api::rpc::{ErrorCode, InvalidReason, ScopeRefusal};
+use gitraptor_api::worktree_origin::HandsOffReasonView;
 
 use crate::model::{ConnState, Notice, ObserveFailure};
 use crate::present::SafeText;
@@ -147,6 +148,15 @@ pub enum Text<'a> {
     NoAgentLegend,
     /// A worktree under the system's temporary folder.
     Temporary,
+    /// The tool that created a linked worktree: certain, or `likely` when the path says so.
+    Origin {
+        tool: &'static str,
+        likely: bool,
+    },
+    /// A linked worktree nothing says who created.
+    OriginUnknown,
+    /// A foreign worktree GitRaptor does not touch, whatever the reason.
+    HandsOff(HandsOffReasonView),
     /// The engine cannot say whether there are sessions.
     AgentNotAvailable,
     ClaudeCode,
@@ -396,6 +406,13 @@ fn en(text: Text<'_>) -> String {
         Text::NoAgent { worktree } => format!("No agent · {worktree}"),
         Text::NoAgentLegend => "no agent: changes by you or another tool".into(),
         Text::Temporary => "temporary".into(),
+        Text::Origin {
+            tool,
+            likely: false,
+        } => (*tool).to_owned(),
+        Text::Origin { tool, likely: true } => format!("{tool}?"),
+        Text::OriginUnknown => "foreign".into(),
+        Text::HandsOff(_) => "foreign · hands off".into(),
         Text::AgentNotAvailable => "agent not available".into(),
         Text::ClaudeCode => "Claude Code".into(),
         Text::OtherAgent => "other agent".into(),
@@ -683,6 +700,13 @@ fn es(text: Text<'_>) -> String {
         Text::NoAgent { worktree } => format!("Sin agente · {worktree}"),
         Text::NoAgentLegend => "sin agente: cambios tuyos o de otra herramienta".into(),
         Text::Temporary => "temporal".into(),
+        Text::Origin {
+            tool,
+            likely: false,
+        } => (*tool).to_owned(),
+        Text::Origin { tool, likely: true } => format!("¿{tool}?"),
+        Text::OriginUnknown => "ajeno".into(),
+        Text::HandsOff(_) => "ajeno · no tocar".into(),
         Text::AgentNotAvailable => "agente no disponible".into(),
         Text::ClaudeCode => "Claude Code".into(),
         Text::OtherAgent => "otro agente".into(),
@@ -1131,6 +1155,15 @@ pub(crate) fn every_text() -> Vec<Text<'static>> {
         Text::NoAgent { worktree: "feat-a" },
         Text::NoAgentLegend,
         Text::Temporary,
+        Text::Origin {
+            tool: "Orca",
+            likely: false,
+        },
+        Text::Origin {
+            tool: "Codex",
+            likely: true,
+        },
+        Text::OriginUnknown,
         Text::AgentNotAvailable,
         Text::ClaudeCode,
         Text::OtherAgent,
@@ -1338,6 +1371,14 @@ pub(crate) fn every_text() -> Vec<Text<'static>> {
     texts.extend(ResyncReason::ALL.map(Text::Resync));
     texts.extend(Legend::ALL.map(Text::Legend));
     texts.extend(HelpPanel::ALL.map(Text::HelpPanel));
+    texts.extend(
+        [
+            HandsOffReasonView::Detached,
+            HandsOffReasonView::Locked,
+            HandsOffReasonView::Unreadable,
+        ]
+        .map(Text::HandsOff),
+    );
     for text in &texts {
         sampled(text);
     }
@@ -1367,6 +1408,9 @@ fn sampled(text: &Text<'_>) {
         | Text::NoAgent { .. }
         | Text::NoAgentLegend
         | Text::Temporary
+        | Text::Origin { .. }
+        | Text::OriginUnknown
+        | Text::HandsOff(_)
         | Text::AgentNotAvailable
         | Text::ClaudeCode
         | Text::OtherAgent
