@@ -206,7 +206,10 @@ fn the_main_worktree_has_no_label() {
 
 #[test]
 fn the_mark_beats_temporary_and_temporary_beats_the_origin() {
-    let temp = "/tmp/wtl005-scratch";
+    let temp = std::env::temp_dir()
+        .join("wtl005-scratch")
+        .display()
+        .to_string();
     let m = model_with(
         Lang::En,
         vec![
