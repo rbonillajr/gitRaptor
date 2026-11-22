@@ -10,7 +10,8 @@ use gitraptor_api::PROTOCOL_VERSION;
 use gitraptor_api::client::{Client, ClientError, Incoming};
 use gitraptor_api::messages::{ClientKind, HelloResult};
 use gitraptor_api::methods::{
-    CAP_OBSERVATION_TIERS, CAP_PREDICTION_PAIRS, CAP_REQUESTER, CAP_SCOPE_ACTIVITY, QUERY_CANCEL,
+    CAP_OBSERVATION_TIERS, CAP_OBSERVATION_WORKTREE_ORIGIN, CAP_PREDICTION_PAIRS, CAP_REQUESTER,
+    CAP_SCOPE_ACTIVITY, QUERY_CANCEL,
 };
 use gitraptor_api::rpc::{self, Id, Notification, Response, ServerMessage};
 use serde_json::{Value, json};
@@ -21,6 +22,7 @@ pub const REQUIRED_CAPABILITIES: &[&str] = &[
     CAP_OBSERVATION_TIERS.name,
     CAP_PREDICTION_PAIRS.name,
     CAP_REQUESTER.name,
+    CAP_OBSERVATION_WORKTREE_ORIGIN.name,
 ];
 
 /// A greeted connection to the daemon.

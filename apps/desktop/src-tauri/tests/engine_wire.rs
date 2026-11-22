@@ -91,6 +91,7 @@ fn worktree(
         last_activity_in_gap: activity.is_none() && detached_at.is_some(),
         detached_at: detached_at.map(str::to_owned),
         operation: operation.map(str::to_owned),
+        origin: None,
     }
 }
 
