@@ -405,7 +405,7 @@ Cada fila cita las fuentes del Panorama con su fecha de consulta. ✔ sí · ≈
 | 4 | Valor | El ahorro es de disco y depende del perfil de compilación: con #328 lo compartible baja a ~10 GiB por worker; un repo con dependencias ligeras apenas ahorra | El argumento de venta pierde fuerza fuera de repos con compilación pesada | Pendiente de Rene |
 | 5 | Expectativas | Copy-on-write solo está medido en APFS; en Linux y Windows sin reflink la copia ocupa el tamaño completo (Pregunta 11) | La promesa de disco no vale en todas las plataformas de M3 | Pendiente: etapa de validación multiplataforma |
 | 6 | Competencia | GitKraken publica cada mes y podría añadir snapshot al descartar o políticas | El diferencial de descarte reversible se reduce | Vigilancia trimestral (BRD § 10) |
-| 7 | Reglas | Un worktree de Codex con HEAD separado no se puede descartar desde GitRaptor (BR-WTL-011) | El usuario de Codex limpia esos worktrees con Codex | Pendiente de Rene |
+| 7 | Reglas | Un worktree de Codex con HEAD separado no se puede descartar desde GitRaptor (BR-WTL-011) | El usuario de Codex limpia esos worktrees con Codex; GitRaptor solo los muestra «ajeno, no tocar» | Decidido: decisión del orquestador (2026-11-21) con la delegación de Rene, al implementar US-WTL-005 |
 
 ---
 
