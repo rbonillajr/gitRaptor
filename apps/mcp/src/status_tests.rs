@@ -164,6 +164,7 @@ fn typical_worktrees_page() -> McpStatus {
                     ahead: Some(2),
                     ..McpHere::default()
                 },
+                origin: None,
             })
             .collect(),
     ))
@@ -226,6 +227,7 @@ fn hostile_worktrees_page() -> McpStatus {
                     ahead: Some(2),
                     ..McpHere::default()
                 },
+                origin: None,
             })
             .collect(),
     ))
@@ -598,6 +600,7 @@ fn every_repo_text_in_the_status_is_marked() {
             uncounted: Some(McpUncounted::BaseMissing),
             ..McpHere::default()
         },
+        origin: None,
     };
     let worktrees = page_status(worktrees_page(vec![other]));
     let paths = page_status(paths_page(

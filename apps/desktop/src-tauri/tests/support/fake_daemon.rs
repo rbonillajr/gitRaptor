@@ -55,12 +55,13 @@ use gitraptor_desktop::engine::link::{ConnectFailure, Connector, Link, SocketCon
 use serde::Serialize;
 use serde_json::{Value, json};
 
-/// The four capabilities the app requires, plus the optional `discovery.events`.
-pub const ALL_CAPABILITIES: [&str; 5] = [
+/// The five capabilities the app requires, plus the optional `discovery.events`.
+pub const ALL_CAPABILITIES: [&str; 6] = [
     "scope.activity",
     "observation.tiers",
     "prediction.pairs",
     "connection.requester",
+    "observation.worktree-origin",
     "discovery.events",
 ];
 
