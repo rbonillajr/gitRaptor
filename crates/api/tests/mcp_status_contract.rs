@@ -117,6 +117,7 @@ fn other_worktree(name: &str) -> McpWorktree {
             ahead: Some(2),
             ..McpHere::default()
         },
+        origin: None,
     }
 }
 
@@ -416,6 +417,7 @@ fn names_in_here_repo_and_page_are_cut_at_their_bound() {
                     sessions: vec![hostile_session()],
                     ..McpHere::default()
                 },
+                origin: None,
             }],
             paths: Vec::new(),
             truncated: false,
