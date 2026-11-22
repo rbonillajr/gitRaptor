@@ -186,3 +186,11 @@ Dos reglas que las tres cumplen y que conviene dejar escritas:
 
 - Un campo nuevo dentro de un tipo `deny_unknown_fields` se quita, para la conexión sin la capacidad, en **todas** sus salidas. `RepoView` sale hoy por `repo.add`, `engine.snapshot` y `scope.snapshot`, que ya pasan por `shape_special_states` en `conn.rs`, y un evento sale por `Outbox`. Si se olvida una, un cliente anterior falla al deserializar.
 - Los tipos siguen en `crates/api/src/messages.rs`, que sigue compartido (§ Qué sigue siendo compartido de la guía). Las tres Dev Specs tocan ahí tipos distintos y se mergean en serie.
+
+## Enmienda (2026-11-21, US-WTL-005: capacidad nueva)
+
+**Decisión del orquestador (2026-11-21), validada por Arquitecto.** Origen: DS-US-WTL-005. Anota la capacidad que declara, en el formato de la tabla de 2026-10-28. No cambia ninguna regla ni el `status`.
+
+| Capacidad | Archivo del módulo | Qué cambia de forma | Quién la pide | Fuente |
+|---|---|---|---|---|
+| `observation.worktree-origin` | `crates/api/src/methods/observation.rs` | `WorktreeView.origin` (`WorktreeOriginView`: herramienta que creó el worktree, evidencia y, si es ajeno y no se debe tocar, `hands_off`) | CLI, TUI, `raptor-mcp` y la app | DS-US-WTL-005 |
