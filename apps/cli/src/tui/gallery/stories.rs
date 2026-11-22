@@ -96,6 +96,7 @@ fn row(i: usize, name: &'static str, state: AgentState, branch: &'static str) ->
         },
         activity: t("2 min ago"),
         tag: None,
+        tag_makes_room: false,
         conflict: false,
         blocked: false,
         operation: None,

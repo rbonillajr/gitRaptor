@@ -183,6 +183,7 @@ pub fn worktrees(views: &[WorktreeView]) -> Vec<WorktreeRow> {
             main: w.main,
             last_activity_ms: w.last_activity_utc_ms,
             temporary: temporary(std::path::Path::new(w.path.raw()), temp_roots()),
+            origin: w.origin.clone(),
             root: std::path::PathBuf::from(w.path.raw()),
             state: match &w.status {
                 WorktreeStatus::Ready {
