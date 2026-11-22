@@ -2,12 +2,12 @@
 id: US-WTL-005
 title: "El desarrollador ve los worktrees de wt, Codex, GitKraken y Orca con su origen sin que GitRaptor los toque"
 type: us
-status: ready
+status: implemented
 priority: high
 milestone: M3
 blocked_by: []
 created: 2026-11-10
-updated: 2026-11-10
+updated: 2026-11-21
 feature: worktree-lifecycle
 related:
   context:
@@ -75,5 +75,7 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 ## Dependencias
 
 - **De User Stories**: Relacionado US-CKP-001 (flota), US-CKP-017 (HEAD separado al descartar) · Bloquea US-WTL-008.
-- **Riesgo aceptado pendiente de Rene**: un worktree de Codex con HEAD separado se limpia desde Codex, no desde GitRaptor (Riesgo 7 de CTX-WTL-001).
+- **Riesgo aceptado (decidido el 2026-11-21 por el orquestador con la delegación de Rene)**: un worktree de Codex con HEAD separado se limpia desde Codex, no desde GitRaptor (Riesgo 7 de CTX-WTL-001).
 - **Cross-cutting / transversales**: cómo se reconoce el origen de cada worktree: transversal (lo define el Arquitecto).
+
+Implementado en: PR #382 ([DS-US-WTL-005](../dev-specs/US-WTL-005-convivencia-worktrees-ajenos.md)), sin certificar (modo rápido). Pendiente con dueño: la verificación manual de T012 (la corre el coordinador tras el merge), la marca «ajeno, no tocar» en la fila de la TUI para worktrees ilegibles o con operación en curso, y Linux y Windows.
