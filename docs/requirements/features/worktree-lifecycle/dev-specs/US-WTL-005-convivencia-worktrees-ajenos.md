@@ -2,7 +2,7 @@
 id: DS-US-WTL-005
 title: "Dev Spec — Origen de cada worktree y marca «ajeno, no tocar» en la flota"
 type: dev-spec
-status: spec-ready
+status: implemented
 created: 2026-11-21
 updated: 2026-11-21
 story: US-WTL-005
@@ -834,3 +834,5 @@ Corre `/security-review --scope devspec docs/requirements/features/worktree-life
 - **T009 y T010 fuera del contrato firmado:** sus pruebas (`apps/desktop/src-tauri/tests/worktree_origin.rs` y `apps/desktop/src/fleet/fleet-model.test.ts`) no entran en el examen firmado porque la suite nextest excluye `gitraptor-desktop` y vitest no escribe el informe JUnit por ruta. Las corren el job `desktop` del CI y la verificación local de FAST MODE; el resultado se anota en el PR, igual que el `grep` de T011.
 - **Topología de pruebas existentes que cambian:** `apps/desktop/src-tauri/tests/engine_link.rs`, `engine_launcher.rs` y `apps/desktop/src/fleet/fixtures.ts` (por `REQUIRED_CAPABILITIES` y `origin: null`).
 - **Página del MCP:** la certifica O4 (`crates/core/tests/worktree_origin_capability.rs`).
+
+Implementado en: PR #382. Sin certificar (modo rápido: sin `baseline --write`). O7 y O8 quedaron fuera del examen firmado y los cubre el job `desktop` del CI. T012 parcial: `raptor repo add` está reservado a un terminal.

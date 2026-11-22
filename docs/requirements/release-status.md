@@ -10,10 +10,10 @@
 
 | Estado | Fichas |
 |---|---|
-| Implementado (`implemented`) | 87 |
+| Implementado (`implemented`) | 88 |
 | Hecho (`done`) | 3 |
 | Implementado en parte (`partially-implemented`) | 27 |
-| Listo (`ready`) | 32 |
+| Listo (`ready`) | 31 |
 | Borrador (`draft`) | 64 |
 | Bloqueado (`blocked`) | 1 |
 | **Total** | **214** |
@@ -28,7 +28,7 @@
 | [mcp](#mcp) | 8 | 0 | 4 | 3 | 13 | 0 | 28 |
 | [motor-local](#motor-local) | 22 | 2 | 9 | 2 | 16 | 0 | 51 |
 | [time-machine](#time-machine) | 19 | 1 | 1 | 0 | 13 | 0 | 34 |
-| [worktree-lifecycle](#worktree-lifecycle) | 0 | 0 | 0 | 8 | 5 | 0 | 13 |
+| [worktree-lifecycle](#worktree-lifecycle) | 1 | 0 | 0 | 7 | 5 | 0 | 13 |
 
 ### cockpit
 
@@ -275,15 +275,15 @@
 
 ### worktree-lifecycle
 
-13 fichas: 8 listo, 5 borrador.
+13 fichas: 1 implementado, 7 listo, 5 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
+| [US-WTL-005](features/worktree-lifecycle/user-stories/US-WTL-005-convivencia-worktrees-ajenos.md) | El desarrollador ve los worktrees de wt, Codex, GitKraken y Orca con su origen sin que GitRaptor los toque | Implementado (`implemented`) | — | — |
 | [US-WTL-001](features/worktree-lifecycle/user-stories/US-WTL-001-worktree-con-copia-desde-semilla.md) | El desarrollador crea un worktree con rama con nombre y artefactos copiados desde una semilla quieta | Listo (`ready`) | — | — |
 | [US-WTL-002](features/worktree-lifecycle/user-stories/US-WTL-002-descarte-reversible-disco.md) | El desarrollador descarta el worktree de un agente terminado, sabe cuánto disco ganó y lo puede restaurar | Listo (`ready`) | — | — |
 | [US-WTL-003](features/worktree-lifecycle/user-stories/US-WTL-003-estado-real-del-agente.md) | El desarrollador ve qué agentes esperan su decisión, cuáles esperan el CI y cuáles se colgaron | Listo (`ready`) | — | — |
 | [US-WTL-004](features/worktree-lifecycle/user-stories/US-WTL-004-worktrees-de-claude-code.md) | Los worktrees que Claude Code crea y borra por su cuenta quedan bajo la red de seguridad de GitRaptor | Listo (`ready`) | — | — |
-| [US-WTL-005](features/worktree-lifecycle/user-stories/US-WTL-005-convivencia-worktrees-ajenos.md) | El desarrollador ve los worktrees de wt, Codex, GitKraken y Orca con su origen sin que GitRaptor los toque | Listo (`ready`) | — | — |
 | [US-WTL-007](features/worktree-lifecycle/user-stories/US-WTL-007-traer-y-devolver.md) | El desarrollador prueba en su copia el trabajo de un agente y se lo devuelve sin perder nada de ninguno de los dos | Listo (`ready`) | — | — |
 | [US-WTL-008](features/worktree-lifecycle/user-stories/US-WTL-008-limpieza-por-politica.md) | El disco no se llena de artefactos viejos porque GitRaptor los limpia según la política del repo | Listo (`ready`) | — | — |
 | [US-WTL-013](features/worktree-lifecycle/user-stories/US-WTL-013-lanzar-agente-e-instalar-skill.md) | El desarrollador lanza un agente de Claude Code en un worktree nuevo, con la skill de GitRaptor instalada, con una sola orden | Listo (`ready`) | — | — |
@@ -454,12 +454,13 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### M3
 
-17 fichas: 2 implementado, 3 implementado en parte, 9 listo, 3 borrador.
+17 fichas: 3 implementado, 3 implementado en parte, 8 listo, 3 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
 | [TS-GRP-010](features/motor-local/technical-stories/TS-GRP-010-perfil-mcp-por-solicitante.md) | Perfil mcp por solicitante: la CLI o la TUI que lanza un agente recibe el perfil mcp | Implementado (`implemented`) | — | — |
 | [US-MCP-023](features/mcp/user-stories/US-MCP-023-cli-json-estable.md) | Un agente que trabaja por Bash lee la salida de raptor con un contrato JSON estable y versionado | Implementado (`implemented`) | — | — |
+| [US-WTL-005](features/worktree-lifecycle/user-stories/US-WTL-005-convivencia-worktrees-ajenos.md) | El desarrollador ve los worktrees de wt, Codex, GitKraken y Orca con su origen sin que GitRaptor los toque | Implementado (`implemented`) | — | — |
 | [SPIKE-GRD-001](features/guardrails/technical-stories/SPIKE-GRD-001-interceptabilidad-hooks.md) | Interceptabilidad, coexistencia y coste de la capa de hooks en los tres SO | Implementado en parte (`partially-implemented`) | #22, #25, #121 | 2 |
 | [SPIKE-GRP-002](features/motor-local/technical-stories/SPIKE-GRP-002-viabilidad-observador.md) | Viabilidad del observador de cambios a escala en los tres SO | Implementado en parte (`partially-implemented`) | #17, #23 | 2 |
 | [TD-GRP-001](features/motor-local/technical-stories/TD-GRP-001-acl-windows.md) | Verificación de ACL en Windows: git.exe (SEC-10) y perfil (SEC-06) | Implementado en parte (`partially-implemented`) | #72 | 2 |
@@ -470,7 +471,6 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-WTL-002](features/worktree-lifecycle/user-stories/US-WTL-002-descarte-reversible-disco.md) | El desarrollador descarta el worktree de un agente terminado, sabe cuánto disco ganó y lo puede restaurar | Listo (`ready`) | — | — |
 | [US-WTL-003](features/worktree-lifecycle/user-stories/US-WTL-003-estado-real-del-agente.md) | El desarrollador ve qué agentes esperan su decisión, cuáles esperan el CI y cuáles se colgaron | Listo (`ready`) | — | — |
 | [US-WTL-004](features/worktree-lifecycle/user-stories/US-WTL-004-worktrees-de-claude-code.md) | Los worktrees que Claude Code crea y borra por su cuenta quedan bajo la red de seguridad de GitRaptor | Listo (`ready`) | — | — |
-| [US-WTL-005](features/worktree-lifecycle/user-stories/US-WTL-005-convivencia-worktrees-ajenos.md) | El desarrollador ve los worktrees de wt, Codex, GitKraken y Orca con su origen sin que GitRaptor los toque | Listo (`ready`) | — | — |
 | [US-WTL-013](features/worktree-lifecycle/user-stories/US-WTL-013-lanzar-agente-e-instalar-skill.md) | El desarrollador lanza un agente de Claude Code en un worktree nuevo, con la skill de GitRaptor instalada, con una sola orden | Listo (`ready`) | — | — |
 | [US-GRD-013](features/guardrails/user-stories/US-GRD-013-comando-edicion-configuracion.md) | El desarrollador cambia la configuración con un comando sin perder lo que editó a mano | Borrador (`draft`) | — | — |
 | [US-GRP-016](features/motor-local/user-stories/US-GRP-016-rama-base-configuracion-equipo.md) | La rama base la define la configuración del equipo | Borrador (`draft`) | — | — |
