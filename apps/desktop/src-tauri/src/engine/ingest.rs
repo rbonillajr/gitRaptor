@@ -41,10 +41,11 @@ use super::wire::{
     CountDto, CountsDto, DaemonDto, DivergenceDto, EndCause, EngineDto, EngineMessage,
     EngineStateDto, ExceptionCommandDto, FleetPerf, GlobalDto, GraphBaseDto, GraphBaseGap,
     GraphCutDto, GraphDto, GuardBlocksDto, GuardSummaryDto, HeadDto, LaneDto, LaneGapDto,
-    LaneHeadDto, LaneStateDto, LimitCode, LineRangeDto, OperationDto, PairDetailDto, PairDto,
-    PairLevel, PairReason, PairState, PendingExceptionDto, ProtectionDto, ProtectionKind, ReadyDto,
-    RefChange, RefDto, RepoFleetDto, RepoStateDto, RepoSummaryDto, SessionDto, SessionOrigin,
-    SessionState, Tier, UnavailableReason, UnloggedDto, WorktreeDto, WorktreeStatusDto,
+    LaneHeadDto, LaneStateDto, LimitCode, LineRangeDto, OperationDto, OriginDto, PairDetailDto,
+    PairDto, PairLevel, PairReason, PairState, PendingExceptionDto, ProtectionDto, ProtectionKind,
+    ReadyDto, RefChange, RefDto, RepoFleetDto, RepoStateDto, RepoSummaryDto, SessionDto,
+    SessionOrigin, SessionState, Tier, UnavailableReason, UnloggedDto, WorktreeDto,
+    WorktreeStatusDto,
 };
 
 /// The global snapshot as a DTO.
@@ -228,6 +229,11 @@ pub fn worktree(view: &WorktreeView) -> WorktreeDto {
             .filter(|hash| is_object_id(hash))
             .map(str::to_owned),
         operation: view.operation.map(operation),
+        origin: view.origin.as_ref().map(|o| OriginDto {
+            tool: o.tool,
+            evidence: o.evidence,
+            hands_off: o.hands_off,
+        }),
     }
 }
 
