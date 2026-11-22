@@ -96,7 +96,8 @@ impl Machine {
     fn status(&self) -> Value {
         let out = self.raptor(&["status", "--json"], &[]);
         assert!(out.status.success(), "{}", text(&out));
-        serde_json::from_slice(&out.stdout).unwrap()
+        let envelope: Value = serde_json::from_slice(&out.stdout).unwrap();
+        envelope["data"].clone()
     }
 
     fn stop(&self) {

@@ -45,8 +45,25 @@ pub fn locate(path: &Path) -> Result<PathBuf, RepoRejection> {
 }
 
 /// Canonical path in the form the read layer accepts (the drive form on Windows).
+///
+/// A path that no longer exists (a vanished worktree) keeps its tail but resolves its deepest
+/// existing ancestor, so it compares equal to the same path under a canonical parent (Windows
+/// short 8.3 names and `/` separators, macOS `/var` → `/private/var`).
 pub fn canonical(path: &Path) -> PathBuf {
-    gitraptor_git::paths::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+    if let Ok(found) = gitraptor_git::paths::canonicalize(path) {
+        return found;
+    }
+    let mut tail: Vec<&std::ffi::OsStr> = Vec::new();
+    let mut current = path;
+    while let (Some(parent), Some(name)) = (current.parent(), current.file_name()) {
+        tail.push(name);
+        if let Ok(mut base) = gitraptor_git::paths::canonicalize(parent) {
+            base.extend(tail.iter().rev());
+            return base;
+        }
+        current = parent;
+    }
+    path.to_path_buf()
 }
 
 /// When the local copy of the remote was last fetched (DEP-CKP-4): the time
