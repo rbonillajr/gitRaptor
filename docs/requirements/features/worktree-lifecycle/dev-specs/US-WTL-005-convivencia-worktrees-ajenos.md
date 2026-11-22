@@ -835,4 +835,4 @@ Corre `/security-review --scope devspec docs/requirements/features/worktree-life
 - **Topología de pruebas existentes que cambian:** `apps/desktop/src-tauri/tests/engine_link.rs`, `engine_launcher.rs` y `apps/desktop/src/fleet/fixtures.ts` (por `REQUIRED_CAPABILITIES` y `origin: null`).
 - **Página del MCP:** la certifica O4 (`crates/core/tests/worktree_origin_capability.rs`).
 
-Implementado en: PR #382. Sin certificar (modo rápido: sin `baseline --write`). O7 y O8 quedaron fuera del examen firmado y los cubre el job `desktop` del CI. T012 parcial: `raptor repo add` está reservado a un terminal.
+Implementado en: PR #383. Sin certificar (modo rápido: sin `baseline --write`). O7 y O8 quedaron fuera del examen firmado y los cubre el job `desktop` del CI. T012 parcial: `raptor repo add` está reservado a un terminal.
