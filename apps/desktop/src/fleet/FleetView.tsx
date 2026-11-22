@@ -121,6 +121,8 @@ function FleetBody({ fleet, nowMs, activity }: FleetViewProps & { fleet: RepoFle
               activityText={c.activityText}
               attentionText={c.attention?.text ?? null}
               unavailableText={c.unavailableText}
+              originText={c.originText}
+              handsOff={c.handsOff}
               a11yLabel={c.a11yLabel}
             />
           </li>

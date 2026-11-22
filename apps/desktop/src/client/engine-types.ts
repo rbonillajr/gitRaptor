@@ -80,6 +80,17 @@ export interface ReadyDto {
 
 export type UnavailableReason = "missing" | "untrusted" | "unreadable";
 
+export type OriginTool = "gitraptor" | "orca" | "worktrunk" | "codex" | "gitkraken" | "claude-code" | "unknown";
+export type OriginEvidence = "registered" | "admin-marker" | "path-pattern" | "none";
+export type HandsOffReason = "detached" | "locked" | "unreadable";
+
+/** Who created a linked worktree and how that is known: closed enums only, no untrusted text. */
+export interface OriginDto {
+  tool: OriginTool;
+  evidence: OriginEvidence;
+  handsOff: HandsOffReason | null;
+}
+
 /** One working copy. `key` is the FNV-1a hash of the raw root path: it pairs sessions and pairs with the card. */
 export interface WorktreeDto {
   key: string;
@@ -92,6 +103,8 @@ export interface WorktreeDto {
   /** Full commit hash of a detached HEAD; the UI cuts it to 7 digits. */
   detachedAt: string | null;
   operation: string | null;
+  /** `null` for the main worktree and when the engine did not offer the capability. */
+  origin: OriginDto | null;
 }
 
 export type AgentDto = { kind: "claude-code" } | { kind: "other"; name: string };
